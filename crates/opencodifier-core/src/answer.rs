@@ -7,6 +7,7 @@ use crate::ids::{CandidateId, QuestionId};
 
 /// One probability entry in a distribution.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "RawDistributionEntry")]
 pub struct DistributionEntry {
     /// Candidate id (choice) or level label (score).
     pub key: String,
@@ -14,20 +15,54 @@ pub struct DistributionEntry {
     pub probability: f64,
 }
 
+/// Deserialization mirror for [`DistributionEntry`]; conversion validates.
+#[derive(Debug, Deserialize)]
+struct RawDistributionEntry {
+    key: String,
+    probability: f64,
+}
+
+impl TryFrom<RawDistributionEntry> for DistributionEntry {
+    type Error = CoreError;
+
+    fn try_from(raw: RawDistributionEntry) -> CoreResult<Self> {
+        if !is_unit_interval(raw.probability) {
+            return Err(CoreError::InvalidProbability { value: raw.probability });
+        }
+        Ok(Self { key: raw.key, probability: raw.probability })
+    }
+}
+
 /// A complete categorical distribution over candidates or score levels.
 ///
 /// Order is preserved exactly as supplied: score levels are ordered, and
 /// stable answer ordering keeps trace and cache output deterministic.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "RawDistribution")]
 pub struct Distribution {
     entries: Vec<DistributionEntry>,
+}
+
+/// Deserialization mirror for [`Distribution`]; conversion validates.
+#[derive(Debug, Deserialize)]
+struct RawDistribution {
+    entries: Vec<DistributionEntry>,
+}
+
+impl TryFrom<RawDistribution> for Distribution {
+    type Error = CoreError;
+
+    fn try_from(raw: RawDistribution) -> CoreResult<Self> {
+        Self::new(raw.entries)
+    }
 }
 
 impl Distribution {
     /// Validates and constructs a distribution.
     ///
     /// Invariants: at least one entry, unique keys, every probability
-    /// finite in `[0, 1]`, total mass equal to 1 within [`SUM_TOLERANCE`].
+    /// finite in `[0, 1]`, total mass equal to 1 within a `1e-6` sum
+    /// tolerance.
     pub fn new(entries: Vec<DistributionEntry>) -> CoreResult<Self> {
         if entries.is_empty() {
             return Err(CoreError::EmptyField { field: "distribution entries" });
@@ -114,7 +149,7 @@ impl Distribution {
 
 /// The answer to one question (PLANNING.md §5).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case", try_from = "RawDecisionAnswer")]
 #[non_exhaustive]
 pub enum DecisionAnswer {
     /// Selected candidate with the full probability distribution.
@@ -152,6 +187,71 @@ pub enum DecisionAnswer {
         /// Calibrated confidence for this answer.
         confidence: f64,
     },
+}
+
+/// Deserialization mirror for [`DecisionAnswer`]; conversion validates.
+///
+/// The variant shapes match [`DecisionAnswer`] exactly so the wire format
+/// is unchanged; every field type already validates itself, and
+/// [`DecisionAnswer::validate`] enforces the answer-level invariants.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum RawDecisionAnswer {
+    /// Mirrors [`DecisionAnswer::Choice`].
+    Choice {
+        /// Id of the question this answers.
+        question_id: QuestionId,
+        /// The selected candidate.
+        choice: CandidateId,
+        /// Full distribution over candidates.
+        distribution: Distribution,
+        /// Calibrated confidence for this answer.
+        confidence: f64,
+    },
+    /// Mirrors [`DecisionAnswer::Boolean`].
+    Boolean {
+        /// Id of the question this answers.
+        question_id: QuestionId,
+        /// The decided value.
+        value: bool,
+        /// Probability that `value` is correct.
+        probability: f64,
+        /// Calibrated confidence for this answer.
+        confidence: f64,
+    },
+    /// Mirrors [`DecisionAnswer::Score`].
+    Score {
+        /// Id of the question this answers.
+        question_id: QuestionId,
+        /// Expected value over positional weights.
+        expected: f64,
+        /// The level the expected value falls into.
+        level: String,
+        /// Full distribution over levels.
+        distribution: Distribution,
+        /// Calibrated confidence for this answer.
+        confidence: f64,
+    },
+}
+
+impl TryFrom<RawDecisionAnswer> for DecisionAnswer {
+    type Error = CoreError;
+
+    fn try_from(raw: RawDecisionAnswer) -> CoreResult<Self> {
+        let answer = match raw {
+            RawDecisionAnswer::Choice { question_id, choice, distribution, confidence } => {
+                Self::Choice { question_id, choice, distribution, confidence }
+            }
+            RawDecisionAnswer::Boolean { question_id, value, probability, confidence } => {
+                Self::Boolean { question_id, value, probability, confidence }
+            }
+            RawDecisionAnswer::Score { question_id, expected, level, distribution, confidence } => {
+                Self::Score { question_id, expected, level, distribution, confidence }
+            }
+        };
+        answer.validate()?;
+        Ok(answer)
+    }
 }
 
 impl DecisionAnswer {

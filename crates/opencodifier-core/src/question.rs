@@ -11,9 +11,25 @@ use crate::ids::{CandidateId, QuestionId};
 /// which is what makes candidate-conditioned scoring (rather than a
 /// fixed-label classifier) the core ML shape of the system.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "RawCandidate")]
 pub struct Candidate {
     id: CandidateId,
     description: String,
+}
+
+/// Deserialization mirror for [`Candidate`]; conversion validates.
+#[derive(Debug, Deserialize)]
+struct RawCandidate {
+    id: String,
+    description: String,
+}
+
+impl TryFrom<RawCandidate> for Candidate {
+    type Error = CoreError;
+
+    fn try_from(raw: RawCandidate) -> CoreResult<Self> {
+        Self::new(raw.id, raw.description)
+    }
 }
 
 impl Candidate {
@@ -45,10 +61,27 @@ impl From<CandidateId> for Candidate {
 
 /// Select one candidate from a runtime-defined set.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "RawChoiceQuestion")]
 pub struct ChoiceQuestion {
     id: QuestionId,
     text: String,
     candidates: Vec<Candidate>,
+}
+
+/// Deserialization mirror for [`ChoiceQuestion`]; conversion validates.
+#[derive(Debug, Deserialize)]
+struct RawChoiceQuestion {
+    id: String,
+    text: String,
+    candidates: Vec<Candidate>,
+}
+
+impl TryFrom<RawChoiceQuestion> for ChoiceQuestion {
+    type Error = CoreError;
+
+    fn try_from(raw: RawChoiceQuestion) -> CoreResult<Self> {
+        Self::new(raw.id, raw.text, raw.candidates)
+    }
 }
 
 impl ChoiceQuestion {
@@ -93,9 +126,25 @@ impl ChoiceQuestion {
 
 /// A yes/no question (Jev's `boolean`/`noul` primitive).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "RawBooleanQuestion")]
 pub struct BooleanQuestion {
     id: QuestionId,
     text: String,
+}
+
+/// Deserialization mirror for [`BooleanQuestion`]; conversion validates.
+#[derive(Debug, Deserialize)]
+struct RawBooleanQuestion {
+    id: String,
+    text: String,
+}
+
+impl TryFrom<RawBooleanQuestion> for BooleanQuestion {
+    type Error = CoreError;
+
+    fn try_from(raw: RawBooleanQuestion) -> CoreResult<Self> {
+        Self::new(raw.id, raw.text)
+    }
 }
 
 impl BooleanQuestion {
@@ -126,8 +175,23 @@ impl BooleanQuestion {
 /// be added later without breaking the wire format, so V1 keeps the
 /// simpler invariant: position is meaning.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "RawScoreLevel")]
 pub struct ScoreLevel {
     label: String,
+}
+
+/// Deserialization mirror for [`ScoreLevel`]; conversion validates.
+#[derive(Debug, Deserialize)]
+struct RawScoreLevel {
+    label: String,
+}
+
+impl TryFrom<RawScoreLevel> for ScoreLevel {
+    type Error = CoreError;
+
+    fn try_from(raw: RawScoreLevel) -> CoreResult<Self> {
+        Self::new(raw.label)
+    }
 }
 
 impl ScoreLevel {
@@ -149,10 +213,27 @@ impl ScoreLevel {
 /// An ordered-severity question returning a distribution over levels plus
 /// an expected value (e.g. task difficulty).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "RawScoreQuestion")]
 pub struct ScoreQuestion {
     id: QuestionId,
     text: String,
     levels: Vec<ScoreLevel>,
+}
+
+/// Deserialization mirror for [`ScoreQuestion`]; conversion validates.
+#[derive(Debug, Deserialize)]
+struct RawScoreQuestion {
+    id: String,
+    text: String,
+    levels: Vec<ScoreLevel>,
+}
+
+impl TryFrom<RawScoreQuestion> for ScoreQuestion {
+    type Error = CoreError;
+
+    fn try_from(raw: RawScoreQuestion) -> CoreResult<Self> {
+        Self::new(raw.id, raw.text, raw.levels)
+    }
 }
 
 impl ScoreQuestion {

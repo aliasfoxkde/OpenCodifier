@@ -42,11 +42,29 @@ pub enum RiskLevel {
 /// The gates must satisfy `abstain_below <= verify_below <=
 /// min_confidence`, otherwise the cascade is contradictory.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "RawDecisionPolicy")]
 pub struct DecisionPolicy {
     min_confidence: f64,
     verify_below: f64,
     abstain_below: f64,
     risk: RiskLevel,
+}
+
+/// Deserialization mirror for [`DecisionPolicy`]; conversion validates.
+#[derive(Debug, Deserialize)]
+struct RawDecisionPolicy {
+    min_confidence: f64,
+    verify_below: f64,
+    abstain_below: f64,
+    risk: RiskLevel,
+}
+
+impl TryFrom<RawDecisionPolicy> for DecisionPolicy {
+    type Error = CoreError;
+
+    fn try_from(raw: RawDecisionPolicy) -> CoreResult<Self> {
+        Self::new(raw.min_confidence, raw.verify_below, raw.abstain_below, raw.risk)
+    }
 }
 
 impl DecisionPolicy {

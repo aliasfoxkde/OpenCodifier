@@ -13,7 +13,7 @@ use crate::error::{CoreError, CoreResult};
 /// serialized state stays valid JSON and cache keys stay deterministic
 /// across platforms.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case", try_from = "RawFactValue")]
 #[non_exhaustive]
 pub enum FactValue {
     /// Free-text fact (e.g. modality: `"text+image"`).
@@ -26,6 +26,36 @@ pub enum FactValue {
     Boolean(bool),
     /// Ordered list of short string tokens (e.g. available modalities).
     List(Vec<String>),
+}
+
+/// Deserialization mirror for [`FactValue`]; conversion validates.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+enum RawFactValue {
+    /// Mirrors [`FactValue::Text`].
+    Text(String),
+    /// Mirrors [`FactValue::Integer`].
+    Integer(i64),
+    /// Mirrors [`FactValue::Float`].
+    Float(f64),
+    /// Mirrors [`FactValue::Boolean`].
+    Boolean(bool),
+    /// Mirrors [`FactValue::List`].
+    List(Vec<String>),
+}
+
+impl TryFrom<RawFactValue> for FactValue {
+    type Error = CoreError;
+
+    fn try_from(raw: RawFactValue) -> CoreResult<Self> {
+        match raw {
+            RawFactValue::Text(text) => Ok(Self::Text(text)),
+            RawFactValue::Integer(int) => Ok(Self::Integer(int)),
+            RawFactValue::Float(float) => Self::float(float),
+            RawFactValue::Boolean(flag) => Ok(Self::Boolean(flag)),
+            RawFactValue::List(items) => Ok(Self::List(items)),
+        }
+    }
 }
 
 impl FactValue {
