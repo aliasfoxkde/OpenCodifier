@@ -1,0 +1,57 @@
+# OpenCodifier CI — GitForge (primary CI/CD platform).
+#
+# GitHub Actions (.github/workflows/) is a mirror only; this file is the
+# pipeline of record. Quality gates mirror `just ci` exactly.
+name: opencodifier-ci
+version: "1.0"
+trigger_on:
+  - push
+  - pull_request
+environment:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+jobs:
+  - name: lint
+    image: rust:1.90
+    timeout: 20m
+    steps:
+      - name: Install components
+        run: rustup component add rustfmt clippy
+      - name: Format check
+        run: cargo fmt --all -- --check
+      - name: Clippy (workspace lint contract)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  - name: test
+    image: rust:1.90
+    needs: [lint]
+    timeout: 20m
+    steps:
+      - name: Unit and integration tests
+        run: cargo test --workspace
+      - name: Documentation tests
+        run: cargo test --doc
+
+  - name: doc
+    image: rust:1.90
+    needs: [lint]
+    timeout: 15m
+    steps:
+      - name: Build docs with warnings as errors
+        run: |
+          export RUSTDOCFLAGS="-D warnings"
+          cargo doc --workspace --no-deps
+
+  - name: supply-chain
+    image: rust:1.90
+    needs: [lint]
+    timeout: 30m
+    steps:
+      - name: Install cargo-deny
+        run: cargo install --locked cargo-deny
+      - name: Licenses, advisories, bans, sources
+        run: cargo deny check
+      - name: Install cargo-audit
+        run: cargo install --locked cargo-audit
+      - name: Vulnerability audit
+        run: cargo audit
