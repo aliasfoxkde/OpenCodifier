@@ -1,0 +1,10 @@
+{
+  "state": "The user asked to rename every occurrence of the symbol across the repository",
+  "model": "local-qwen",
+  "questions": {
+    "needs_tools": {
+      "type": "noul",
+      "instructions": "Does this request require tool access?"
+    }
+  }
+}

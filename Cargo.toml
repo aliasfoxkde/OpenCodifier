@@ -2,7 +2,7 @@
 resolver = "2"
 # Members are added explicitly as phases land (PLANNING.md §39). The core
 # crate is deliberately dependency-minimal; interface crates join later.
-members = ["crates/opencodifier-core"]
+members = ["crates/opencodifier-core", "crates/opencodifier-schema", "crates/opencodifier-engine"]
 
 [workspace.package]
 version = "0.1.0"
@@ -48,7 +48,10 @@ print_stderr = "deny"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 thiserror = "2"
+# SHA-256 for exact-decision cache keys (PLANNING.md §44, §64).
+sha2 = "0.10"
 
 [profile.release]
 # Reproducible, auditable release artifacts (PLANNING.md §69).

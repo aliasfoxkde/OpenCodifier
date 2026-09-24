@@ -1,0 +1,93 @@
+{
+  "answers": [
+    {
+      "type": "choice",
+      "question_id": "model",
+      "choice": "local-qwen",
+      "distribution": {
+        "entries": [
+          {
+            "key": "local-qwen",
+            "probability": 0.91
+          },
+          {
+            "key": "local-glm",
+            "probability": 0.09
+          }
+        ]
+      },
+      "confidence": 0.91
+    },
+    {
+      "type": "score",
+      "question_id": "difficulty",
+      "expected": 2.53,
+      "level": "difficult",
+      "distribution": {
+        "entries": [
+          {
+            "key": "trivial",
+            "probability": 0.01
+          },
+          {
+            "key": "easy",
+            "probability": 0.07
+          },
+          {
+            "key": "moderate",
+            "probability": 0.42
+          },
+          {
+            "key": "difficult",
+            "probability": 0.38
+          },
+          {
+            "key": "expert",
+            "probability": 0.12
+          }
+        ]
+      },
+      "confidence": 0.71
+    },
+    {
+      "type": "boolean",
+      "question_id": "needs_tools",
+      "value": true,
+      "probability": 0.87,
+      "confidence": 0.87
+    }
+  ],
+  "outcome": "accept",
+  "confidence": {
+    "top_probability": 0.91,
+    "margin": 0.82,
+    "entropy": 0.2,
+    "calibrated_confidence": 0.91,
+    "ood_score": 0.02,
+    "verifier_agreement": null
+  },
+  "trace": {
+    "trace_version": 1,
+    "entries": [
+      {
+        "node": "schema.normalize",
+        "detail": {
+          "format": {
+            "kind": "text",
+            "value": "native"
+          },
+          "questions_in": {
+            "kind": "integer",
+            "value": 3
+          }
+        }
+      }
+    ]
+  },
+  "metrics": {
+    "candidates_in": 2,
+    "candidates_out": 2,
+    "cache_hit": false,
+    "verification_triggered": false
+  }
+}

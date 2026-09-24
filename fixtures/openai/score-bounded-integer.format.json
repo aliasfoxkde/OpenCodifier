@@ -1,0 +1,21 @@
+{
+  "type": "json_schema",
+  "name": "opencodifier_decisions",
+  "strict": true,
+  "schema": {
+    "type": "object",
+    "title": "opencodifier_decisions",
+    "description": "One field per decision question, answered in a single response.",
+    "properties": {
+      "difficulty": {
+        "type": "integer",
+        "title": "How difficult is this request?",
+        "description": "opencodifier:levels=[\"trivial\",\"easy\",\"moderate\",\"difficult\",\"expert\"]",
+        "minimum": 0,
+        "maximum": 4
+      }
+    },
+    "required": ["difficulty"],
+    "additionalProperties": false
+  }
+}

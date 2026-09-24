@@ -1,0 +1,62 @@
+{
+  "state": {
+    "text": "route this request across local models",
+    "facts": {
+      "context_tokens": {
+        "kind": "integer",
+        "value": 4096
+      }
+    }
+  },
+  "questions": [
+    {
+      "type": "choice",
+      "id": "model",
+      "text": "Which model should serve this request?",
+      "candidates": [
+        {
+          "id": "local-qwen",
+          "description": "General coding and reasoning"
+        },
+        {
+          "id": "local-glm",
+          "description": "Complex reasoning"
+        }
+      ]
+    },
+    {
+      "type": "score",
+      "id": "difficulty",
+      "text": "How difficult is this request?",
+      "levels": [
+        { "label": "trivial" },
+        { "label": "easy" },
+        { "label": "moderate" },
+        { "label": "difficult" },
+        { "label": "expert" }
+      ]
+    },
+    {
+      "type": "boolean",
+      "id": "needs_tools",
+      "text": "Does this request need tools?"
+    }
+  ],
+  "policy": {
+    "min_confidence": 0.8,
+    "verify_below": 0.65,
+    "abstain_below": 0.5,
+    "risk": "low"
+  },
+  "metadata": {
+    "request_id": "fixture-0001",
+    "limits": {
+      "max_input_bytes": 1048576,
+      "max_questions": 32,
+      "max_candidates": 256,
+      "max_graph_nodes": 128,
+      "max_execution_time": { "secs": 10, "nanos": 0 },
+      "max_retrieval_results": 64
+    }
+  }
+}

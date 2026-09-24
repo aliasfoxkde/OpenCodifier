@@ -1,0 +1,19 @@
+{
+  "type": "json_schema",
+  "name": "opencodifier_decisions",
+  "strict": true,
+  "schema": {
+    "type": "object",
+    "title": "opencodifier_decisions",
+    "description": "One field per decision question, answered in a single response.",
+    "properties": {
+      "needs_tools": {
+        "type": "boolean",
+        "title": "Does this request need tools?",
+        "description": "Answer true or false."
+      }
+    },
+    "required": ["needs_tools"],
+    "additionalProperties": false
+  }
+}
