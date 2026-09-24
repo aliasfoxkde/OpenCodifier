@@ -13,6 +13,7 @@ use crate::state::State;
 /// schemas, Jev requests — normalizes into this type before the engine
 /// sees it. Vendor formats are adapters; this is the internal truth.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "RawDecisionRequest")]
 pub struct DecisionRequest {
     state: State,
     questions: Vec<DecisionQuestion>,
@@ -20,13 +21,35 @@ pub struct DecisionRequest {
     metadata: RequestMetadata,
 }
 
+/// Deserialization mirror for [`DecisionRequest`]; conversion validates.
+///
+/// Each field type validates itself on deserialize; [`DecisionRequest::new`]
+/// additionally enforces the cross-field resource limits.
+#[derive(Debug, Deserialize)]
+struct RawDecisionRequest {
+    state: State,
+    questions: Vec<DecisionQuestion>,
+    policy: DecisionPolicy,
+    metadata: RequestMetadata,
+}
+
+impl TryFrom<RawDecisionRequest> for DecisionRequest {
+    type Error = CoreError;
+
+    fn try_from(raw: RawDecisionRequest) -> CoreResult<Self> {
+        Self::new(raw.state, raw.questions, raw.policy, raw.metadata)
+    }
+}
+
 impl DecisionRequest {
     /// Validates and constructs a request.
     ///
     /// Enforced limits: at least one question, no more than
-    /// [`Limits::max_questions`], state text within
-    /// [`Limits::max_input_bytes`], choice candidate sets within
-    /// [`Limits::max_candidates`].
+    /// [`Limits::max_questions`](crate::policy::Limits::max_questions),
+    /// state text within
+    /// [`Limits::max_input_bytes`](crate::policy::Limits::max_input_bytes),
+    /// choice candidate sets within
+    /// [`Limits::max_candidates`](crate::policy::Limits::max_candidates).
     pub fn new(
         state: State,
         questions: Vec<DecisionQuestion>,

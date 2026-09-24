@@ -39,12 +39,31 @@ impl DecisionOutcome {
 
 /// The full result of one decision request.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "RawDecisionResponse")]
 pub struct DecisionResponse {
     answers: Vec<DecisionAnswer>,
     outcome: DecisionOutcome,
     confidence: ConfidenceReport,
     trace: DecisionTrace,
     metrics: DecisionMetrics,
+}
+
+/// Deserialization mirror for [`DecisionResponse`]; conversion validates.
+#[derive(Debug, Deserialize)]
+struct RawDecisionResponse {
+    answers: Vec<DecisionAnswer>,
+    outcome: DecisionOutcome,
+    confidence: ConfidenceReport,
+    trace: DecisionTrace,
+    metrics: DecisionMetrics,
+}
+
+impl TryFrom<RawDecisionResponse> for DecisionResponse {
+    type Error = CoreError;
+
+    fn try_from(raw: RawDecisionResponse) -> CoreResult<Self> {
+        Self::new(raw.answers, raw.outcome, raw.confidence, raw.trace, raw.metrics)
+    }
 }
 
 impl DecisionResponse {
