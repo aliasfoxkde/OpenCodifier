@@ -118,9 +118,18 @@ Remaining risks tracked in §6 below.
 
 ## Phase 12 — release
 
-- `just ci` green locally; GitForge pipeline (`.gitforge.yml`) green via
-  `gitforge pipeline` — the validation of record; GitHub mirror status
-  ignored if red (billing-blocked account, per harness policy).
+- `just ci` green locally; the same gates validated through the
+  harness-jobs queue (`cargo-fmt`, `cargo-clippy`, `cargo-test`,
+  `cargo-coverage` profiles at this cwd) — that is the CI validation of
+  record for this build.
+- **GitForge finding (2026-09-24):** pipeline **creation** is a stub in
+  the current GitForge build (`pipeline --create` reports "not yet
+  implemented"; `PipelineQueries::create` has no API caller; pushes do
+  not auto-create pipelines from `.gitforge.yml`). `.gitforge.yml`
+  remains the pipeline definition of record for when the endpoint lands;
+  until then, gate parity is maintained by keeping it line-for-line
+  equivalent to `just ci`. GitHub mirror status ignored if red
+  (billing-blocked account, per harness policy).
 - cargo-deny + cargo-audit clean; aegis scan: 0 new findings vs
   baseline; coverage ≥ 99% lines workspace-wide.
 - SemVer tag `v0.1.0`, GitHub release notes from the changelog, push
