@@ -2,7 +2,12 @@
 resolver = "2"
 # Members are added explicitly as phases land (PLANNING.md §39). The core
 # crate is deliberately dependency-minimal; interface crates join later.
-members = ["crates/opencodifier-core", "crates/opencodifier-schema", "crates/opencodifier-engine"]
+members = [
+    "crates/opencodifier-core",
+    "crates/opencodifier-schema",
+    "crates/opencodifier-engine",
+    "crates/opencodifier-runtime",
+]
 
 [workspace.package]
 version = "0.1.0"

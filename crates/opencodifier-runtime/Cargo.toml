@@ -1,0 +1,17 @@
+[package]
+name = "opencodifier-runtime"
+description = "Synchronous inference backend abstraction for OpenCodifier: InferenceBackend and EmbeddingBackend traits, validated dense f32 tensors, and deterministic mock backends. No ML runtime is linked by default; ONNX support is feature-gated behind an explicit feasibility gate."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords = ["inference", "embedding", "decision", "onnx", "tensor"]
+categories = ["science", "api-bindings"]
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror.workspace = true
