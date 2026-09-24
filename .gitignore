@@ -1,0 +1,24 @@
+# Build artifacts
+/target
+
+# Coverage output
+/coverage
+*.profraw
+*.profdata
+tarpaulin-report.html
+lcov.info
+
+# Model artifacts are never committed (downloaded explicitly, SHA-256 verified)
+/models/**/*.onnx
+/models/**/*.safetensors
+
+# Local scratch state
+/.scratch
+*.local.toml
+
+# Editor / OS noise
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store

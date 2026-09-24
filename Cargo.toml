@@ -1,0 +1,57 @@
+[workspace]
+resolver = "2"
+# Members are added explicitly as phases land (PLANNING.md §39). The core
+# crate is deliberately dependency-minimal; interface crates join later.
+members = ["crates/opencodifier-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# MSRV policy: the oldest stable toolchain the workspace is tested against
+# in CI. Bumps are breaking changes and recorded in CHANGELOG.md.
+rust-version = "1.90"
+license = "Apache-2.0"
+repository = "https://github.com/aliasfoxkde/OpenCodifier"
+authors = ["OpenCodifier contributors"]
+
+[workspace.lints.rust]
+# The engine is pure safe Rust; any unsafe block must be a reviewed,
+# documented exception added locally with justification.
+unsafe_code = "forbid"
+# Doc coverage is enforced by CI (`-D warnings`), not by taste.
+missing_docs = "warn"
+missing_debug_implementations = "deny"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+
+# Pedantic lints that fight idiomatic library APIs are waived here, once,
+# with reasons — not scattered through the code.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+module_name_repetitions = "allow"
+
+# Production-safety bans. Test modules re-allow `unwrap_used` /
+# `expect_used` locally; production code paths may not unwrap, expect,
+# or panic.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[profile.release]
+# Reproducible, auditable release artifacts (PLANNING.md §69).
+lto = "thin"
+strip = "debuginfo"
+codegen-units = 1

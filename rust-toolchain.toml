@@ -1,0 +1,6 @@
+# Local development channel. The MSRV is declared in [workspace.package]
+# (`rust-version`) and is enforced separately in CI against the pinned MSRV
+# toolchain; this file only selects what local `cargo` commands use.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

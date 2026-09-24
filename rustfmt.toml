@@ -1,0 +1,9 @@
+# Stable-channel rustfmt configuration.
+#
+# Intentionally minimal: unstable options (`imports_granularity`,
+# `group_imports`, `format_code_in_doc_comments`, ...) require nightly
+# rustfmt and would make `cargo fmt --check` fail on the stable toolchain
+# selected by rust-toolchain.toml. Strictness here comes from clippy.
+edition = "2024"
+max_width = 100
+use_small_heuristics = "Max"

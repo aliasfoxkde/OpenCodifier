@@ -1,0 +1,41 @@
+# cargo-deny configuration.
+# Run with: cargo deny check
+
+[graph]
+# Check the whole workspace including dev-dependencies.
+all-features = true
+
+[licenses]
+version = 2
+# Allow only permissive licenses compatible with Apache-2.0 redistribution.
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "MIT",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Zlib",
+  "CDLA-Permissive-2.0",
+]
+# Confidence threshold for license detection in Cargo.toml / LICENSE files.
+confidence-threshold = 0.93
+
+[advisories]
+version = 2
+# Fail the build on any published security advisory affecting the graph.
+yanked = "deny"
+
+[bans]
+# Duplicated crates are tolerated during development (warn) and reviewed
+# before release; a hard deny makes every transitive bump break CI.
+multiple-versions = "warn"
+wildcards = "deny"
+# Highlight dependency-duplication hotspots as they appear.
+highlight = "all"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

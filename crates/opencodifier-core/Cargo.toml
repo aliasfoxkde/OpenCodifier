@@ -1,0 +1,21 @@
+[package]
+name = "opencodifier-core"
+description = "Canonical decision IR for OpenCodifier: typed decision questions, candidates, policies, calibrated confidence, and execution traces."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords = ["decision", "classifier", "inference", "routing"]
+categories = ["data-structures"]
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json = "1"
