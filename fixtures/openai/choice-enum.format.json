@@ -1,0 +1,20 @@
+{
+  "type": "json_schema",
+  "name": "opencodifier_decisions",
+  "strict": true,
+  "schema": {
+    "type": "object",
+    "title": "opencodifier_decisions",
+    "description": "One field per decision question, answered in a single response.",
+    "properties": {
+      "model": {
+        "type": "string",
+        "title": "Which model should serve this request?",
+        "description": "opencodifier:descriptions=[\"General coding and reasoning\",\"Complex reasoning\"]",
+        "enum": ["local-qwen", "local-glm"]
+      }
+    },
+    "required": ["model"],
+    "additionalProperties": false
+  }
+}

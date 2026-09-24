@@ -1,0 +1,14 @@
+{
+  "state": "Select the model to serve this coding request",
+  "model": "local-qwen",
+  "questions": {
+    "model": {
+      "type": "choice",
+      "instructions": "Which model should serve this request?",
+      "criteria": {
+        "local-qwen": "General coding and reasoning",
+        "local-glm": "Complex reasoning"
+      }
+    }
+  }
+}

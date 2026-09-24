@@ -1,0 +1,10 @@
+{
+  "model": "local-qwen",
+  "answers": {
+    "model": "local-glm"
+  },
+  "usage": {
+    "input_tokens": 128,
+    "output_tokens": 1
+  }
+}

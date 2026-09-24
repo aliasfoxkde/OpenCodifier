@@ -1,0 +1,29 @@
+[package]
+name = "opencodifier-engine"
+description = "Deterministic decision-graph engine for OpenCodifier: DAG executor, rule engine, candidate narrowing, exact-decision cache, and BM25 lexical scoring. No ML, no async runtime, no network."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords = ["decision", "classifier", "rules-engine", "dag", "cache"]
+categories = ["data-structures", "algorithms"]
+
+[lints]
+workspace = true
+
+[dependencies]
+opencodifier-core = { path = "../opencodifier-core", version = "0.1.0" }
+serde.workspace = true
+serde_json = "1"
+sha2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false }
+proptest = "1"
+
+[[bench]]
+name = "engine"
+harness = false

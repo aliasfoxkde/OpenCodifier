@@ -1,0 +1,16 @@
+{
+  "state": "Refactor the parser module and add regression tests",
+  "model": "local-qwen",
+  "questions": {
+    "difficulty": {
+      "type": "score",
+      "instructions": "How difficult is this request?",
+      "criteria": {
+        "trivial": "No thought required",
+        "moderate": "Focused single-file work",
+        "difficult": "Multi-file change with tests",
+        "expert": "Cross-cutting redesign"
+      }
+    }
+  }
+}

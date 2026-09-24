@@ -1,0 +1,10 @@
+{
+  "model": "local-qwen",
+  "answers": {
+    "needs_tools": 0.87
+  },
+  "usage": {
+    "input_tokens": 96,
+    "output_tokens": 2
+  }
+}
