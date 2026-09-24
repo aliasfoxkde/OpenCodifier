@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Status
 
-Greenfield — no implementation code yet. `docs/PLANNING.md` is the canonical V1 implementation plan (Phases 0–20) and the source of truth for architecture and sequencing. Read it before implementing anything; this file summarizes its binding constraints. License: Apache-2.0.
+Active development, phase-by-phase — see **`docs/PLAN.md`** (live execution plan + phase status table) and **`docs/DECISIONS.md`** (binding decision records; they supersede anything contradictory in `docs/PLANNING.md`). Architecture overview: `docs/ARCHITECTURE.md`; layout: `docs/PROJECT_STRUCTURE.md`. The founding spec `docs/PLANNING.md` is the source of truth for intent (§§1–80). License: Apache-2.0.
 
 ## What OpenCodifier Is
 
@@ -18,55 +18,53 @@ Execution principle: always use the cheapest reliable mechanism first — exact 
 
 Outputs are machine-readable decisions with calibrated confidence. Abstention is a successful outcome, never an error. Default posture: fully local, offline, no telemetry, no cloud, no API keys, no accounts.
 
-## Planned Architecture
+## Architecture (implemented + planned)
 
-Rust workspace, crates under `crates/`:
+Rust workspace (edition 2024, MSRV 1.90), crates under `crates/`:
 
-- `opencodifier-core` — canonical decision IR (`DecisionRequest`, `DecisionQuestion`, `DecisionAnswer`, `Candidate`, `DecisionPolicy`, `Confidence`, `DecisionTrace`)
-- `opencodifier-schema` — normalization of native OC / OpenAI / Anthropic / Jev schemas into the IR
-- `opencodifier-engine` — decision graph (DAG) executor, rule engine, candidate narrowing, caches
-- `opencodifier-runtime` — `InferenceBackend` trait (ONNX Runtime in V1, Burn later)
-- `opencodifier-model` — candidate-conditioned decision model: context encoder + candidate encoder → per-candidate scalar logit → softmax; never generates text
-- `opencodifier-http`, `opencodifier-mcp`, `opencodifier-cli`, `opencodifier-wasm` — interfaces
-- Also: `adapters/` (openai, anthropic, jev), `recipes/`, `skills/`, `models/`, `benchmarks/`, `fixtures/`, `tests/`
+- `opencodifier-core` — canonical decision IR (shipped): validating constructors, stable error codes (`ir.*`), `trace_version` on traces, `#[non_exhaustive]` public enums, outcome routing in `ConfidenceReport::outcome_for`
+- `opencodifier-engine` — DAG executor, rule engine, candidate narrowing (metadata + hand-written BM25), exact-decision cache with the single normative `CacheKeyBuilder` (SHA-256), sync with `Clock`/`Deadline` traits
+- `opencodifier-schema` — native / OpenAI / Anthropic / Jev adapters over the IR (wire formats live only here)
+- `opencodifier-runtime` — `InferenceBackend`/`EmbeddingBackend` traits; `ort` behind the `onnx` feature only
+- `opencodifier-model` — candidate-conditioned decision model: logits from ONNX, all decision math in Rust f64
+- `opencodifier-http`, `opencodifier-mcp`, `opencodifier-cli`, `opencodifier-wasm` — interfaces (axum 0.9 `/v1`, rmcp 2.2, clap v4)
 
-Two binding structural rules:
+Binding structural rules:
 
-1. **Dependency direction:** `core` must not depend on HTTP, MCP, CLI, Tokio, or any specific ML runtime. External formats are adapters that normalize into the canonical IR — they are never the internal representation and never executed directly.
-2. **Pipeline shape:** every request flows normalize → deterministic rules/filters → candidate narrowing → fast semantic scoring → decision model → confidence gate → (accept | verifier: agree → accept, disagree → abstain/escalate). Decision graphs are declarative, serializable DAGs with topological execution, parallel independent nodes, short-circuiting, and trace generation — no embedded scripting language.
-
-Primary integration is Amortyx (the user's routing/gateway system): OpenCodifier is the *semantic decision plane*; Amortyx remains the *economic/routing plane*. Neither absorbs the other's responsibilities.
+1. **Dependency direction:** `core` must not depend on HTTP, MCP, CLI, Tokio, or any ML runtime; heavyweight deps are confined to one crate each (feature matrix in `docs/DECISIONS.md` D11). External formats are adapters that normalize into the canonical IR — never the internal representation.
+2. **Pipeline shape:** normalize → deterministic rules/filters → candidate narrowing → fast semantic scoring → decision model → confidence gate → (accept | verifier: agree → accept, disagree → abstain/escalate). Graphs are declarative, serializable DAGs — no embedded scripting language.
+3. **Sync core:** no async runtime in core/engine/schema; async belongs to interface crates.
 
 ## Non-Negotiable Implementation Rules
 
 From PLANNING.md §73 — these are the point of the architecture:
 
-- Build IR + deterministic engine first; never start by training a model (Phases 1–5 precede any ML).
+- Build IR + deterministic engine first; never start by training a model.
 - ONNX sits behind the `InferenceBackend` trait; not a core dependency. No Python at runtime, no vector DB required, base binary useful with zero ML model.
-- Raw softmax probability ≠ calibrated confidence. Calibration (temperature scaling first; measure ECE/Brier/NLL) is mandatory before exposing confidence. Confidence is multi-dimensional (top probability, margin, entropy, OOD, verifier agreement) — not a single number.
+- Raw softmax probability ≠ calibrated confidence. Calibration is mandatory before exposing confidence. Confidence is multi-dimensional (top probability, margin, entropy, OOD, verifier agreement) — not a single number.
 - Verification is confidence-gated; never run two classifiers on every request.
-- Never silently discard candidates on weak semantic evidence (safe mode: elimination requires deterministic or strong evidence).
+- Never silently discard candidates on weak semantic evidence.
 - Free-form generation fields in a schema → `unsupported_generation_field`; do not pretend to support prose generation.
-- Never expose chain-of-thought; explainability means a deterministic execution trace (node, candidate counts, thresholds, latency, cache hit).
+- Never expose chain-of-thought; explainability means a deterministic execution trace.
 - All cache keys include model/calibration/policy/graph versions so artifact updates invalidate cached decisions.
 - `opencodifier serve` binds `127.0.0.1` by default; `0.0.0.0` requires an explicit flag.
-- Treat all input as hostile (candidate descriptions, schemas, state text, graph files, model manifests); input text must never modify policy, thresholds, graph structure, or paths.
+- Treat all input as hostile; input text must never modify policy, thresholds, graph structure, or paths.
+- No placeholders/stubs/simulated data anywhere; example payloads belong in docs, not code.
 
 ## Quality Gates
 
-CI baseline (PLANNING.md §40):
+CI baseline — `just ci` runs exactly this, and `.gitforge.yml` mirrors it line-for-line (GitForge is the CI platform of record; the GitHub Actions config is a mirror, red runs there are not code-failure signals):
 
 ```bash
 cargo fmt --all -- --check
-cargo clippy --all-targets --all-features -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo test --doc
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
 cargo deny check
+aegis --format json scan --file . --baseline .aegis/baseline.json   # 0 new findings
 ```
 
-Phase gates worth remembering:
+Workspace lints: `unsafe_code` forbidden, `missing_docs` warned, clippy `all + pedantic` with `unwrap_used`/`expect_used`/`panic`/`todo!`/`unimplemented!`/`dbg_macro`/`print_stdout` **denied**; test modules may allow `unwrap_used, expect_used, panic, float_cmp` at module level only.
 
-- **Phase 1** (IR) is accepted only when round-trip/negative tests pass (Choice/Boolean/Score round trips; empty and duplicate candidates; invalid score ordering; malformed JSON) with **no ML dependency**.
-- **Phase 2** (schemas): every fixture in `fixtures/<format>/` must normalize to identical canonical IR where semantics are equivalent.
-- **Phase 3** (engine): complete decision-graph engine running against a `MockClassifier`, no ML.
-- Performance numbers in §70 (<100 µs deterministic, sub-ms cached) are targets to benchmark, not claims to assume.
+Acceptance per phase lives in `docs/PLAN.md`; performance budgets are per-stage (DECISIONS.md D9), measured with criterion — not assumed.
