@@ -52,7 +52,7 @@ Remaining risks tracked in §6 below.
 | 9 | `opencodifier-http` | **done** — axum **0.8** `/v1` (D12 amended), loopback gate, 26 tests incl. real-socket e2e |
 | 10 | `opencodifier-mcp` | pending |
 | 11 | E2E recipes + docs book + examples | **done** (85cd2ec) — `recipes/` 3 runnable graphs + captured responses; docs set + accessibility checked |
-| 12 | Release engineering (tag, release, GitForge pipeline green) | **done** (49bc224) — bench baseline committed; harness-jobs cwd gap + GitForge pipeline-creation stub recorded; tag v0.1.0 |
+| 12 | Release engineering (tag, release, GitForge pipeline green) | **done** (49bc224) — tag v0.1.0; pipeline of record green through GitForge (fe4b0871) |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
@@ -287,6 +287,20 @@ Remaining risks tracked in §6 below.
   recorded: the aegis gate runs after every content edit, not only
   before "the final" one. The six findings were triaged into the
   baseline (1,729 → 1,734; dead :259 fence entry removed).
+- **Pipeline of record green (2026-09-25, run fe4b0871 on 3f38113):**
+  lint, test, doc, and supply-chain (cargo-deny, cargo-audit, aegis
+  baseline gate) all succeeded inside the baked image. Getting there
+  surfaced one more platform finding: a newer platform release deployed
+  from un-merged main silently dropped the pipeline-management endpoints
+  (PR #236 still open), so the CLI's run-trigger route reports not-found
+  against it; the push-webhook and internal trigger paths were
+  unaffected, and manual runs went through the CI service's own
+  push-event endpoint (the same typed path webhooks use). Durable fix:
+  merge PR #236 to main before the next platform release cut.
+  Harness-jobs: the fmt profile ran green through the queue (first
+  OpenCodifier gate validated there); clippy/test/coverage remain
+  queue-blocked by box load — local `just ci` and the GitForge pipeline
+  cover the same gates meanwhile.
 - cargo-deny + cargo-audit clean; aegis scan: 0 new findings vs
   baseline; coverage ≥ 99% lines workspace-wide.
 - SemVer tag `v0.1.0`, GitHub release notes from the changelog, push
