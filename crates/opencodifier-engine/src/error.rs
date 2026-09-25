@@ -189,6 +189,21 @@ pub enum EngineError {
         reason: String,
     },
 
+    /// A classifier (lexical, embedding, or model-backed) failed to decide.
+    ///
+    /// The engine itself is agnostic over [`Classifier`](crate::classifier::Classifier)
+    /// implementations, so the failing party is identified by its model id
+    /// and the underlying reason is carried as a string — engine never
+    /// depends on a specific backend crate.
+    #[error("classifier `{model_id}` failed: {reason}")]
+    ClassifierFailed {
+        /// The [`Classifier::model_id`](crate::classifier::Classifier::model_id)
+        /// of the failing classifier.
+        model_id: String,
+        /// What went wrong inside the classifier.
+        reason: String,
+    },
+
     /// A core IR error (invalid request, invalid distribution, ...).
     #[error(transparent)]
     Core(#[from] CoreError),
@@ -219,6 +234,7 @@ impl EngineError {
             Self::InvalidConfig { .. } => "engine.invalid_config",
             Self::Serialization { .. } => "engine.serialization",
             Self::NodeFailed { .. } => "engine.node_failed",
+            Self::ClassifierFailed { .. } => "engine.classifier_failed",
             Self::Core(_) => "ir.invalid",
         }
     }
@@ -260,6 +276,7 @@ mod tests {
             EngineError::InvalidConfig { reason: "r".into() },
             EngineError::Serialization { reason: "r".into() },
             EngineError::NodeFailed { node: "n".into(), reason: "r".into() },
+            EngineError::ClassifierFailed { model_id: "m".into(), reason: "r".into() },
             EngineError::Core(CoreError::EmptyQuestions),
         ];
 
@@ -273,6 +290,8 @@ mod tests {
         assert_eq!(errors[12].code(), "graph.invalid_node");
         assert_eq!(errors[13].code(), "rules.invalid");
         assert_eq!(errors[14].code(), "cache.miss_configured");
+        assert_eq!(errors[20].code(), "engine.classifier_failed");
+        assert_eq!(errors[20].to_string(), "classifier `m` failed: r");
     }
 
     #[test]

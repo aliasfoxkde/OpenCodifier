@@ -1,0 +1,23 @@
+[package]
+name = "opencodifier-model"
+description = "Model layer for OpenCodifier: embedding-backed semantic classification, SHA-256-verified model manifests, and the candidate-conditioned inference contract over any InferenceBackend. Softmax and confidence stay in Rust; no weights ship in V1."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords = ["decision", "embedding", "inference", "classifier"]
+categories = ["science", "text-processing"]
+
+[lints]
+workspace = true
+
+[dependencies]
+opencodifier-core = { path = "../opencodifier-core", version = "0.1.0" }
+opencodifier-engine = { path = "../opencodifier-engine", version = "0.1.0" }
+opencodifier-runtime = { path = "../opencodifier-runtime", version = "0.1.0" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
