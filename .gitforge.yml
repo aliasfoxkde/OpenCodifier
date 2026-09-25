@@ -55,3 +55,7 @@ jobs:
         run: cargo install --locked cargo-audit
       - name: Vulnerability audit
         run: cargo audit
+      - name: Install aegis (pattern scanner)
+        run: cargo install --locked --git http://127.0.0.1:42782/bigdata-ci/aegis.git aegis
+      - name: Security pattern scan (0 new findings)
+        run: aegis --format json scan --file . --baseline .aegis/baseline.json

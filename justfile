@@ -3,8 +3,8 @@
 
 default := "ci"
 
-# Full CI gate: format, lint, test, doc, deny.
-ci: fmt-check lint test doc deny
+# Full CI gate: format, lint, test, doc, deny, audit, pattern scan.
+ci: fmt-check lint test doc deny scan
 
 # Format all code.
 fmt:
@@ -24,7 +24,7 @@ test:
 
 # Build and test documentation examples.
 doc:
-    cargo doc --workspace --no-deps --document-private-items
+    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
     cargo test --doc
 
 # Dependency license/advisory/ban checks.
@@ -34,6 +34,10 @@ deny:
 # Known-vulnerability audit of the dependency graph.
 audit:
     cargo audit
+
+# Security pattern scan: fail on findings newer than the baseline.
+scan:
+    aegis --format json scan --file . --baseline .aegis/baseline.json --quiet
 
 # Unused-dependency check.
 machete:
