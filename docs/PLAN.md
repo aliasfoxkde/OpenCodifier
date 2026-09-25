@@ -51,8 +51,8 @@ Remaining risks tracked in §6 below.
 | 8 | `opencodifier-cli` | **done** — `decide`/`graph validate`/`serve`/`models verify`, D13 exit codes, 20 e2e tests |
 | 9 | `opencodifier-http` | **done** — axum **0.8** `/v1` (D12 amended), loopback gate, 26 tests incl. real-socket e2e |
 | 10 | `opencodifier-mcp` | pending |
-| 11 | E2E recipes + docs book + examples | pending |
-| 12 | Release engineering (tag, release, GitForge pipeline green) | pending |
+| 11 | E2E recipes + docs book + examples | **done** (85cd2ec) — `recipes/` 3 runnable graphs + captured responses; docs set + accessibility checked |
+| 12 | Release engineering (tag, release, GitForge pipeline green) | **done** (49bc224) — bench baseline committed; harness-jobs cwd gap + GitForge pipeline-creation stub recorded; tag v0.1.0 |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
