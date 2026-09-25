@@ -29046,16 +29046,6 @@
       "stable_id": "aegis-ba05e299c5f820dbe9d23857339b1b254e5c988e102723ad4ab5bb76b81c1232"
     },
     {
-      "category": "ai-detection",
-      "fingerprint": "markdown-code-fence:./docs/PLAN.md:259:72a3ccbc9ef76d5fb1395d9874440bee5aa2192f9556c4cf830eb908cd4b9f64",
-      "location": {
-        "file": "./docs/PLAN.md",
-        "line": 259
-      },
-      "pattern": "markdown-code-fence",
-      "triage": "line shift of accepted entry (was :252, same content hash) from the Phase 12 plan edit; re-appended 2026-09-25"
-    },
-    {
       "id": "000000000000000018d8a8de0b4e69f2",
       "pattern": "integration-test-marker",
       "category": "shift-left",
@@ -29494,6 +29484,102 @@
       "fingerprint": "timeout-configuration:./.gitforge.yml:55:fab6f492d9389e1e26e53beb4f7641b50cf41eadfea9fb82e5569e1074eac7c5",
       "stable_id": "aegis-c83218fa6dca59a45bd1ee45626797c739ca6dab031ff139f82a342a1e24330e",
       "triage": "explicit per-job timeouts are desirable CI hygiene, not a finding; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8aa1b658b423a",
+      "pattern": "hardcoded-ip",
+      "category": "devops",
+      "severity": "medium",
+      "confidence": "medium",
+      "location": {
+        "file": "./docs/PLAN.md",
+        "line": 254,
+        "column": 10
+      },
+      "description": "Hardcoded IP address detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "hardcoded-ip:./docs/PLAN.md:254:12ca17b49af2289436f303e0166030a21e525d266e209267433801a8fd4071a0",
+      "stable_id": "aegis-6e41ca3b21e45c62a6e69d23ebf486ebb007185c9ec58249a65e1587f2b5e77d",
+      "triage": "documentation of the measured container-topology finding (127.0.0.1 git-server and 172.17.0.1 bridge gateway are unreachable from job containers \u2014 the reason the CI image exists); no endpoint is called; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8aa1b658b5ff6",
+      "pattern": "hardcoded-ip",
+      "category": "devops",
+      "severity": "medium",
+      "confidence": "medium",
+      "location": {
+        "file": "./docs/PLAN.md",
+        "line": 258,
+        "column": 56
+      },
+      "description": "Hardcoded IP address detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "hardcoded-ip:./docs/PLAN.md:258:346840d5a3d9fe9b61ce99955bb98df3db872090732c96aa5df1d83cb1f3e85a",
+      "stable_id": "aegis-d5c355947c22ca70dccfd5e3d75c418400a23e961aa896062d3dd3c58fceda1b",
+      "triage": "documentation of the measured container-topology finding (127.0.0.1 git-server and 172.17.0.1 bridge gateway are unreachable from job containers \u2014 the reason the CI image exists); no endpoint is called; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8aa1b7852c62d",
+      "pattern": "zip-code",
+      "category": "pii",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./docs/PLAN.md",
+        "line": 254,
+        "column": 20
+      },
+      "description": "US ZIP code detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "zip-code:./docs/PLAN.md:254:9ddff7e7f21000ac8a8bf11b01b108605e9b60c1ee60e7adc92859a0d96722a5",
+      "stable_id": "aegis-b30e46948fca8d5abc818de2fb67b57243e4db2180f44d575f10a3f564761987",
+      "triage": "documentation of the measured container-topology finding (127.0.0.1 git-server and 172.17.0.1 bridge gateway are unreachable from job containers \u2014 the reason the CI image exists); no endpoint is called; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8aa1b6c095ad6",
+      "pattern": "ssrf-localhost",
+      "category": "web-security",
+      "severity": "medium",
+      "confidence": "medium",
+      "location": {
+        "file": "./docs/PLAN.md",
+        "line": 254,
+        "column": 10
+      },
+      "description": "Potential SSRF targeting internal resources",
+      "reference": "https://owasp.org/www-community/attacks/Server_Side_Request_Forgery",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "ssrf-localhost:./docs/PLAN.md:254:12ca17b49af2289436f303e0166030a21e525d266e209267433801a8fd4071a0",
+      "stable_id": "aegis-c86032b9fac79756849a5759c026f0c3180015a3fa04aba687e11677f8fe68e8",
+      "triage": "documentation of the measured container-topology finding (127.0.0.1 git-server and 172.17.0.1 bridge gateway are unreachable from job containers \u2014 the reason the CI image exists); no endpoint is called; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8aa1b5ee48128",
+      "pattern": "magic-number",
+      "category": "code-quality",
+      "severity": "low",
+      "confidence": "medium",
+      "location": {
+        "file": "./docs/PLAN.md",
+        "line": 254,
+        "column": 20
+      },
+      "description": "Magic number detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "magic-number:./docs/PLAN.md:254:9ddff7e7f21000ac8a8bf11b01b108605e9b60c1ee60e7adc92859a0d96722a5",
+      "stable_id": "aegis-0efa6718946ce3d95d5c7b6d846c6494df011a45d2bd103ec0737e7fa40fcaac",
+      "triage": "documentation of the measured container-topology finding (127.0.0.1 git-server and 172.17.0.1 bridge gateway are unreachable from job containers \u2014 the reason the CI image exists); no endpoint is called; accepted 2026-09-25"
+    },
+    {
+      "category": "ai-detection",
+      "fingerprint": "markdown-code-fence:./docs/PLAN.md:297:72a3ccbc9ef76d5fb1395d9874440bee5aa2192f9556c4cf830eb908cd4b9f64",
+      "triage": "line shift of accepted entry (same content hash 72a3ccbc\u2026) from the Phase 12 run-evidence paragraph; re-baselined 2026-09-25"
     }
   ]
 }
