@@ -210,10 +210,17 @@ Remaining risks tracked in §6 below.
 
 ## Phase 12 — release
 
-- `just ci` green locally; the same gates validated through the
-  harness-jobs queue (`cargo-fmt`, `cargo-clippy`, `cargo-test`,
-  `cargo-coverage` profiles at this cwd) — that is the CI validation of
-  record for this build.
+- `just ci` green locally is the validation of record for this build.
+- **Harness-jobs finding (2026-09-25):** the harness-jobs queue
+  **rejects this cwd outright** — `submit_job` accepts only
+  `/home/mkinney/repos/backend-fixed`, `/nas/Temp/repos/GitForge`,
+  `/nas/Temp/repos/dsc`, `/nas/Temp/repos/BigData`,
+  `/nas/Temp/repos/Amortyx*`. The planned "gates validated through the
+  harness-jobs queue at this cwd" is therefore not achievable as
+  written; the gap is recorded rather than worked around. If OpenCodifier
+  is added to the queue's allowlist, the four profiles
+  (`cargo-fmt`, `cargo-clippy`, `cargo-test`, `cargo-coverage`) remain
+  the intended validation path.
 - **GitForge finding (2026-09-24):** pipeline **creation** is a stub in
   the current GitForge build (`pipeline --create` reports "not yet
   implemented"; `PipelineQueries::create` has no API caller; pushes do

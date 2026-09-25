@@ -31,7 +31,7 @@ opencodifier/
 ├── recipes/                 # runnable decision graphs + captured responses (done)
 ├── skills/                  # agent-facing usage skills (planned)
 ├── models/                  # model artifacts (never committed; SHA-256 verified)
-├── benchmarks/              # criterion output kept per release (planned)
+├── benchmarks/              # per-release criterion baselines (done for v0.1.0)
 └── docs/                    # PLANNING.md (founding), PLAN.md (live plan), …
 ```
 
