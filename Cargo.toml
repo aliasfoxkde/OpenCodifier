@@ -8,6 +8,8 @@ members = [
     "crates/opencodifier-engine",
     "crates/opencodifier-runtime",
     "crates/opencodifier-model",
+    "crates/opencodifier-http",
+    "crates/opencodifier-cli",
 ]
 
 [workspace.package]

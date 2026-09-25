@@ -11,11 +11,36 @@ model. Jev/System One compatibility is one adapter mode, not the identity.
 
 ## Status
 
-**Work in progress — pre-1.0.** The canonical decision IR
-([`opencodifier-core`](crates/opencodifier-core)) is implemented and tested.
-The deterministic engine, schema adapters, and interfaces are landing
-phase by phase; the live plan is [`docs/PLAN.md`](docs/PLAN.md) and the
-founding document is [`docs/PLANNING.md`](docs/PLANNING.md).
+**Work in progress — pre-1.0, but real and runnable today.** The
+canonical decision IR, schema adapters (native / OpenAI / Anthropic /
+Jev), deterministic engine (graphs, rules, caches, BM25 narrowing),
+backend traits, and both primary interfaces are implemented and tested:
+
+- `opencodifier` CLI — `decide`, `graph validate`, `serve`,
+  `models verify` (see `--help` for the exit-code contract).
+- `POST /v1/decide`, `POST /v1/graph/validate`, `GET /v1/healthz` —
+  axum server, loopback-only unless explicitly told otherwise.
+
+The live plan is [`docs/PLAN.md`](docs/PLAN.md) and the founding
+document is [`docs/PLANNING.md`](docs/PLANNING.md). Try it with the
+committed native fixture (choice + score + boolean in one request):
+
+```bash
+cargo run -p opencodifier-cli -- decide --input fixtures/native/request.json
+```
+
+The response carries a full distribution per answer, a multi-dimensional
+confidence report, and the deterministic execution trace. Under the
+fixture's default policy the lexical engine's 0.5 top confidence lands in
+the verify band, so the CLI prints the complete response and exits `2`
+(policy-gate escalation) — the runtime refusing to overclaim is the
+product working. Add `--abstain-is-success` to exit `0`, or `--trace`
+to print the execution report. Validate any decision graph without
+running it:
+
+```bash
+cargo run -p opencodifier-cli -- graph validate <graph.json>
+```
 
 ## Design commitments
 
