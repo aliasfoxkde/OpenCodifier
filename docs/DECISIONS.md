@@ -146,7 +146,7 @@ re-ordering, candidate narrowing subset-safety. Fixtures under
 No crate may enable another crate's heavyweight feature transitively;
 the default build of the whole workspace stays ML-free and runtime-free.
 
-## D12 — HTTP surface: axum 0.9, `/v1` prefix
+## D12 — HTTP surface: axum 0.8, `/v1` prefix
 
 Endpoints: `POST /v1/decide`, `POST /v1/graph/validate`,
 `GET /v1/healthz`. Errors map `code()` → stable strings in the body
@@ -155,12 +155,25 @@ input, 5xx internal). Binding default `127.0.0.1:8177`; non-loopback
 binds require `--allow-remote` (documented as a real risk in
 SECURITY.md).
 
+*Amended 2026-09-24: the original pin said "axum 0.9" — that version
+does not exist (latest published is 0.8.9); the pin was aspirational
+and never checked, the same failure mode as the ONNX api pin in D2.
+Corrected to the measured reality: **axum 0.8**.*
+
 ## D13 — CLI: clap v4 with an exit-code table
 
 `decide`, `graph validate`, `serve`, `models verify` subcommands. Exit
 codes: 0 success/abstain-with-flag, 1 input error, 2 policy gate
 escalation, 3 internal error — documented in `--help` and the book so
 scripts can branch on them.
+
+*Implemented notes (2026-09-25): exit 2 covers **every non-decisive
+outcome** (`abstain`, `escalate`, `verify`, `no_valid_candidate`) —
+`is_decisive()` is the only honest split the `DecisionOutcome` enum
+supports. clap's own default exit 2 for bad arguments is normalized to
+1 so scripts can trust the table. `serve --policy` validates the file
+then reports `cli.policy_inapplicable`: policy lives on the request in
+this IR, and a pretended server-wide override would be a lie.*
 
 ## D14 — Model integrity: SHA-256 manifests, never commit weights
 

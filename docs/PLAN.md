@@ -47,9 +47,9 @@ Remaining risks tracked in §6 below.
 | 4 | Engine narrowing (metadata + BM25) | **done** (5952769) |
 | 5 | Deterministic decision model + calibration interface | **done** (5952769) |
 | 6 | `opencodifier-runtime` trait + honest ONNX feasibility | **done** (5146c34) — gate measured: a FAIL / b FAIL / c PASS → `onnx` deferred (D2) |
-| 7 | `opencodifier-model` (candidate-conditioned scoring) | **done** — `EmbeddingClassifier`, `ModelManifest`, serving contract; no weights in V1 |
-| 8 | `opencodifier-cli` | pending |
-| 9 | `opencodifier-http` | pending |
+| 7 | `opencodifier-model` (candidate-conditioned scoring) | **done** (d3a5aa5) — `EmbeddingClassifier`, `ModelManifest`, serving contract; no weights in V1 |
+| 8 | `opencodifier-cli` | **done** — `decide`/`graph validate`/`serve`/`models verify`, D13 exit codes, 20 e2e tests |
+| 9 | `opencodifier-http` | **done** — axum **0.8** `/v1` (D12 amended), loopback gate, 26 tests incl. real-socket e2e |
 | 10 | `opencodifier-mcp` | pending |
 | 11 | E2E recipes + docs book + examples | pending |
 | 12 | Release engineering (tag, release, GitForge pipeline green) | pending |
@@ -134,14 +134,57 @@ Remaining risks tracked in §6 below.
   is normalized by construction — and the `#[non_exhaustive]`
   question-kind arm).
 
-## Phases 8–10 — interfaces
+## Phases 8–9 — interfaces (done)
 
-- CLI (D13), HTTP (D12), MCP (D1) all reuse the same `EngineHandle`
-  facade; no endpoint reimplements pipeline logic.
-- CLI (D13), HTTP (D12), MCP (D1) all reuse the same `EngineHandle`
-  facade; no endpoint reimplements pipeline logic.
-- **Accept:** one e2e test per interface driving a real decision
-  (choice + score + abstain case) through the full stack.
+- `opencodifier-engine::EngineHandle` — the one facade (D5 sync):
+  `lexical` zero-ML constructor, `decide`/`decide_with_report`,
+  `validate_graph`, `health`. No interface reimplements pipeline logic.
+- `opencodifier-cli` (D13): `decide`
+  (`--input`/`--format native|openai|anthropic|jev`/`--policy`/`--trace`/
+  `--abstain-is-success`), `graph validate`, `serve`
+  (`--bind 127.0.0.1:8177` default, `--allow-remote` gate,
+  `--graph`), `models verify` (D14 digest gate). Exit codes 0 accept /
+  1 input / 2 policy-gate escalation / 3 internal — **any non-decisive
+  outcome** is exit 2 (the honest split `DecisionOutcome` supports),
+  and clap's own exit 2 for bad args is normalized to 1 so scripts can
+  trust the table. Responses always canonical native JSON; `--trace`
+  prints the CLI-owned execution-report projection (`RunReport` is not
+  `Serialize`; recorded as a possible engine follow-up).
+- `opencodifier-http` (D12, **axum 0.8** — 0.9 does not exist; D2-style
+  pin correction recorded): `POST /v1/decide`,
+  `POST /v1/graph/validate`, `GET /v1/healthz`; `{"error":{code,message}}`
+  envelope with owning-crate codes; 400 input vs 500 engine faults;
+  1 MiB body cap at the socket; loopback-by-default bind with
+  `allow_remote` opt-in; sync engine off the async workers via
+  `spawn_blocking`; abstention is 200.
+- `serve --policy` validates the file then reports
+  `cli.policy_inapplicable`: policy lives on the request in this IR,
+  and pretending a server-wide policy override existed would be a lie.
+- **Accept (met):** choice + score + abstain e2e through both surfaces
+  — CLI via `assert_cmd` on the real binary, HTTP via reqwest over a
+  real socket; abstention forced through a high-threshold `DecisionPolicy`
+  carried in the request (the IR's own mechanism, no special casing).
+  The serve loop is additionally lifecycle-tested in-process:
+  `serve_with_shutdown` takes the shutdown future as a parameter, so
+  bind → accept → request → graceful shutdown runs under the test
+  runtime (the spawned-binary e2e covers the same loop at process
+  level, but a child's profraw never merges into the coverage report).
+- **Coverage ledger (2026-09-25, clean instrumented measure):**
+  8,340 instrumented lines, **83 uncovered = 99.00% line coverage**
+  (lcov `DA:…,0` ground truth; the llvm-cov summary overcounts
+  duplicate codegen regions and is not the ledger basis). Every
+  uncovered line is in a documented-unreachable category with an
+  in-source justification: engine 44 (mutex-poisoning arms,
+  `#[non_exhaustive]` catch-alls, assertion-shadowed fallbacks,
+  divide-by-zero guards), schema 10 (`#[non_exhaustive]`
+  catch-alls), model 13 (defensive `Distribution::from_pairs`
+  closures after normalized softmax + the non_exhaustive
+  question-kind arm), interfaces 16 (CLI `run()` process shell and
+  the `ctrl_c` await — process-lifetime lines covered by the e2e
+  suites whose profraw files cannot merge — and the defensive
+  encode-error closure on engine-produced responses).
+- Phase 10 (MCP) remains planned; D1's `rmcp 2.2` pin is stale
+  (latest is 3.4.x) and will be corrected when that phase starts.
 
 ## Phase 11 — docs + recipes
 

@@ -1,0 +1,26 @@
+[package]
+name = "opencodifier-http"
+description = "axum /v1 HTTP surface for the OpenCodifier decision runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+opencodifier-core = { path = "../opencodifier-core", version = "0.1.0" }
+opencodifier-engine = { path = "../opencodifier-engine", version = "0.1.0" }
+opencodifier-schema = { path = "../opencodifier-schema", version = "0.1.0" }
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "signal"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+[lints]
+workspace = true

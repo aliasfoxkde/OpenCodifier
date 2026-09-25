@@ -18,16 +18,16 @@ opencodifier/
 │
 ├── crates/
 │   ├── opencodifier-core/      # canonical decision IR (done)
-│   ├── opencodifier-engine/    # DAG executor, rules, caches, narrowing, BM25
-│   ├── opencodifier-schema/    # native/OpenAI/Anthropic/Jev adapters (planned)
-│   ├── opencodifier-runtime/   # InferenceBackend trait, ONNX backend (planned)
-│   ├── opencodifier-model/     # candidate-conditioned decision model (planned)
-│   ├── opencodifier-http/      # axum /v1 API (planned)
+│   ├── opencodifier-schema/    # native/OpenAI/Anthropic/Jev adapters (done)
+│   ├── opencodifier-engine/    # DAG executor, rules, caches, narrowing, BM25 (done)
+│   ├── opencodifier-runtime/   # InferenceBackend traits, mocks; `onnx` deferred by gate (done, D2)
+│   ├── opencodifier-model/     # decision serving contract + embedding classifier + manifests (done)
+│   ├── opencodifier-http/      # axum 0.8 /v1 API (done)
+│   ├── opencodifier-cli/       # clap CLI binary `opencodifier` (done)
 │   ├── opencodifier-mcp/       # rmcp server (planned)
-│   ├── opencodifier-cli/       # clap CLI (planned)
 │   └── opencodifier-wasm/      # browser target (planned)
 │
-├── fixtures/                # wire-format fixtures per adapter (planned, Phase 2)
+├── fixtures/                # wire-format fixtures per adapter (done, byte-locked)
 ├── recipes/                 # ready-to-use decision graphs (planned)
 ├── skills/                  # agent-facing usage skills (planned)
 ├── models/                  # model artifacts (never committed; SHA-256 verified)
@@ -38,9 +38,11 @@ opencodifier/
 ## Dependency direction (binding)
 
 ```text
-cli/http/mcp/wasm ──► engine ──► core ◄── schema
-                       │
-                       └──► runtime ──► core      (planned)
+cli ──► http ──┐
+               ├──► engine ──► core ◄── schema
+model ──► runtime ──► core
+        └────────► engine
+(mcp/wasm, when they land, take the same engine-facade edge as cli/http)
 ```
 
 `opencodifier-core` must never depend on HTTP, MCP, CLI, Tokio, or any ML

@@ -27,7 +27,7 @@ Rust workspace (edition 2024, MSRV 1.90), crates under `crates/`:
 - `opencodifier-schema` — native / OpenAI / Anthropic / Jev adapters over the IR (wire formats live only here)
 - `opencodifier-runtime` — `InferenceBackend`/`EmbeddingBackend` traits; `ort` behind the `onnx` feature only
 - `opencodifier-model` — candidate-conditioned decision model: logits from ONNX, all decision math in Rust f64
-- `opencodifier-http`, `opencodifier-mcp`, `opencodifier-cli`, `opencodifier-wasm` — interfaces (axum 0.9 `/v1`, rmcp 2.2, clap v4)
+- `opencodifier-http`, `opencodifier-mcp`, `opencodifier-cli`, `opencodifier-wasm` — interfaces (axum 0.8 `/v1` [D12 amended], rmcp 2.2, clap v4)
 
 Binding structural rules:
 
