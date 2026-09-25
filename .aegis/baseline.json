@@ -3803,57 +3803,6 @@
       "stable_id": "aegis-7a82955bee5cf27a4d74b7db2fec94615cd0b174368643d9ada61e7cf0a3f40c"
     },
     {
-      "id": "000000000000000018d89da74dba3c47",
-      "pattern": "ai-generated-marker",
-      "category": "ai-detection",
-      "severity": "low",
-      "confidence": "medium",
-      "location": {
-        "file": "./docs/PROJECT_STRUCTURE.md",
-        "line": 21,
-        "column": 57
-      },
-      "description": "AI generation marker detected",
-      "tags": [],
-      "kind": "pattern",
-      "fingerprint": "ai-generated-marker:./docs/PROJECT_STRUCTURE.md:21:744205e43529c1fc39bc4ed37dbcd1e91facc78d2a2d136bc893b023ac3c75f5",
-      "stable_id": "aegis-b9693ba25069d60faa2f0466a9934e2aa04ab33a4ce16604149c3993aefef2b6"
-    },
-    {
-      "id": "000000000000000018d89da74dba6579",
-      "pattern": "markdown-code-fence",
-      "category": "ai-detection",
-      "severity": "low",
-      "confidence": "low",
-      "location": {
-        "file": "./docs/PROJECT_STRUCTURE.md",
-        "line": 8,
-        "column": 1
-      },
-      "description": "Markdown code fence detected",
-      "tags": [],
-      "kind": "pattern",
-      "fingerprint": "markdown-code-fence:./docs/PROJECT_STRUCTURE.md:8:d9eff75ef0caa389cd539570c66312e4cd01b0220cc39b65fa0cdaa5abc90e0b",
-      "stable_id": "aegis-ca80152b56714e6c85ccbbd93243a15753e48120125e6cb61a571fb70ed48ad8"
-    },
-    {
-      "id": "000000000000000018d89da74dba7806",
-      "pattern": "markdown-code-fence",
-      "category": "ai-detection",
-      "severity": "low",
-      "confidence": "low",
-      "location": {
-        "file": "./docs/PROJECT_STRUCTURE.md",
-        "line": 40,
-        "column": 1
-      },
-      "description": "Markdown code fence detected",
-      "tags": [],
-      "kind": "pattern",
-      "fingerprint": "markdown-code-fence:./docs/PROJECT_STRUCTURE.md:40:77eb780bd92190413ebdbb4cb670848f5b11e7aa45b4caac8db7c247bfd7d63c",
-      "stable_id": "aegis-e002e91a0345813e4f4948385922b1589a5a2675f101b4d6577a8fb43c699b2b"
-    },
-    {
       "id": "000000000000000018d89da74ee31f60",
       "pattern": "shift-left-github-actions-workflow",
       "category": "shift-left",
@@ -3870,23 +3819,6 @@
       "kind": "pattern",
       "fingerprint": "shift-left-github-actions-workflow:./docs/PROJECT_STRUCTURE.md:16:b803fcb7f17ed9235f1e5cb1fcd2f5d3b2838429d4368ae4c57ce4436577f03f",
       "stable_id": "aegis-e831c97671d1f8ba64d7d6b489bc9b20251dee2cb89d3a31586f6aa6b55b2bec"
-    },
-    {
-      "id": "000000000000000018d89da74ee34435",
-      "pattern": "integration-test-marker",
-      "category": "shift-left",
-      "severity": "low",
-      "confidence": "high",
-      "location": {
-        "file": "./docs/PROJECT_STRUCTURE.md",
-        "line": 58,
-        "column": 24
-      },
-      "description": "Integration test marker detected",
-      "tags": [],
-      "kind": "pattern",
-      "fingerprint": "integration-test-marker:./docs/PROJECT_STRUCTURE.md:58:adb0800a0de78508924fdf8857b8270b864a2c29302c61ede6c249ec32118c61",
-      "stable_id": "aegis-de394cbf239aaa2e3f5480ef77887692917182f10f235901dadb7123e49dee4d"
     },
     {
       "id": "000000000000000018d89da750d943d0",
@@ -29122,42 +29054,446 @@
       },
       "pattern": "markdown-code-fence",
       "triage": "line shift of accepted entry (was :252, same content hash) from the Phase 12 plan edit; re-appended 2026-09-25"
-    }
-  ],
-  "stats": {
-    "files_scanned": 120,
-    "files_skipped": 29287,
-    "files_failed": 0,
-    "bytes_scanned": 1020541,
-    "finding_count": 1708,
-    "suppressed_count": 0,
-    "patterns_matched": 299,
-    "scan_time_ms": 50468,
-    "io_time_ms": 8234,
-    "workers_used": 16,
-    "findings_by_severity": {
-      "medium": 1074,
-      "high": 6,
-      "low": 626,
-      "info": 2
     },
-    "findings_by_category": {
-      "devops": 41,
-      "code-quality": 121,
-      "git-hygiene": 1,
-      "ai-detection": 350,
-      "cloud-native": 8,
-      "pii": 2,
-      "ai-safety": 111,
-      "supply-chain": 11,
-      "web-security": 39,
-      "llm-guardrails": 11,
-      "shift-left": 23,
-      "performance": 37,
-      "healthcare": 1,
-      "statistical-anomaly": 2,
-      "frameworks": 930,
-      "infrastructure": 20
+    {
+      "id": "000000000000000018d8a8de0b4e69f2",
+      "pattern": "integration-test-marker",
+      "category": "shift-left",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./docs/PROJECT_STRUCTURE.md",
+        "line": 61,
+        "column": 24
+      },
+      "description": "Integration test marker detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "integration-test-marker:./docs/PROJECT_STRUCTURE.md:61:adb0800a0de78508924fdf8857b8270b864a2c29302c61ede6c249ec32118c61",
+      "stable_id": "aegis-725d2981738273ce7674ef04a126e56fb3d38abfd36e6bebcae9eb42e7ebac37",
+      "triage": "line shift of accepted entry (same content hash) from the infrastructure/ tree addition; re-baselined 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8de0bdb6bd4",
+      "pattern": "markdown-code-fence",
+      "category": "ai-detection",
+      "severity": "low",
+      "confidence": "low",
+      "location": {
+        "file": "./docs/PROJECT_STRUCTURE.md",
+        "line": 8,
+        "column": 1
+      },
+      "description": "Markdown code fence detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "markdown-code-fence:./docs/PROJECT_STRUCTURE.md:8:e51d54a126793b57cfeb2a78bfb11b8aed20233d0bec687169947a84e1c3d1fe",
+      "stable_id": "aegis-ca80152b56714e6c85ccbbd93243a15753e48120125e6cb61a571fb70ed48ad8",
+      "triage": "content change inside the workspace-layout fenced block (infrastructure/ image-recipe entry added); directory-tree diagram, no code; re-baselined 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8de0bdb7fbe",
+      "pattern": "markdown-code-fence",
+      "category": "ai-detection",
+      "severity": "low",
+      "confidence": "low",
+      "location": {
+        "file": "./docs/PROJECT_STRUCTURE.md",
+        "line": 43,
+        "column": 1
+      },
+      "description": "Markdown code fence detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "markdown-code-fence:./docs/PROJECT_STRUCTURE.md:43:77eb780bd92190413ebdbb4cb670848f5b11e7aa45b4caac8db7c247bfd7d63c",
+      "stable_id": "aegis-46b1dd320c50829646a99f78759d5d78af3ce35cb4f08bb79cc45a2de69ba205",
+      "triage": "line shift of accepted entry (same content hash) from the infrastructure/ tree addition; re-baselined 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8de0bdb9063",
+      "pattern": "ai-generated-marker",
+      "category": "ai-detection",
+      "severity": "low",
+      "confidence": "medium",
+      "location": {
+        "file": "./docs/PROJECT_STRUCTURE.md",
+        "line": 24,
+        "column": 57
+      },
+      "description": "AI generation marker detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "ai-generated-marker:./docs/PROJECT_STRUCTURE.md:24:744205e43529c1fc39bc4ed37dbcd1e91facc78d2a2d136bc893b023ac3c75f5",
+      "stable_id": "aegis-f3c5b6791a3f722b8aeefae76ea53295f3449d44906870d09d8fd2364c848b07",
+      "triage": "line shift of accepted entry (same content hash) from the infrastructure/ tree addition; re-baselined 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddc7ba4d54",
+      "pattern": "ssrf-localhost",
+      "category": "web-security",
+      "severity": "medium",
+      "confidence": "medium",
+      "location": {
+        "file": "./infrastructure/docker/ci-rust.Dockerfile",
+        "line": 7,
+        "column": 44
+      },
+      "description": "Potential SSRF targeting internal resources",
+      "reference": "https://owasp.org/www-community/attacks/Server_Side_Request_Forgery",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "ssrf-localhost:./infrastructure/docker/ci-rust.Dockerfile:7:12ca17b49af2289436f303e0166030a21e525d266e209267433801a8fd4071a0",
+      "stable_id": "aegis-f449dca36cf35dc82ed9b98a25435e9e3caf44db0728c1e3dea3df197bdcac51",
+      "triage": "documentation of the single-host container topology (the 127.0.0.1 git-server is unreachable from containers \u2014 the reason this recipe exists); no endpoint is called; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddc7ba6b10",
+      "pattern": "ssrf-localhost",
+      "category": "web-security",
+      "severity": "medium",
+      "confidence": "medium",
+      "location": {
+        "file": "./infrastructure/docker/ci-rust.Dockerfile",
+        "line": 9,
+        "column": 31
+      },
+      "description": "Potential SSRF targeting internal resources",
+      "reference": "https://owasp.org/www-community/attacks/Server_Side_Request_Forgery",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "ssrf-localhost:./infrastructure/docker/ci-rust.Dockerfile:9:12ca17b49af2289436f303e0166030a21e525d266e209267433801a8fd4071a0",
+      "stable_id": "aegis-100a110b2531316bc5334081d06b3fa9828adde64977f7f389bc0431943bba80",
+      "triage": "documentation of the single-host container topology (the 127.0.0.1 git-server is unreachable from containers \u2014 the reason this recipe exists); no endpoint is called; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddc9605c59",
+      "pattern": "hardcoded-ip",
+      "category": "devops",
+      "severity": "medium",
+      "confidence": "medium",
+      "location": {
+        "file": "./infrastructure/docker/ci-rust.Dockerfile",
+        "line": 7,
+        "column": 44
+      },
+      "description": "Hardcoded IP address detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "hardcoded-ip:./infrastructure/docker/ci-rust.Dockerfile:7:12ca17b49af2289436f303e0166030a21e525d266e209267433801a8fd4071a0",
+      "stable_id": "aegis-94f4beb763f1213c49b26610c036d649d0b9663e0f02ce030eddf7d46c310731",
+      "triage": "documentation of the single-host container topology (the 127.0.0.1 git-server is unreachable from containers \u2014 the reason this recipe exists); no endpoint is called; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddc9607e2d",
+      "pattern": "hardcoded-ip",
+      "category": "devops",
+      "severity": "medium",
+      "confidence": "medium",
+      "location": {
+        "file": "./infrastructure/docker/ci-rust.Dockerfile",
+        "line": 9,
+        "column": 31
+      },
+      "description": "Hardcoded IP address detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "hardcoded-ip:./infrastructure/docker/ci-rust.Dockerfile:9:12ca17b49af2289436f303e0166030a21e525d266e209267433801a8fd4071a0",
+      "stable_id": "aegis-0f6c0700bfa632dcbc7970e22047060db61d4f4a4c65441b07545da8ac6e24c7",
+      "triage": "documentation of the single-host container topology (the 127.0.0.1 git-server is unreachable from containers \u2014 the reason this recipe exists); no endpoint is called; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddcb399285",
+      "pattern": "zip-code",
+      "category": "pii",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./infrastructure/docker/ci-rust.Dockerfile",
+        "line": 7,
+        "column": 54
+      },
+      "description": "US ZIP code detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "zip-code:./infrastructure/docker/ci-rust.Dockerfile:7:9ddff7e7f21000ac8a8bf11b01b108605e9b60c1ee60e7adc92859a0d96722a5",
+      "stable_id": "aegis-f97e14701e0077d51b737bca19b0d8a6d026980f11eb7c11a2d05ebe3d2976ec",
+      "triage": "documentation of the single-host container topology (the 127.0.0.1 git-server is unreachable from containers \u2014 the reason this recipe exists); no endpoint is called; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddcb39ac70",
+      "pattern": "zip-code",
+      "category": "pii",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./infrastructure/docker/ci-rust.Dockerfile",
+        "line": 9,
+        "column": 41
+      },
+      "description": "US ZIP code detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "zip-code:./infrastructure/docker/ci-rust.Dockerfile:9:9ddff7e7f21000ac8a8bf11b01b108605e9b60c1ee60e7adc92859a0d96722a5",
+      "stable_id": "aegis-730800fc2d2fd28b4b40c9613c22b3459175083a71012e67a305dc68eb7ae665",
+      "triage": "documentation of the single-host container topology (the 127.0.0.1 git-server is unreachable from containers \u2014 the reason this recipe exists); no endpoint is called; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddcb3f5ee9",
+      "pattern": "cargo-toml",
+      "category": "supply-chain",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./infrastructure/docker/ci-rust.Dockerfile",
+        "line": 72,
+        "column": 6
+      },
+      "description": "Rust Cargo.toml detected",
+      "reference": "https://doc.rust-lang.org/cargo/reference/manifest.html",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "cargo-toml:./infrastructure/docker/ci-rust.Dockerfile:72:2e9d962a08321605940b5a657135052fbcef87b5e360662bb527c96d9a615542",
+      "stable_id": "aegis-228098e55c13c727be17aeab02d52882905dfdd03b4bf485c2d29283b7161c67",
+      "triage": "supply-chain detector misfire on file-name mentions (Cargo.toml/Cargo.lock/cargo-audit) in the image recipe prose and pins; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddcb3f7abc",
+      "pattern": "cargo-lock",
+      "category": "supply-chain",
+      "severity": "medium",
+      "confidence": "high",
+      "location": {
+        "file": "./infrastructure/docker/ci-rust.Dockerfile",
+        "line": 29,
+        "column": 3
+      },
+      "description": "Rust Cargo.lock detected",
+      "reference": "https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "cargo-lock:./infrastructure/docker/ci-rust.Dockerfile:29:13ee4b2252c9e516a0547f2891aa2105c3ca71c6d7a1e682c69be97998dfc87e",
+      "stable_id": "aegis-adb0513109536f8a09318e6ffd9aa880c3ecd36e9f5ac1c34dcfe8f591600563",
+      "triage": "supply-chain detector misfire on file-name mentions (Cargo.toml/Cargo.lock/cargo-audit) in the image recipe prose and pins; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddcb3f9090",
+      "pattern": "cargo-lock",
+      "category": "supply-chain",
+      "severity": "medium",
+      "confidence": "high",
+      "location": {
+        "file": "./infrastructure/docker/ci-rust.Dockerfile",
+        "line": 72,
+        "column": 17
+      },
+      "description": "Rust Cargo.lock detected",
+      "reference": "https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "cargo-lock:./infrastructure/docker/ci-rust.Dockerfile:72:13ee4b2252c9e516a0547f2891aa2105c3ca71c6d7a1e682c69be97998dfc87e",
+      "stable_id": "aegis-dc6fbfb35ab1aa7c146da8436b1a0f8d42b400073c6bdcbe9ffa41b63765ed47",
+      "triage": "supply-chain detector misfire on file-name mentions (Cargo.toml/Cargo.lock/cargo-audit) in the image recipe prose and pins; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddcb3fa4c0",
+      "pattern": "cargo-audit",
+      "category": "supply-chain",
+      "severity": "medium",
+      "confidence": "high",
+      "location": {
+        "file": "./infrastructure/docker/ci-rust.Dockerfile",
+        "line": 83,
+        "column": 29
+      },
+      "description": "Cargo audit command detected",
+      "reference": "https://crates.io/crates/cargo-audit",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "cargo-audit:./infrastructure/docker/ci-rust.Dockerfile:83:317b89076b51f10c163a382ef5e1c870a95f3b614745fd1d6af30487bc92bdb9",
+      "stable_id": "aegis-1df97ee0bdcb96310252e5f808389d5f5a8d907bcb2b893709f4be62da2b7c7c",
+      "triage": "supply-chain detector misfire on file-name mentions (Cargo.toml/Cargo.lock/cargo-audit) in the image recipe prose and pins; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddcbd7dfed",
+      "pattern": "magic-number",
+      "category": "code-quality",
+      "severity": "low",
+      "confidence": "medium",
+      "location": {
+        "file": "./infrastructure/docker/ci-rust.Dockerfile",
+        "line": 7,
+        "column": 54
+      },
+      "description": "Magic number detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "magic-number:./infrastructure/docker/ci-rust.Dockerfile:7:9ddff7e7f21000ac8a8bf11b01b108605e9b60c1ee60e7adc92859a0d96722a5",
+      "stable_id": "aegis-d6b51dbd221420fc1988a51aa18739269102adfa34bb1c3b547715112e1a4662",
+      "triage": "documentation of the single-host container topology (the 127.0.0.1 git-server is unreachable from containers \u2014 the reason this recipe exists); no endpoint is called; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddcbd7f7a9",
+      "pattern": "magic-number",
+      "category": "code-quality",
+      "severity": "low",
+      "confidence": "medium",
+      "location": {
+        "file": "./infrastructure/docker/ci-rust.Dockerfile",
+        "line": 9,
+        "column": 41
+      },
+      "description": "Magic number detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "magic-number:./infrastructure/docker/ci-rust.Dockerfile:9:9ddff7e7f21000ac8a8bf11b01b108605e9b60c1ee60e7adc92859a0d96722a5",
+      "stable_id": "aegis-c2ab45d3e1bf3dbbde3f111afa10864802943725c3b97514d806049f4705690c",
+      "triage": "documentation of the single-host container topology (the 127.0.0.1 git-server is unreachable from containers \u2014 the reason this recipe exists); no endpoint is called; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddb83bb7a9",
+      "pattern": "cargo-audit",
+      "category": "supply-chain",
+      "severity": "medium",
+      "confidence": "high",
+      "location": {
+        "file": "./justfile",
+        "line": 75,
+        "column": 34
+      },
+      "description": "Cargo audit command detected",
+      "reference": "https://crates.io/crates/cargo-audit",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "cargo-audit:./justfile:75:317b89076b51f10c163a382ef5e1c870a95f3b614745fd1d6af30487bc92bdb9",
+      "stable_id": "aegis-2ca2eafed706c18a59497cb0f99446d3c2f68a92d8727cd43773476bae2580ed",
+      "triage": "supply-chain detector misfire on the `audit` recipe name/comment; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddc854a60b",
+      "pattern": "cargo-audit",
+      "category": "supply-chain",
+      "severity": "medium",
+      "confidence": "high",
+      "location": {
+        "file": "./.gitforge.yml",
+        "line": 60,
+        "column": 14
+      },
+      "description": "Cargo audit command detected",
+      "reference": "https://crates.io/crates/cargo-audit",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "cargo-audit:./.gitforge.yml:60:317b89076b51f10c163a382ef5e1c870a95f3b614745fd1d6af30487bc92bdb9",
+      "stable_id": "aegis-b0d8066dbc156bfca93561a8d4bed5ba73d07c24a997b0a3315845fed505a7ec",
+      "triage": "supply-chain detector misfire on the cargo-audit job step; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddc9fcbef5",
+      "pattern": "pr-review-marker",
+      "category": "shift-left",
+      "severity": "low",
+      "confidence": "medium",
+      "location": {
+        "file": "./.gitforge.yml",
+        "line": 18,
+        "column": 5
+      },
+      "description": "PR review marker detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "pr-review-marker:./.gitforge.yml:18:ffcfd72fad7954ae5a63628d70ad100d808cb5a3305a1bb20117fbd66e305764",
+      "stable_id": "aegis-cac4aec1d7c874e12874d2b3af0338fb98a99911d2e2a8e46397843c7b16ea6d",
+      "triage": "marker heuristics matched job names/trigger text (\"pull_request\", \"Unit and integration tests\"); accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddc9fcdc26",
+      "pattern": "integration-test-marker",
+      "category": "shift-left",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./.gitforge.yml",
+        "line": 37,
+        "column": 24
+      },
+      "description": "Integration test marker detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "integration-test-marker:./.gitforge.yml:37:23124e920c5d9d07bf043f65b66271c5375d2345513cdd1b2c3a9d345fcb6695",
+      "stable_id": "aegis-d6889b34889747c111cbf89d92c9a967bde0775604c4425e5f766f952fe608f3",
+      "triage": "marker heuristics matched job names/trigger text (\"pull_request\", \"Unit and integration tests\"); accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddcb946ec9",
+      "pattern": "timeout-configuration",
+      "category": "cloud-native",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./.gitforge.yml",
+        "line": 25,
+        "column": 5
+      },
+      "description": "Timeout configuration detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "timeout-configuration:./.gitforge.yml:25:78406459a490e55a21199c01fedef1a27be04b555b1485cfb6f679a1d6e0982b",
+      "stable_id": "aegis-b270ec09172635a8362aab6b01625b0cd8e855dd29b0944285cd357a7f77a008",
+      "triage": "explicit per-job timeouts are desirable CI hygiene, not a finding; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddcb948c86",
+      "pattern": "timeout-configuration",
+      "category": "cloud-native",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./.gitforge.yml",
+        "line": 35,
+        "column": 5
+      },
+      "description": "Timeout configuration detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "timeout-configuration:./.gitforge.yml:35:78406459a490e55a21199c01fedef1a27be04b555b1485cfb6f679a1d6e0982b",
+      "stable_id": "aegis-04a9655bb589283957442cad8fae2da1e5fec74c4b02dd3ffd9c8079fb9988d2",
+      "triage": "explicit per-job timeouts are desirable CI hygiene, not a finding; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddcb94a0b6",
+      "pattern": "timeout-configuration",
+      "category": "cloud-native",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./.gitforge.yml",
+        "line": 45,
+        "column": 5
+      },
+      "description": "Timeout configuration detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "timeout-configuration:./.gitforge.yml:45:d3001a24ebe9cf4a685b5d9ed5fb34948ecabbbb076c482076acae4f65a9d084",
+      "stable_id": "aegis-d78280ce661ff9fb460519832f448ce7c7868319d64642cd69b401745e8c05f9",
+      "triage": "explicit per-job timeouts are desirable CI hygiene, not a finding; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8a8ddcb94b15a",
+      "pattern": "timeout-configuration",
+      "category": "cloud-native",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./.gitforge.yml",
+        "line": 55,
+        "column": 5
+      },
+      "description": "Timeout configuration detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "timeout-configuration:./.gitforge.yml:55:fab6f492d9389e1e26e53beb4f7641b50cf41eadfea9fb82e5569e1074eac7c5",
+      "stable_id": "aegis-c83218fa6dca59a45bd1ee45626797c739ca6dab031ff139f82a342a1e24330e",
+      "triage": "explicit per-job timeouts are desirable CI hygiene, not a finding; accepted 2026-09-25"
     }
-  }
+  ]
 }

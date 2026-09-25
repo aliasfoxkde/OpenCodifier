@@ -16,6 +16,9 @@ opencodifier/
 ├── .github/workflows/ci.yml # GitHub mirror config (not a failure signal)
 ├── .aegis/baseline.json     # aegis pattern-scan baseline (new findings = failures)
 │
+├── infrastructure/
+│   └── docker/ci-rust.Dockerfile  # runner-local CI image recipe (`just ci-image`)
+│
 ├── crates/
 │   ├── opencodifier-core/      # canonical decision IR (done)
 │   ├── opencodifier-schema/    # native/OpenAI/Anthropic/Jev adapters (done)

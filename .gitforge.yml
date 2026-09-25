@@ -2,6 +2,15 @@
 #
 # GitHub Actions (.github/workflows/) is a mirror only; this file is the
 # pipeline of record. Quality gates mirror `just ci` exactly.
+#
+# All jobs run on the runner-local `opencodifier-ci-rust` image, which bakes
+# the toolchain, rustfmt/clippy, cargo-deny, cargo-audit, aegis (pinned
+# rev), and a warm crate registry. Tools are NOT installed at job runtime:
+# the runner's preflight (F25) contract is baked-in-tools, and containers
+# here cannot reach host services at all (the host firewall default-DROPs
+# docker-sourced traffic; only crates.io-style egress works). Build/rebuild
+# the image and bump the tag per the cache contract in
+# infrastructure/docker/ci-rust.Dockerfile (`just ci-image`).
 name: opencodifier-ci
 version: "1.0"
 trigger_on:
@@ -12,18 +21,16 @@ environment:
   RUSTFLAGS: "-D warnings"
 jobs:
   - name: lint
-    image: rust:1.90
+    image: opencodifier-ci-rust:1
     timeout: 20m
     steps:
-      - name: Install components
-        run: rustup component add rustfmt clippy
       - name: Format check
         run: cargo fmt --all -- --check
       - name: Clippy (workspace lint contract)
         run: cargo clippy --workspace --all-targets -- -D warnings
 
   - name: test
-    image: rust:1.90
+    image: opencodifier-ci-rust:1
     needs: [lint]
     timeout: 20m
     steps:
@@ -33,7 +40,7 @@ jobs:
         run: cargo test --doc
 
   - name: doc
-    image: rust:1.90
+    image: opencodifier-ci-rust:1
     needs: [lint]
     timeout: 15m
     steps:
@@ -43,19 +50,13 @@ jobs:
           cargo doc --workspace --no-deps
 
   - name: supply-chain
-    image: rust:1.90
+    image: opencodifier-ci-rust:1
     needs: [lint]
     timeout: 30m
     steps:
-      - name: Install cargo-deny
-        run: cargo install --locked cargo-deny
       - name: Licenses, advisories, bans, sources
         run: cargo deny check
-      - name: Install cargo-audit
-        run: cargo install --locked cargo-audit
       - name: Vulnerability audit
         run: cargo audit
-      - name: Install aegis (pattern scanner)
-        run: cargo install --locked --git http://127.0.0.1:42782/bigdata-ci/aegis.git aegis
       - name: Security pattern scan (0 new findings)
         run: aegis --format json scan --file . --baseline .aegis/baseline.json
