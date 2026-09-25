@@ -186,14 +186,27 @@ Remaining risks tracked in §6 below.
 - Phase 10 (MCP) remains planned; D1's `rmcp 2.2` pin is stale
   (latest is 3.4.x) and will be corrected when that phase starts.
 
-## Phase 11 — docs + recipes
+## Phase 11 — docs + recipes (done)
 
 - README current; `docs/` set complete (this file, ARCHITECTURE,
   DECISIONS, PROJECT_STRUCTURE, SECURITY, CONTRIBUTING); rustdoc
-  exported; `recipes/` with ≥3 runnable decision graphs and their
-  fixtures-derived expected outputs.
-- Accessibility: CLI `--help` clean under a screen reader, rustdoc
-  structure passes heading-order checks.
+  exported.
+- `recipes/` (done): three runnable decision graphs with their paired
+  requests and captured responses — `minimal-choice` (smallest graph
+  that can decide a choice question; the `filter` node is mandatory
+  because choice questions are decided only over narrowed candidates),
+  `strict-verify` (full ladder, 0.95 gate → the refusal is the
+  product), `boolean-score` (no choice node; lexical evidence below
+  `abstain_below` → abstain as HTTP 200). All responses are captured
+  by execution, byte-reproducible across fresh serves (the cache node
+  makes a *second* identical request report `cache_hit: true`, so
+  comparisons use a fresh process — documented in `recipes/README.md`).
+- Accessibility (checked 2026-09-25): CLI `--help` is plain text with
+  zero ANSI escapes when piped, structured exit-code and diagnostics
+  sections, and every subcommand's `--help` exits 0. Rustdoc heading
+  order verified across all 67 generated pages: no authored content
+  skips; the single h1→h3 jump is in rustdoc's own upstream `all.html`
+  template (not crate-controlled).
 
 ## Phase 12 — release
 

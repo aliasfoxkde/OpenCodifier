@@ -42,6 +42,12 @@ running it:
 cargo run -p opencodifier-cli -- graph validate <graph.json>
 ```
 
+Ready-to-run decision graphs — including the smallest graph that can
+decide a choice question and a deliberately strict gate that answers
+`verify` instead of guessing — live in [`recipes/`](recipes/) with the
+requests that exercise them and the captured responses to compare
+against.
+
 ## Design commitments
 
 - **Deterministic first.** Exact rule → cached decision → metadata filter →

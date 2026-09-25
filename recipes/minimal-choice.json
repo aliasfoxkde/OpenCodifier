@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "nodes": [
+    { "id": "normalize", "kind": "normalize" },
+    { "id": "filter", "kind": "filter", "depends_on": ["normalize"] },
+    { "id": "choice", "kind": "choice", "depends_on": ["filter"] },
+    {
+      "id": "threshold",
+      "kind": "threshold",
+      "depends_on": ["choice"],
+      "threshold": 0.5
+    },
+    { "id": "output", "kind": "output", "depends_on": ["threshold"] }
+  ]
+}

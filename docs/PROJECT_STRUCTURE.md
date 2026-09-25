@@ -28,7 +28,7 @@ opencodifier/
 │   └── opencodifier-wasm/      # browser target (planned)
 │
 ├── fixtures/                # wire-format fixtures per adapter (done, byte-locked)
-├── recipes/                 # ready-to-use decision graphs (planned)
+├── recipes/                 # runnable decision graphs + captured responses (done)
 ├── skills/                  # agent-facing usage skills (planned)
 ├── models/                  # model artifacts (never committed; SHA-256 verified)
 ├── benchmarks/              # criterion output kept per release (planned)

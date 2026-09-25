@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "nodes": [
+    { "id": "normalize", "kind": "normalize" },
+    { "id": "rule", "kind": "rule", "depends_on": ["normalize"] },
+    { "id": "cache", "kind": "cache", "depends_on": ["normalize"] },
+    { "id": "boolean", "kind": "boolean", "depends_on": ["rule"] },
+    { "id": "score", "kind": "score", "depends_on": ["rule"] },
+    { "id": "filter", "kind": "filter", "depends_on": ["rule", "cache"] },
+    { "id": "lexical", "kind": "lexical", "depends_on": ["filter"] },
+    { "id": "choice", "kind": "choice", "depends_on": ["lexical"] },
+    {
+      "id": "threshold",
+      "kind": "threshold",
+      "depends_on": ["choice", "boolean", "score"],
+      "threshold": 0.95
+    },
+    { "id": "output", "kind": "output", "depends_on": ["threshold"] }
+  ]
+}

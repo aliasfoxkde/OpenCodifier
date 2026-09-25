@@ -10,21 +10,22 @@ releases may break, and every breaking change is recorded in this file
 
 ### Added
 
-- `opencodifier-engine::EngineHandle` — the shared facade every
-  interface crate (CLI, HTTP, MCP) assembles and drives the runtime
-  through; includes `validate_graph`, `health`, and the deterministic
-  `lexical` constructor (PLAN Phase 8–10 wiring).
-- `opencodifier-http` crate in progress — axum **0.8** `/v1` surface
-  (`POST /v1/decide`, `POST /v1/graph/validate`, `GET /v1/healthz`),
-  loopback-by-default bind gate (D12). The original D12 pin said
-  "axum 0.9"; that version does not exist and the record was amended
-  to the measured reality.
+- `recipes/` — three runnable decision graphs with paired requests and
+  byte-reproducible captured responses (`minimal-choice`,
+  `strict-verify`, `boolean-score`), each demonstrating a different
+  facet of the escalation ladder; `recipes/README.md` documents the
+  capture-and-compare procedure (PLAN Phase 11).
 
 ### Changed
 
-- `opencodifier-runtime` backend traits now require `Debug` (matching
-  the engine `Classifier` precedent) so interface crates can hold
-  boxed backends in debuggable facades.
+- `opencodifier-http::serve_with_shutdown` — the graceful-shutdown
+  future is now a parameter (the `serve` entry point keeps `Ctrl-C`),
+  so embedders and tests can end the serve loop with their own signal.
+
+## [0.1.0] — in development
+
+Phased build-out per `docs/PLAN.md`; hashes refer to the repository
+history.
 
 ## [0.1.0] — in development
 
@@ -67,9 +68,22 @@ history.
   any `EmbeddingBackend` into an engine `Classifier`, SHA-256
   `ModelManifest` + artifact verification (D14). No trained weights
   ship in V1; the engine is fully useful without them.
+- **Phases 8–9 — interfaces** (563ad3f): `opencodifier-engine::EngineHandle`
+  (the shared facade: `lexical` zero-ML constructor, `decide`,
+  `decide_with_report`, `validate_graph`, `health`);
+  `opencodifier-http` (axum **0.8** — the original D12 pin said "axum
+  0.9", which does not exist; amended — `/v1` decide/graph-validate/
+  healthz, owning-crate error codes, 1 MiB body cap, loopback-only
+  bind with `allow_remote` opt-in, `spawn_blocking` off async workers,
+  abstention is 200); `opencodifier-cli` (D13: decide / graph validate
+  / serve / models verify; exit codes 0 accept / 1 input / 2
+  policy-gate escalation / 3 internal, with clap's exit-2 normalized
+  to 1). Real-socket e2e over both surfaces.
 - Coverage ledger (2026-09-24): 7,604 instrumented lines, 73
   documented-unreachable, **99.04% line coverage** by lcov ground
   truth; every uncovered line carries an in-source justification.
+  Updated 2026-09-25 after Phases 8–9: 8,340 lines, 83
+  documented-unreachable, **99.00%**.
 
 [Unreleased]: https://github.com/aliasfoxkde/OpenCodifier/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.1.0
