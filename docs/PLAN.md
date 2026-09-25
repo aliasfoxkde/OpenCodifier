@@ -211,24 +211,44 @@ Remaining risks tracked in §6 below.
 ## Phase 12 — release
 
 - `just ci` green locally is the validation of record for this build.
-- **Harness-jobs finding (2026-09-25):** the harness-jobs queue
-  **rejects this cwd outright** — `submit_job` accepts only
-  `/home/mkinney/repos/backend-fixed`, `/nas/Temp/repos/GitForge`,
-  `/nas/Temp/repos/dsc`, `/nas/Temp/repos/BigData`,
-  `/nas/Temp/repos/Amortyx*`. The planned "gates validated through the
-  harness-jobs queue at this cwd" is therefore not achievable as
-  written; the gap is recorded rather than worked around. If OpenCodifier
-  is added to the queue's allowlist, the four profiles
-  (`cargo-fmt`, `cargo-clippy`, `cargo-test`, `cargo-coverage`) remain
-  the intended validation path.
-- **GitForge finding (2026-09-24):** pipeline **creation** is a stub in
-  the current GitForge build (`pipeline --create` reports "not yet
-  implemented"; `PipelineQueries::create` has no API caller; pushes do
-  not auto-create pipelines from `.gitforge.yml`). `.gitforge.yml`
-  remains the pipeline definition of record for when the endpoint lands;
-  until then, gate parity is maintained by keeping it line-for-line
-  equivalent to `just ci`. GitHub mirror status ignored if red
-  (billing-blocked account, per harness policy).
+- **Harness-jobs finding (2026-09-25) — RESOLVED at the source:** the
+  queue rejected this cwd outright (`submit_job` accepted only
+  backend-fixed, GitForge, dsc, BigData, Amortyx*). Fixed in the
+  harness itself (backend-fixed `053264d`): `/nas/Temp/repos/OpenCodifier`
+  is now an allowed root, with allowlist tests extended (the suite also
+  had a stale assertion claiming `dsc` is refused after DSC_ROOT became
+  an allowed root). The four profiles (`cargo-fmt`, `cargo-clippy`,
+  `cargo-test`, `cargo-coverage`) are now the validated path for gate
+  evidence; results recorded below as they complete.
+- **GitForge finding (2026-09-24) — RESOLVED at the source:** pipeline
+  **creation** was a stub (`pipeline --create` printed "not yet
+  implemented"; `PipelineQueries::create` had no API caller). Also
+  discovered: GitForge's rename commit (acc45f49) missed the pipeline
+  filename, so CI read `.gitforce.yml` while repositories (including
+  OpenCodifier) commit `.gitforge.yml`. Fixed in GitForge: the gateway
+  now exposes `POST /api/pipelines` (validated registration with the
+  single-active-version invariant), `POST /api/pipelines/{id}/runs`
+  (revision-resolved hand-off to the CI orchestrator), and
+  `DELETE /api/pipelines/{id}` (delete when runless, deactivate when
+  history exists); the CLI `pipeline create/run/watch/delete` verbs are
+  implemented against them; and the committed-definition loader accepts
+  `.gitforge.yml` first with the legacy `.gitforce.yml` spelling as a
+  fallback. Covered by gateway route tests + ci-service loader tests.
+- **Aegis finding (2026-09-25) — RESOLVED at the source:** baseline
+  refreshes self-polluted because the scanner read `.aegis/baseline.json`
+  during the scan and baked its own matches into the fresh artifact
+  (2,721 → 13,143 entries, ~80% self-referential). Fixed in aegis
+  itself (aegis `fix/state-dir-self-scan`, 445cf4c, 0.6.3): the
+  `.aegis` state directory is now a built-in exclusion like
+  `node_modules`/`target`/`.git`, across directory, single-file, and
+  `--staged` scans (via the new `Scanner::should_ignore`). The
+  out-of-tree regeneration dance and its memory note are retired. The
+  committed baseline was regenerated in tree with the fixed binary:
+  **1,708 entries, zero self-referential** (was 1,707 mostly polluted),
+  and the documented gate command reports **0 new findings**. One
+  config lesson recorded: generation and gate must use the same
+  `--config` (this repo's gate runs the default profile — production
+  would report ~1,667 phantom findings).
 - cargo-deny + cargo-audit clean; aegis scan: 0 new findings vs
   baseline; coverage ≥ 99% lines workspace-wide.
 - SemVer tag `v0.1.0`, GitHub release notes from the changelog, push
