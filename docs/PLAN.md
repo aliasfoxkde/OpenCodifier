@@ -278,6 +278,15 @@ Remaining risks tracked in §6 below.
   fence-content change in PROJECT_STRUCTURE.md, and 20 detector misfires
   on CI prose (loopback topology documentation, `timeout:` fields,
   tool/file-name mentions) — each appended with a triage note.
+  First pipeline run on the image (f1153de0): lint, test, and doc
+  succeeded on the baked image; supply-chain failed — correctly. The
+  paragraph recording this finding had been added to this file after the
+  local gate last ran, and its loopback/IP documentation tripped five
+  detector patterns plus one line-shifted fence: the pipeline caught
+  what a post-edit local gate would have caught. Discipline correction
+  recorded: the aegis gate runs after every content edit, not only
+  before "the final" one. The six findings were triaged into the
+  baseline (1,729 → 1,734; dead :259 fence entry removed).
 - cargo-deny + cargo-audit clean; aegis scan: 0 new findings vs
   baseline; coverage ≥ 99% lines workspace-wide.
 - SemVer tag `v0.1.0`, GitHub release notes from the changelog, push
