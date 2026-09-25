@@ -249,6 +249,35 @@ Remaining risks tracked in §6 below.
   config lesson recorded: generation and gate must use the same
   `--config` (this repo's gate runs the default profile — production
   would report ~1,667 phantom findings).
+- **CI-image finding (2026-09-25) — RESOLVED:** the first real pipeline
+  run (8185900a) failed the supply-chain lane at `cargo install --git
+  http://127.0.0.1:42782/...aegis.git` — connection refused. The root
+  cause is host networking, not a wrong address: job AND build containers
+  cannot reach host services at all (the host firewall INPUT chain is
+  default-DROP for docker-sourced traffic — only DNS/53 is accepted;
+  verified from a bridge-network container against the 172.17.0.1 gateway
+  too), so no URL to the git-server can work from inside a job. Fixing it
+  exposed two further defects: every lane compiled its tools at job
+  runtime (against the runner's own F25 baked-in-tools contract), and
+  `rust-toolchain.toml` (`channel = "stable"`) made every job silently
+  download the latest stable on the stock `rust:1.90` image (measured:
+  1.98.1) — CI never ran the pinned 1.90. The fix follows the GitForge
+  house pattern (`dsc-ci-rust`): a committed image recipe
+  (`infrastructure/docker/ci-rust.Dockerfile`, built by `just ci-image`,
+  runner-local tag `opencodifier-ci-rust:1`) bakes the toolchain
+  (`RUSTUP_TOOLCHAIN` — verified to override the rust-toolchain.toml
+  file), rustfmt/clippy (absent from the stock rust image), cargo-deny
+  0.20.2, cargo-audit 0.22.2, aegis at pinned rev `445cf4c` (the exact
+  binary the committed baseline was generated with, vendored as
+  build-context source because it is not on crates.io), and a warm crate
+  registry. All four jobs now run with zero runtime installs; the full
+  supply-chain lane was rehearsed inside the image against the working
+  tree (deny / audit / aegis / fmt all exit 0) before the pipeline ran
+  it. The scan of the new files triaged 24 findings into the baseline
+  (1,709 → 1,729 entries; 4 dead entries removed): 3 line shifts + 1
+  fence-content change in PROJECT_STRUCTURE.md, and 20 detector misfires
+  on CI prose (loopback topology documentation, `timeout:` fields,
+  tool/file-name mentions) — each appended with a triage note.
 - cargo-deny + cargo-audit clean; aegis scan: 0 new findings vs
   baseline; coverage ≥ 99% lines workspace-wide.
 - SemVer tag `v0.1.0`, GitHub release notes from the changelog, push
