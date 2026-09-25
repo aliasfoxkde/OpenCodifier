@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "nodes": [
+    { "id": "normalize", "kind": "normalize" },
+    { "id": "rule", "kind": "rule", "depends_on": ["normalize"] },
+    { "id": "boolean", "kind": "boolean", "depends_on": ["rule"] },
+    { "id": "score", "kind": "score", "depends_on": ["rule"] },
+    {
+      "id": "threshold",
+      "kind": "threshold",
+      "depends_on": ["boolean", "score"],
+      "threshold": 0.65
+    },
+    { "id": "output", "kind": "output", "depends_on": ["threshold"] }
+  ]
+}
