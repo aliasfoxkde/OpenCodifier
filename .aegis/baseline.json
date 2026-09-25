@@ -29577,9 +29577,40 @@
       "triage": "documentation of the measured container-topology finding (127.0.0.1 git-server and 172.17.0.1 bridge gateway are unreachable from job containers \u2014 the reason the CI image exists); no endpoint is called; accepted 2026-09-25"
     },
     {
+      "id": "000000000000000018d8ab6f52d97c83",
+      "pattern": "security-test-marker",
+      "category": "shift-left",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./docs/PLAN.md",
+        "line": 301,
+        "column": 4
+      },
+      "description": "Security test marker detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "security-test-marker:./docs/PLAN.md:301:c2fb7cdef5c6bd4b464ee31786abc8f5295484699f8cd095acf4bdec8c890709",
+      "stable_id": "aegis-d4a555db6de7ab6e1c68fddf1d5d46473ab34179a8d666125bc5be42768b4e65",
+      "triage": "marker heuristic on closeout prose describing the security-gate validation; no test or secret content; accepted 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8ab6f54a2ce3d",
+      "pattern": "markdown-code-fence",
       "category": "ai-detection",
-      "fingerprint": "markdown-code-fence:./docs/PLAN.md:297:72a3ccbc9ef76d5fb1395d9874440bee5aa2192f9556c4cf830eb908cd4b9f64",
-      "triage": "line shift of accepted entry (same content hash 72a3ccbc\u2026) from the Phase 12 run-evidence paragraph; re-baselined 2026-09-25"
+      "severity": "low",
+      "confidence": "low",
+      "location": {
+        "file": "./docs/PLAN.md",
+        "line": 311,
+        "column": 1
+      },
+      "description": "Markdown code fence detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "markdown-code-fence:./docs/PLAN.md:311:72a3ccbc9ef76d5fb1395d9874440bee5aa2192f9556c4cf830eb908cd4b9f64",
+      "stable_id": "aegis-1f734e6de98b53ad58ca141902ba50da1f0f11e85fca8a35ed765177ca8d0d50",
+      "triage": "line shift of accepted entry (same content hash 72a3ccbc\u2026) from the Phase 12 closeout paragraph; re-baselined 2026-09-25"
     }
   ]
 }
