@@ -123,7 +123,7 @@ pub use engine::{DecisionEngine, EngineConfig};
 pub use error::{EngineError, EngineResult};
 pub use executor::RunReport;
 pub use graph::{DecisionGraph, NodeKind, NodeSpec};
-pub use lexical::{Bm25Index, softmax, tokenize};
+pub use lexical::{Bm25Index, negation_polarity, softmax, tokenize};
 pub use narrowing::{LexicalScores, NarrowingOutcome};
 pub use rules::{Action, Condition, Rule, RuleEngine, RuleSet};
 

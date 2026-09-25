@@ -365,6 +365,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "opencodifier-model"
+version = "0.1.0"
+dependencies = [
+ "opencodifier-core",
+ "opencodifier-engine",
+ "opencodifier-runtime",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
 name = "opencodifier-runtime"
 version = "0.1.0"
 dependencies = [

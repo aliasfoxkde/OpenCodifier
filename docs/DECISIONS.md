@@ -11,15 +11,52 @@ beta; the stable line is 2.2, which speaks the MCP `2025-11-25` stable
 revision. Exact-pin (`=`) because rmcp 2.x → 3.x is a protocol-surface
 change, not a semver-compatible bump. Revisit when 3.0 reaches stable.
 
-## D2 — ONNX runtime: `ort = "=2.0.0-rc.13"`
+## D2 — ONNX runtime: `ort = "=2.0.0-rc.13"` — DEFERRED by measured gate
 
 `ort` rc.12 → rc.13 changed the API and rc.14 may again. fastembed pins
 rc.12, which is why fastembed is **not** used (D4). Pin exactly, keep
 behind the `onnx` feature, and bump only as a deliberate PR that re-runs
-the model round-trip tests. `default-features = false`,
-`features = ["std", "ndarray", "api-27"]`, plus the `load-dynamic`
-feature packaged as the `runtime-onnx-dynamic` feature so distros can
-point at a system ONNX runtime.
+the model round-trip tests. `default-features = false`, plus the
+`load-dynamic` feature packaged as the `runtime-onnx-dynamic` feature so
+distros can point at a system ONNX runtime.
+
+**Feasibility-gate result (measured 2026-09-24, scratch probe
+`/nas/Temp/tmp/oc-ort-probe`): the `onnx` feature does NOT ship in
+V0.1. The dependency is not added; the deterministic path is the only
+path.** Per PLAN.md Phase 6 the gate had three legs:
+
+- **(a) reference model loads with api-27 — FAIL.** ort rc.13 defaults
+  to `api-27`, which demands ONNX Runtime 1.27.x. Nothing on the
+  reference machine provides it (system dylib: 1.21.0 / API 21;
+  Python-wheel copies: 1.22.1, 1.24.1, 1.24.2 / API 22-24). Loading at
+  the default API level fails with a clean typed error for every
+  available dylib. It would pass only compiled down to `api-24` (needs
+  a 1.24.x dylib) or `api-21` (all four load). Numerics are identical
+  across API levels (measured).
+- **(b) bit-identical logits round-trip vs Rust softmax — FAIL.** Over
+  10,000 seeded random logit rows plus extremes: ONNX `Softmax` op,
+  ONNX Div-chain, and Rust f32 softmax agree pairwise within **max 5
+  ULP (~2.4e-7 abs, ~3.3e-7 rel)** but no pair is bit-identical —
+  including the two ONNX formulations with each other. ORT additionally
+  flushes subnormal probabilities to 0 below ~1e-38 where Rust keeps
+  them. Run-to-run ORT output **is** deterministic (0/640,000 values
+  differed across 5 repeats) — the requirement that fails is
+  *cross-implementation* bit-identity. Consequence for later: cache
+  keys already avoid this (cached responses are stored, not recomputed
+  in a second implementation), but verifier agreement and calibration
+  comparisons must carry a 5-ULP tolerance, never `==` on f32.
+- **(c) p99 single-decision latency ≤ budget — PASS.** Single-row
+  [1,8] p99: 30.8-61.0 us; batch [64,8] p99: 39.7-60.1 us across all
+  four dylibs — two orders of magnitude inside the 5 ms budget (D9).
+
+**Re-entry conditions for the `onnx` feature:** compile at `api-21` or
+`api-24` (not the default `api-27`); require an explicit
+`ORT_DYLIB_PATH` (no unversioned `libonnxruntime.so` resolves on this
+platform, and ort panics via dlopen without one); document the
+user-supplied dylib requirement; and carry the 5-ULP tolerance rule
+into verifier/calibration comparisons. Also: `Session::run` takes
+`&mut self` at rc.13, so a concurrent server needs a session pool or
+mutex.
 
 ## D3 — MSRV: 1.90, stable channel
 

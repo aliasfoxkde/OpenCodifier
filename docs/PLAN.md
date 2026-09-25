@@ -42,19 +42,19 @@ Remaining risks tracked in §6 below.
 |-------|-------|--------|
 | 0 | Workspace scaffold, governance, CI configs | **done** (37b8b63) |
 | 1 | `opencodifier-core` canonical IR | **done** (4f8900c) |
-| 2 | `opencodifier-schema` adapters + fixtures | **next** |
-| 3 | `opencodifier-engine` graphs + rules + caches | in progress |
-| 4 | Engine narrowing (metadata + BM25) | pending |
-| 5 | Deterministic decision model + calibration interface | pending |
-| 6 | `opencodifier-runtime` trait + honest ONNX feasibility | pending |
-| 7 | `opencodifier-model` (candidate-conditioned scoring) | pending |
+| 2 | `opencodifier-schema` adapters + fixtures | **done** (5952769) |
+| 3 | `opencodifier-engine` graphs + rules + caches | **done** (5952769) |
+| 4 | Engine narrowing (metadata + BM25) | **done** (5952769) |
+| 5 | Deterministic decision model + calibration interface | **done** (5952769) |
+| 6 | `opencodifier-runtime` trait + honest ONNX feasibility | **done** (5146c34) — gate measured: a FAIL / b FAIL / c PASS → `onnx` deferred (D2) |
+| 7 | `opencodifier-model` (candidate-conditioned scoring) | **done** — `EmbeddingClassifier`, `ModelManifest`, serving contract; no weights in V1 |
 | 8 | `opencodifier-cli` | pending |
 | 9 | `opencodifier-http` | pending |
 | 10 | `opencodifier-mcp` | pending |
 | 11 | E2E recipes + docs book + examples | pending |
 | 12 | Release engineering (tag, release, GitForge pipeline green) | pending |
 
-## Phase 2 — schema adapters + fixtures (next)
+## Phase 2 — schema adapters + fixtures (done, 5952769)
 
 - `opencodifier-schema` crate: `native` (identity), `openai`
   (strict structured outputs — enum / anyOf / minimum-maximum only;
@@ -72,7 +72,7 @@ Remaining risks tracked in §6 below.
   byte-locked; adapters total (no panics on any input ≤ limits);
   clippy/fmt/test/deny clean; coverage of the crate ≥ 99% lines.
 
-## Phase 3–5 — engine (in progress)
+## Phase 3–5 — engine (done, 5952769)
 
 - DAG executor over `max_graph_nodes 128`, topological, cycle-checked.
 - Deterministic rules: fact equality/range/set membership, text
@@ -86,22 +86,58 @@ Remaining risks tracked in §6 below.
 - **Accept:** criterion benches for D9 table (rule/cache/BM25 rows);
   property tests pass 10k cases; full trace emitted per run.
 
-## Phase 6 — runtime abstraction + honest ONNX feasibility
+## Phase 6 — runtime abstraction + honest ONNX feasibility (done)
 
 - `InferenceBackend` / `EmbeddingBackend` traits in
-  `opencodifier-runtime`, sync (D5), returning logits/f32 vectors.
-- `onnx` feature with ort rc.13 (D2); a `MockBackend` for tests.
-- **Honest feasibility gate:** ONNX support ships only if (a) a
-  reference model loads with `api-27`, (b) logits-only round-trip
-  matches Rust softmax bit-for-bit across 10k random inputs, (c) p99
-  single-decision latency on the reference laptop ≤ budget. If any fail,
-  the feature is documented as experimental and the deterministic path
-  remains the default — **no simulated results**.
+  `opencodifier-runtime`, sync (D5), `Debug + Send + Sync`, returning
+  validated `f32` `DenseTensor`s — logits/vectors only (D7). Mock
+  backends (scripted inference, deterministic FNV-1a embedder) keep the
+  whole product runnable with zero ML.
+- **Honest feasibility gate — MEASURED 2026-09-24 (probe
+  `/nas/Temp/tmp/oc-ort-probe`, four real dylibs, 10k seeded inputs):
+  the `onnx` feature does not ship in V0.1.**
+  - (a) `api-27` load — **FAIL**: ort rc.13 demands ONNX Runtime
+    1.27.x; available dylibs are 1.21.0 (system) and 1.22.1/1.24.1/1.24.2
+    (Python wheels). Loadable only at `api-21`/`api-24`.
+  - (b) bit-identity vs Rust softmax — **FAIL**: max 5 ULP (~3.3e-7
+    rel) agreement, never bit-identical; ORT flushes subnormals below
+    ~1e-38. Run-to-run ORT is deterministic (0/640k differed).
+  - (c) latency — **PASS**: p99 31-61 us vs the 5 ms budget (~100x
+    headroom).
+  - Consequence: no ort dependency is added; deterministic path is the
+    only path; re-entry conditions recorded in DECISIONS.md D2
+    (api-21/24 build, explicit `ORT_DYLIB_PATH`, 5-ULP tolerance in
+    verifier/calibration comparisons, `Session::run` is `&mut self`).
+  - **No simulated results were produced or needed: every number above
+    is measured on this machine.**
 
-## Phases 7–10 — model + interfaces
+## Phase 7 — model crate (done, this commit)
 
 - `opencodifier-model`: candidate-conditioned scoring over
-  `InferenceBackend`; confidence = calibrated report, never raw softmax.
+  `InferenceBackend` (`decision.rs`: named-tensor contract
+  `context`/`candidates`/`logits`, shape-validated, never truncated;
+  Rust-side softmax per D7) and embedding similarity classification
+  (`embedding.rs`: any `EmbeddingBackend` → engine `Classifier`,
+  cosine + stable softmax, temperature is scoring shape — not
+  calibration; zero-vector → 0.0, never NaN; malformed backend answers
+  are typed `engine.classifier_failed` failures, never guesses).
+  SHA-256 `ModelManifest` + artifact verification (D14).
+- **Coverage ledger (2026-09-24, clean instrumented re-measure):**
+  7,604 instrumented lines, **73 uncovered = 99.04% line coverage**
+  (lcov `DA:…,0` ground truth; the llvm-cov summary's 98.58% counts
+  duplicate codegen regions and is not the ledger basis). Every
+  uncovered line is in a documented-unreachable category with an
+  in-source justification: 50 engine lines (mutex-poisoning arms,
+  `#[non_exhaustive]` catch-alls, assertion-shadowed fallbacks), 10
+  schema lines (`#[non_exhaustive]` catch-alls), 13 model lines (3
+  defensive `Distribution::from_pairs` closures after softmax — output
+  is normalized by construction — and the `#[non_exhaustive]`
+  question-kind arm).
+
+## Phases 8–10 — interfaces
+
+- CLI (D13), HTTP (D12), MCP (D1) all reuse the same `EngineHandle`
+  facade; no endpoint reimplements pipeline logic.
 - CLI (D13), HTTP (D12), MCP (D1) all reuse the same `EngineHandle`
   facade; no endpoint reimplements pipeline logic.
 - **Accept:** one e2e test per interface driving a real decision

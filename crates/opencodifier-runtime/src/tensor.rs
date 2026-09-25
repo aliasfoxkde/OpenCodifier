@@ -108,6 +108,7 @@ mod tests {
         let tensor = DenseTensor::new(vec![2, 3], vec![0.0, 1.0, 2.0, 3.0, 4.0, 5.0]).unwrap();
         assert_eq!(tensor.shape(), &[2, 3]);
         assert_eq!(tensor.rows(), 2);
+        assert_eq!(tensor.data(), &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0]);
         assert_eq!(tensor.row(0).unwrap(), &[0.0, 1.0, 2.0]);
         assert_eq!(tensor.row(1).unwrap(), &[3.0, 4.0, 5.0]);
         assert_eq!(tensor.row(2), None, "out-of-range row");

@@ -28,7 +28,7 @@ use crate::tensor::DenseTensor;
 /// same [`model_id`](InferenceBackend::model_id) — cache correctness
 /// depends on it, because cached decisions are keyed by request plus
 /// model identity.
-pub trait InferenceBackend: Send + Sync {
+pub trait InferenceBackend: std::fmt::Debug + Send + Sync {
     /// Stable identifier of the model this backend serves. Must change
     /// when the model changes: it feeds the decision cache key.
     fn model_id(&self) -> &str;
@@ -51,7 +51,7 @@ pub trait InferenceBackend: Send + Sync {
 /// Backends are encouraged to return L2-normalized vectors (the mock and
 /// the reference ONNX encoder both do) so cosine and dot products
 /// coincide; callers must not rely on it unless the backend documents it.
-pub trait EmbeddingBackend: Send + Sync {
+pub trait EmbeddingBackend: std::fmt::Debug + Send + Sync {
     /// Stable identifier of the embedding model. Feeds cache keys exactly
     /// like an inference model id.
     fn model_id(&self) -> &str;
