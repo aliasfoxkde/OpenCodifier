@@ -22,12 +22,7 @@ releases may break, and every breaking change is recorded in this file
   future is now a parameter (the `serve` entry point keeps `Ctrl-C`),
   so embedders and tests can end the serve loop with their own signal.
 
-## [0.1.0] — in development
-
-Phased build-out per `docs/PLAN.md`; hashes refer to the repository
-history.
-
-## [0.1.0] — in development
+## [0.1.0] — 2026-09-25
 
 Phased build-out per `docs/PLAN.md`; hashes refer to the repository
 history.
