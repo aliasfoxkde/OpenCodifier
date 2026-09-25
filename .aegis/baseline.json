@@ -29112,6 +29112,16 @@
       "kind": "statistical",
       "fingerprint": "file-size-outlier:./crates/opencodifier-schema/src/openai.rs:1:1979dafed1f454667aae607e64f4af5bf08043939eeab33c3491dc7c76c02be0",
       "stable_id": "aegis-ba05e299c5f820dbe9d23857339b1b254e5c988e102723ad4ab5bb76b81c1232"
+    },
+    {
+      "category": "ai-detection",
+      "fingerprint": "markdown-code-fence:./docs/PLAN.md:259:72a3ccbc9ef76d5fb1395d9874440bee5aa2192f9556c4cf830eb908cd4b9f64",
+      "location": {
+        "file": "./docs/PLAN.md",
+        "line": 259
+      },
+      "pattern": "markdown-code-fence",
+      "triage": "line shift of accepted entry (was :252, same content hash) from the Phase 12 plan edit; re-appended 2026-09-25"
     }
   ],
   "stats": {
