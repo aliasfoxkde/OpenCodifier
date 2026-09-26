@@ -189,17 +189,33 @@ versioned artifacts alongside model manifests, referenced by
 `calibrated_confidence = raw` with `calibration_version = "none"`, so
 the cache never conflates calibrated and uncalibrated results.
 
-## D16 — Decision-model pick: Gemma-3-4b-it (measured, Phase 13)
+## D16 — Decision-model pick: Qwen3.5-2B (measured, Phase 13; amended)
 
-**Decision:** gemma-3-4b-it (Q4_K_M GGUF, sha256 `882e8d2d…`, see
-`benchmarks/decision-model/results/models.manifest.json`) is the reference
-model for the candidate-conditioned decision layer. It leads every suite
-class (0.95 metadata / 0.85 lexical-semantic / 0.45 relational, 0.750
-overall) over Qwen2.5-{0.5,1.5,3}B and Llama-3.2-1B under identical
-constrained-scoring conditions (thecodacus/llama.cpp `parallel-decision`
-`ad129b0`, `POST /v1/decision` tree mode, CPU-only host). Qwen2.5-3B is the
-runner-up (0.675). Llama-3.2-1B and Qwen2.5-0.5B are rejected — at or below
-the zero-ML engine baseline (0.483) overall.
+**Decision (amended 2026-09-26):** Qwen3.5-2B (Q4_K_M GGUF, sha256
+`aaf42c8b…`, see `benchmarks/decision-model/results/models.manifest.json`)
+is the reference model for the candidate-conditioned decision layer. It
+scores 0.725 overall (0.95 metadata / 0.72 lexical-semantic / **0.50
+relational — best measured**), **ECE 0.062 — best calibrated measured**,
+p50 1735 ms, under the identical constrained-scoring conditions as every
+other arm (thecodacus/llama.cpp `parallel-decision` `ad129b0`,
+`POST /v1/decision` tree mode, CPU-only host).
+
+The pick moves from gemma-3-4b-it (0.750) because the 2.5-point gap is 3
+items of a 120-item suite — inside the noise floor — while Qwen3.5-2B wins
+on everything the runtime actually consumes: calibration (ECE 0.062 vs
+0.236; confidence gating is the product, D15), the relational class
+(0.50 vs 0.45), half the parameters, and ~57% of the single-decision
+latency. Gemma-3-4b-it keeps the lexical crown (0.85 vs 0.72) and stands
+as the accuracy-ceiling reference. Qwen3.5-0.8B (0.650 @ 613 ms, ECE
+0.074) is the measured fast tier for latency-sensitive rungs. MiniCPM5-1B
+is rejected: 0.483 overall — a tie with the zero-ML engine baseline at
+~130× its latency, with a collapsed chat baseline (0.092).
+
+*Original decision 2026-09-25:* gemma-3-4b-it (Q4_K_M GGUF, sha256
+`882e8d2d…`) — it led every class (0.95 / 0.85 / 0.45, 0.750 overall) over
+the original five typed models (Qwen2.5-{0.5,1.5,3}B, Llama-3.2-1B;
+Qwen2.5-3B runner-up at 0.675). Llama-3.2-1B and Qwen2.5-0.5B remain
+rejected — at or below the zero-ML engine baseline (0.483) overall.*
 
 **Serving mechanism is NOT the decision.** The measurement went through
 llama.cpp's `/v1/decision`; the integration seam in this codebase remains
@@ -208,10 +224,18 @@ ONNX re-entry gate is D2. Any backend that can produce candidate-conditioned
 logits is admissible; the pick names the weights, not the server.
 
 **Conditions carried forward (blocking exposure, not the pick):**
-- Raw winner probability is uncalibrated at every model (ECE 0.17–0.27);
-  D15 calibration must be fit per class before any confidence leaves the
-  runtime (§73 confirmed by measurement).
-- relational_compositional ≤ 0.45 everywhere cheap: those decisions stay
-  escalation/verifier territory regardless of model choice.
+- Raw winner probability is uncalibrated at every model (ECE 0.062–0.265
+  across the ten arms; even the best, Qwen3.5-2B, has had no post-hoc
+  calibration fitted). D15 calibration must be fit per class before any
+  confidence leaves the runtime (§73 confirmed by measurement).
+- relational_compositional tops out at 0.50 (Qwen3.5-2B) and sits ≤ 0.45
+  everywhere else cheap: those decisions stay escalation/verifier
+  territory regardless of model choice.
 - The ladder holds: the lexical engine at 5.3 ms keeps metadata_match
-  (0.88); a model call is only bought when cheaper layers abstain.
+  (0.88 vs 0.95 for the best model at ~130–570× the latency); a model
+  call is only bought when cheaper layers abstain.
+- Single-shot, chat-JSON and decision-arm latencies are comparable on CPU
+  (prefill-dominated); the decision arm earns its slot on determinism
+  (bit-exact replay vs batch-composition-sensitive generation), exact
+  candidate distributions, and 5–8× bulk throughput — not on single-shot
+  wall clock.
