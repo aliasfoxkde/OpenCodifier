@@ -8,11 +8,17 @@ releases may break, and every breaking change is recorded in this file
 
 ## [Unreleased]
 
-Decision-model feasibility benchmark (PLAN Phase 13, in progress):
-candidate-conditioned question suite + runner harness under
-`benchmarks/decision-model/`, measuring constrained-decode accuracy,
-latency, and determinism for small local models against the engine's
-own lexical/BM25 baseline and an embedding zero-shot arm.
+Decision-model benchmark (PLAN Phase 13) — built and run:
+`benchmarks/decision-model/` holds a byte-locked 120-item
+candidate-conditioned suite (metadata_match / lexical_semantic /
+relational_compositional), three measured arms (the engine's lexical
+pipeline, a MiniLM embedding zero-shot, and llama.cpp
+`parallel-decision` constrained scoring across five GGUF models), and
+the committed summary + model manifest. **Gemma-3-4b-it is the model pick**
+(0.750 overall, leads every class; DECISIONS.md D16); raw winner
+probability measured uncalibrated everywhere (ECE 0.17–0.27), so D15
+calibration blocks any confidence exposure, and the relational class
+(≤ 0.45 for every cheap arm) stays escalation territory.
 
 ## [0.1.1] — 2026-09-26
 

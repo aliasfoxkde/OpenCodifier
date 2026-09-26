@@ -11,10 +11,17 @@ lcov.info
 # Model artifacts are never committed (downloaded explicitly, SHA-256 verified)
 /models/**/*.onnx
 /models/**/*.safetensors
+/models/**/*.gguf
 
 # Local scratch state
 /.scratch
 *.local.toml
+
+# Benchmark runtime logs and raw run JSONs are out-of-tree measurement data;
+# the repo commits only results/summary.md + results/models.manifest.json
+/benchmarks/decision-model/results/*.server.log
+/benchmarks/decision-model/results/*.json
+!/benchmarks/decision-model/results/models.manifest.json
 
 # Editor / OS noise
 .idea/
