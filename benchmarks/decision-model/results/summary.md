@@ -13,6 +13,9 @@ probability, single-decision latency, determinism.
 | llama__MiniCPM5-1B.json | 0.95 / 0.35 / 0.15 | 0.483 | 0.232 | 693.9ms | yes |
 | llama__Qwen3.5-0.8B-q4_0.json | 0.93 / 0.68 / 0.35 | 0.650 | 0.074 | 612.6ms | yes |
 | llama__Qwen3.5-2B.json | 0.95 / 0.72 / 0.50 | 0.725 | 0.062 | 1734.8ms | yes |
+| llama__Qwen3.8-0.8B-Distilled.json | 0.85 / 0.55 / 0.30 | 0.567 | 0.098 | 807.7ms | yes |
+| llama__Qwen3.8-2B-Distill.json | 0.90 / 0.62 / 0.33 | 0.617 | 0.095 | 1343.9ms | yes |
+| llama__Qwen3.8-4B-Distill.json | 1.00 / 0.95 / 0.35 | 0.767 | 0.057 | 3756.6ms | yes |
 | llama__gemma-3-4b-it.json | 0.95 / 0.85 / 0.45 | 0.750 | 0.236 | 3039.7ms | yes |
 | llama__qwen0.5b.json | 0.60 / 0.33 / 0.25 | 0.392 | 0.218 | 694.8ms | yes |
 | llama__qwen1.5b.json | 0.90 / 0.45 / 0.40 | 0.583 | 0.191 | 1247.8ms | yes |
@@ -29,6 +32,12 @@ probability, single-decision latency, determinism.
 - `llama__Qwen3.5-0.8B-q4_0.json` bulk per-decision (batched contexts): lexical_semantic: 140ms; metadata_match: 960ms; relational_compositional: 205ms.
 - `llama__Qwen3.5-2B.json` chat (JSON-writing) baseline: acc 0.717, p50 1565ms — the token-by-token alternative the decision arm replaces.
 - `llama__Qwen3.5-2B.json` bulk per-decision (batched contexts): lexical_semantic: 378ms; metadata_match: 2667ms; relational_compositional: 577ms.
+- `llama__Qwen3.8-0.8B-Distilled.json` chat (JSON-writing) baseline: acc 0.667, p50 966ms — the token-by-token alternative the decision arm replaces.
+- `llama__Qwen3.8-0.8B-Distilled.json` bulk per-decision (batched contexts): lexical_semantic: 181ms; metadata_match: 1242ms; relational_compositional: 262ms.
+- `llama__Qwen3.8-2B-Distill.json` chat (JSON-writing) baseline: acc 0.700, p50 1369ms — the token-by-token alternative the decision arm replaces.
+- `llama__Qwen3.8-2B-Distill.json` bulk per-decision (batched contexts): lexical_semantic: 329ms; metadata_match: 2309ms; relational_compositional: 501ms.
+- `llama__Qwen3.8-4B-Distill.json` chat (JSON-writing) baseline: acc 0.742, p50 3454ms — the token-by-token alternative the decision arm replaces.
+- `llama__Qwen3.8-4B-Distill.json` bulk per-decision (batched contexts): lexical_semantic: 832ms; metadata_match: 5813ms; relational_compositional: 1276ms.
 - `llama__gemma-3-4b-it.json` chat (JSON-writing) baseline: acc 0.775, p50 3399ms — the token-by-token alternative the decision arm replaces.
 - `llama__gemma-3-4b-it.json` bulk per-decision (batched contexts): lexical_semantic: 565ms; metadata_match: 4573ms; relational_compositional: 954ms.
 - `llama__qwen0.5b.json` chat (JSON-writing) baseline: acc 0.433, p50 479ms — the token-by-token alternative the decision arm replaces.

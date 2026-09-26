@@ -189,33 +189,49 @@ versioned artifacts alongside model manifests, referenced by
 `calibrated_confidence = raw` with `calibration_version = "none"`, so
 the cache never conflates calibrated and uncalibrated results.
 
-## D16 — Decision-model pick: Qwen3.5-2B (measured, Phase 13; amended)
+## D16 — Decision-model pick: Qwen3.8-4B-Distill (measured, Phase 13; amended ×2)
 
-**Decision (amended 2026-09-26):** Qwen3.5-2B (Q4_K_M GGUF, sha256
-`aaf42c8b…`, see `benchmarks/decision-model/results/models.manifest.json`)
-is the reference model for the candidate-conditioned decision layer. It
-scores 0.725 overall (0.95 metadata / 0.72 lexical-semantic / **0.50
-relational — best measured**), **ECE 0.062 — best calibrated measured**,
-p50 1735 ms, under the identical constrained-scoring conditions as every
-other arm (thecodacus/llama.cpp `parallel-decision` `ad129b0`,
-`POST /v1/decision` tree mode, CPU-only host).
+**Decision (amended 2026-09-26, second pass — Qwen3.8 distills):**
+**Qwen3.8-4B-Distill** (empero-ai, Q4_K_M GGUF, sha256 `dec96e8c…`, see
+`benchmarks/decision-model/results/models.manifest.json`) is the reference
+model for the candidate-conditioned decision layer: **0.767 overall
+(1.00 metadata — perfect / 0.95 lexical-semantic — new crown / 0.35
+relational), ECE 0.057 — best calibrated measured**, p50 3757 ms, under
+the identical constrained-scoring conditions as every other arm
+(thecodacus/llama.cpp `parallel-decision` `ad129b0`, `POST /v1/decision`
+tree mode, CPU-only host). It strictly supersedes Gemma-3-4b-it (0.750,
+ECE 0.236 — worse on both axes; Gemma is now fully superseded, kept only
+as an arm in the record).
 
-The pick moves from gemma-3-4b-it (0.750) because the 2.5-point gap is 3
-items of a 120-item suite — inside the noise floor — while Qwen3.5-2B wins
-on everything the runtime actually consumes: calibration (ECE 0.062 vs
-0.236; confidence gating is the product, D15), the relational class
-(0.50 vs 0.45), half the parameters, and ~57% of the single-decision
-latency. Gemma-3-4b-it keeps the lexical crown (0.85 vs 0.72) and stands
-as the accuracy-ceiling reference. Qwen3.5-0.8B (0.650 @ 613 ms, ECE
-0.074) is the measured fast tier for latency-sensitive rungs. MiniCPM5-1B
-is rejected: 0.483 overall — a tie with the zero-ML engine baseline at
-~130× its latency, with a collapsed chat baseline (0.092).
+The pick is a **tier scheme**, because the leaders trade off:
 
-*Original decision 2026-09-25:* gemma-3-4b-it (Q4_K_M GGUF, sha256
-`882e8d2d…`) — it led every class (0.95 / 0.85 / 0.45, 0.750 overall) over
+- **Reference: Qwen3.8-4B-Distill** — accuracy + calibration leader. This
+  is the model D15 calibration is fit against first and the verifier tier
+  uses.
+- **Balanced alternative: Qwen3.5-2B** (0.725, ECE 0.062, p50 1735 ms) —
+  holds the relational crown (**0.50** vs the 4B distill's 0.35; its one
+  weak class), half the latency. Preferred where the residual stream is
+  relational-heavy or the latency budget bites.
+- **Fast tier: Qwen3.5-0.8B** (0.650 @ 613 ms, ECE 0.074) — unchanged;
+  neither new 0.8B distill comes close (0.567).
+
+Rejected on measurement: Qwen3.8-2B-Distill (0.617 @ 1344 ms — below
+Qwen3.5-2B everywhere that matters), Qwen3.8-0.8B (0.567 @ 808 ms bf16 —
+dominated by Qwen3.5-0.8B on accuracy, latency, and calibration),
+MiniCPM5-1B, Llama-3.2-1B, Qwen2.5-0.5B (at or below the engine baseline).
+Provenance findings folded into the record: (a) both community
+"Qwen3.8-0.8B" repos ship **bit-identical safetensors** (sha
+`a84cd623…`) — one model, two packages, caught by manifest discipline
+(D14); (b) their uploads omit the MTP block declared in config — GGUF
+conversion requires llama.cpp's `--no-mtp`.
+
+*Amendment history:* 2026-09-26 first pass — **Qwen3.5-2B**, moved from
+Gemma because a 3-item gap was noise while calibration (0.062 vs 0.236),
+relational (0.50 vs 0.45), half the parameters, and ~57% of the latency
+were not. 2026-09-25 original — **gemma-3-4b-it** (Q4_K_M GGUF, sha256
+`882e8d2d…`), led every class (0.95 / 0.85 / 0.45, 0.750 overall) over
 the original five typed models (Qwen2.5-{0.5,1.5,3}B, Llama-3.2-1B;
-Qwen2.5-3B runner-up at 0.675). Llama-3.2-1B and Qwen2.5-0.5B remain
-rejected — at or below the zero-ML engine baseline (0.483) overall.*
+Qwen2.5-3B runner-up at 0.675).*
 
 **Serving mechanism is NOT the decision.** The measurement went through
 llama.cpp's `/v1/decision`; the integration seam in this codebase remains
@@ -224,18 +240,22 @@ ONNX re-entry gate is D2. Any backend that can produce candidate-conditioned
 logits is admissible; the pick names the weights, not the server.
 
 **Conditions carried forward (blocking exposure, not the pick):**
-- Raw winner probability is uncalibrated at every model (ECE 0.062–0.265
-  across the ten arms; even the best, Qwen3.5-2B, has had no post-hoc
-  calibration fitted). D15 calibration must be fit per class before any
-  confidence leaves the runtime (§73 confirmed by measurement).
-- relational_compositional tops out at 0.50 (Qwen3.5-2B) and sits ≤ 0.45
-  everywhere else cheap: those decisions stay escalation/verifier
-  territory regardless of model choice.
+- Raw winner probability is uncalibrated at every model (ECE 0.057–0.265
+  across the thirteen arms; even the best, Qwen3.8-4B-Distill, has had no
+  post-hoc calibration fitted). D15 calibration must be fit per class
+  before any confidence leaves the runtime (§73 confirmed by measurement).
+- relational_compositional tops out at 0.50 (Qwen3.5-2B); the reference
+  pick scores 0.35 there — that class stays escalation/verifier territory
+  regardless of model choice, which is precisely why a relational-weak
+  reference is tolerable.
 - The ladder holds: the lexical engine at 5.3 ms keeps metadata_match
-  (0.88 vs 0.95 for the best model at ~130–570× the latency); a model
-  call is only bought when cheaper layers abstain.
+  (0.88 vs 1.00 for the best model at ~700× the latency); a model call is
+  only bought when cheaper layers abstain.
 - Single-shot, chat-JSON and decision-arm latencies are comparable on CPU
   (prefill-dominated); the decision arm earns its slot on determinism
   (bit-exact replay vs batch-composition-sensitive generation), exact
   candidate distributions, and 5–8× bulk throughput — not on single-shot
-  wall clock.
+  wall clock. Note the arm's accuracy dominance is model-dependent: the
+  Qwen3.8-2B distill is the first arm whose chat baseline beats its
+  decision score (0.700 vs 0.617) — reasoning-by-writing distills lose
+  under forced token-path commitment.

@@ -13,14 +13,16 @@ Decision-model benchmark (PLAN Phase 13) — built and run:
 candidate-conditioned suite (metadata_match / lexical_semantic /
 relational_compositional), three measured arms (the engine's lexical
 pipeline, a MiniLM embedding zero-shot, and llama.cpp
-`parallel-decision` constrained scoring across eight GGUF models), and
-the committed summary + model manifest. **Qwen3.5-2B is the model pick**
-(0.725 overall, ECE 0.062 — best calibrated, best relational class,
-amended from Gemma-3-4b-it 0.750; DECISIONS.md D16), with Qwen3.5-0.8B
-as the measured fast tier (0.650 @ 613 ms). Raw winner probability
-measured uncalibrated everywhere (ECE 0.062–0.265), so D15 calibration
-still blocks any confidence exposure, and the relational class (≤ 0.50
-for every cheap arm) stays escalation territory.
+`parallel-decision` constrained scoring across eleven GGUF models), and
+the committed summary + model manifest. **Qwen3.8-4B-Distill is the
+reference pick** (0.767 overall with a perfect 1.00 metadata class, ECE
+0.057 — best calibrated; D16 amended ×2 into a tier scheme), with
+Qwen3.5-2B as the balanced alternative (0.725, relational crown 0.50,
+half the latency) and Qwen3.5-0.8B as the fast tier (0.650 @ 613 ms).
+Raw winner probability measured uncalibrated everywhere
+(ECE 0.057–0.265), so D15 calibration still blocks any confidence
+exposure, and the relational class (≤ 0.50 for every cheap arm) stays
+escalation territory.
 
 ## [0.1.1] — 2026-09-26
 
