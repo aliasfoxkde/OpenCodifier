@@ -35,6 +35,7 @@ opencodifier/
 ├── skills/                  # agent-facing usage skills (planned)
 ├── models/                  # model artifacts (never committed; SHA-256 verified)
 ├── benchmarks/              # per-release criterion baselines (done for v0.1.0)
+│   └── decision-model/      # Phase 13 model-pick benchmark: byte-locked suite, arms, results
 └── docs/                    # PLANNING.md (founding), PLAN.md (live plan), …
 ```
 

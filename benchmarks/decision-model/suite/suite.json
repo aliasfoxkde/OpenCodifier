@@ -1,0 +1,3199 @@
+{
+ "instructions": "You are choosing from a fixed list of options. Read the context and answer with exactly one option id from the allowed choices. Do not invent options. If unsure, still pick the closest option.",
+ "items": [
+  {
+   "answer": "target-alpha",
+   "candidates": [
+    {
+     "description": "deployment target alpha (region=us-east-1, tier=free, encrypted=yes, replicas=2)",
+     "id": "target-alpha"
+    },
+    {
+     "description": "deployment target bravo (region=us-east-1, tier=standard, encrypted=no, replicas=2)",
+     "id": "target-bravo"
+    },
+    {
+     "description": "deployment target charlie (region=eu-west-1, tier=free, encrypted=no, replicas=1)",
+     "id": "target-charlie"
+    },
+    {
+     "description": "deployment target delta (region=ap-south-1, tier=premium, encrypted=yes, replicas=5)",
+     "id": "target-delta"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: region must be us-east-1; tier must be free; encrypted must be yes; replicas must be 2.\nCatalog:\n- target-alpha: region=us-east-1, tier=free, encrypted=yes, replicas=2.\n- target-bravo: region=us-east-1, tier=standard, encrypted=no, replicas=2.\n- target-charlie: region=eu-west-1, tier=free, encrypted=no, replicas=1.\n- target-delta: region=ap-south-1, tier=premium, encrypted=yes, replicas=5.",
+   "id": "A-0000",
+   "question": "Which deployment target satisfies all of the constraints?"
+  },
+  {
+   "answer": "target-charlie",
+   "candidates": [
+    {
+     "description": "deployment target alpha (region=ap-south-1, tier=free, encrypted=no, replicas=1)",
+     "id": "target-alpha"
+    },
+    {
+     "description": "deployment target bravo (region=sa-east-1, tier=standard, encrypted=no, replicas=1)",
+     "id": "target-bravo"
+    },
+    {
+     "description": "deployment target charlie (region=eu-west-1, tier=free, encrypted=yes, replicas=3)",
+     "id": "target-charlie"
+    },
+    {
+     "description": "deployment target delta (region=us-east-1, tier=free, encrypted=no, replicas=5)",
+     "id": "target-delta"
+    },
+    {
+     "description": "deployment target echo (region=eu-west-1, tier=standard, encrypted=yes, replicas=2)",
+     "id": "target-echo"
+    },
+    {
+     "description": "deployment target foxtrot (region=sa-east-1, tier=free, encrypted=yes, replicas=2)",
+     "id": "target-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: region must be eu-west-1; tier must be free; encrypted must be yes; replicas must be 3.\nCatalog:\n- target-alpha: region=ap-south-1, tier=free, encrypted=no, replicas=1.\n- target-bravo: region=sa-east-1, tier=standard, encrypted=no, replicas=1.\n- target-charlie: region=eu-west-1, tier=free, encrypted=yes, replicas=3.\n- target-delta: region=us-east-1, tier=free, encrypted=no, replicas=5.\n- target-echo: region=eu-west-1, tier=standard, encrypted=yes, replicas=2.\n- target-foxtrot: region=sa-east-1, tier=free, encrypted=yes, replicas=2.",
+   "id": "A-0001",
+   "question": "Which deployment target satisfies all of the constraints?"
+  },
+  {
+   "answer": "target-echo",
+   "candidates": [
+    {
+     "description": "deployment target alpha (region=us-east-1, tier=standard, encrypted=yes, replicas=3)",
+     "id": "target-alpha"
+    },
+    {
+     "description": "deployment target bravo (region=ap-south-1, tier=standard, encrypted=yes, replicas=1)",
+     "id": "target-bravo"
+    },
+    {
+     "description": "deployment target charlie (region=eu-west-1, tier=standard, encrypted=yes, replicas=1)",
+     "id": "target-charlie"
+    },
+    {
+     "description": "deployment target delta (region=us-east-1, tier=premium, encrypted=yes, replicas=2)",
+     "id": "target-delta"
+    },
+    {
+     "description": "deployment target echo (region=eu-west-1, tier=free, encrypted=no, replicas=1)",
+     "id": "target-echo"
+    },
+    {
+     "description": "deployment target foxtrot (region=sa-east-1, tier=standard, encrypted=yes, replicas=2)",
+     "id": "target-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: region must be eu-west-1; tier must be free; encrypted must be no; replicas must be 1.\nCatalog:\n- target-alpha: region=us-east-1, tier=standard, encrypted=yes, replicas=3.\n- target-bravo: region=ap-south-1, tier=standard, encrypted=yes, replicas=1.\n- target-charlie: region=eu-west-1, tier=standard, encrypted=yes, replicas=1.\n- target-delta: region=us-east-1, tier=premium, encrypted=yes, replicas=2.\n- target-echo: region=eu-west-1, tier=free, encrypted=no, replicas=1.\n- target-foxtrot: region=sa-east-1, tier=standard, encrypted=yes, replicas=2.",
+   "id": "A-0002",
+   "question": "Which deployment target satisfies all of the constraints?"
+  },
+  {
+   "answer": "target-delta",
+   "candidates": [
+    {
+     "description": "deployment target alpha (region=sa-east-1, tier=standard, encrypted=no, replicas=3)",
+     "id": "target-alpha"
+    },
+    {
+     "description": "deployment target bravo (region=us-east-1, tier=standard, encrypted=no, replicas=2)",
+     "id": "target-bravo"
+    },
+    {
+     "description": "deployment target charlie (region=eu-west-1, tier=standard, encrypted=yes, replicas=1)",
+     "id": "target-charlie"
+    },
+    {
+     "description": "deployment target delta (region=ap-south-1, tier=free, encrypted=no, replicas=5)",
+     "id": "target-delta"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: region must be ap-south-1; tier must be free; encrypted must be no; replicas must be 5.\nCatalog:\n- target-alpha: region=sa-east-1, tier=standard, encrypted=no, replicas=3.\n- target-bravo: region=us-east-1, tier=standard, encrypted=no, replicas=2.\n- target-charlie: region=eu-west-1, tier=standard, encrypted=yes, replicas=1.\n- target-delta: region=ap-south-1, tier=free, encrypted=no, replicas=5.",
+   "id": "A-0003",
+   "question": "Which deployment target satisfies all of the constraints?"
+  },
+  {
+   "answer": "target-bravo",
+   "candidates": [
+    {
+     "description": "deployment target alpha (region=eu-west-1, tier=free, encrypted=no, replicas=1)",
+     "id": "target-alpha"
+    },
+    {
+     "description": "deployment target bravo (region=us-east-1, tier=standard, encrypted=yes, replicas=5)",
+     "id": "target-bravo"
+    },
+    {
+     "description": "deployment target charlie (region=us-east-1, tier=standard, encrypted=no, replicas=3)",
+     "id": "target-charlie"
+    },
+    {
+     "description": "deployment target delta (region=ap-south-1, tier=premium, encrypted=no, replicas=2)",
+     "id": "target-delta"
+    },
+    {
+     "description": "deployment target echo (region=sa-east-1, tier=free, encrypted=no, replicas=1)",
+     "id": "target-echo"
+    },
+    {
+     "description": "deployment target foxtrot (region=us-east-1, tier=standard, encrypted=no, replicas=2)",
+     "id": "target-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: region must be us-east-1; tier must be standard; encrypted must be yes; replicas must be 5.\nCatalog:\n- target-alpha: region=eu-west-1, tier=free, encrypted=no, replicas=1.\n- target-bravo: region=us-east-1, tier=standard, encrypted=yes, replicas=5.\n- target-charlie: region=us-east-1, tier=standard, encrypted=no, replicas=3.\n- target-delta: region=ap-south-1, tier=premium, encrypted=no, replicas=2.\n- target-echo: region=sa-east-1, tier=free, encrypted=no, replicas=1.\n- target-foxtrot: region=us-east-1, tier=standard, encrypted=no, replicas=2.",
+   "id": "A-0004",
+   "question": "Which deployment target satisfies all of the constraints?"
+  },
+  {
+   "answer": "target-charlie",
+   "candidates": [
+    {
+     "description": "deployment target alpha (region=us-east-1, tier=standard, encrypted=yes, replicas=5)",
+     "id": "target-alpha"
+    },
+    {
+     "description": "deployment target bravo (region=ap-south-1, tier=standard, encrypted=no, replicas=3)",
+     "id": "target-bravo"
+    },
+    {
+     "description": "deployment target charlie (region=us-east-1, tier=premium, encrypted=yes, replicas=1)",
+     "id": "target-charlie"
+    },
+    {
+     "description": "deployment target delta (region=ap-south-1, tier=standard, encrypted=no, replicas=1)",
+     "id": "target-delta"
+    },
+    {
+     "description": "deployment target echo (region=sa-east-1, tier=premium, encrypted=no, replicas=5)",
+     "id": "target-echo"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: region must be us-east-1; tier must be premium; encrypted must be yes; replicas must be 1.\nCatalog:\n- target-alpha: region=us-east-1, tier=standard, encrypted=yes, replicas=5.\n- target-bravo: region=ap-south-1, tier=standard, encrypted=no, replicas=3.\n- target-charlie: region=us-east-1, tier=premium, encrypted=yes, replicas=1.\n- target-delta: region=ap-south-1, tier=standard, encrypted=no, replicas=1.\n- target-echo: region=sa-east-1, tier=premium, encrypted=no, replicas=5.",
+   "id": "A-0005",
+   "question": "Which deployment target satisfies all of the constraints?"
+  },
+  {
+   "answer": "target-alpha",
+   "candidates": [
+    {
+     "description": "deployment target alpha (region=sa-east-1, tier=free, encrypted=no, replicas=5)",
+     "id": "target-alpha"
+    },
+    {
+     "description": "deployment target bravo (region=eu-west-1, tier=standard, encrypted=no, replicas=5)",
+     "id": "target-bravo"
+    },
+    {
+     "description": "deployment target charlie (region=us-east-1, tier=free, encrypted=yes, replicas=2)",
+     "id": "target-charlie"
+    },
+    {
+     "description": "deployment target delta (region=eu-west-1, tier=free, encrypted=yes, replicas=3)",
+     "id": "target-delta"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: region must be sa-east-1; tier must be free; encrypted must be no; replicas must be 5.\nCatalog:\n- target-alpha: region=sa-east-1, tier=free, encrypted=no, replicas=5.\n- target-bravo: region=eu-west-1, tier=standard, encrypted=no, replicas=5.\n- target-charlie: region=us-east-1, tier=free, encrypted=yes, replicas=2.\n- target-delta: region=eu-west-1, tier=free, encrypted=yes, replicas=3.",
+   "id": "A-0006",
+   "question": "Which deployment target satisfies all of the constraints?"
+  },
+  {
+   "answer": "target-delta",
+   "candidates": [
+    {
+     "description": "deployment target alpha (region=eu-west-1, tier=free, encrypted=yes, replicas=5)",
+     "id": "target-alpha"
+    },
+    {
+     "description": "deployment target bravo (region=us-east-1, tier=free, encrypted=yes, replicas=1)",
+     "id": "target-bravo"
+    },
+    {
+     "description": "deployment target charlie (region=ap-south-1, tier=standard, encrypted=yes, replicas=1)",
+     "id": "target-charlie"
+    },
+    {
+     "description": "deployment target delta (region=ap-south-1, tier=standard, encrypted=no, replicas=2)",
+     "id": "target-delta"
+    },
+    {
+     "description": "deployment target echo (region=sa-east-1, tier=premium, encrypted=yes, replicas=1)",
+     "id": "target-echo"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: region must be ap-south-1; tier must be standard; encrypted must be no; replicas must be 2.\nCatalog:\n- target-alpha: region=eu-west-1, tier=free, encrypted=yes, replicas=5.\n- target-bravo: region=us-east-1, tier=free, encrypted=yes, replicas=1.\n- target-charlie: region=ap-south-1, tier=standard, encrypted=yes, replicas=1.\n- target-delta: region=ap-south-1, tier=standard, encrypted=no, replicas=2.\n- target-echo: region=sa-east-1, tier=premium, encrypted=yes, replicas=1.",
+   "id": "A-0007",
+   "question": "Which deployment target satisfies all of the constraints?"
+  },
+  {
+   "answer": "target-echo",
+   "candidates": [
+    {
+     "description": "deployment target alpha (region=us-east-1, tier=standard, encrypted=yes, replicas=3)",
+     "id": "target-alpha"
+    },
+    {
+     "description": "deployment target bravo (region=ap-south-1, tier=premium, encrypted=yes, replicas=1)",
+     "id": "target-bravo"
+    },
+    {
+     "description": "deployment target charlie (region=us-east-1, tier=standard, encrypted=yes, replicas=2)",
+     "id": "target-charlie"
+    },
+    {
+     "description": "deployment target delta (region=sa-east-1, tier=standard, encrypted=yes, replicas=5)",
+     "id": "target-delta"
+    },
+    {
+     "description": "deployment target echo (region=sa-east-1, tier=standard, encrypted=yes, replicas=1)",
+     "id": "target-echo"
+    },
+    {
+     "description": "deployment target foxtrot (region=us-east-1, tier=standard, encrypted=no, replicas=2)",
+     "id": "target-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: region must be sa-east-1; tier must be standard; encrypted must be yes; replicas must be 1.\nCatalog:\n- target-alpha: region=us-east-1, tier=standard, encrypted=yes, replicas=3.\n- target-bravo: region=ap-south-1, tier=premium, encrypted=yes, replicas=1.\n- target-charlie: region=us-east-1, tier=standard, encrypted=yes, replicas=2.\n- target-delta: region=sa-east-1, tier=standard, encrypted=yes, replicas=5.\n- target-echo: region=sa-east-1, tier=standard, encrypted=yes, replicas=1.\n- target-foxtrot: region=us-east-1, tier=standard, encrypted=no, replicas=2.",
+   "id": "A-0008",
+   "question": "Which deployment target satisfies all of the constraints?"
+  },
+  {
+   "answer": "target-alpha",
+   "candidates": [
+    {
+     "description": "deployment target alpha (region=us-east-1, tier=free, encrypted=yes, replicas=3)",
+     "id": "target-alpha"
+    },
+    {
+     "description": "deployment target bravo (region=us-east-1, tier=premium, encrypted=yes, replicas=5)",
+     "id": "target-bravo"
+    },
+    {
+     "description": "deployment target charlie (region=sa-east-1, tier=standard, encrypted=yes, replicas=3)",
+     "id": "target-charlie"
+    },
+    {
+     "description": "deployment target delta (region=sa-east-1, tier=premium, encrypted=yes, replicas=2)",
+     "id": "target-delta"
+    },
+    {
+     "description": "deployment target echo (region=sa-east-1, tier=free, encrypted=no, replicas=5)",
+     "id": "target-echo"
+    },
+    {
+     "description": "deployment target foxtrot (region=sa-east-1, tier=standard, encrypted=no, replicas=5)",
+     "id": "target-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: region must be us-east-1; tier must be free; encrypted must be yes; replicas must be 3.\nCatalog:\n- target-alpha: region=us-east-1, tier=free, encrypted=yes, replicas=3.\n- target-bravo: region=us-east-1, tier=premium, encrypted=yes, replicas=5.\n- target-charlie: region=sa-east-1, tier=standard, encrypted=yes, replicas=3.\n- target-delta: region=sa-east-1, tier=premium, encrypted=yes, replicas=2.\n- target-echo: region=sa-east-1, tier=free, encrypted=no, replicas=5.\n- target-foxtrot: region=sa-east-1, tier=standard, encrypted=no, replicas=5.",
+   "id": "A-0009",
+   "question": "Which deployment target satisfies all of the constraints?"
+  },
+  {
+   "answer": "target-charlie",
+   "candidates": [
+    {
+     "description": "deployment target alpha (region=sa-east-1, tier=free, encrypted=yes, replicas=3)",
+     "id": "target-alpha"
+    },
+    {
+     "description": "deployment target bravo (region=ap-south-1, tier=standard, encrypted=yes, replicas=1)",
+     "id": "target-bravo"
+    },
+    {
+     "description": "deployment target charlie (region=eu-west-1, tier=free, encrypted=no, replicas=2)",
+     "id": "target-charlie"
+    },
+    {
+     "description": "deployment target delta (region=eu-west-1, tier=free, encrypted=yes, replicas=5)",
+     "id": "target-delta"
+    },
+    {
+     "description": "deployment target echo (region=us-east-1, tier=free, encrypted=yes, replicas=3)",
+     "id": "target-echo"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: region must be eu-west-1; tier must be free; encrypted must be no; replicas must be 2.\nCatalog:\n- target-alpha: region=sa-east-1, tier=free, encrypted=yes, replicas=3.\n- target-bravo: region=ap-south-1, tier=standard, encrypted=yes, replicas=1.\n- target-charlie: region=eu-west-1, tier=free, encrypted=no, replicas=2.\n- target-delta: region=eu-west-1, tier=free, encrypted=yes, replicas=5.\n- target-echo: region=us-east-1, tier=free, encrypted=yes, replicas=3.",
+   "id": "A-0010",
+   "question": "Which deployment target satisfies all of the constraints?"
+  },
+  {
+   "answer": "target-alpha",
+   "candidates": [
+    {
+     "description": "deployment target alpha (region=us-east-1, tier=free, encrypted=yes, replicas=1)",
+     "id": "target-alpha"
+    },
+    {
+     "description": "deployment target bravo (region=sa-east-1, tier=premium, encrypted=no, replicas=2)",
+     "id": "target-bravo"
+    },
+    {
+     "description": "deployment target charlie (region=eu-west-1, tier=premium, encrypted=yes, replicas=2)",
+     "id": "target-charlie"
+    },
+    {
+     "description": "deployment target delta (region=us-east-1, tier=premium, encrypted=no, replicas=1)",
+     "id": "target-delta"
+    },
+    {
+     "description": "deployment target echo (region=sa-east-1, tier=standard, encrypted=yes, replicas=2)",
+     "id": "target-echo"
+    },
+    {
+     "description": "deployment target foxtrot (region=sa-east-1, tier=standard, encrypted=yes, replicas=3)",
+     "id": "target-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: region must be us-east-1; tier must be free; encrypted must be yes; replicas must be 1.\nCatalog:\n- target-alpha: region=us-east-1, tier=free, encrypted=yes, replicas=1.\n- target-bravo: region=sa-east-1, tier=premium, encrypted=no, replicas=2.\n- target-charlie: region=eu-west-1, tier=premium, encrypted=yes, replicas=2.\n- target-delta: region=us-east-1, tier=premium, encrypted=no, replicas=1.\n- target-echo: region=sa-east-1, tier=standard, encrypted=yes, replicas=2.\n- target-foxtrot: region=sa-east-1, tier=standard, encrypted=yes, replicas=3.",
+   "id": "A-0011",
+   "question": "Which deployment target satisfies all of the constraints?"
+  },
+  {
+   "answer": "target-charlie",
+   "candidates": [
+    {
+     "description": "deployment target alpha (region=us-east-1, tier=premium, encrypted=no, replicas=2)",
+     "id": "target-alpha"
+    },
+    {
+     "description": "deployment target bravo (region=ap-south-1, tier=premium, encrypted=yes, replicas=5)",
+     "id": "target-bravo"
+    },
+    {
+     "description": "deployment target charlie (region=sa-east-1, tier=premium, encrypted=no, replicas=2)",
+     "id": "target-charlie"
+    },
+    {
+     "description": "deployment target delta (region=ap-south-1, tier=premium, encrypted=no, replicas=3)",
+     "id": "target-delta"
+    },
+    {
+     "description": "deployment target echo (region=sa-east-1, tier=standard, encrypted=no, replicas=3)",
+     "id": "target-echo"
+    },
+    {
+     "description": "deployment target foxtrot (region=ap-south-1, tier=premium, encrypted=yes, replicas=2)",
+     "id": "target-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: region must be sa-east-1; tier must be premium; encrypted must be no; replicas must be 2.\nCatalog:\n- target-alpha: region=us-east-1, tier=premium, encrypted=no, replicas=2.\n- target-bravo: region=ap-south-1, tier=premium, encrypted=yes, replicas=5.\n- target-charlie: region=sa-east-1, tier=premium, encrypted=no, replicas=2.\n- target-delta: region=ap-south-1, tier=premium, encrypted=no, replicas=3.\n- target-echo: region=sa-east-1, tier=standard, encrypted=no, replicas=3.\n- target-foxtrot: region=ap-south-1, tier=premium, encrypted=yes, replicas=2.",
+   "id": "A-0012",
+   "question": "Which deployment target satisfies all of the constraints?"
+  },
+  {
+   "answer": "target-foxtrot",
+   "candidates": [
+    {
+     "description": "deployment target alpha (region=us-east-1, tier=standard, encrypted=yes, replicas=3)",
+     "id": "target-alpha"
+    },
+    {
+     "description": "deployment target bravo (region=eu-west-1, tier=premium, encrypted=yes, replicas=3)",
+     "id": "target-bravo"
+    },
+    {
+     "description": "deployment target charlie (region=eu-west-1, tier=free, encrypted=yes, replicas=3)",
+     "id": "target-charlie"
+    },
+    {
+     "description": "deployment target delta (region=sa-east-1, tier=premium, encrypted=yes, replicas=2)",
+     "id": "target-delta"
+    },
+    {
+     "description": "deployment target echo (region=us-east-1, tier=premium, encrypted=yes, replicas=1)",
+     "id": "target-echo"
+    },
+    {
+     "description": "deployment target foxtrot (region=ap-south-1, tier=premium, encrypted=no, replicas=3)",
+     "id": "target-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: region must be ap-south-1; tier must be premium; encrypted must be no; replicas must be 3.\nCatalog:\n- target-alpha: region=us-east-1, tier=standard, encrypted=yes, replicas=3.\n- target-bravo: region=eu-west-1, tier=premium, encrypted=yes, replicas=3.\n- target-charlie: region=eu-west-1, tier=free, encrypted=yes, replicas=3.\n- target-delta: region=sa-east-1, tier=premium, encrypted=yes, replicas=2.\n- target-echo: region=us-east-1, tier=premium, encrypted=yes, replicas=1.\n- target-foxtrot: region=ap-south-1, tier=premium, encrypted=no, replicas=3.",
+   "id": "A-0013",
+   "question": "Which deployment target satisfies all of the constraints?"
+  },
+  {
+   "answer": "volume-echo",
+   "candidates": [
+    {
+     "description": "storage volume alpha (capacity=250g, media=ssd, snapshots=on, zone=z2)",
+     "id": "volume-alpha"
+    },
+    {
+     "description": "storage volume bravo (capacity=1t, media=nvme, snapshots=on, zone=z3)",
+     "id": "volume-bravo"
+    },
+    {
+     "description": "storage volume charlie (capacity=1t, media=ssd, snapshots=on, zone=z3)",
+     "id": "volume-charlie"
+    },
+    {
+     "description": "storage volume delta (capacity=100g, media=ssd, snapshots=on, zone=z2)",
+     "id": "volume-delta"
+    },
+    {
+     "description": "storage volume echo (capacity=100g, media=ssd, snapshots=on, zone=z1)",
+     "id": "volume-echo"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: capacity must be 100g; media must be ssd; snapshots must be on; zone must be z1.\nCatalog:\n- volume-alpha: capacity=250g, media=ssd, snapshots=on, zone=z2.\n- volume-bravo: capacity=1t, media=nvme, snapshots=on, zone=z3.\n- volume-charlie: capacity=1t, media=ssd, snapshots=on, zone=z3.\n- volume-delta: capacity=100g, media=ssd, snapshots=on, zone=z2.\n- volume-echo: capacity=100g, media=ssd, snapshots=on, zone=z1.",
+   "id": "A-0100",
+   "question": "Which storage volume satisfies all of the requirements?"
+  },
+  {
+   "answer": "volume-delta",
+   "candidates": [
+    {
+     "description": "storage volume alpha (capacity=1t, media=hdd, snapshots=off, zone=z1)",
+     "id": "volume-alpha"
+    },
+    {
+     "description": "storage volume bravo (capacity=1t, media=hdd, snapshots=off, zone=z3)",
+     "id": "volume-bravo"
+    },
+    {
+     "description": "storage volume charlie (capacity=100g, media=hdd, snapshots=off, zone=z2)",
+     "id": "volume-charlie"
+    },
+    {
+     "description": "storage volume delta (capacity=100g, media=ssd, snapshots=off, zone=z2)",
+     "id": "volume-delta"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: capacity must be 100g; media must be ssd; snapshots must be off; zone must be z2.\nCatalog:\n- volume-alpha: capacity=1t, media=hdd, snapshots=off, zone=z1.\n- volume-bravo: capacity=1t, media=hdd, snapshots=off, zone=z3.\n- volume-charlie: capacity=100g, media=hdd, snapshots=off, zone=z2.\n- volume-delta: capacity=100g, media=ssd, snapshots=off, zone=z2.",
+   "id": "A-0101",
+   "question": "Which storage volume satisfies all of the requirements?"
+  },
+  {
+   "answer": "volume-echo",
+   "candidates": [
+    {
+     "description": "storage volume alpha (capacity=1t, media=nvme, snapshots=off, zone=z1)",
+     "id": "volume-alpha"
+    },
+    {
+     "description": "storage volume bravo (capacity=100g, media=hdd, snapshots=on, zone=z2)",
+     "id": "volume-bravo"
+    },
+    {
+     "description": "storage volume charlie (capacity=250g, media=ssd, snapshots=on, zone=z2)",
+     "id": "volume-charlie"
+    },
+    {
+     "description": "storage volume delta (capacity=1t, media=hdd, snapshots=off, zone=z2)",
+     "id": "volume-delta"
+    },
+    {
+     "description": "storage volume echo (capacity=500g, media=hdd, snapshots=off, zone=z3)",
+     "id": "volume-echo"
+    },
+    {
+     "description": "storage volume foxtrot (capacity=250g, media=ssd, snapshots=on, zone=z3)",
+     "id": "volume-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: capacity must be 500g; media must be hdd; snapshots must be off; zone must be z3.\nCatalog:\n- volume-alpha: capacity=1t, media=nvme, snapshots=off, zone=z1.\n- volume-bravo: capacity=100g, media=hdd, snapshots=on, zone=z2.\n- volume-charlie: capacity=250g, media=ssd, snapshots=on, zone=z2.\n- volume-delta: capacity=1t, media=hdd, snapshots=off, zone=z2.\n- volume-echo: capacity=500g, media=hdd, snapshots=off, zone=z3.\n- volume-foxtrot: capacity=250g, media=ssd, snapshots=on, zone=z3.",
+   "id": "A-0102",
+   "question": "Which storage volume satisfies all of the requirements?"
+  },
+  {
+   "answer": "volume-bravo",
+   "candidates": [
+    {
+     "description": "storage volume alpha (capacity=1t, media=hdd, snapshots=off, zone=z3)",
+     "id": "volume-alpha"
+    },
+    {
+     "description": "storage volume bravo (capacity=1t, media=hdd, snapshots=off, zone=z2)",
+     "id": "volume-bravo"
+    },
+    {
+     "description": "storage volume charlie (capacity=250g, media=nvme, snapshots=off, zone=z3)",
+     "id": "volume-charlie"
+    },
+    {
+     "description": "storage volume delta (capacity=250g, media=hdd, snapshots=on, zone=z1)",
+     "id": "volume-delta"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: capacity must be 1t; media must be hdd; snapshots must be off; zone must be z2.\nCatalog:\n- volume-alpha: capacity=1t, media=hdd, snapshots=off, zone=z3.\n- volume-bravo: capacity=1t, media=hdd, snapshots=off, zone=z2.\n- volume-charlie: capacity=250g, media=nvme, snapshots=off, zone=z3.\n- volume-delta: capacity=250g, media=hdd, snapshots=on, zone=z1.",
+   "id": "A-0103",
+   "question": "Which storage volume satisfies all of the requirements?"
+  },
+  {
+   "answer": "volume-charlie",
+   "candidates": [
+    {
+     "description": "storage volume alpha (capacity=250g, media=ssd, snapshots=off, zone=z1)",
+     "id": "volume-alpha"
+    },
+    {
+     "description": "storage volume bravo (capacity=500g, media=hdd, snapshots=on, zone=z1)",
+     "id": "volume-bravo"
+    },
+    {
+     "description": "storage volume charlie (capacity=500g, media=nvme, snapshots=on, zone=z3)",
+     "id": "volume-charlie"
+    },
+    {
+     "description": "storage volume delta (capacity=100g, media=ssd, snapshots=on, zone=z1)",
+     "id": "volume-delta"
+    },
+    {
+     "description": "storage volume echo (capacity=250g, media=ssd, snapshots=off, zone=z2)",
+     "id": "volume-echo"
+    },
+    {
+     "description": "storage volume foxtrot (capacity=1t, media=ssd, snapshots=on, zone=z2)",
+     "id": "volume-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: capacity must be 500g; media must be nvme; snapshots must be on; zone must be z3.\nCatalog:\n- volume-alpha: capacity=250g, media=ssd, snapshots=off, zone=z1.\n- volume-bravo: capacity=500g, media=hdd, snapshots=on, zone=z1.\n- volume-charlie: capacity=500g, media=nvme, snapshots=on, zone=z3.\n- volume-delta: capacity=100g, media=ssd, snapshots=on, zone=z1.\n- volume-echo: capacity=250g, media=ssd, snapshots=off, zone=z2.\n- volume-foxtrot: capacity=1t, media=ssd, snapshots=on, zone=z2.",
+   "id": "A-0104",
+   "question": "Which storage volume satisfies all of the requirements?"
+  },
+  {
+   "answer": "volume-bravo",
+   "candidates": [
+    {
+     "description": "storage volume alpha (capacity=250g, media=ssd, snapshots=on, zone=z1)",
+     "id": "volume-alpha"
+    },
+    {
+     "description": "storage volume bravo (capacity=500g, media=ssd, snapshots=on, zone=z3)",
+     "id": "volume-bravo"
+    },
+    {
+     "description": "storage volume charlie (capacity=1t, media=nvme, snapshots=on, zone=z2)",
+     "id": "volume-charlie"
+    },
+    {
+     "description": "storage volume delta (capacity=500g, media=ssd, snapshots=on, zone=z1)",
+     "id": "volume-delta"
+    },
+    {
+     "description": "storage volume echo (capacity=100g, media=hdd, snapshots=on, zone=z3)",
+     "id": "volume-echo"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: capacity must be 500g; media must be ssd; snapshots must be on; zone must be z3.\nCatalog:\n- volume-alpha: capacity=250g, media=ssd, snapshots=on, zone=z1.\n- volume-bravo: capacity=500g, media=ssd, snapshots=on, zone=z3.\n- volume-charlie: capacity=1t, media=nvme, snapshots=on, zone=z2.\n- volume-delta: capacity=500g, media=ssd, snapshots=on, zone=z1.\n- volume-echo: capacity=100g, media=hdd, snapshots=on, zone=z3.",
+   "id": "A-0105",
+   "question": "Which storage volume satisfies all of the requirements?"
+  },
+  {
+   "answer": "volume-alpha",
+   "candidates": [
+    {
+     "description": "storage volume alpha (capacity=100g, media=nvme, snapshots=off, zone=z1)",
+     "id": "volume-alpha"
+    },
+    {
+     "description": "storage volume bravo (capacity=100g, media=hdd, snapshots=off, zone=z3)",
+     "id": "volume-bravo"
+    },
+    {
+     "description": "storage volume charlie (capacity=500g, media=nvme, snapshots=on, zone=z1)",
+     "id": "volume-charlie"
+    },
+    {
+     "description": "storage volume delta (capacity=250g, media=nvme, snapshots=off, zone=z2)",
+     "id": "volume-delta"
+    },
+    {
+     "description": "storage volume echo (capacity=100g, media=nvme, snapshots=off, zone=z2)",
+     "id": "volume-echo"
+    },
+    {
+     "description": "storage volume foxtrot (capacity=1t, media=nvme, snapshots=off, zone=z1)",
+     "id": "volume-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: capacity must be 100g; media must be nvme; snapshots must be off; zone must be z1.\nCatalog:\n- volume-alpha: capacity=100g, media=nvme, snapshots=off, zone=z1.\n- volume-bravo: capacity=100g, media=hdd, snapshots=off, zone=z3.\n- volume-charlie: capacity=500g, media=nvme, snapshots=on, zone=z1.\n- volume-delta: capacity=250g, media=nvme, snapshots=off, zone=z2.\n- volume-echo: capacity=100g, media=nvme, snapshots=off, zone=z2.\n- volume-foxtrot: capacity=1t, media=nvme, snapshots=off, zone=z1.",
+   "id": "A-0106",
+   "question": "Which storage volume satisfies all of the requirements?"
+  },
+  {
+   "answer": "volume-alpha",
+   "candidates": [
+    {
+     "description": "storage volume alpha (capacity=100g, media=ssd, snapshots=on, zone=z1)",
+     "id": "volume-alpha"
+    },
+    {
+     "description": "storage volume bravo (capacity=500g, media=ssd, snapshots=on, zone=z2)",
+     "id": "volume-bravo"
+    },
+    {
+     "description": "storage volume charlie (capacity=250g, media=ssd, snapshots=off, zone=z3)",
+     "id": "volume-charlie"
+    },
+    {
+     "description": "storage volume delta (capacity=250g, media=hdd, snapshots=off, zone=z3)",
+     "id": "volume-delta"
+    },
+    {
+     "description": "storage volume echo (capacity=500g, media=ssd, snapshots=on, zone=z3)",
+     "id": "volume-echo"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: capacity must be 100g; media must be ssd; snapshots must be on; zone must be z1.\nCatalog:\n- volume-alpha: capacity=100g, media=ssd, snapshots=on, zone=z1.\n- volume-bravo: capacity=500g, media=ssd, snapshots=on, zone=z2.\n- volume-charlie: capacity=250g, media=ssd, snapshots=off, zone=z3.\n- volume-delta: capacity=250g, media=hdd, snapshots=off, zone=z3.\n- volume-echo: capacity=500g, media=ssd, snapshots=on, zone=z3.",
+   "id": "A-0107",
+   "question": "Which storage volume satisfies all of the requirements?"
+  },
+  {
+   "answer": "volume-delta",
+   "candidates": [
+    {
+     "description": "storage volume alpha (capacity=100g, media=hdd, snapshots=off, zone=z2)",
+     "id": "volume-alpha"
+    },
+    {
+     "description": "storage volume bravo (capacity=250g, media=hdd, snapshots=off, zone=z1)",
+     "id": "volume-bravo"
+    },
+    {
+     "description": "storage volume charlie (capacity=1t, media=ssd, snapshots=off, zone=z2)",
+     "id": "volume-charlie"
+    },
+    {
+     "description": "storage volume delta (capacity=1t, media=hdd, snapshots=off, zone=z1)",
+     "id": "volume-delta"
+    },
+    {
+     "description": "storage volume echo (capacity=250g, media=ssd, snapshots=on, zone=z2)",
+     "id": "volume-echo"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: capacity must be 1t; media must be hdd; snapshots must be off; zone must be z1.\nCatalog:\n- volume-alpha: capacity=100g, media=hdd, snapshots=off, zone=z2.\n- volume-bravo: capacity=250g, media=hdd, snapshots=off, zone=z1.\n- volume-charlie: capacity=1t, media=ssd, snapshots=off, zone=z2.\n- volume-delta: capacity=1t, media=hdd, snapshots=off, zone=z1.\n- volume-echo: capacity=250g, media=ssd, snapshots=on, zone=z2.",
+   "id": "A-0108",
+   "question": "Which storage volume satisfies all of the requirements?"
+  },
+  {
+   "answer": "volume-echo",
+   "candidates": [
+    {
+     "description": "storage volume alpha (capacity=250g, media=hdd, snapshots=off, zone=z1)",
+     "id": "volume-alpha"
+    },
+    {
+     "description": "storage volume bravo (capacity=1t, media=nvme, snapshots=off, zone=z1)",
+     "id": "volume-bravo"
+    },
+    {
+     "description": "storage volume charlie (capacity=500g, media=nvme, snapshots=on, zone=z3)",
+     "id": "volume-charlie"
+    },
+    {
+     "description": "storage volume delta (capacity=100g, media=nvme, snapshots=off, zone=z1)",
+     "id": "volume-delta"
+    },
+    {
+     "description": "storage volume echo (capacity=500g, media=hdd, snapshots=off, zone=z2)",
+     "id": "volume-echo"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: capacity must be 500g; media must be hdd; snapshots must be off; zone must be z2.\nCatalog:\n- volume-alpha: capacity=250g, media=hdd, snapshots=off, zone=z1.\n- volume-bravo: capacity=1t, media=nvme, snapshots=off, zone=z1.\n- volume-charlie: capacity=500g, media=nvme, snapshots=on, zone=z3.\n- volume-delta: capacity=100g, media=nvme, snapshots=off, zone=z1.\n- volume-echo: capacity=500g, media=hdd, snapshots=off, zone=z2.",
+   "id": "A-0109",
+   "question": "Which storage volume satisfies all of the requirements?"
+  },
+  {
+   "answer": "volume-bravo",
+   "candidates": [
+    {
+     "description": "storage volume alpha (capacity=500g, media=hdd, snapshots=on, zone=z2)",
+     "id": "volume-alpha"
+    },
+    {
+     "description": "storage volume bravo (capacity=1t, media=nvme, snapshots=off, zone=z2)",
+     "id": "volume-bravo"
+    },
+    {
+     "description": "storage volume charlie (capacity=500g, media=nvme, snapshots=on, zone=z2)",
+     "id": "volume-charlie"
+    },
+    {
+     "description": "storage volume delta (capacity=1t, media=nvme, snapshots=on, zone=z3)",
+     "id": "volume-delta"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: capacity must be 1t; media must be nvme; snapshots must be off; zone must be z2.\nCatalog:\n- volume-alpha: capacity=500g, media=hdd, snapshots=on, zone=z2.\n- volume-bravo: capacity=1t, media=nvme, snapshots=off, zone=z2.\n- volume-charlie: capacity=500g, media=nvme, snapshots=on, zone=z2.\n- volume-delta: capacity=1t, media=nvme, snapshots=on, zone=z3.",
+   "id": "A-0110",
+   "question": "Which storage volume satisfies all of the requirements?"
+  },
+  {
+   "answer": "volume-bravo",
+   "candidates": [
+    {
+     "description": "storage volume alpha (capacity=100g, media=hdd, snapshots=on, zone=z1)",
+     "id": "volume-alpha"
+    },
+    {
+     "description": "storage volume bravo (capacity=250g, media=hdd, snapshots=off, zone=z3)",
+     "id": "volume-bravo"
+    },
+    {
+     "description": "storage volume charlie (capacity=250g, media=nvme, snapshots=on, zone=z1)",
+     "id": "volume-charlie"
+    },
+    {
+     "description": "storage volume delta (capacity=100g, media=ssd, snapshots=off, zone=z1)",
+     "id": "volume-delta"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: capacity must be 250g; media must be hdd; snapshots must be off; zone must be z3.\nCatalog:\n- volume-alpha: capacity=100g, media=hdd, snapshots=on, zone=z1.\n- volume-bravo: capacity=250g, media=hdd, snapshots=off, zone=z3.\n- volume-charlie: capacity=250g, media=nvme, snapshots=on, zone=z1.\n- volume-delta: capacity=100g, media=ssd, snapshots=off, zone=z1.",
+   "id": "A-0111",
+   "question": "Which storage volume satisfies all of the requirements?"
+  },
+  {
+   "answer": "volume-alpha",
+   "candidates": [
+    {
+     "description": "storage volume alpha (capacity=500g, media=hdd, snapshots=off, zone=z1)",
+     "id": "volume-alpha"
+    },
+    {
+     "description": "storage volume bravo (capacity=100g, media=hdd, snapshots=off, zone=z1)",
+     "id": "volume-bravo"
+    },
+    {
+     "description": "storage volume charlie (capacity=100g, media=hdd, snapshots=on, zone=z1)",
+     "id": "volume-charlie"
+    },
+    {
+     "description": "storage volume delta (capacity=1t, media=ssd, snapshots=off, zone=z3)",
+     "id": "volume-delta"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: capacity must be 500g; media must be hdd; snapshots must be off; zone must be z1.\nCatalog:\n- volume-alpha: capacity=500g, media=hdd, snapshots=off, zone=z1.\n- volume-bravo: capacity=100g, media=hdd, snapshots=off, zone=z1.\n- volume-charlie: capacity=100g, media=hdd, snapshots=on, zone=z1.\n- volume-delta: capacity=1t, media=ssd, snapshots=off, zone=z3.",
+   "id": "A-0112",
+   "question": "Which storage volume satisfies all of the requirements?"
+  },
+  {
+   "answer": "volume-delta",
+   "candidates": [
+    {
+     "description": "storage volume alpha (capacity=250g, media=nvme, snapshots=on, zone=z3)",
+     "id": "volume-alpha"
+    },
+    {
+     "description": "storage volume bravo (capacity=250g, media=hdd, snapshots=on, zone=z2)",
+     "id": "volume-bravo"
+    },
+    {
+     "description": "storage volume charlie (capacity=250g, media=hdd, snapshots=on, zone=z1)",
+     "id": "volume-charlie"
+    },
+    {
+     "description": "storage volume delta (capacity=100g, media=nvme, snapshots=off, zone=z3)",
+     "id": "volume-delta"
+    },
+    {
+     "description": "storage volume echo (capacity=1t, media=ssd, snapshots=on, zone=z2)",
+     "id": "volume-echo"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: capacity must be 100g; media must be nvme; snapshots must be off; zone must be z3.\nCatalog:\n- volume-alpha: capacity=250g, media=nvme, snapshots=on, zone=z3.\n- volume-bravo: capacity=250g, media=hdd, snapshots=on, zone=z2.\n- volume-charlie: capacity=250g, media=hdd, snapshots=on, zone=z1.\n- volume-delta: capacity=100g, media=nvme, snapshots=off, zone=z3.\n- volume-echo: capacity=1t, media=ssd, snapshots=on, zone=z2.",
+   "id": "A-0113",
+   "question": "Which storage volume satisfies all of the requirements?"
+  },
+  {
+   "answer": "instance-alpha",
+   "candidates": [
+    {
+     "description": "service instance alpha (runtime=jvm21, memory=1g, autoscale=off, zone=b)",
+     "id": "instance-alpha"
+    },
+    {
+     "description": "service instance bravo (runtime=node22, memory=512m, autoscale=on, zone=a)",
+     "id": "instance-bravo"
+    },
+    {
+     "description": "service instance charlie (runtime=jvm21, memory=4g, autoscale=on, zone=a)",
+     "id": "instance-charlie"
+    },
+    {
+     "description": "service instance delta (runtime=jvm21, memory=4g, autoscale=on, zone=c)",
+     "id": "instance-delta"
+    },
+    {
+     "description": "service instance echo (runtime=node22, memory=2g, autoscale=off, zone=a)",
+     "id": "instance-echo"
+    },
+    {
+     "description": "service instance foxtrot (runtime=go123, memory=4g, autoscale=off, zone=b)",
+     "id": "instance-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: runtime must be jvm21; memory must be 1g; autoscale must be off; zone must be b.\nCatalog:\n- instance-alpha: runtime=jvm21, memory=1g, autoscale=off, zone=b.\n- instance-bravo: runtime=node22, memory=512m, autoscale=on, zone=a.\n- instance-charlie: runtime=jvm21, memory=4g, autoscale=on, zone=a.\n- instance-delta: runtime=jvm21, memory=4g, autoscale=on, zone=c.\n- instance-echo: runtime=node22, memory=2g, autoscale=off, zone=a.\n- instance-foxtrot: runtime=go123, memory=4g, autoscale=off, zone=b.",
+   "id": "A-0200",
+   "question": "Which service instance matches the requested profile?"
+  },
+  {
+   "answer": "instance-alpha",
+   "candidates": [
+    {
+     "description": "service instance alpha (runtime=go123, memory=512m, autoscale=on, zone=c)",
+     "id": "instance-alpha"
+    },
+    {
+     "description": "service instance bravo (runtime=py312, memory=4g, autoscale=off, zone=b)",
+     "id": "instance-bravo"
+    },
+    {
+     "description": "service instance charlie (runtime=node22, memory=1g, autoscale=off, zone=a)",
+     "id": "instance-charlie"
+    },
+    {
+     "description": "service instance delta (runtime=node22, memory=512m, autoscale=on, zone=a)",
+     "id": "instance-delta"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: runtime must be go123; memory must be 512m; autoscale must be on; zone must be c.\nCatalog:\n- instance-alpha: runtime=go123, memory=512m, autoscale=on, zone=c.\n- instance-bravo: runtime=py312, memory=4g, autoscale=off, zone=b.\n- instance-charlie: runtime=node22, memory=1g, autoscale=off, zone=a.\n- instance-delta: runtime=node22, memory=512m, autoscale=on, zone=a.",
+   "id": "A-0201",
+   "question": "Which service instance matches the requested profile?"
+  },
+  {
+   "answer": "instance-alpha",
+   "candidates": [
+    {
+     "description": "service instance alpha (runtime=jvm21, memory=4g, autoscale=off, zone=c)",
+     "id": "instance-alpha"
+    },
+    {
+     "description": "service instance bravo (runtime=jvm21, memory=1g, autoscale=on, zone=b)",
+     "id": "instance-bravo"
+    },
+    {
+     "description": "service instance charlie (runtime=jvm21, memory=512m, autoscale=off, zone=b)",
+     "id": "instance-charlie"
+    },
+    {
+     "description": "service instance delta (runtime=node22, memory=512m, autoscale=off, zone=b)",
+     "id": "instance-delta"
+    },
+    {
+     "description": "service instance echo (runtime=py312, memory=4g, autoscale=on, zone=b)",
+     "id": "instance-echo"
+    },
+    {
+     "description": "service instance foxtrot (runtime=jvm21, memory=4g, autoscale=on, zone=c)",
+     "id": "instance-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: runtime must be jvm21; memory must be 4g; autoscale must be off; zone must be c.\nCatalog:\n- instance-alpha: runtime=jvm21, memory=4g, autoscale=off, zone=c.\n- instance-bravo: runtime=jvm21, memory=1g, autoscale=on, zone=b.\n- instance-charlie: runtime=jvm21, memory=512m, autoscale=off, zone=b.\n- instance-delta: runtime=node22, memory=512m, autoscale=off, zone=b.\n- instance-echo: runtime=py312, memory=4g, autoscale=on, zone=b.\n- instance-foxtrot: runtime=jvm21, memory=4g, autoscale=on, zone=c.",
+   "id": "A-0202",
+   "question": "Which service instance matches the requested profile?"
+  },
+  {
+   "answer": "instance-charlie",
+   "candidates": [
+    {
+     "description": "service instance alpha (runtime=py312, memory=2g, autoscale=off, zone=c)",
+     "id": "instance-alpha"
+    },
+    {
+     "description": "service instance bravo (runtime=go123, memory=2g, autoscale=off, zone=b)",
+     "id": "instance-bravo"
+    },
+    {
+     "description": "service instance charlie (runtime=jvm21, memory=512m, autoscale=on, zone=a)",
+     "id": "instance-charlie"
+    },
+    {
+     "description": "service instance delta (runtime=node22, memory=2g, autoscale=on, zone=a)",
+     "id": "instance-delta"
+    },
+    {
+     "description": "service instance echo (runtime=jvm21, memory=2g, autoscale=on, zone=c)",
+     "id": "instance-echo"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: runtime must be jvm21; memory must be 512m; autoscale must be on; zone must be a.\nCatalog:\n- instance-alpha: runtime=py312, memory=2g, autoscale=off, zone=c.\n- instance-bravo: runtime=go123, memory=2g, autoscale=off, zone=b.\n- instance-charlie: runtime=jvm21, memory=512m, autoscale=on, zone=a.\n- instance-delta: runtime=node22, memory=2g, autoscale=on, zone=a.\n- instance-echo: runtime=jvm21, memory=2g, autoscale=on, zone=c.",
+   "id": "A-0203",
+   "question": "Which service instance matches the requested profile?"
+  },
+  {
+   "answer": "instance-bravo",
+   "candidates": [
+    {
+     "description": "service instance alpha (runtime=node22, memory=512m, autoscale=off, zone=a)",
+     "id": "instance-alpha"
+    },
+    {
+     "description": "service instance bravo (runtime=jvm21, memory=1g, autoscale=off, zone=c)",
+     "id": "instance-bravo"
+    },
+    {
+     "description": "service instance charlie (runtime=py312, memory=4g, autoscale=off, zone=b)",
+     "id": "instance-charlie"
+    },
+    {
+     "description": "service instance delta (runtime=jvm21, memory=512m, autoscale=off, zone=a)",
+     "id": "instance-delta"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: runtime must be jvm21; memory must be 1g; autoscale must be off; zone must be c.\nCatalog:\n- instance-alpha: runtime=node22, memory=512m, autoscale=off, zone=a.\n- instance-bravo: runtime=jvm21, memory=1g, autoscale=off, zone=c.\n- instance-charlie: runtime=py312, memory=4g, autoscale=off, zone=b.\n- instance-delta: runtime=jvm21, memory=512m, autoscale=off, zone=a.",
+   "id": "A-0204",
+   "question": "Which service instance matches the requested profile?"
+  },
+  {
+   "answer": "instance-delta",
+   "candidates": [
+    {
+     "description": "service instance alpha (runtime=node22, memory=4g, autoscale=off, zone=b)",
+     "id": "instance-alpha"
+    },
+    {
+     "description": "service instance bravo (runtime=py312, memory=1g, autoscale=off, zone=a)",
+     "id": "instance-bravo"
+    },
+    {
+     "description": "service instance charlie (runtime=py312, memory=512m, autoscale=on, zone=c)",
+     "id": "instance-charlie"
+    },
+    {
+     "description": "service instance delta (runtime=jvm21, memory=2g, autoscale=off, zone=a)",
+     "id": "instance-delta"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: runtime must be jvm21; memory must be 2g; autoscale must be off; zone must be a.\nCatalog:\n- instance-alpha: runtime=node22, memory=4g, autoscale=off, zone=b.\n- instance-bravo: runtime=py312, memory=1g, autoscale=off, zone=a.\n- instance-charlie: runtime=py312, memory=512m, autoscale=on, zone=c.\n- instance-delta: runtime=jvm21, memory=2g, autoscale=off, zone=a.",
+   "id": "A-0205",
+   "question": "Which service instance matches the requested profile?"
+  },
+  {
+   "answer": "instance-bravo",
+   "candidates": [
+    {
+     "description": "service instance alpha (runtime=node22, memory=512m, autoscale=on, zone=b)",
+     "id": "instance-alpha"
+    },
+    {
+     "description": "service instance bravo (runtime=jvm21, memory=1g, autoscale=off, zone=c)",
+     "id": "instance-bravo"
+    },
+    {
+     "description": "service instance charlie (runtime=node22, memory=4g, autoscale=on, zone=c)",
+     "id": "instance-charlie"
+    },
+    {
+     "description": "service instance delta (runtime=go123, memory=4g, autoscale=off, zone=c)",
+     "id": "instance-delta"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: runtime must be jvm21; memory must be 1g; autoscale must be off; zone must be c.\nCatalog:\n- instance-alpha: runtime=node22, memory=512m, autoscale=on, zone=b.\n- instance-bravo: runtime=jvm21, memory=1g, autoscale=off, zone=c.\n- instance-charlie: runtime=node22, memory=4g, autoscale=on, zone=c.\n- instance-delta: runtime=go123, memory=4g, autoscale=off, zone=c.",
+   "id": "A-0206",
+   "question": "Which service instance matches the requested profile?"
+  },
+  {
+   "answer": "instance-alpha",
+   "candidates": [
+    {
+     "description": "service instance alpha (runtime=jvm21, memory=512m, autoscale=on, zone=a)",
+     "id": "instance-alpha"
+    },
+    {
+     "description": "service instance bravo (runtime=jvm21, memory=2g, autoscale=on, zone=c)",
+     "id": "instance-bravo"
+    },
+    {
+     "description": "service instance charlie (runtime=go123, memory=2g, autoscale=on, zone=b)",
+     "id": "instance-charlie"
+    },
+    {
+     "description": "service instance delta (runtime=go123, memory=4g, autoscale=on, zone=a)",
+     "id": "instance-delta"
+    },
+    {
+     "description": "service instance echo (runtime=go123, memory=1g, autoscale=on, zone=c)",
+     "id": "instance-echo"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: runtime must be jvm21; memory must be 512m; autoscale must be on; zone must be a.\nCatalog:\n- instance-alpha: runtime=jvm21, memory=512m, autoscale=on, zone=a.\n- instance-bravo: runtime=jvm21, memory=2g, autoscale=on, zone=c.\n- instance-charlie: runtime=go123, memory=2g, autoscale=on, zone=b.\n- instance-delta: runtime=go123, memory=4g, autoscale=on, zone=a.\n- instance-echo: runtime=go123, memory=1g, autoscale=on, zone=c.",
+   "id": "A-0207",
+   "question": "Which service instance matches the requested profile?"
+  },
+  {
+   "answer": "instance-foxtrot",
+   "candidates": [
+    {
+     "description": "service instance alpha (runtime=py312, memory=1g, autoscale=off, zone=c)",
+     "id": "instance-alpha"
+    },
+    {
+     "description": "service instance bravo (runtime=py312, memory=4g, autoscale=off, zone=b)",
+     "id": "instance-bravo"
+    },
+    {
+     "description": "service instance charlie (runtime=py312, memory=2g, autoscale=off, zone=b)",
+     "id": "instance-charlie"
+    },
+    {
+     "description": "service instance delta (runtime=node22, memory=4g, autoscale=on, zone=b)",
+     "id": "instance-delta"
+    },
+    {
+     "description": "service instance echo (runtime=py312, memory=1g, autoscale=on, zone=b)",
+     "id": "instance-echo"
+    },
+    {
+     "description": "service instance foxtrot (runtime=jvm21, memory=4g, autoscale=on, zone=b)",
+     "id": "instance-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: runtime must be jvm21; memory must be 4g; autoscale must be on; zone must be b.\nCatalog:\n- instance-alpha: runtime=py312, memory=1g, autoscale=off, zone=c.\n- instance-bravo: runtime=py312, memory=4g, autoscale=off, zone=b.\n- instance-charlie: runtime=py312, memory=2g, autoscale=off, zone=b.\n- instance-delta: runtime=node22, memory=4g, autoscale=on, zone=b.\n- instance-echo: runtime=py312, memory=1g, autoscale=on, zone=b.\n- instance-foxtrot: runtime=jvm21, memory=4g, autoscale=on, zone=b.",
+   "id": "A-0208",
+   "question": "Which service instance matches the requested profile?"
+  },
+  {
+   "answer": "instance-foxtrot",
+   "candidates": [
+    {
+     "description": "service instance alpha (runtime=jvm21, memory=1g, autoscale=on, zone=c)",
+     "id": "instance-alpha"
+    },
+    {
+     "description": "service instance bravo (runtime=node22, memory=2g, autoscale=off, zone=c)",
+     "id": "instance-bravo"
+    },
+    {
+     "description": "service instance charlie (runtime=go123, memory=2g, autoscale=off, zone=b)",
+     "id": "instance-charlie"
+    },
+    {
+     "description": "service instance delta (runtime=node22, memory=4g, autoscale=on, zone=c)",
+     "id": "instance-delta"
+    },
+    {
+     "description": "service instance echo (runtime=go123, memory=4g, autoscale=off, zone=a)",
+     "id": "instance-echo"
+    },
+    {
+     "description": "service instance foxtrot (runtime=go123, memory=1g, autoscale=off, zone=b)",
+     "id": "instance-foxtrot"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: runtime must be go123; memory must be 1g; autoscale must be off; zone must be b.\nCatalog:\n- instance-alpha: runtime=jvm21, memory=1g, autoscale=on, zone=c.\n- instance-bravo: runtime=node22, memory=2g, autoscale=off, zone=c.\n- instance-charlie: runtime=go123, memory=2g, autoscale=off, zone=b.\n- instance-delta: runtime=node22, memory=4g, autoscale=on, zone=c.\n- instance-echo: runtime=go123, memory=4g, autoscale=off, zone=a.\n- instance-foxtrot: runtime=go123, memory=1g, autoscale=off, zone=b.",
+   "id": "A-0209",
+   "question": "Which service instance matches the requested profile?"
+  },
+  {
+   "answer": "instance-charlie",
+   "candidates": [
+    {
+     "description": "service instance alpha (runtime=go123, memory=4g, autoscale=off, zone=c)",
+     "id": "instance-alpha"
+    },
+    {
+     "description": "service instance bravo (runtime=jvm21, memory=1g, autoscale=off, zone=b)",
+     "id": "instance-bravo"
+    },
+    {
+     "description": "service instance charlie (runtime=node22, memory=4g, autoscale=off, zone=c)",
+     "id": "instance-charlie"
+    },
+    {
+     "description": "service instance delta (runtime=node22, memory=2g, autoscale=off, zone=a)",
+     "id": "instance-delta"
+    },
+    {
+     "description": "service instance echo (runtime=jvm21, memory=2g, autoscale=on, zone=c)",
+     "id": "instance-echo"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: runtime must be node22; memory must be 4g; autoscale must be off; zone must be c.\nCatalog:\n- instance-alpha: runtime=go123, memory=4g, autoscale=off, zone=c.\n- instance-bravo: runtime=jvm21, memory=1g, autoscale=off, zone=b.\n- instance-charlie: runtime=node22, memory=4g, autoscale=off, zone=c.\n- instance-delta: runtime=node22, memory=2g, autoscale=off, zone=a.\n- instance-echo: runtime=jvm21, memory=2g, autoscale=on, zone=c.",
+   "id": "A-0210",
+   "question": "Which service instance matches the requested profile?"
+  },
+  {
+   "answer": "instance-charlie",
+   "candidates": [
+    {
+     "description": "service instance alpha (runtime=py312, memory=2g, autoscale=off, zone=a)",
+     "id": "instance-alpha"
+    },
+    {
+     "description": "service instance bravo (runtime=py312, memory=4g, autoscale=on, zone=a)",
+     "id": "instance-bravo"
+    },
+    {
+     "description": "service instance charlie (runtime=jvm21, memory=2g, autoscale=on, zone=a)",
+     "id": "instance-charlie"
+    },
+    {
+     "description": "service instance delta (runtime=jvm21, memory=512m, autoscale=on, zone=a)",
+     "id": "instance-delta"
+    },
+    {
+     "description": "service instance echo (runtime=go123, memory=4g, autoscale=on, zone=a)",
+     "id": "instance-echo"
+    }
+   ],
+   "class": "metadata_match",
+   "context": "Constraints: runtime must be jvm21; memory must be 2g; autoscale must be on; zone must be a.\nCatalog:\n- instance-alpha: runtime=py312, memory=2g, autoscale=off, zone=a.\n- instance-bravo: runtime=py312, memory=4g, autoscale=on, zone=a.\n- instance-charlie: runtime=jvm21, memory=2g, autoscale=on, zone=a.\n- instance-delta: runtime=jvm21, memory=512m, autoscale=on, zone=a.\n- instance-echo: runtime=go123, memory=4g, autoscale=on, zone=a.",
+   "id": "A-0211",
+   "question": "Which service instance matches the requested profile?"
+  },
+  {
+   "answer": "billing",
+   "candidates": [
+    {
+     "description": "Delivery of physical goods",
+     "id": "shipping"
+    },
+    {
+     "description": "Credentials and workspace settings",
+     "id": "account"
+    },
+    {
+     "description": "Money and invoicing matters",
+     "id": "billing"
+    },
+    {
+     "description": "Software faults and defects",
+     "id": "technical"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "I think I was billed twice for the same month.",
+   "id": "B-0100",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "billing",
+   "candidates": [
+    {
+     "description": "Credentials and workspace settings",
+     "id": "account"
+    },
+    {
+     "description": "Money and invoicing matters",
+     "id": "billing"
+    },
+    {
+     "description": "Software faults and defects",
+     "id": "technical"
+    },
+    {
+     "description": "Delivery of physical goods",
+     "id": "shipping"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "The amount taken from my card does not match my plan.",
+   "id": "B-0101",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "billing",
+   "candidates": [
+    {
+     "description": "Delivery of physical goods",
+     "id": "shipping"
+    },
+    {
+     "description": "Credentials and workspace settings",
+     "id": "account"
+    },
+    {
+     "description": "Money and invoicing matters",
+     "id": "billing"
+    },
+    {
+     "description": "Software faults and defects",
+     "id": "technical"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Our invoice is missing the purchase order number we asked for.",
+   "id": "B-0102",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "billing",
+   "candidates": [
+    {
+     "description": "Delivery of physical goods",
+     "id": "shipping"
+    },
+    {
+     "description": "Credentials and workspace settings",
+     "id": "account"
+    },
+    {
+     "description": "Money and invoicing matters",
+     "id": "billing"
+    },
+    {
+     "description": "Software faults and defects",
+     "id": "technical"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "I want to switch my subscription to the annual discount.",
+   "id": "B-0103",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "technical",
+   "candidates": [
+    {
+     "description": "Access control and threats",
+     "id": "security"
+    },
+    {
+     "description": "Product behavior that is broken",
+     "id": "technical"
+    },
+    {
+     "description": "Charges, refunds and invoices",
+     "id": "billing"
+    },
+    {
+     "description": "Requests for new capability",
+     "id": "feature"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "The dashboard has shown a blank page since Tuesday.",
+   "id": "B-0904",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "technical",
+   "candidates": [
+    {
+     "description": "Requests for new capability",
+     "id": "feature"
+    },
+    {
+     "description": "Access control and threats",
+     "id": "security"
+    },
+    {
+     "description": "Product behavior that is broken",
+     "id": "technical"
+    },
+    {
+     "description": "Charges, refunds and invoices",
+     "id": "billing"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Uploading a file makes the app crash every time.",
+   "id": "B-0905",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "technical",
+   "candidates": [
+    {
+     "description": "Requests for new capability",
+     "id": "feature"
+    },
+    {
+     "description": "Access control and threats",
+     "id": "security"
+    },
+    {
+     "description": "Product behavior that is broken",
+     "id": "technical"
+    },
+    {
+     "description": "Charges, refunds and invoices",
+     "id": "billing"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "The mobile app signs me out within a minute of logging in.",
+   "id": "B-0906",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "technical",
+   "candidates": [
+    {
+     "description": "Requests for new capability",
+     "id": "feature"
+    },
+    {
+     "description": "Access control and threats",
+     "id": "security"
+    },
+    {
+     "description": "Product behavior that is broken",
+     "id": "technical"
+    },
+    {
+     "description": "Charges, refunds and invoices",
+     "id": "billing"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Charts stop rendering when a filter uses special characters.",
+   "id": "B-0907",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "shipping",
+   "candidates": [
+    {
+     "description": "Payment and pricing questions",
+     "id": "billing"
+    },
+    {
+     "description": "Regulatory and audit needs",
+     "id": "compliance"
+    },
+    {
+     "description": "Parcels, couriers and delivery status",
+     "id": "shipping"
+    },
+    {
+     "description": "Defects in the application",
+     "id": "technical"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "My order was supposed to arrive last week and has not.",
+   "id": "B-0808",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "shipping",
+   "candidates": [
+    {
+     "description": "Defects in the application",
+     "id": "technical"
+    },
+    {
+     "description": "Payment and pricing questions",
+     "id": "billing"
+    },
+    {
+     "description": "Regulatory and audit needs",
+     "id": "compliance"
+    },
+    {
+     "description": "Parcels, couriers and delivery status",
+     "id": "shipping"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "The tracking page has not updated in four days.",
+   "id": "B-0809",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "shipping",
+   "candidates": [
+    {
+     "description": "Defects in the application",
+     "id": "technical"
+    },
+    {
+     "description": "Payment and pricing questions",
+     "id": "billing"
+    },
+    {
+     "description": "Regulatory and audit needs",
+     "id": "compliance"
+    },
+    {
+     "description": "Parcels, couriers and delivery status",
+     "id": "shipping"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "The courier left the parcel at the wrong address.",
+   "id": "B-0810",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "shipping",
+   "candidates": [
+    {
+     "description": "Regulatory and audit needs",
+     "id": "compliance"
+    },
+    {
+     "description": "Parcels, couriers and delivery status",
+     "id": "shipping"
+    },
+    {
+     "description": "Defects in the application",
+     "id": "technical"
+    },
+    {
+     "description": "Payment and pricing questions",
+     "id": "billing"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "One item arrived damaged and the box was crushed.",
+   "id": "B-0811",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "account",
+   "candidates": [
+    {
+     "description": "First-time setup and team invites",
+     "id": "onboarding"
+    },
+    {
+     "description": "Subscription and invoice issues",
+     "id": "billing"
+    },
+    {
+     "description": "Logins, profiles and permissions",
+     "id": "account"
+    },
+    {
+     "description": "Malfunctioning features",
+     "id": "technical"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "I cannot get back into my profile after the reset.",
+   "id": "B-0012",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "account",
+   "candidates": [
+    {
+     "description": "Logins, profiles and permissions",
+     "id": "account"
+    },
+    {
+     "description": "Malfunctioning features",
+     "id": "technical"
+    },
+    {
+     "description": "First-time setup and team invites",
+     "id": "onboarding"
+    },
+    {
+     "description": "Subscription and invoice issues",
+     "id": "billing"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "How do I move my data to a different organization?",
+   "id": "B-0013",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "account",
+   "candidates": [
+    {
+     "description": "Subscription and invoice issues",
+     "id": "billing"
+    },
+    {
+     "description": "Logins, profiles and permissions",
+     "id": "account"
+    },
+    {
+     "description": "Malfunctioning features",
+     "id": "technical"
+    },
+    {
+     "description": "First-time setup and team invites",
+     "id": "onboarding"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "My display name shows the wrong company everywhere.",
+   "id": "B-0014",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "account",
+   "candidates": [
+    {
+     "description": "Subscription and invoice issues",
+     "id": "billing"
+    },
+    {
+     "description": "Logins, profiles and permissions",
+     "id": "account"
+    },
+    {
+     "description": "Malfunctioning features",
+     "id": "technical"
+    },
+    {
+     "description": "First-time setup and team invites",
+     "id": "onboarding"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "I need to hand ownership of the workspace to a colleague.",
+   "id": "B-0015",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "feature",
+   "candidates": [
+    {
+     "description": "Speed and responsiveness problems",
+     "id": "performance"
+    },
+    {
+     "description": "Connecting external systems",
+     "id": "integration"
+    },
+    {
+     "description": "Something that fails today",
+     "id": "technical"
+    },
+    {
+     "description": "Enhancement ideas and new capabilities",
+     "id": "feature"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "It would help if the report could export to spreadsheets.",
+   "id": "B-0316",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "feature",
+   "candidates": [
+    {
+     "description": "Connecting external systems",
+     "id": "integration"
+    },
+    {
+     "description": "Something that fails today",
+     "id": "technical"
+    },
+    {
+     "description": "Enhancement ideas and new capabilities",
+     "id": "feature"
+    },
+    {
+     "description": "Speed and responsiveness problems",
+     "id": "performance"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Can the scheduler support repeating weekly jobs?",
+   "id": "B-0317",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "feature",
+   "candidates": [
+    {
+     "description": "Something that fails today",
+     "id": "technical"
+    },
+    {
+     "description": "Enhancement ideas and new capabilities",
+     "id": "feature"
+    },
+    {
+     "description": "Speed and responsiveness problems",
+     "id": "performance"
+    },
+    {
+     "description": "Connecting external systems",
+     "id": "integration"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Please add keyboard shortcuts for the review queue.",
+   "id": "B-0318",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "feature",
+   "candidates": [
+    {
+     "description": "Something that fails today",
+     "id": "technical"
+    },
+    {
+     "description": "Enhancement ideas and new capabilities",
+     "id": "feature"
+    },
+    {
+     "description": "Speed and responsiveness problems",
+     "id": "performance"
+    },
+    {
+     "description": "Connecting external systems",
+     "id": "integration"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "A dark mode for late-night shifts would be great.",
+   "id": "B-0319",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "compliance",
+   "candidates": [
+    {
+     "description": "Policy, audit and legal retention",
+     "id": "compliance"
+    },
+    {
+     "description": "Intrusion and abuse concerns",
+     "id": "security"
+    },
+    {
+     "description": "User and permission management",
+     "id": "account"
+    },
+    {
+     "description": "Product improvement requests",
+     "id": "feature"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Our auditors need a record of every data access.",
+   "id": "B-0220",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "compliance",
+   "candidates": [
+    {
+     "description": "Policy, audit and legal retention",
+     "id": "compliance"
+    },
+    {
+     "description": "Intrusion and abuse concerns",
+     "id": "security"
+    },
+    {
+     "description": "User and permission management",
+     "id": "account"
+    },
+    {
+     "description": "Product improvement requests",
+     "id": "feature"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "We must keep customer records for seven years.",
+   "id": "B-0221",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "compliance",
+   "candidates": [
+    {
+     "description": "Intrusion and abuse concerns",
+     "id": "security"
+    },
+    {
+     "description": "User and permission management",
+     "id": "account"
+    },
+    {
+     "description": "Product improvement requests",
+     "id": "feature"
+    },
+    {
+     "description": "Policy, audit and legal retention",
+     "id": "compliance"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Which region keeps our data to satisfy local law?",
+   "id": "B-0222",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "compliance",
+   "candidates": [
+    {
+     "description": "Intrusion and abuse concerns",
+     "id": "security"
+    },
+    {
+     "description": "User and permission management",
+     "id": "account"
+    },
+    {
+     "description": "Product improvement requests",
+     "id": "feature"
+    },
+    {
+     "description": "Policy, audit and legal retention",
+     "id": "compliance"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "We need a signed data processing agreement.",
+   "id": "B-0223",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "performance",
+   "candidates": [
+    {
+     "description": "Missing functionality",
+     "id": "feature"
+    },
+    {
+     "description": "Correctness failures and errors",
+     "id": "technical"
+    },
+    {
+     "description": "Third-party connections",
+     "id": "integration"
+    },
+    {
+     "description": "Throughput, latency and scale",
+     "id": "performance"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Queries slow to a crawl once the table passes a million rows.",
+   "id": "B-0624",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "performance",
+   "candidates": [
+    {
+     "description": "Third-party connections",
+     "id": "integration"
+    },
+    {
+     "description": "Throughput, latency and scale",
+     "id": "performance"
+    },
+    {
+     "description": "Missing functionality",
+     "id": "feature"
+    },
+    {
+     "description": "Correctness failures and errors",
+     "id": "technical"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "The editor lags badly on large documents.",
+   "id": "B-0625",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "performance",
+   "candidates": [
+    {
+     "description": "Correctness failures and errors",
+     "id": "technical"
+    },
+    {
+     "description": "Third-party connections",
+     "id": "integration"
+    },
+    {
+     "description": "Throughput, latency and scale",
+     "id": "performance"
+    },
+    {
+     "description": "Missing functionality",
+     "id": "feature"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Batch jobs take hours where they used to take minutes.",
+   "id": "B-0626",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "performance",
+   "candidates": [
+    {
+     "description": "Third-party connections",
+     "id": "integration"
+    },
+    {
+     "description": "Throughput, latency and scale",
+     "id": "performance"
+    },
+    {
+     "description": "Missing functionality",
+     "id": "feature"
+    },
+    {
+     "description": "Correctness failures and errors",
+     "id": "technical"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "The search box freezes for seconds before results appear.",
+   "id": "B-0627",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "integration",
+   "candidates": [
+    {
+     "description": "Wishlist items for the roadmap",
+     "id": "feature"
+    },
+    {
+     "description": "Slow behavior under load",
+     "id": "performance"
+    },
+    {
+     "description": "APIs, webhooks and data exchange",
+     "id": "integration"
+    },
+    {
+     "description": "Unauthorized access events",
+     "id": "security"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Webhook deliveries from your service never reach our endpoint.",
+   "id": "B-0428",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "integration",
+   "candidates": [
+    {
+     "description": "Unauthorized access events",
+     "id": "security"
+    },
+    {
+     "description": "Wishlist items for the roadmap",
+     "id": "feature"
+    },
+    {
+     "description": "Slow behavior under load",
+     "id": "performance"
+    },
+    {
+     "description": "APIs, webhooks and data exchange",
+     "id": "integration"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "We need your API to push events into our warehouse.",
+   "id": "B-0429",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "integration",
+   "candidates": [
+    {
+     "description": "Unauthorized access events",
+     "id": "security"
+    },
+    {
+     "description": "Wishlist items for the roadmap",
+     "id": "feature"
+    },
+    {
+     "description": "Slow behavior under load",
+     "id": "performance"
+    },
+    {
+     "description": "APIs, webhooks and data exchange",
+     "id": "integration"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "The Salesforce connector drops custom fields on sync.",
+   "id": "B-0430",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "integration",
+   "candidates": [
+    {
+     "description": "Slow behavior under load",
+     "id": "performance"
+    },
+    {
+     "description": "APIs, webhooks and data exchange",
+     "id": "integration"
+    },
+    {
+     "description": "Unauthorized access events",
+     "id": "security"
+    },
+    {
+     "description": "Wishlist items for the roadmap",
+     "id": "feature"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Can we authenticate with the SSO provider we already run?",
+   "id": "B-0431",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "onboarding",
+   "candidates": [
+    {
+     "description": "Identity and access administration",
+     "id": "account"
+    },
+    {
+     "description": "Ideas for new functionality",
+     "id": "feature"
+    },
+    {
+     "description": "Payment and plan management",
+     "id": "billing"
+    },
+    {
+     "description": "Getting started, invites and roles",
+     "id": "onboarding"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "New hires cannot see the shared workspace on day one.",
+   "id": "B-0532",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "onboarding",
+   "candidates": [
+    {
+     "description": "Ideas for new functionality",
+     "id": "feature"
+    },
+    {
+     "description": "Payment and plan management",
+     "id": "billing"
+    },
+    {
+     "description": "Getting started, invites and roles",
+     "id": "onboarding"
+    },
+    {
+     "description": "Identity and access administration",
+     "id": "account"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Where do I invite teammates and set their roles?",
+   "id": "B-0533",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "onboarding",
+   "candidates": [
+    {
+     "description": "Payment and plan management",
+     "id": "billing"
+    },
+    {
+     "description": "Getting started, invites and roles",
+     "id": "onboarding"
+    },
+    {
+     "description": "Identity and access administration",
+     "id": "account"
+    },
+    {
+     "description": "Ideas for new functionality",
+     "id": "feature"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "The guided tour never appears for new sign-ups.",
+   "id": "B-0534",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "onboarding",
+   "candidates": [
+    {
+     "description": "Getting started, invites and roles",
+     "id": "onboarding"
+    },
+    {
+     "description": "Identity and access administration",
+     "id": "account"
+    },
+    {
+     "description": "Ideas for new functionality",
+     "id": "feature"
+    },
+    {
+     "description": "Payment and plan management",
+     "id": "billing"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Is there a checklist for setting up our first project?",
+   "id": "B-0535",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "security",
+   "candidates": [
+    {
+     "description": "Audit trails and regulations",
+     "id": "compliance"
+    },
+    {
+     "description": "Profile and password help",
+     "id": "account"
+    },
+    {
+     "description": "Bugs in the product",
+     "id": "technical"
+    },
+    {
+     "description": "Suspicious activity and protection",
+     "id": "security"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Someone tried to sign in from a country we do not operate in.",
+   "id": "B-0736",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "security",
+   "candidates": [
+    {
+     "description": "Profile and password help",
+     "id": "account"
+    },
+    {
+     "description": "Bugs in the product",
+     "id": "technical"
+    },
+    {
+     "description": "Suspicious activity and protection",
+     "id": "security"
+    },
+    {
+     "description": "Audit trails and regulations",
+     "id": "compliance"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "We want two-step verification forced for all admins.",
+   "id": "B-0737",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "security",
+   "candidates": [
+    {
+     "description": "Profile and password help",
+     "id": "account"
+    },
+    {
+     "description": "Bugs in the product",
+     "id": "technical"
+    },
+    {
+     "description": "Suspicious activity and protection",
+     "id": "security"
+    },
+    {
+     "description": "Audit trails and regulations",
+     "id": "compliance"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "An API key was pasted into a public ticket by mistake.",
+   "id": "B-0738",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "security",
+   "candidates": [
+    {
+     "description": "Profile and password help",
+     "id": "account"
+    },
+    {
+     "description": "Bugs in the product",
+     "id": "technical"
+    },
+    {
+     "description": "Suspicious activity and protection",
+     "id": "security"
+    },
+    {
+     "description": "Audit trails and regulations",
+     "id": "compliance"
+    }
+   ],
+   "class": "lexical_semantic",
+   "context": "Sessions stay open forever after a laptop is stolen.",
+   "id": "B-0739",
+   "question": "Which team should handle this message?"
+  },
+  {
+   "answer": "billing",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component billing",
+     "id": "billing"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "billing is failing. auth is failing. billing depends on index. index depends on feed.",
+   "id": "C-0000",
+   "question": "Fixing which single component restores every part of the chain?"
+  },
+  {
+   "answer": "gateway",
+   "candidates": [
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component export",
+     "id": "export"
+    },
+    {
+     "description": "component feed",
+     "id": "feed"
+    },
+    {
+     "description": "component gateway",
+     "id": "gateway"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "gateway depends on dispatch. gateway is failing. auth is failing.",
+   "id": "C-0001",
+   "question": "Fixing which single component restores every part of the chain?"
+  },
+  {
+   "answer": "export",
+   "candidates": [
+    {
+     "description": "component billing",
+     "id": "billing"
+    },
+    {
+     "description": "component export",
+     "id": "export"
+    },
+    {
+     "description": "component gateway",
+     "id": "gateway"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "export depends on billing. export is failing. index is failing.",
+   "id": "C-0002",
+   "question": "Fixing which single component restores every part of the chain?"
+  },
+  {
+   "answer": "billing",
+   "candidates": [
+    {
+     "description": "component billing",
+     "id": "billing"
+    },
+    {
+     "description": "component export",
+     "id": "export"
+    },
+    {
+     "description": "component gateway",
+     "id": "gateway"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "billing is failing. gateway is failing. billing depends on export.",
+   "id": "C-0003",
+   "question": "Fixing which single component restores every part of the chain?"
+  },
+  {
+   "answer": "export",
+   "candidates": [
+    {
+     "description": "component billing",
+     "id": "billing"
+    },
+    {
+     "description": "component catalog",
+     "id": "catalog"
+    },
+    {
+     "description": "component export",
+     "id": "export"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "export is failing. index is failing. catalog depends on billing. export depends on catalog.",
+   "id": "C-0004",
+   "question": "Fixing which single component restores every part of the chain?"
+  },
+  {
+   "answer": "catalog",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component catalog",
+     "id": "catalog"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component gateway",
+     "id": "gateway"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "catalog is failing. auth is failing. catalog depends on billing.",
+   "id": "C-0005",
+   "question": "Fixing which single component restores every part of the chain?"
+  },
+  {
+   "answer": "billing",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component billing",
+     "id": "billing"
+    },
+    {
+     "description": "component feed",
+     "id": "feed"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "billing is failing. index is failing. auth depends on catalog. billing depends on auth.",
+   "id": "C-0006",
+   "question": "Fixing which single component restores every part of the chain?"
+  },
+  {
+   "answer": "index",
+   "candidates": [
+    {
+     "description": "component export",
+     "id": "export"
+    },
+    {
+     "description": "component feed",
+     "id": "feed"
+    },
+    {
+     "description": "component gateway",
+     "id": "gateway"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "index is failing. auth is failing. feed depends on export. index depends on feed.",
+   "id": "C-0007",
+   "question": "Fixing which single component restores every part of the chain?"
+  },
+  {
+   "answer": "gateway",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component billing",
+     "id": "billing"
+    },
+    {
+     "description": "component gateway",
+     "id": "gateway"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "gateway is failing. auth is failing. gateway depends on billing.",
+   "id": "C-0008",
+   "question": "Fixing which single component restores every part of the chain?"
+  },
+  {
+   "answer": "export",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component catalog",
+     "id": "catalog"
+    },
+    {
+     "description": "component export",
+     "id": "export"
+    },
+    {
+     "description": "component feed",
+     "id": "feed"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "export depends on feed. export is failing. auth is failing.",
+   "id": "C-0009",
+   "question": "Fixing which single component restores every part of the chain?"
+  },
+  {
+   "answer": "auth",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component export",
+     "id": "export"
+    },
+    {
+     "description": "component gateway",
+     "id": "gateway"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "auth depends on gateway. gateway depends on index. auth is failing. export is failing.",
+   "id": "C-0010",
+   "question": "Fixing which single component restores every part of the chain?"
+  },
+  {
+   "answer": "auth",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component catalog",
+     "id": "catalog"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "auth is failing. billing is failing. auth depends on index.",
+   "id": "C-0011",
+   "question": "Fixing which single component restores every part of the chain?"
+  },
+  {
+   "answer": "gateway",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component feed",
+     "id": "feed"
+    },
+    {
+     "description": "component gateway",
+     "id": "gateway"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "gateway is failing. auth is failing. gateway depends on index.",
+   "id": "C-0012",
+   "question": "Fixing which single component restores every part of the chain?"
+  },
+  {
+   "answer": "export",
+   "candidates": [
+    {
+     "description": "component billing",
+     "id": "billing"
+    },
+    {
+     "description": "component catalog",
+     "id": "catalog"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component export",
+     "id": "export"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "export is failing. catalog is failing. export depends on billing.",
+   "id": "C-0013",
+   "question": "Fixing which single component restores every part of the chain?"
+  },
+  {
+   "answer": "north",
+   "candidates": [
+    {
+     "description": "region central",
+     "id": "central"
+    },
+    {
+     "description": "region north",
+     "id": "north"
+    },
+    {
+     "description": "region south",
+     "id": "south"
+    },
+    {
+     "description": "region west",
+     "id": "west"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "central: down, degraded, degraded. south: down, degraded, down, healthy, down. west: down, healthy, healthy, down. north: healthy, healthy, healthy, degraded.",
+   "id": "C-0100",
+   "question": "Which region currently has the most healthy nodes?"
+  },
+  {
+   "answer": "central",
+   "candidates": [
+    {
+     "description": "region central",
+     "id": "central"
+    },
+    {
+     "description": "region east",
+     "id": "east"
+    },
+    {
+     "description": "region north",
+     "id": "north"
+    },
+    {
+     "description": "region west",
+     "id": "west"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "west: degraded, down, healthy. east: healthy, down, degraded, down. north: down, down, down. central: healthy, healthy, healthy, degraded, degraded.",
+   "id": "C-0101",
+   "question": "Which region currently has the most healthy nodes?"
+  },
+  {
+   "answer": "central",
+   "candidates": [
+    {
+     "description": "region central",
+     "id": "central"
+    },
+    {
+     "description": "region east",
+     "id": "east"
+    },
+    {
+     "description": "region north",
+     "id": "north"
+    },
+    {
+     "description": "region south",
+     "id": "south"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "south: degraded, down, down. central: healthy, healthy, healthy, degraded. north: down, healthy, down, down, down. east: healthy, down, healthy, degraded.",
+   "id": "C-0102",
+   "question": "Which region currently has the most healthy nodes?"
+  },
+  {
+   "answer": "east",
+   "candidates": [
+    {
+     "description": "region central",
+     "id": "central"
+    },
+    {
+     "description": "region east",
+     "id": "east"
+    },
+    {
+     "description": "region north",
+     "id": "north"
+    },
+    {
+     "description": "region south",
+     "id": "south"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "central: degraded, down, down. east: healthy, healthy, healthy, down, degraded. south: degraded, degraded, degraded, healthy. north: healthy, degraded, healthy, degraded, degraded.",
+   "id": "C-0103",
+   "question": "Which region currently has the most healthy nodes?"
+  },
+  {
+   "answer": "east",
+   "candidates": [
+    {
+     "description": "region central",
+     "id": "central"
+    },
+    {
+     "description": "region east",
+     "id": "east"
+    },
+    {
+     "description": "region north",
+     "id": "north"
+    },
+    {
+     "description": "region south",
+     "id": "south"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "central: degraded, degraded, degraded, down, healthy. south: down, degraded, degraded, healthy. north: degraded, down, down, healthy. east: down, healthy, down, healthy, degraded.",
+   "id": "C-0104",
+   "question": "Which region currently has the most healthy nodes?"
+  },
+  {
+   "answer": "central",
+   "candidates": [
+    {
+     "description": "region central",
+     "id": "central"
+    },
+    {
+     "description": "region east",
+     "id": "east"
+    },
+    {
+     "description": "region north",
+     "id": "north"
+    },
+    {
+     "description": "region south",
+     "id": "south"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "north: down, down, down. east: healthy, down, healthy, down. central: healthy, down, healthy, down, healthy. south: down, healthy, degraded.",
+   "id": "C-0105",
+   "question": "Which region currently has the most healthy nodes?"
+  },
+  {
+   "answer": "south",
+   "candidates": [
+    {
+     "description": "region east",
+     "id": "east"
+    },
+    {
+     "description": "region north",
+     "id": "north"
+    },
+    {
+     "description": "region south",
+     "id": "south"
+    },
+    {
+     "description": "region west",
+     "id": "west"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "east: healthy, degraded, degraded, down, down. south: healthy, healthy, healthy, healthy. north: healthy, degraded, down, down. west: down, down, degraded, healthy, down.",
+   "id": "C-0106",
+   "question": "Which region currently has the most healthy nodes?"
+  },
+  {
+   "answer": "central",
+   "candidates": [
+    {
+     "description": "region central",
+     "id": "central"
+    },
+    {
+     "description": "region east",
+     "id": "east"
+    },
+    {
+     "description": "region south",
+     "id": "south"
+    },
+    {
+     "description": "region west",
+     "id": "west"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "west: degraded, degraded, healthy, degraded, down. south: down, down, healthy, down. central: down, healthy, down, healthy, down. east: degraded, down, degraded, down.",
+   "id": "C-0107",
+   "question": "Which region currently has the most healthy nodes?"
+  },
+  {
+   "answer": "central",
+   "candidates": [
+    {
+     "description": "region central",
+     "id": "central"
+    },
+    {
+     "description": "region east",
+     "id": "east"
+    },
+    {
+     "description": "region north",
+     "id": "north"
+    },
+    {
+     "description": "region south",
+     "id": "south"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "north: down, healthy, degraded. central: down, healthy, healthy, degraded, degraded. south: down, down, down, degraded, degraded. east: degraded, down, down, degraded, degraded.",
+   "id": "C-0108",
+   "question": "Which region currently has the most healthy nodes?"
+  },
+  {
+   "answer": "central",
+   "candidates": [
+    {
+     "description": "region central",
+     "id": "central"
+    },
+    {
+     "description": "region east",
+     "id": "east"
+    },
+    {
+     "description": "region north",
+     "id": "north"
+    },
+    {
+     "description": "region south",
+     "id": "south"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "south: down, healthy, down, healthy, down. east: degraded, down, down, degraded, degraded. central: healthy, healthy, healthy. north: down, down, down, degraded.",
+   "id": "C-0109",
+   "question": "Which region currently has the most healthy nodes?"
+  },
+  {
+   "answer": "central",
+   "candidates": [
+    {
+     "description": "region central",
+     "id": "central"
+    },
+    {
+     "description": "region east",
+     "id": "east"
+    },
+    {
+     "description": "region south",
+     "id": "south"
+    },
+    {
+     "description": "region west",
+     "id": "west"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "east: down, degraded, healthy. west: down, healthy, degraded. central: healthy, healthy, down, down. south: down, down, degraded.",
+   "id": "C-0110",
+   "question": "Which region currently has the most healthy nodes?"
+  },
+  {
+   "answer": "west",
+   "candidates": [
+    {
+     "description": "region central",
+     "id": "central"
+    },
+    {
+     "description": "region north",
+     "id": "north"
+    },
+    {
+     "description": "region south",
+     "id": "south"
+    },
+    {
+     "description": "region west",
+     "id": "west"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "central: degraded, down, degraded. south: healthy, down, degraded. west: degraded, healthy, healthy, down, degraded. north: degraded, healthy, degraded.",
+   "id": "C-0111",
+   "question": "Which region currently has the most healthy nodes?"
+  },
+  {
+   "answer": "east",
+   "candidates": [
+    {
+     "description": "region central",
+     "id": "central"
+    },
+    {
+     "description": "region east",
+     "id": "east"
+    },
+    {
+     "description": "region north",
+     "id": "north"
+    },
+    {
+     "description": "region west",
+     "id": "west"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "north: down, down, down. west: down, down, down, degraded. central: down, degraded, down, down, degraded. east: degraded, degraded, degraded, healthy.",
+   "id": "C-0112",
+   "question": "Which region currently has the most healthy nodes?"
+  },
+  {
+   "answer": "south",
+   "candidates": [
+    {
+     "description": "region central",
+     "id": "central"
+    },
+    {
+     "description": "region east",
+     "id": "east"
+    },
+    {
+     "description": "region north",
+     "id": "north"
+    },
+    {
+     "description": "region south",
+     "id": "south"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "east: down, healthy, healthy, down, down. south: healthy, degraded, healthy, healthy, down. central: degraded, healthy, down. north: healthy, down, healthy, degraded, down.",
+   "id": "C-0113",
+   "question": "Which region currently has the most healthy nodes?"
+  },
+  {
+   "answer": "feed",
+   "candidates": [
+    {
+     "description": "component billing",
+     "id": "billing"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component feed",
+     "id": "feed"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "index comes back online only after feed. billing comes back online only after index. dispatch comes back online only after billing.",
+   "id": "C-0200",
+   "question": "Which component is brought back online first?"
+  },
+  {
+   "answer": "feed",
+   "candidates": [
+    {
+     "description": "component billing",
+     "id": "billing"
+    },
+    {
+     "description": "component export",
+     "id": "export"
+    },
+    {
+     "description": "component feed",
+     "id": "feed"
+    },
+    {
+     "description": "component gateway",
+     "id": "gateway"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "export comes back online only after billing. billing comes back online only after feed. gateway comes back online only after export.",
+   "id": "C-0201",
+   "question": "Which component is brought back online first?"
+  },
+  {
+   "answer": "catalog",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component billing",
+     "id": "billing"
+    },
+    {
+     "description": "component catalog",
+     "id": "catalog"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "dispatch comes back online only after billing. index comes back online only after billing. index comes back online only after dispatch. auth comes back online only after index. billing comes back online only after catalog.",
+   "id": "C-0202",
+   "question": "Which component is brought back online first?"
+  },
+  {
+   "answer": "dispatch",
+   "candidates": [
+    {
+     "description": "component billing",
+     "id": "billing"
+    },
+    {
+     "description": "component catalog",
+     "id": "catalog"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component export",
+     "id": "export"
+    },
+    {
+     "description": "component feed",
+     "id": "feed"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "feed comes back online only after dispatch. catalog comes back online only after export. billing comes back online only after feed. export comes back online only after feed. export comes back online only after billing.",
+   "id": "C-0203",
+   "question": "Which component is brought back online first?"
+  },
+  {
+   "answer": "dispatch",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component catalog",
+     "id": "catalog"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component feed",
+     "id": "feed"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "index comes back online only after catalog. feed comes back online only after index. catalog comes back online only after dispatch. auth comes back online only after dispatch. catalog comes back online only after auth.",
+   "id": "C-0204",
+   "question": "Which component is brought back online first?"
+  },
+  {
+   "answer": "index",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component catalog",
+     "id": "catalog"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "dispatch comes back online only after catalog. auth comes back online only after index. catalog comes back online only after auth.",
+   "id": "C-0205",
+   "question": "Which component is brought back online first?"
+  },
+  {
+   "answer": "gateway",
+   "candidates": [
+    {
+     "description": "component catalog",
+     "id": "catalog"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component export",
+     "id": "export"
+    },
+    {
+     "description": "component gateway",
+     "id": "gateway"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "dispatch comes back online only after export. catalog comes back online only after gateway. export comes back online only after catalog.",
+   "id": "C-0206",
+   "question": "Which component is brought back online first?"
+  },
+  {
+   "answer": "billing",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component billing",
+     "id": "billing"
+    },
+    {
+     "description": "component feed",
+     "id": "feed"
+    },
+    {
+     "description": "component gateway",
+     "id": "gateway"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "auth comes back online only after gateway. feed comes back online only after auth. index comes back online only after billing. auth comes back online only after index. gateway comes back online only after index.",
+   "id": "C-0207",
+   "question": "Which component is brought back online first?"
+  },
+  {
+   "answer": "feed",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component feed",
+     "id": "feed"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "auth comes back online only after feed. dispatch comes back online only after auth. index comes back online only after dispatch.",
+   "id": "C-0208",
+   "question": "Which component is brought back online first?"
+  },
+  {
+   "answer": "dispatch",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component billing",
+     "id": "billing"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component export",
+     "id": "export"
+    },
+    {
+     "description": "component gateway",
+     "id": "gateway"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "gateway comes back online only after export. billing comes back online only after dispatch. auth comes back online only after gateway. gateway comes back online only after billing. export comes back online only after billing.",
+   "id": "C-0209",
+   "question": "Which component is brought back online first?"
+  },
+  {
+   "answer": "dispatch",
+   "candidates": [
+    {
+     "description": "component auth",
+     "id": "auth"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component gateway",
+     "id": "gateway"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "auth comes back online only after dispatch. index comes back online only after gateway. gateway comes back online only after auth.",
+   "id": "C-0210",
+   "question": "Which component is brought back online first?"
+  },
+  {
+   "answer": "export",
+   "candidates": [
+    {
+     "description": "component billing",
+     "id": "billing"
+    },
+    {
+     "description": "component dispatch",
+     "id": "dispatch"
+    },
+    {
+     "description": "component export",
+     "id": "export"
+    },
+    {
+     "description": "component index",
+     "id": "index"
+    }
+   ],
+   "class": "relational_compositional",
+   "context": "dispatch comes back online only after export. billing comes back online only after dispatch. index comes back online only after billing.",
+   "id": "C-0211",
+   "question": "Which component is brought back online first?"
+  }
+ ],
+ "seed": 20260926,
+ "suite_version": 1
+}

@@ -52,7 +52,8 @@ Remaining risks tracked in §6 below.
 | 9 | `opencodifier-http` | **done** — axum **0.8** `/v1` (D12 amended), loopback gate, 26 tests incl. real-socket e2e |
 | 10 | `opencodifier-mcp` | pending |
 | 11 | E2E recipes + docs book + examples | **done** (85cd2ec) — `recipes/` 3 runnable graphs + captured responses; docs set + accessibility checked |
-| 12 | Release engineering (tag, release, GitForge pipeline green) | **done** (49bc224) — tag v0.1.0; pipeline of record green through GitForge (fe4b0871) |
+| 12 | Release engineering (tag, release, GitForge pipeline green) | **done** (49bc224) — tag v0.1.0; pipeline of record green through GitForge (fe4b0871); v0.1.1 CI hardening (3bad2bb, run 8e8401f0) |
+| 13 | Decision-model benchmark: pick the model | **done** — `benchmarks/decision-model/`; Gemma-3-4b selected (D16) |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
@@ -305,6 +306,68 @@ Remaining risks tracked in §6 below.
   baseline; coverage ≥ 99% lines workspace-wide.
 - SemVer tag `v0.1.0`, GitHub release notes from the changelog, push
   origin + gitforge.
+
+## Phase 13 — decision-model benchmark (done)
+
+Question: before any weights are trained, can a small local general model
+serve the candidate-conditioned decision layer — and which one? Answered
+with measurement, not opinion.
+
+- **Harness** (`benchmarks/decision-model/`): a committed byte-locked
+  suite (`suite/suite.json`, generator `generate_suite.py`, seed
+  20260926, 120 Choice questions in canonical IR shape with ground
+  truth by construction — metadata_match / lexical_semantic /
+  relational_compositional, 40 each), three arms, and a summarizer.
+  Weights never enter the repo; `results/models.manifest.json` pins
+  every artifact's SHA-256 (D14 practice).
+- **Design sources** (operator-supplied): the Jev analysis at
+  `docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt` and
+  thecodacus/llama.cpp branch `parallel-decision` (reviewed at
+  `ad129b0`). The llama arm drives its `POST /v1/decision`: candidate
+  ids scored as token paths forked from one cached prefix, tree mode =
+  log-softmax at each divergence node, product along the path,
+  renormalized over candidates — the exact constrained distribution,
+  nothing sampled. Distinct-token-path candidates are hard-rejected by
+  the branch (throws), duplicate-id suites would not pass silently.
+- **Results** (CPU-only host — no GPU here, so absolute latency is
+  CPU-scale; ranking and calibration are the deliverable; full table in
+  `benchmarks/decision-model/results/summary.md`):
+
+  | arm | acc (meta/lex/rel) | acc | ECE | p50 |
+  |---|---|---|---|---|
+  | engine builtin-lexical | 0.88 / 0.23 / 0.35 | 0.483 | 0.115 | 5.3 ms |
+  | MiniLM-L6 zero-shot | 0.30 / 0.62 / 0.35 | 0.425 | 0.172 | 107 ms |
+  | Qwen2.5-0.5B | 0.60 / 0.33 / 0.25 | 0.392 | 0.218 | 695 ms |
+  | Llama-3.2-1B | 0.48 / 0.35 / 0.35 | 0.392 | 0.265 | 997 ms |
+  | Qwen2.5-1.5B | 0.90 / 0.45 / 0.40 | 0.583 | 0.191 | 1.25 s |
+  | Qwen2.5-3B | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2.58 s |
+  | **Gemma-3-4b-it** | **0.95 / 0.85 / 0.45** | **0.750** | 0.236 | 3.04 s |
+
+- **Findings.** (1) The task-dependent floor from the reference video
+  reproduces exactly: relational_compositional never exceeds 0.45 for
+  any cheap arm, so the confidence gate + escalation is mandatory, not
+  decorative. (2) The ladder's ordering is validated per class: the
+  lexical engine nearly solves attribute matching at 1/500th the
+  latency, embeddings own paraphrase, and only the model adds the
+  relational headroom it can. (3) Raw winner probability is NOT
+  calibrated anywhere (ECE 0.17–0.27) — §73's calibration mandate and
+  D15 are confirmed by measurement before any confidence is exposed.
+  (4) The constrained decision arm is bit-deterministic run-to-run on
+  every model; the chat JSON-writing baseline is not (identical reruns
+  of Qwen-0.5B scored 0.400 then 0.433 — continuous-batching
+  composition changes greedy decode) — the scoring arm is the
+  deterministic one. (5) Batched contexts cut per-decision cost 5–8x
+  (Gemma lexical class: 565 ms bulk vs 3.04 s single) — prefill
+  dominates on CPU. (6) Gemma-3-4b-it leads every class and is the
+  model pick (D16); Qwen2.5-3B is the runner-up; Llama-3.2-1B and
+  Qwen2.5-0.5B are rejected (at or below the engine baseline overall).
+- **Accept:** suite byte-lock verified (generator rerun is
+  byte-identical); every arm replays the suite twice with
+  `determinism.predictions_match` recorded in its result file;
+  `results/summary.md` and `results/models.manifest.json` are
+  committed — raw run JSONs stay out of tree (regenerable from the
+  pinned suite + manifest on deterministic arms, and pure measurement
+  data the scanner gate should not have to triage).
 
 ## Quality gates (every phase, no exceptions)
 
