@@ -53,7 +53,7 @@ Remaining risks tracked in §6 below.
 | 10 | `opencodifier-mcp` | pending |
 | 11 | E2E recipes + docs book + examples | **done** (85cd2ec) — `recipes/` 3 runnable graphs + captured responses; docs set + accessibility checked |
 | 12 | Release engineering (tag, release, GitForge pipeline green) | **done** (49bc224) — tag v0.1.0; pipeline of record green through GitForge (fe4b0871); v0.1.1 CI hardening (3bad2bb, run 8e8401f0) |
-| 13 | Decision-model benchmark: pick the model | **done** — `benchmarks/decision-model/`; Gemma-3-4b selected (D16) |
+| 13 | Decision-model benchmark: pick the model | **done** — `benchmarks/decision-model/`, ten arms; Qwen3.5-2B selected, amended from Gemma-3-4b (D16) |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
@@ -341,26 +341,46 @@ with measurement, not opinion.
   | Llama-3.2-1B | 0.48 / 0.35 / 0.35 | 0.392 | 0.265 | 997 ms |
   | Qwen2.5-1.5B | 0.90 / 0.45 / 0.40 | 0.583 | 0.191 | 1.25 s |
   | Qwen2.5-3B | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2.58 s |
-  | **Gemma-3-4b-it** | **0.95 / 0.85 / 0.45** | **0.750** | 0.236 | 3.04 s |
+  | Gemma-3-4b-it | 0.95 / 0.85 / 0.45 | 0.750 | 0.236 | 3.04 s |
+  | **Qwen3.5-0.8B** | 0.93 / 0.68 / 0.35 | 0.650 | 0.074 | 613 ms |
+  | **Qwen3.5-2B** | **0.95 / 0.72 / 0.50** | **0.725** | **0.062** | 1.73 s |
+  | MiniCPM5-1B | 0.95 / 0.35 / 0.15 | 0.483 | 0.232 | 694 ms |
+
+- **Extension (2026-09-26).** Three newer models typed through the
+  identical harness moved the pick (D16 amended): **Qwen3.5-2B** —
+  within noise of Gemma's accuracy (0.725 vs 0.750 = 3 items of 120) but
+  decisively better where the runtime consumes: best-calibrated of all
+  ten arms (ECE 0.062 vs 0.236), best relational score (0.50), half the
+  parameters, ~57% of the latency. **Qwen3.5-0.8B** is the measured fast
+  tier: 0.650 @ 613 ms — more accurate than every Qwen2.5 model at or
+  below their latency. **MiniCPM5-1B** is rejected: 0.483 ties the
+  zero-ML engine at ~130× its latency and its chat baseline collapses
+  (0.092) — metadata-tilted (0.95) but no semantic or relational skill.
+  The chat-arm re-measurement also surfaced a thinking-mode pitfall now
+  fixed in the runner: Qwen3.5/MiniCPM5 chat templates spend the token
+  budget on `reasoning_content` and return empty `content` unless
+  `enable_thinking` is disabled; with the fix, Qwen3.5-2B's chat
+  baseline (0.717) lands on its decision-arm accuracy (0.725).
 
 - **Findings.** (1) The task-dependent floor from the reference video
-  reproduces exactly: relational_compositional never exceeds 0.45 for
+  reproduces exactly: relational_compositional never exceeds 0.50 for
   any cheap arm, so the confidence gate + escalation is mandatory, not
   decorative. (2) The ladder's ordering is validated per class: the
   lexical engine nearly solves attribute matching at 1/500th the
   latency, embeddings own paraphrase, and only the model adds the
   relational headroom it can. (3) Raw winner probability is NOT
-  calibrated anywhere (ECE 0.17–0.27) — §73's calibration mandate and
-  D15 are confirmed by measurement before any confidence is exposed.
-  (4) The constrained decision arm is bit-deterministic run-to-run on
-  every model; the chat JSON-writing baseline is not (identical reruns
-  of Qwen-0.5B scored 0.400 then 0.433 — continuous-batching
-  composition changes greedy decode) — the scoring arm is the
-  deterministic one. (5) Batched contexts cut per-decision cost 5–8x
-  (Gemma lexical class: 565 ms bulk vs 3.04 s single) — prefill
-  dominates on CPU. (6) Gemma-3-4b-it leads every class and is the
-  model pick (D16); Qwen2.5-3B is the runner-up; Llama-3.2-1B and
-  Qwen2.5-0.5B are rejected (at or below the engine baseline overall).
+  calibrated anywhere (ECE 0.062–0.265, and even the best arm has no
+  post-hoc calibration fitted) — §73's calibration mandate and D15 are
+  confirmed by measurement before any confidence is exposed. (4) The
+  constrained decision arm is bit-deterministic run-to-run on every
+  model; the chat JSON-writing baseline is not (identical reruns of
+  Qwen-0.5B scored 0.400 then 0.433 — continuous-batching composition
+  changes greedy decode) — the scoring arm is the deterministic one.
+  (5) Batched contexts cut per-decision cost 5–8x (Gemma lexical class:
+  565 ms bulk vs 3.04 s single) — prefill dominates on CPU. (6) The
+  pick is Qwen3.5-2B with Gemma-3-4b-it as accuracy-ceiling reference
+  and Qwen3.5-0.8B as fast tier (D16, amended); Qwen2.5-3B, Llama-3.2-1B,
+  Qwen2.5-0.5B and MiniCPM5-1B are rejected.
 - **Accept:** suite byte-lock verified (generator rerun is
   byte-identical); every arm replays the suite twice with
   `determinism.predictions_match` recorded in its result file;

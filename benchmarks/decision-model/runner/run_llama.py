@@ -162,7 +162,7 @@ def run_batched(port: int, suite: dict, items: list[dict]) -> dict:
     return out
 
 
-def run_chat(port: int, suite: dict, items: list[dict]) -> list[dict]:
+def run_chat(port: int, suite: dict, items: list[dict], max_tokens: int) -> list[dict]:
     out = []
     for it in items:
         opts = "\n".join(f"- {c['id']}: {c['description']}" for c in it["candidates"])
@@ -176,8 +176,11 @@ def run_chat(port: int, suite: dict, items: list[dict]) -> list[dict]:
                 {"role": "user", "content": user},
             ],
             "temperature": 0,
-            "max_tokens": 64,
+            "max_tokens": max_tokens,
             "response_format": {"type": "json_object"},
+            # Thinking-mode templates (Qwen3.5, MiniCPM5) otherwise spend the
+            # whole budget on reasoning_content and return empty content.
+            "chat_template_kwargs": {"enable_thinking": False},
         }
         t0 = time.monotonic()
         resp = post(f"http://127.0.0.1:{port}/v1/chat/completions", payload)
@@ -259,6 +262,12 @@ def main() -> int:
     ap.add_argument("--decision-seqs", type=int, default=24)
     ap.add_argument("--skip-chat", action="store_true")
     ap.add_argument("--skip-batched", action="store_true")
+    ap.add_argument(
+        "--chat-only",
+        action="store_true",
+        help="re-run only the chat baseline, merging into the existing out file",
+    )
+    ap.add_argument("--chat-max-tokens", type=int, default=512)
     args = ap.parse_args()
 
     suite = json.loads(args.suite.read_text())
@@ -284,6 +293,37 @@ def main() -> int:
     try:
         wait_health(args.port, proc)
 
+        if args.chat_only:
+            prior_path = args.out
+            prior = json.loads(prior_path.read_text()) if prior_path.exists() else None
+            chat_rows = run_chat(args.port, suite, items, args.chat_max_tokens)
+            chat = {
+                "rows": chat_rows,
+                "metrics": {
+                    "accuracy": sum(1 for r in chat_rows if r["pred"] == r["answer"])
+                    / len(chat_rows),
+                    "accuracy_by_class": {
+                        cls: sum(1 for r in chat_rows if r["class"] == cls and r["pred"] == r["answer"])
+                        / sum(1 for r in chat_rows if r["class"] == cls)
+                        for cls in sorted({r["class"] for r in chat_rows})
+                    },
+                    "p50_ms": sorted(r["wall_ms"] for r in chat_rows)[len(chat_rows) // 2],
+                    "mean_ms": sum(r["wall_ms"] for r in chat_rows) / len(chat_rows),
+                    "max_tokens": args.chat_max_tokens,
+                    "thinking_disabled": True,
+                },
+            }
+            if prior is None:
+                raise RuntimeError("--chat-only requires an existing result file to merge into")
+            prior["chat"] = chat
+            prior_path.write_text(json.dumps(prior, sort_keys=True, indent=1) + "\n")
+            cm = chat["metrics"]
+            print(
+                f"chat acc={cm['accuracy']:.3f} p50={cm['p50_ms']:.0f}ms (merged into {prior_path})",
+                flush=True,
+            )
+            return 0
+
         single = run_suite(args.port, suite, items)
         single_again = run_suite(args.port, suite, items)
         max_delta = max(
@@ -301,7 +341,7 @@ def main() -> int:
         )
         chat = None
         if not args.skip_chat:
-            chat_rows = run_chat(args.port, suite, items)
+            chat_rows = run_chat(args.port, suite, items, args.chat_max_tokens)
             chat = {
                 "rows": chat_rows,
                 "metrics": {
