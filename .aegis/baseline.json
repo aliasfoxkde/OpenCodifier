@@ -28910,108 +28910,6 @@
       "stable_id": "aegis-f8e274d5a0988c220bc8fb605c1bcebfa2e7d2cd16c4f8062b1a992048b7d49b"
     },
     {
-      "id": "000000000000000018d89da71a58bca1",
-      "pattern": "integration-test-marker",
-      "category": "shift-left",
-      "severity": "low",
-      "confidence": "high",
-      "location": {
-        "file": "./CHANGELOG.md",
-        "line": 76,
-        "column": 22
-      },
-      "description": "Integration test marker detected",
-      "tags": [],
-      "kind": "pattern",
-      "fingerprint": "integration-test-marker:./CHANGELOG.md:76:6d8749c4fe00b757c1bc1c376a99f31d1bd38b422d44f5b6aa2d6a6c5e975cba",
-      "stable_id": "aegis-bd210e7f5c18507860ed0af6a9ec747368276e771f2970d67bb2c334b8c1d381"
-    },
-    {
-      "id": "000000000000000018d89da7240fe9f6",
-      "pattern": "todo-comment",
-      "category": "code-quality",
-      "severity": "low",
-      "confidence": "high",
-      "location": {
-        "file": "./CHANGELOG.md",
-        "line": 34,
-        "column": 56
-      },
-      "description": "TODO/FIXME comment detected",
-      "tags": [],
-      "kind": "pattern",
-      "fingerprint": "todo-comment:./CHANGELOG.md:34:602fae580f5863abfb31bf356decfdc73bf1224a62aacf6b4829ffa2dbe58390",
-      "stable_id": "aegis-2a190e21b485e7d061b17481928f5994cc3a1b002a9d7d82266001007a546857"
-    },
-    {
-      "id": "000000000000000018d89da7241037b7",
-      "pattern": "magic-number",
-      "category": "code-quality",
-      "severity": "low",
-      "confidence": "medium",
-      "location": {
-        "file": "./CHANGELOG.md",
-        "line": 42,
-        "column": 42
-      },
-      "description": "Magic number detected",
-      "tags": [],
-      "kind": "pattern",
-      "fingerprint": "magic-number:./CHANGELOG.md:42:a2a4bb828722248c335d2dd7d21a51d5f954e34f2a4ff3b277308fa5e90bee49",
-      "stable_id": "aegis-afb079625228777e6b2b6554bd6308dad624afc51c7fb9776b427c19757ff677"
-    },
-    {
-      "id": "000000000000000018d89da72410522d",
-      "pattern": "magic-number",
-      "category": "code-quality",
-      "severity": "low",
-      "confidence": "medium",
-      "location": {
-        "file": "./CHANGELOG.md",
-        "line": 46,
-        "column": 47
-      },
-      "description": "Magic number detected",
-      "tags": [],
-      "kind": "pattern",
-      "fingerprint": "magic-number:./CHANGELOG.md:46:a2a4bb828722248c335d2dd7d21a51d5f954e34f2a4ff3b277308fa5e90bee49",
-      "stable_id": "aegis-c92bf95ddf77f933db8bf847e6b03ac20765b22b95a4a26f9b43631659b639ea"
-    },
-    {
-      "id": "000000000000000018d89da72868a55a",
-      "pattern": "ai-generated-marker",
-      "category": "ai-detection",
-      "severity": "low",
-      "confidence": "medium",
-      "location": {
-        "file": "./CHANGELOG.md",
-        "line": 43,
-        "column": 3
-      },
-      "description": "AI generation marker detected",
-      "tags": [],
-      "kind": "pattern",
-      "fingerprint": "ai-generated-marker:./CHANGELOG.md:43:744205e43529c1fc39bc4ed37dbcd1e91facc78d2a2d136bc893b023ac3c75f5",
-      "stable_id": "aegis-c07965946e09f4237070cf06b4853a8b7d5e114c5faae60e488bcfe862e18511"
-    },
-    {
-      "id": "000000000000000018d89da72fc037e3",
-      "pattern": "interpretability-tool",
-      "category": "ai-safety",
-      "severity": "low",
-      "confidence": "high",
-      "location": {
-        "file": "./CHANGELOG.md",
-        "line": 62,
-        "column": 3
-      },
-      "description": "Interpretability tool reference detected",
-      "tags": [],
-      "kind": "pattern",
-      "fingerprint": "interpretability-tool:./CHANGELOG.md:62:ec098178cd829fd9686d5e9c33aebc65c1d1e1f1de92967c51603c84bd6510ac",
-      "stable_id": "aegis-f54cca2606e5c38c6feaafb30295120183f5d8ec508e501aa05dff711547d2c7"
-    },
-    {
       "id": "000000000000000018d89daa812d2b41",
       "pattern": "comment-ratio-outlier",
       "category": "statistical-anomaly",
@@ -29611,6 +29509,314 @@
       "fingerprint": "markdown-code-fence:./docs/PLAN.md:311:72a3ccbc9ef76d5fb1395d9874440bee5aa2192f9556c4cf830eb908cd4b9f64",
       "stable_id": "aegis-1f734e6de98b53ad58ca141902ba50da1f0f11e85fca8a35ed765177ca8d0d50",
       "triage": "line shift of accepted entry (same content hash 72a3ccbc\u2026) from the Phase 12 closeout paragraph; re-baselined 2026-09-25"
+    },
+    {
+      "id": "000000000000000018d8ed069b5d4c4c",
+      "pattern": "excess-line-length",
+      "category": "code-quality",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt",
+        "line": 53,
+        "column": 1
+      },
+      "description": "Excessively long line detected (>200 characters)",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "excess-line-length:./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt:53:41994638950b023f4ff35d3e7b744cd0f6a71fd5db53ce9a45baac4d3588d220",
+      "stable_id": "aegis-71499a53cd2d6c2422bd0ddd77163566d61c64dbc649082cc6076a34f6f18994",
+      "triage": "third-party reference document committed under docs/References/ for design context; detector misfires on its prose, API examples, and raw-line formatting; accepted 2026-09-26"
+    },
+    {
+      "id": "000000000000000018d8ed069b5db483",
+      "pattern": "excess-line-length",
+      "category": "code-quality",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt",
+        "line": 57,
+        "column": 1
+      },
+      "description": "Excessively long line detected (>200 characters)",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "excess-line-length:./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt:57:91797127a7edbb9bd287d8f5c4dae4d53cfe661e3ba5792dd581b716b7bbb7a4",
+      "stable_id": "aegis-6c511bcd981e7208d99527ac5e726a013fb43a176a7cbd7d3a414e5f05219924",
+      "triage": "third-party reference document committed under docs/References/ for design context; detector misfires on its prose, API examples, and raw-line formatting; accepted 2026-09-26"
+    },
+    {
+      "id": "000000000000000018d8ed069b8fedb8",
+      "pattern": "azure-aks-cluster",
+      "category": "cloud-native",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt",
+        "line": 26,
+        "column": 46
+      },
+      "description": "Azure AKS cluster detected",
+      "reference": "https://docs.microsoft.com/en-us/azure/aks/",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "azure-aks-cluster:./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt:26:b075b18d6e273c802744f832e3f4cb807b72922e92f203af671a45d3bbe3c658",
+      "stable_id": "aegis-b4b443611eb04a33db241796d8a23f3918e4b2f1cd90c946e91a91bbca4f2292",
+      "triage": "third-party reference document committed under docs/References/ for design context; detector misfires on its prose, API examples, and raw-line formatting; accepted 2026-09-26"
+    },
+    {
+      "id": "000000000000000018d8ed069b902219",
+      "pattern": "azure-aks-cluster",
+      "category": "cloud-native",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt",
+        "line": 44,
+        "column": 16
+      },
+      "description": "Azure AKS cluster detected",
+      "reference": "https://docs.microsoft.com/en-us/azure/aks/",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "azure-aks-cluster:./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt:44:b075b18d6e273c802744f832e3f4cb807b72922e92f203af671a45d3bbe3c658",
+      "stable_id": "aegis-bbde502577e3768301ab046b7d944b283956204a0c2fb2fa36f81537765f4a1d",
+      "triage": "third-party reference document committed under docs/References/ for design context; detector misfires on its prose, API examples, and raw-line formatting; accepted 2026-09-26"
+    },
+    {
+      "id": "000000000000000018d8ed069c5bb0b0",
+      "pattern": "ai-generated-marker",
+      "category": "ai-detection",
+      "severity": "low",
+      "confidence": "medium",
+      "location": {
+        "file": "./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt",
+        "line": 50,
+        "column": 1
+      },
+      "description": "AI generation marker detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "ai-generated-marker:./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt:50:cc7ff1bfed60eb09a4836678ac1f7956bf78da89580c5439a3bd13c7d6255c5d",
+      "stable_id": "aegis-41cb49e8668485544102722acc415106a8b3c291ea75da57ba55ff199a02cb6e",
+      "triage": "third-party reference document committed under docs/References/ for design context; detector misfires on its prose, API examples, and raw-line formatting; accepted 2026-09-26"
+    },
+    {
+      "id": "000000000000000018d8ed069c5bce27",
+      "pattern": "openai-format",
+      "category": "ai-detection",
+      "severity": "low",
+      "confidence": "low",
+      "location": {
+        "file": "./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt",
+        "line": 57,
+        "column": 2
+      },
+      "description": "Common AI assistant phrasing detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "openai-format:./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt:57:05255736a479824be0ee5cb3dbf89c794664edf6c4d25089c526f128547f57dd",
+      "stable_id": "aegis-7d3500f9910866463043f1378fc0c95d7ec3e06abf2f10208b7956d0b58972bc",
+      "triage": "third-party reference document committed under docs/References/ for design context; detector misfires on its prose, API examples, and raw-line formatting; accepted 2026-09-26"
+    },
+    {
+      "id": "000000000000000018d8ed069c5bf52a",
+      "pattern": "openai-format",
+      "category": "ai-detection",
+      "severity": "low",
+      "confidence": "low",
+      "location": {
+        "file": "./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt",
+        "line": 57,
+        "column": 8257
+      },
+      "description": "Common AI assistant phrasing detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "openai-format:./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt:57:372a30bd4a955b811ac15c04a60d9f59c311c4b224b39cc07f124a48bc11b51d",
+      "stable_id": "aegis-f4c1e9ec6e82db7ecdda054ae5aae270b4689f7ce5a04969b35028f4c44536e4",
+      "triage": "third-party reference document committed under docs/References/ for design context; detector misfires on its prose, API examples, and raw-line formatting; accepted 2026-09-26"
+    },
+    {
+      "id": "000000000000000018d8ed069b5e3548",
+      "pattern": "security-test-marker",
+      "category": "shift-left",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt",
+        "line": 57,
+        "column": 227
+      },
+      "description": "Security test marker detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "security-test-marker:./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt:57:da3c4005bad0573d4dfc379ecad9ba07b82986ea3bf2e1187fe23dd15c500340",
+      "stable_id": "aegis-46f4e8ab5db2d093934235bc2973df26be03d92863fe6026f0d6c105e3348e03",
+      "triage": "third-party reference document committed under docs/References/ for design context; detector misfires on its prose, API examples, and raw-line formatting; accepted 2026-09-26"
+    },
+    {
+      "id": "000000000000000018d8ed06a14f268a",
+      "pattern": "hallucination-risk",
+      "category": "ai-safety",
+      "severity": "medium",
+      "confidence": "medium",
+      "location": {
+        "file": "./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt",
+        "line": 57,
+        "column": 77
+      },
+      "description": "Potential hallucination risk detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "hallucination-risk:./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt:57:2e04da615e1631f05e25eceed00621759157f31fe273f1d304f62e28e9dd002e",
+      "stable_id": "aegis-cd50b49c180d7420a75c802572529e2fc829a70c9abd3715d6df48d8a70f7632",
+      "triage": "third-party reference document committed under docs/References/ for design context; detector misfires on its prose, API examples, and raw-line formatting; accepted 2026-09-26"
+    },
+    {
+      "id": "000000000000000018d8ed06a14f3b8c",
+      "pattern": "interpretability-tool",
+      "category": "ai-safety",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt",
+        "line": 57,
+        "column": 20744
+      },
+      "description": "Interpretability tool reference detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "interpretability-tool:./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt:57:ec098178cd829fd9686d5e9c33aebc65c1d1e1f1de92967c51603c84bd6510ac",
+      "stable_id": "aegis-2f3c8b4840aaf5b0b2228d4c928895f3b80e6a87b7ffea517a1c8a842caecc40",
+      "triage": "third-party reference document committed under docs/References/ for design context; detector misfires on its prose, API examples, and raw-line formatting; accepted 2026-09-26"
+    },
+    {
+      "id": "000000000000000018d8ed069d0f0e62",
+      "pattern": "debug-endpoint",
+      "category": "devops",
+      "severity": "low",
+      "confidence": "medium",
+      "location": {
+        "file": "./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt",
+        "line": 57,
+        "column": 297
+      },
+      "description": "Debug/test endpoint detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "debug-endpoint:./docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt:57:f451df39725734d950a89a55ff17b778eda1fefbd343677d2618c707422ff21e",
+      "stable_id": "aegis-87089e513cfd14d056b5e2b6fc96becac9d8b9420ebcb8983e002f12f00895cb",
+      "triage": "third-party reference document committed under docs/References/ for design context; detector misfires on its prose, API examples, and raw-line formatting; accepted 2026-09-26"
+    },
+    {
+      "id": "000000000000000018d8ed4639f517a8",
+      "pattern": "interpretability-tool",
+      "category": "ai-safety",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./CHANGELOG.md",
+        "line": 84,
+        "column": 3
+      },
+      "description": "Interpretability tool reference detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "interpretability-tool:./CHANGELOG.md:84:ec098178cd829fd9686d5e9c33aebc65c1d1e1f1de92967c51603c84bd6510ac",
+      "stable_id": "aegis-d42e875fc7f62ce0248f7f5ea7f34d9693bde5bed35b65cb9aaed89a0f22f881",
+      "triage": "changelog prose: release-section text (run IDs, feature descriptions); line-shifted 2026-09-26 by the 0.1.1 Added-bullet removal"
+    },
+    {
+      "id": "000000000000000018d8ed463a23bf35",
+      "pattern": "integration-test-marker",
+      "category": "shift-left",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./CHANGELOG.md",
+        "line": 98,
+        "column": 22
+      },
+      "description": "Integration test marker detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "integration-test-marker:./CHANGELOG.md:98:6d8749c4fe00b757c1bc1c376a99f31d1bd38b422d44f5b6aa2d6a6c5e975cba",
+      "stable_id": "aegis-57e795343817538005208f528166256c36c6fc9c423bac44cf8bc43d2637eaa4",
+      "triage": "changelog prose: release-section text (run IDs, feature descriptions); line-shifted 2026-09-26 by the 0.1.1 Added-bullet removal"
+    },
+    {
+      "id": "000000000000000018d8ed463dfa5d8b",
+      "pattern": "todo-comment",
+      "category": "code-quality",
+      "severity": "low",
+      "confidence": "high",
+      "location": {
+        "file": "./CHANGELOG.md",
+        "line": 56,
+        "column": 56
+      },
+      "description": "TODO/FIXME comment detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "todo-comment:./CHANGELOG.md:56:602fae580f5863abfb31bf356decfdc73bf1224a62aacf6b4829ffa2dbe58390",
+      "stable_id": "aegis-7647137ccc1eff74ead4fda563ea7698d9f764087a2fbff79afb7b02d7979e8d",
+      "triage": "changelog prose: release-section text (run IDs, feature descriptions); accepted 2026-09-26"
+    },
+    {
+      "id": "000000000000000018d8ed463dfab492",
+      "pattern": "magic-number",
+      "category": "code-quality",
+      "severity": "low",
+      "confidence": "medium",
+      "location": {
+        "file": "./CHANGELOG.md",
+        "line": 64,
+        "column": 42
+      },
+      "description": "Magic number detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "magic-number:./CHANGELOG.md:64:a2a4bb828722248c335d2dd7d21a51d5f954e34f2a4ff3b277308fa5e90bee49",
+      "stable_id": "aegis-90471bffbc8d1590b07d5b6474c326ef60c4258272c6917daa47f2ef16812a9b",
+      "triage": "changelog prose: release-section text (run IDs, feature descriptions); accepted 2026-09-26"
+    },
+    {
+      "id": "000000000000000018d8ed463dfad4c3",
+      "pattern": "magic-number",
+      "category": "code-quality",
+      "severity": "low",
+      "confidence": "medium",
+      "location": {
+        "file": "./CHANGELOG.md",
+        "line": 68,
+        "column": 47
+      },
+      "description": "Magic number detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "magic-number:./CHANGELOG.md:68:a2a4bb828722248c335d2dd7d21a51d5f954e34f2a4ff3b277308fa5e90bee49",
+      "stable_id": "aegis-cdd24cbd9f57a246301650448dd86f81b419b49d843927bde1ec9a37f11cc950",
+      "triage": "changelog prose: release-section text (run IDs, feature descriptions); accepted 2026-09-26"
+    },
+    {
+      "id": "000000000000000018d8ed463f1051dd",
+      "pattern": "ai-generated-marker",
+      "category": "ai-detection",
+      "severity": "low",
+      "confidence": "medium",
+      "location": {
+        "file": "./CHANGELOG.md",
+        "line": 65,
+        "column": 3
+      },
+      "description": "AI generation marker detected",
+      "tags": [],
+      "kind": "pattern",
+      "fingerprint": "ai-generated-marker:./CHANGELOG.md:65:744205e43529c1fc39bc4ed37dbcd1e91facc78d2a2d136bc893b023ac3c75f5",
+      "stable_id": "aegis-635f2052ff1337cfaed20a09f01e002543e16029fe39bef8d6b04a5a77d7ce75",
+      "triage": "changelog prose: release-section text (run IDs, feature descriptions); accepted 2026-09-26"
     }
   ]
 }

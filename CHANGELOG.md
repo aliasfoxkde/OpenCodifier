@@ -8,19 +8,35 @@ releases may break, and every breaking change is recorded in this file
 
 ## [Unreleased]
 
+Decision-model feasibility benchmark (PLAN Phase 13, in progress):
+candidate-conditioned question suite + runner harness under
+`benchmarks/decision-model/`, measuring constrained-decode accuracy,
+latency, and determinism for small local models against the engine's
+own lexical/BM25 baseline and an embedding zero-shot arm.
+
+## [0.1.1] — 2026-09-26
+
 ### Added
 
-- `recipes/` — three runnable decision graphs with paired requests and
-  byte-reproducible captured responses (`minimal-choice`,
-  `strict-verify`, `boolean-score`), each demonstrating a different
-  facet of the escalation ladder; `recipes/README.md` documents the
-  capture-and-compare procedure (PLAN Phase 11).
+- `infrastructure/docker/ci-rust.Dockerfile` + `just ci-image` — the
+  runner-local CI image (`opencodifier-ci-rust:1`) that bakes the
+  pinned toolchain, rustfmt/clippy, cargo-deny, cargo-audit, aegis
+  (rev-pinned), and a warm crate registry (PLAN Phase 12).
 
 ### Changed
 
-- `opencodifier-http::serve_with_shutdown` — the graceful-shutdown
-  future is now a parameter (the `serve` entry point keeps `Ctrl-C`),
-  so embedders and tests can end the serve loop with their own signal.
+- `.gitforge.yml` — all four jobs run on the baked CI image with zero
+  runtime tool installs; job containers cannot reach host services
+  (host firewall default-DROPs docker-sourced traffic), and
+  `rust-toolchain.toml` had been silently overriding the image
+  toolchain at job runtime (measured: latest stable downloaded
+  in-job). `RUSTUP_TOOLCHAIN` in the image pins every job to the
+  baked compiler (PLAN Phase 12).
+- Pipeline of record validated green through GitForge: runs `fe4b0871`
+  and `69d17ef2` (lint, test, doc, supply-chain all succeeded).
+- Aegis baseline discipline: the gate runs after every content edit
+  (run `f1153de0` failed the supply-chain lane on untriaged doc-edit
+  findings); triaged appends recorded per entry (1,709 → 1,735).
 
 ## [0.1.0] — 2026-09-25
 
@@ -29,6 +45,12 @@ history.
 
 ### Added
 
+- `recipes/` — three runnable decision graphs with paired requests and
+  byte-reproducible captured responses (`minimal-choice`,
+  `strict-verify`, `boolean-score`), each demonstrating a different
+  facet of the escalation ladder; `recipes/README.md` documents the
+  capture-and-compare procedure (ea19aed; folded from Unreleased —
+  this item shipped in 0.1.0 but was left unstaged there).
 - **Phase 0 — scaffold + governance** (37b8b63, 0611b5a): Rust
   workspace (edition 2024, MSRV 1.90), workspace lints (`unsafe_code`
   forbid, clippy all+pedantic with unwrap/expect/panic/todo denied),
@@ -80,5 +102,14 @@ history.
   Updated 2026-09-25 after Phases 8–9: 8,340 lines, 83
   documented-unreachable, **99.00%**.
 
-[Unreleased]: https://github.com/aliasfoxkde/OpenCodifier/compare/v0.1.0...HEAD
+### Changed
+
+- `opencodifier-http::serve_with_shutdown` — the graceful-shutdown
+  future is now a parameter (the `serve` entry point keeps `Ctrl-C`),
+  so embedders and tests can end the serve loop with their own signal
+  (563ad3f; folded from Unreleased — this item shipped in 0.1.0 but
+  was left unstaged there).
+
+[Unreleased]: https://github.com/aliasfoxkde/OpenCodifier/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.1.1
 [0.1.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.1.0
