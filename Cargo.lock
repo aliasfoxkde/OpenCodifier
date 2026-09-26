@@ -919,7 +919,7 @@ checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
 name = "opencodifier-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -937,7 +937,7 @@ dependencies = [
 
 [[package]]
 name = "opencodifier-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -946,7 +946,7 @@ dependencies = [
 
 [[package]]
 name = "opencodifier-engine"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "criterion",
  "opencodifier-core",
@@ -959,7 +959,7 @@ dependencies = [
 
 [[package]]
 name = "opencodifier-http"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "axum",
  "opencodifier-core",
@@ -974,7 +974,7 @@ dependencies = [
 
 [[package]]
 name = "opencodifier-model"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "opencodifier-core",
  "opencodifier-engine",
@@ -987,14 +987,14 @@ dependencies = [
 
 [[package]]
 name = "opencodifier-runtime"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "opencodifier-schema"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "opencodifier-core",
  "proptest",
