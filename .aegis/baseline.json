@@ -36078,6 +36078,258 @@
    "fingerprint": "integration-test-marker:./CHANGELOG.md:106:6d8749c4fe00b757c1bc1c376a99f31d1bd38b422d44f5b6aa2d6a6c5e975cba",
    "stable_id": "aegis-573a65d5adfda47cd53747c9bf5499cad870e9f3eaf8333dce63c3a5659baf44",
    "triage": "doc prose detector misfire on narrative text (2026-09-26)"
+  },
+  {
+   "id": "000000000000000018d903066b1eaf0a",
+   "pattern": "magic-number",
+   "category": "code-quality",
+   "severity": "low",
+   "confidence": "medium",
+   "location": {
+    "file": "./docs/DECISIONS.md",
+    "line": 199,
+    "column": 60
+   },
+   "description": "Magic number detected",
+   "tags": [],
+   "kind": "pattern",
+   "fingerprint": "magic-number:./docs/DECISIONS.md:199:7328f9713cf2421aed7685680e2b799ea64dedf2e76f82f1017d8bc8f80a992f",
+   "stable_id": "aegis-07db927ee88016d0c9f227f04d54d2b0027d9207694b7b7be5701c0302d14f5a",
+   "triage": "measurement documentation prose; benchmark numbers, ratios, and artifact hashes described in decision records and merged summaries (2026-09-26)"
+  },
+  {
+   "id": "000000000000000018d903066b1eddb1",
+   "pattern": "magic-number",
+   "category": "code-quality",
+   "severity": "low",
+   "confidence": "medium",
+   "location": {
+    "file": "./docs/DECISIONS.md",
+    "line": 211,
+    "column": 63
+   },
+   "description": "Magic number detected",
+   "tags": [],
+   "kind": "pattern",
+   "fingerprint": "magic-number:./docs/DECISIONS.md:211:76d6a8153b2e6ea49abf44111408f3d25887ddab9af37284a025d1b8febac3c1",
+   "stable_id": "aegis-273b8bc1b40098ab3f5cfee39ba5fd09efed496d5c511eb59471379cfc2a983a",
+   "triage": "measurement documentation prose; benchmark numbers, ratios, and artifact hashes described in decision records and merged summaries (2026-09-26)"
+  },
+  {
+   "id": "000000000000000018d903066b1f08cc",
+   "pattern": "magic-number",
+   "category": "code-quality",
+   "severity": "low",
+   "confidence": "medium",
+   "location": {
+    "file": "./docs/DECISIONS.md",
+    "line": 218,
+    "column": 54
+   },
+   "description": "Magic number detected",
+   "tags": [],
+   "kind": "pattern",
+   "fingerprint": "magic-number:./docs/DECISIONS.md:218:aa13fda43018c393de7088225497fee24270d428a9de0d2f8d0cc899f6687e69",
+   "stable_id": "aegis-b9d494b5f5e9ad91ef9945a647f2d1e26a81e2e07d289ed898c1a9c3b1f475bf",
+   "triage": "measurement documentation prose; benchmark numbers, ratios, and artifact hashes described in decision records and merged summaries (2026-09-26)"
+  },
+  {
+   "id": "000000000000000018d90306708a8fc7",
+   "pattern": "markdown-code-fence",
+   "category": "ai-detection",
+   "severity": "low",
+   "confidence": "low",
+   "location": {
+    "file": "./docs/PLAN.md",
+    "line": 421,
+    "column": 1
+   },
+   "description": "Markdown code fence detected",
+   "tags": [],
+   "kind": "pattern",
+   "fingerprint": "markdown-code-fence:./docs/PLAN.md:421:72a3ccbc9ef76d5fb1395d9874440bee5aa2192f9556c4cf830eb908cd4b9f64",
+   "stable_id": "aegis-a52b99deeda66558a1208e062e365cd6177cfd15a4db3edec9ab1f5ecc5aec94",
+   "triage": "quality-gate command block inside the plan document; docs, not executable code (2026-09-26)"
+  },
+  {
+   "id": "000000000000000018d903063ff717d4",
+   "pattern": "magic-number",
+   "category": "code-quality",
+   "severity": "low",
+   "confidence": "medium",
+   "location": {
+    "file": "./benchmarks/decision-model/results/summary.md",
+    "line": 17,
+    "column": 73
+   },
+   "description": "Magic number detected",
+   "tags": [],
+   "kind": "pattern",
+   "fingerprint": "magic-number:./benchmarks/decision-model/results/summary.md:17:2b0ebe245db547be83a6fe7635f1e9204b237b7e9f8ed0347fd92cede5791c60",
+   "stable_id": "aegis-1ff7ecec3760127202b20df9123c83e9667ecf16ce9a2180b927d3b788d1316b",
+   "triage": "measurement documentation prose; benchmark numbers, ratios, and artifact hashes described in decision records and merged summaries (2026-09-26)"
+  },
+  {
+   "id": "000000000000000018d903063ff73591",
+   "pattern": "magic-number",
+   "category": "code-quality",
+   "severity": "low",
+   "confidence": "medium",
+   "location": {
+    "file": "./benchmarks/decision-model/results/summary.md",
+    "line": 18,
+    "column": 73
+   },
+   "description": "Magic number detected",
+   "tags": [],
+   "kind": "pattern",
+   "fingerprint": "magic-number:./benchmarks/decision-model/results/summary.md:18:e9cfd9f31e4566c22dac0ec2a45735bf1ff4297f00cf954582c6eeba6ee95c46",
+   "stable_id": "aegis-bec9464c141b80d000ef4274fee580f6f027606f2437f27cd727da1672f18f63",
+   "triage": "measurement documentation prose; benchmark numbers, ratios, and artifact hashes described in decision records and merged summaries (2026-09-26)"
+  },
+  {
+   "id": "000000000000000018d903063ff74e1f",
+   "pattern": "magic-number",
+   "category": "code-quality",
+   "severity": "low",
+   "confidence": "medium",
+   "location": {
+    "file": "./benchmarks/decision-model/results/summary.md",
+    "line": 19,
+    "column": 68
+   },
+   "description": "Magic number detected",
+   "tags": [],
+   "kind": "pattern",
+   "fingerprint": "magic-number:./benchmarks/decision-model/results/summary.md:19:508d030c81626ebe8bd8961bd75059dbe7c22ed798825c27885ec524ea0bb45a",
+   "stable_id": "aegis-192f1115f0f1e255837f65daf2046e017a9e9d804bde75652828c8fd6dafd203",
+   "triage": "measurement documentation prose; benchmark numbers, ratios, and artifact hashes described in decision records and merged summaries (2026-09-26)"
+  },
+  {
+   "id": "000000000000000018d903063ff76666",
+   "pattern": "magic-number",
+   "category": "code-quality",
+   "severity": "low",
+   "confidence": "medium",
+   "location": {
+    "file": "./benchmarks/decision-model/results/summary.md",
+    "line": 21,
+    "column": 63
+   },
+   "description": "Magic number detected",
+   "tags": [],
+   "kind": "pattern",
+   "fingerprint": "magic-number:./benchmarks/decision-model/results/summary.md:21:92f3c34650437f1ddf6b2f2e3f4d240e6e3755bace50d44b7a3fda82332a942b",
+   "stable_id": "aegis-49f160809569b494cf4b308a383c661077e6661451c26f0d5369168e7eb53cf2",
+   "triage": "measurement documentation prose; benchmark numbers, ratios, and artifact hashes described in decision records and merged summaries (2026-09-26)"
+  },
+  {
+   "id": "000000000000000018d903063ff781f4",
+   "pattern": "magic-number",
+   "category": "code-quality",
+   "severity": "low",
+   "confidence": "medium",
+   "location": {
+    "file": "./benchmarks/decision-model/results/summary.md",
+    "line": 22,
+    "column": 61
+   },
+   "description": "Magic number detected",
+   "tags": [],
+   "kind": "pattern",
+   "fingerprint": "magic-number:./benchmarks/decision-model/results/summary.md:22:e7303ad874c1009003d08c7bd18c3c1f1bbc6fde77ed0f6024ab9c998285ddb8",
+   "stable_id": "aegis-d14a671cc9a7d5f655bfbfce7575c47fb63b523ee080924ab01cd3ae44ebeaee",
+   "triage": "measurement documentation prose; benchmark numbers, ratios, and artifact hashes described in decision records and merged summaries (2026-09-26)"
+  },
+  {
+   "id": "000000000000000018d9030645427b07",
+   "pattern": "interpretability-tool",
+   "category": "ai-safety",
+   "severity": "low",
+   "confidence": "high",
+   "location": {
+    "file": "./CHANGELOG.md",
+    "line": 94,
+    "column": 3
+   },
+   "description": "Interpretability tool reference detected",
+   "tags": [],
+   "kind": "pattern",
+   "fingerprint": "interpretability-tool:./CHANGELOG.md:94:ec098178cd829fd9686d5e9c33aebc65c1d1e1f1de92967c51603c84bd6510ac",
+   "stable_id": "aegis-aff96a28888a3bb676492063900c5f932c85310f1e78c2688729a6e69ded7e13",
+   "triage": "doc prose detector misfire on narrative text (2026-09-26)"
+  },
+  {
+   "id": "000000000000000018d9030646326e42",
+   "pattern": "magic-number",
+   "category": "code-quality",
+   "severity": "low",
+   "confidence": "medium",
+   "location": {
+    "file": "./CHANGELOG.md",
+    "line": 78,
+    "column": 47
+   },
+   "description": "Magic number detected",
+   "tags": [],
+   "kind": "pattern",
+   "fingerprint": "magic-number:./CHANGELOG.md:78:a2a4bb828722248c335d2dd7d21a51d5f954e34f2a4ff3b277308fa5e90bee49",
+   "stable_id": "aegis-e349f79ddd64ce9b4aacd7841de9e86dca731241c156099ac0addc540ffa52c8",
+   "triage": "measurement documentation prose; benchmark numbers, ratios, and artifact hashes described in decision records and merged summaries (2026-09-26)"
+  },
+  {
+   "id": "000000000000000018d90306463284e7",
+   "pattern": "todo-comment",
+   "category": "code-quality",
+   "severity": "low",
+   "confidence": "high",
+   "location": {
+    "file": "./CHANGELOG.md",
+    "line": 66,
+    "column": 56
+   },
+   "description": "TODO/FIXME comment detected",
+   "tags": [],
+   "kind": "pattern",
+   "fingerprint": "todo-comment:./CHANGELOG.md:66:602fae580f5863abfb31bf356decfdc73bf1224a62aacf6b4829ffa2dbe58390",
+   "stable_id": "aegis-480bf77d52ad58bc6ee664ea5334440d7254cbff6acaab97275a12db78772fea",
+   "triage": "doc prose detector misfire on narrative text (2026-09-26)"
+  },
+  {
+   "id": "000000000000000018d9030647c4d115",
+   "pattern": "integration-test-marker",
+   "category": "shift-left",
+   "severity": "low",
+   "confidence": "high",
+   "location": {
+    "file": "./CHANGELOG.md",
+    "line": 108,
+    "column": 22
+   },
+   "description": "Integration test marker detected",
+   "tags": [],
+   "kind": "pattern",
+   "fingerprint": "integration-test-marker:./CHANGELOG.md:108:6d8749c4fe00b757c1bc1c376a99f31d1bd38b422d44f5b6aa2d6a6c5e975cba",
+   "stable_id": "aegis-fbafd4615deeb9e9e3529afd0c48470fab4ad596ebc57f85bf4450ac217befa2",
+   "triage": "doc prose detector misfire on narrative text (2026-09-26)"
+  },
+  {
+   "id": "000000000000000018d90306498bce87",
+   "pattern": "ai-generated-marker",
+   "category": "ai-detection",
+   "severity": "low",
+   "confidence": "medium",
+   "location": {
+    "file": "./CHANGELOG.md",
+    "line": 75,
+    "column": 3
+   },
+   "description": "AI generation marker detected",
+   "tags": [],
+   "kind": "pattern",
+   "fingerprint": "ai-generated-marker:./CHANGELOG.md:75:744205e43529c1fc39bc4ed37dbcd1e91facc78d2a2d136bc893b023ac3c75f5",
+   "stable_id": "aegis-2bf1d6dbac1a52d10d92e98a75633e88d36909f04073aa2b2930972283dd8436",
+   "triage": "doc prose detector misfire on narrative text (2026-09-26)"
   }
  ]
 }

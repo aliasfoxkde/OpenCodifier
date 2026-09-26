@@ -53,7 +53,7 @@ Remaining risks tracked in §6 below.
 | 10 | `opencodifier-mcp` | pending |
 | 11 | E2E recipes + docs book + examples | **done** (85cd2ec) — `recipes/` 3 runnable graphs + captured responses; docs set + accessibility checked |
 | 12 | Release engineering (tag, release, GitForge pipeline green) | **done** (49bc224) — tag v0.1.0; pipeline of record green through GitForge (fe4b0871); v0.1.1 CI hardening (3bad2bb, run 8e8401f0) |
-| 13 | Decision-model benchmark: pick the model | **done** — `benchmarks/decision-model/`, ten arms; Qwen3.5-2B selected, amended from Gemma-3-4b (D16) |
+| 13 | Decision-model benchmark: pick the model | **done** — `benchmarks/decision-model/`, thirteen arms; Qwen3.8-4B-Distill reference pick, tiered alternatives (D16, amended ×2) |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
@@ -342,9 +342,12 @@ with measurement, not opinion.
   | Qwen2.5-1.5B | 0.90 / 0.45 / 0.40 | 0.583 | 0.191 | 1.25 s |
   | Qwen2.5-3B | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2.58 s |
   | Gemma-3-4b-it | 0.95 / 0.85 / 0.45 | 0.750 | 0.236 | 3.04 s |
-  | **Qwen3.5-0.8B** | 0.93 / 0.68 / 0.35 | 0.650 | 0.074 | 613 ms |
-  | **Qwen3.5-2B** | **0.95 / 0.72 / 0.50** | **0.725** | **0.062** | 1.73 s |
+  | Qwen3.5-0.8B | 0.93 / 0.68 / 0.35 | 0.650 | 0.074 | 613 ms |
+  | Qwen3.5-2B | 0.95 / 0.72 / 0.50 | 0.725 | 0.062 | 1.73 s |
   | MiniCPM5-1B | 0.95 / 0.35 / 0.15 | 0.483 | 0.232 | 694 ms |
+  | **Qwen3.8-0.8B-Distill** | 0.85 / 0.55 / 0.30 | 0.567 | 0.098 | 808 ms |
+  | Qwen3.8-2B-Distill | 0.90 / 0.62 / 0.33 | 0.617 | 0.095 | 1.34 s |
+  | **Qwen3.8-4B-Distill** | **1.00 / 0.95 / 0.35** | **0.767** | **0.057** | 3.76 s |
 
 - **Extension (2026-09-26).** Three newer models typed through the
   identical harness moved the pick (D16 amended): **Qwen3.5-2B** —
@@ -362,6 +365,22 @@ with measurement, not opinion.
   `enable_thinking` is disabled; with the fix, Qwen3.5-2B's chat
   baseline (0.717) lands on its decision-arm accuracy (0.725).
 
+- **Extension 2 (2026-09-26, Qwen3.8 distills).** Four community distill
+  arms typed through the identical harness moved the pick again (D16
+  amended ×2, now a tier scheme): **Qwen3.8-4B-Distill** takes the
+  reference slot on both axes that matter — best accuracy measured
+  (0.767; metadata 1.00 is the first perfect class score) and best
+  calibration (ECE 0.057) — strictly superseding Gemma-3-4b-it. Its one
+  weak class is relational (0.35 vs Qwen3.5-2B's 0.50), which is why
+  D16 now names **Qwen3.5-2B as the balanced alternative** (relational
+  crown, half the latency) and keeps the Qwen3.5-0.8B fast tier. The two
+  community "Qwen3.8-0.8B" repos (gatilin, Atomic-Germ) are **the same
+  weights** — bit-identical `model.safetensors` (sha `a84cd623…`), one
+  model under two names, caught by SHA manifest discipline — and score
+  0.567, dominated by Qwen3.5-0.8B. Their uploads also omit the MTP
+  block their configs declare; GGUF conversion needs llama.cpp's
+  `--no-mtp` flag (converted locally to bf16, 1.5 GB, clean export).
+
 - **Findings.** (1) The task-dependent floor from the reference video
   reproduces exactly: relational_compositional never exceeds 0.50 for
   any cheap arm, so the confidence gate + escalation is mandatory, not
@@ -369,7 +388,7 @@ with measurement, not opinion.
   lexical engine nearly solves attribute matching at 1/500th the
   latency, embeddings own paraphrase, and only the model adds the
   relational headroom it can. (3) Raw winner probability is NOT
-  calibrated anywhere (ECE 0.062–0.265, and even the best arm has no
+  calibrated anywhere (ECE 0.057–0.265, and even the best arm has no
   post-hoc calibration fitted) — §73's calibration mandate and D15 are
   confirmed by measurement before any confidence is exposed. (4) The
   constrained decision arm is bit-deterministic run-to-run on every
@@ -377,10 +396,18 @@ with measurement, not opinion.
   Qwen-0.5B scored 0.400 then 0.433 — continuous-batching composition
   changes greedy decode) — the scoring arm is the deterministic one.
   (5) Batched contexts cut per-decision cost 5–8x (Gemma lexical class:
-  565 ms bulk vs 3.04 s single) — prefill dominates on CPU. (6) The
-  pick is Qwen3.5-2B with Gemma-3-4b-it as accuracy-ceiling reference
-  and Qwen3.5-0.8B as fast tier (D16, amended); Qwen2.5-3B, Llama-3.2-1B,
-  Qwen2.5-0.5B and MiniCPM5-1B are rejected.
+  565 ms bulk vs 3.04 s single) — prefill dominates on CPU. (6) The pick
+  is a tier scheme (D16 amended ×2): Qwen3.8-4B-Distill reference,
+  Qwen3.5-2B balanced/relational alternative, Qwen3.5-0.8B fast tier;
+  Gemma-3-4b-it, Qwen2.5-3B, Llama-3.2-1B, Qwen2.5-0.5B, MiniCPM5-1B and
+  all three Qwen3.8 small distills are rejected on measurement. (7) The
+  decision arm's accuracy dominance is model-dependent: the Qwen3.8-2B
+  distill is the first arm whose chat baseline **beats** its decision
+  score (0.700 vs 0.617) — distills trained to reason by writing lose
+  under forced token-path commitment — while the 4B distill keeps the
+  normal order (decision 0.767 > chat 0.742). (8) Community model repos
+  repackage identical weights under different names; the SHA-256
+  manifest (D14) is what catches it.
 - **Accept:** suite byte-lock verified (generator rerun is
   byte-identical); every arm replays the suite twice with
   `determinism.predictions_match` recorded in its result file;
