@@ -451,7 +451,6 @@ def main() -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, sort_keys=True, indent=1) + "\n")
     m = result["metrics"]
-    m = result["metrics"]
     print(
         f"acc={m['accuracy']:.3f} ece={m['ece']:.3f} "
         f"per_class={ {k: round(v, 3) for k, v in m['accuracy_by_class'].items()} } "
