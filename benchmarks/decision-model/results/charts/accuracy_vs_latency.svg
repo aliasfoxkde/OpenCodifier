@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="520" viewBox="0 0 880 520" font-family="sans-serif">
+<text x="16" y="24" font-size="17" font-weight="bold">Accuracy vs single-decision latency (p50, log scale)</text>
+<text x="16" y="42" font-size="11" fill="#555">Decision-model benchmark — candidate-conditioned tree mode, CPU-only host (-t 12, -c 8192, -ngl 0). Chat screens excluded (sampled, non-comparable).</text>
+<rect x="68" y="56" width="602" height="406" fill="#fafafa" stroke="#999"/>
+<line x1="68" y1="434.9" x2="670" y2="434.9" stroke="#ddd"/>
+<text x="60" y="438.9" font-size="11" text-anchor="end" fill="#444">0.2</text>
+<line x1="68" y1="380.8" x2="670" y2="380.8" stroke="#ddd"/>
+<text x="60" y="384.8" font-size="11" text-anchor="end" fill="#444">0.3</text>
+<line x1="68" y1="326.7" x2="670" y2="326.7" stroke="#ddd"/>
+<text x="60" y="330.7" font-size="11" text-anchor="end" fill="#444">0.4</text>
+<line x1="68" y1="272.5" x2="670" y2="272.5" stroke="#ddd"/>
+<text x="60" y="276.5" font-size="11" text-anchor="end" fill="#444">0.5</text>
+<line x1="68" y1="218.4" x2="670" y2="218.4" stroke="#ddd"/>
+<text x="60" y="222.4" font-size="11" text-anchor="end" fill="#444">0.6</text>
+<line x1="68" y1="164.3" x2="670" y2="164.3" stroke="#ddd"/>
+<text x="60" y="168.3" font-size="11" text-anchor="end" fill="#444">0.7</text>
+<line x1="68" y1="110.1" x2="670" y2="110.1" stroke="#ddd"/>
+<text x="60" y="114.1" font-size="11" text-anchor="end" fill="#444">0.8</text>
+<line x1="68" y1="56.0" x2="670" y2="56.0" stroke="#ddd"/>
+<text x="60" y="60.0" font-size="11" text-anchor="end" fill="#444">0.9</text>
+<text x="18" y="259" font-size="12" fill="#333" text-anchor="middle" transform="rotate(-90 18 259)">accuracy</text>
+<line x1="194.0" y1="56" x2="194.0" y2="462" stroke="#ddd"/>
+<text x="194.0" y="480" font-size="11" text-anchor="middle" fill="#444">10ms</text>
+<line x1="320.0" y1="56" x2="320.0" y2="462" stroke="#ddd"/>
+<text x="320.0" y="480" font-size="11" text-anchor="middle" fill="#444">0.1s</text>
+<line x1="446.0" y1="56" x2="446.0" y2="462" stroke="#ddd"/>
+<text x="446.0" y="480" font-size="11" text-anchor="middle" fill="#444">1s</text>
+<line x1="572.0" y1="56" x2="572.0" y2="462" stroke="#ddd"/>
+<text x="572.0" y="480" font-size="11" text-anchor="middle" fill="#444">10s</text>
+<line x1="670.0" y1="56" x2="670.0" y2="462" stroke="#ddd"/>
+<text x="670.0" y="480" font-size="11" text-anchor="middle" fill="#444">60s</text>
+<text x="369" y="504" font-size="12" text-anchor="middle" fill="#333">single-decision p50 (log; embed arms plot mean ms/item)</text>
+<path d="M 512.5 226.9 L 517.5 235.9 L 507.5 235.9 Z" fill="#9467bd"/>
+<path d="M 323.7 308.1 L 328.7 317.1 L 318.7 317.1 Z" fill="#9467bd"/>
+<rect x="155.0" y="277.6" width="8" height="8" fill="#d62728"/>
+<path d="M 413.0 280.1 L 419.0 286.1 L 413.0 292.1 L 407.0 286.1 Z" fill="#8c564b"/>
+<circle cx="532.5" cy="191.3" r="4.5" fill="#7f7f7f"/>
+<circle cx="403.4" cy="394.3" r="4.5" fill="#7f7f7f"/>
+<circle cx="341.1" cy="398.8" r="4.5" fill="#7f7f7f"/>
+<circle cx="438.1" cy="425.9" r="4.5" fill="#7f7f7f"/>
+<circle cx="562.1" cy="182.3" r="4.5" fill="#7f7f7f"/>
+<circle cx="497.1" cy="213.9" r="4.5" fill="#7f7f7f"/>
+<circle cx="445.8" cy="331.2" r="4.5" fill="#7f7f7f"/>
+<circle cx="575.0" cy="119.2" r="4.5" fill="#b8860b"/>
+<circle cx="605.3" cy="101.1" r="4.5" fill="#b8860b"/>
+<circle cx="591.6" cy="101.1" r="4.5" fill="#b8860b"/>
+<circle cx="426.0" cy="281.6" r="4.5" fill="#7f7f7f"/>
+<circle cx="419.2" cy="191.3" r="4.5" fill="#7f7f7f"/>
+<circle cx="472.4" cy="335.7" r="4.5" fill="#2ca02c"/>
+<circle cx="482.6" cy="299.6" r="4.5" fill="#2ca02c"/>
+<circle cx="478.9" cy="132.7" r="4.5" fill="#2ca02c"/>
+<circle cx="488.7" cy="146.2" r="4.5" fill="#2ca02c"/>
+<circle cx="488.8" cy="132.7" r="4.5" fill="#2ca02c"/>
+<circle cx="488.4" cy="132.7" r="4.5" fill="#2ca02c"/>
+<circle cx="488.5" cy="128.2" r="4.5" fill="#2ca02c"/>
+<circle cx="476.1" cy="150.7" r="4.5" fill="#2ca02c"/>
+<circle cx="540.8" cy="123.7" r="4.5" fill="#1f77b4"/>
+<circle cx="550.7" cy="110.1" r="4.5" fill="#1f77b4"/>
+<circle cx="517.5" cy="209.4" r="4.5" fill="#1f77b4"/>
+<circle cx="596.8" cy="114.6" r="4.5" fill="#1f77b4"/>
+<circle cx="554.2" cy="110.1" r="4.5" fill="#1f77b4"/>
+<circle cx="532.6" cy="110.1" r="4.5" fill="#1f77b4"/>
+<circle cx="524.9" cy="128.2" r="4.5" fill="#1f77b4"/>
+<circle cx="434.3" cy="236.4" r="4.5" fill="#7f7f7f"/>
+<circle cx="462.1" cy="209.4" r="4.5" fill="#7f7f7f"/>
+<circle cx="518.4" cy="128.2" r="4.5" fill="#7f7f7f"/>
+<circle cx="379.8" cy="434.9" r="4.5" fill="#7f7f7f"/>
+<circle cx="506.8" cy="137.2" r="4.5" fill="#7f7f7f"/>
+<circle cx="489.0" cy="407.9" r="4.5" fill="#7f7f7f"/>
+<circle cx="398.9" cy="358.2" r="4.5" fill="#7f7f7f"/>
+<circle cx="426.0" cy="331.2" r="4.5" fill="#7f7f7f"/>
+<circle cx="458.1" cy="227.4" r="4.5" fill="#7f7f7f"/>
+<circle cx="497.7" cy="177.8" r="4.5" fill="#7f7f7f"/>
+<text x="519.5" y="235.9" font-size="10" fill="#222">gte 0.575</text>
+<text x="166.0" y="285.6" font-size="10" fill="#222">engine lexical 0.483</text>
+<text x="445.1" y="429.9" font-size="10" fill="#222">Jev-0.8B* 0.217</text>
+<text x="598.6" y="105.1" font-size="10" fill="#222">MiMo-9B-Q3_K_S 0.817</text>
+<text x="426.2" y="195.3" font-size="10" fill="#222">Q3.5-0.8B q4_0 0.650</text>
+<text x="483.1" y="154.7" font-size="10" fill="#222">Q3.5-2B 0.725</text>
+<text x="557.7" y="114.1" font-size="10" fill="#222">Q3.5-4B-Q3_K_S 0.800</text>
+<text x="539.6" y="114.1" font-size="10" fill="#222">Q3.5-4B-UD-Q4_K_XL 0.800</text>
+<rect x="682" y="55" width="12" height="12" fill="#1f77b4"/>
+<text x="700" y="66" font-size="11" fill="#333">decision arm (llama.cpp tree)</text>
+<rect x="682" y="73" width="12" height="12" fill="#b8860b"/>
+<text x="700" y="84" font-size="11" fill="#333">MiMo-9B</text>
+<rect x="682" y="91" width="12" height="12" fill="#2ca02c"/>
+<text x="700" y="102" font-size="11" fill="#333">Qwen3.5-2B ladder</text>
+<rect x="682" y="109" width="12" height="12" fill="#d62728"/>
+<text x="700" y="120" font-size="11" fill="#333">engine lexical (5.3ms)</text>
+<rect x="682" y="127" width="12" height="12" fill="#9467bd"/>
+<text x="700" y="138" font-size="11" fill="#333">embedding zero-shot</text>
+<rect x="682" y="145" width="12" height="12" fill="#8c564b"/>
+<text x="700" y="156" font-size="11" fill="#333">Laya-421M</text>
+<rect x="682" y="163" width="12" height="12" fill="#7f7f7f"/>
+<text x="700" y="174" font-size="11" fill="#333">other decision arms</text>
+* Jev-Style-0.8B: interface mismatch (verdict-slot readout), see REPORT.md F11
+</svg>

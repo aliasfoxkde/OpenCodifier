@@ -15,9 +15,11 @@ latency, and run-twice determinism:
 | arm | runner | mechanism |
 |---|---|---|
 | `engine_builtin_lexical` | `run_engine.py` | OpenCodifier's own engine (`opencodifier serve`, builtin lexical pipeline) — the zero-ML baseline every model must beat to earn its latency |
-| `embedding_zero_shot` | `run_embed.py` | MiniLM ONNX cosine + softmax — the "embedding similarity" layer of the ladder |
+| `embedding_zero_shot` | `run_embed.py` | MiniLM ONNX cosine + softmax — the "embedding similarity" layer of the ladder (gte-modernbert ran through the same arm) |
+| `laya_decision` | `run_laya.py` | Laya-421M, a small purpose-trained decision model, same suite |
 | `llama_decision` | `run_llama.py` | llama.cpp `parallel-decision` branch (`POST /v1/decision`): every candidate id scored as a token path forked from one cached prefix; tree mode returns the exact constrained distribution, nothing is sampled |
 | `llama_decision` chat baseline | `run_llama.py --skip-chat` opt-out | the same questions written as JSON by ordinary token-by-token chat completion at temperature 0 — what the decision arm replaces |
+| `llama_chat_baseline_only` | `run_llama.py` | chat-only screen for forks with no `/v1/decision` (K2-Horizon): sampled decode, labeled `(chat screen)` in the summary, never comparable to decision rows |
 
 The decision-arm design and the latency targets follow the operator-supplied
 reference (`docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt`)
@@ -57,13 +59,18 @@ python3 runner/run_embed.py --model-dir /path/to/minilm \
     --out "$RUNS/embed__minilm.json"
 
 # 3. decision arm per GGUF model (downloads are operator-supplied; the
-#    runner records each file's SHA-256 into the results)
+#    runner records each file's SHA-256 into the results; --timeout
+#    bounds each request — 9B batched tails exceed the old fixed limit)
 python3 runner/run_llama.py --llama-dir /path/to/llama.cpp \
     --models-dir /path/to/models --model qwen2.5-0.5b-instruct-q4_k_m.gguf \
-    --out "$RUNS/llama__qwen2.5-0.5b.json"
+    --timeout 3600 --out "$RUNS/llama__qwen2.5-0.5b.json"
 
 # 4. merge everything, then copy summary.md + models.manifest.json in-tree
 python3 runner/summarize.py --results-dir "$RUNS"
+
+# 5. render the charts committed under results/charts/ (plain SVG, no deps;
+#    every mark is derived from the run JSONs — a view of the record)
+python3 runner/plot.py --results-dir "$RUNS" --models-dir /path/to/models
 ```
 
 Model weights never enter the repository; `models.manifest.json` (written by
@@ -82,9 +89,12 @@ in the summary table is a finding, not a rounding note.
 
 `results/` commits the merged evidence only — `summary.md` (the
 comparison table the Phase 13 record in `docs/PLAN.md` and the pick in
-`docs/DECISIONS.md` D16 rest on) and `models.manifest.json` (SHA-256 of
-every model and embedder used). Raw per-run JSONs stay out of the repo
-tree: they are regenerable from the pinned inputs — the suite is
+`docs/DECISIONS.md` D16 rest on), `models.manifest.json` (SHA-256 of
+every model and embedder used), and `REPORT.md` + `charts/` (the full
+narrative record: methodology, complete board, quant ladders, findings
+catalog, threats to validity, reproduction — the charts are rendered by
+`runner/plot.py` from the run JSONs). Raw per-run JSONs stay out of the
+repo tree: they are regenerable from the pinned inputs — the suite is
 byte-locked, every arm replays twice with predictions matching
 (`determinism.predictions_match` in each run file), and the artifacts
 are pinned by the manifest — and data files consisting of thousands of

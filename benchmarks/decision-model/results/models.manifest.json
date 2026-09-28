@@ -1,10 +1,13 @@
 {
+ "Bonsai-4B.gguf": "4524b3f997f0f06444e568d1f26e2efd69effa3218c7ad3047432fb171e42168",
  "Falcon-H1-Tiny-90M-Instruct-Q4_K_M.gguf": "e7d655345a876ecb073ea86f5ce68e412b99090c34a6bde8a2982bc48afb2612",
  "Falcon-H1-Tiny-Tool-Calling-90M-Q4_K_M.gguf": "9381ccff79b2941339cdf0df8b7047a794970295585dd3ee3aac863ee6f1886e",
  "Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf": "0a19bc29bacc33e0d871146c8612b24dd14c2ed2e61cedeb7a928b0852628bac",
  "K2-Horizon-1B-Q4_K_M.gguf": "78bff592aeba235c767c93a0bda5870d5a4a8dca21c2a2d502930dd3078c79f2",
  "K2-Horizon-4B-Q4_K_M.gguf": "07773aed93890d4f5d08b421430000d5c8d73cefc74fbdc32e67d820f23207b2",
  "K2-Horizon-7B-Q4_K_M.gguf": "eb89c15a0ae9712be2ee462bf43802de14200f20f93b73da6eb68c2ebdd28e4e",
+ "LFM2.5-2.6B-Q3.8-TBrilliance-NEO-MAX-Q6_K.gguf": "f55f86ac8f456807834b5f97f8f25c9c057b59ae7741bc546be10c2068416bd6",
+ "LFM2.5-2.6B-Q4_K_M.gguf": "02a8b7e17487d326e46d68ce0ba24211e1b80a14c4cd0597fa73c1cd697f52ed",
  "Llama-3.2-1B-Instruct-Q4_K_M.gguf": "6f85a640a97cf2bf5b8e764087b1e83da0fdb51d7c9fab7d0fece9385611df83",
  "MiMo-V2.6-Distill-Qwen-9B-IQ3_XXS.gguf": "83d6383197adda49ed71fd6764f5d22c7993b5bc5554b5e8fd5151bc987ff04b",
  "MiMo-V2.6-Distill-Qwen-9B-Q3_K_M.gguf": "d98e54ec9650b6554cfdeea531e2420009207d50471170d0c3640483df8e87eb",

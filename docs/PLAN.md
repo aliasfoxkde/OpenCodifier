@@ -406,6 +406,20 @@ with measurement, not opinion.
   analog to this codebase: decision-gated PreToolUse guard,
   artifact-embedded group temperatures, automation-at-error-budget eval.
 
+- **Extension 4 (2026-09-28 — 44 runs).** Four operator-requested arms,
+  no tier changes (D16 amended ×4): **Bonsai-4B** (ternary, 546 MiB) is
+  the board's best accuracy-per-byte — 0.650, the 0.8B tier's accuracy
+  at a quarter of the size — but its 4.86 s p50 is 4B-class, so it wins
+  no tier (ternary packing collapses size and CPU prefill in equal
+  measure); **Ternary-Bonsai-8B is unmeasurable on this host** (g64
+  quant >10 CPU-hours per decision request; plain Q2_0/PQ2_0 tensors
+  unreadable by the ad129b0 build — recorded as a finding, no row);
+  **LFM2.5-2.6B** (0.608 @ 2.55 s, first hybrid-conv architecture
+  tested) is dominated by Qwen3.5-2B; the **DavidAU X12 NEO MAX merge**
+  (0.667 @ 8.35 s, best sub-3B lexical at 0.775) is latency-toxic.
+  Full narrative record now committed: `results/REPORT.md` +
+  `results/charts/` (rendered by `runner/plot.py` from the run JSONs).
+
 - **Findings.** (1) The task-dependent floor from the reference video
   reproduces exactly: relational_compositional never exceeds 0.50 for
   any cheap arm (the ceiling held across the whole sweep until
