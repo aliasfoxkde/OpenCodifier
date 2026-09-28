@@ -35,8 +35,24 @@ def main() -> int:
         if p.name == "models.manifest.json":
             continue
         d = json.loads(p.read_text())
-        if "arm" not in d or "metrics" not in d:
+        if "arm" not in d:
             continue
+        if "metrics" not in d:
+            # Chat-only screens (forks without /v1/decision) carry their
+            # numbers under chat.metrics. Include them, clearly labeled:
+            # sampled decode, no decision arm, not comparable to decision rows.
+            chat = (d.get("chat") or {}).get("metrics")
+            if not chat or d["arm"] != "llama_chat_baseline_only":
+                continue
+            d = {
+                **d,
+                "metrics": {
+                    "accuracy": chat["accuracy"],
+                    "accuracy_by_class": chat["accuracy_by_class"],
+                    "latency": {"p50_ms": chat["p50_ms"]},
+                },
+                "chat_only_screen": True,
+            }
         results.append((p.name, d))
 
     if not results:
@@ -52,6 +68,10 @@ def main() -> int:
         "Columns: accuracy (meta/lex/rel), overall accuracy, ECE of the winner",
         "probability, single-decision latency, determinism.",
         "",
+        "Rows marked `(chat screen)` are token-by-token chat baselines from forks",
+        "without a decision arm: sampled decode, JSON-writing, no calibrated",
+        "distribution — context for the decision rows, never comparable to them.",
+        "",
         "| run | acc (meta/lex/rel) | acc | ECE | p50 | determinism |",
         "|---|---|---|---|---|---|",
     ]
@@ -64,15 +84,17 @@ def main() -> int:
         if p50 is None and "ms_per_item" in m:
             p50 = m["ms_per_item"]
         det = d.get("determinism", {})
-        det_s = (
-            "yes"
-            if det.get("predictions_match")
-            else f"NO (Δ{det.get('max_prob_delta', 0):.2g})"
-        )
+        if d.get("chat_only_screen"):
+            det_s = "n/a (sampled)"
+        elif det.get("predictions_match"):
+            det_s = "yes"
+        else:
+            det_s = f"NO (Δ{det.get('max_prob_delta', 0):.2g})"
         ece_s = f"{ece:.3f}" if ece is not None else "—"
         p50_s = f"{p50:.1f}ms" if p50 is not None else "—"
+        label = f"{name} (chat screen)" if d.get("chat_only_screen") else name
         lines.append(
-            f"| {name} | {fmt_class_table(m['accuracy_by_class'])} | {acc:.3f} "
+            f"| {label} | {fmt_class_table(m['accuracy_by_class'])} | {acc:.3f} "
             f"| {ece_s} | {p50_s} | {det_s} |"
         )
         model = d.get("model", {})
@@ -80,6 +102,8 @@ def main() -> int:
             manifest[model["file"]] = model["sha256"]
         elif "sha256_model_onnx" in model:
             manifest[model["name"]] = model["sha256_model_onnx"]
+        elif "sha256_model_safetensors" in model:
+            manifest[model["name"]] = model["sha256_model_safetensors"]
 
     lines += ["", "## Notes", ""]
     for name, d in results:
