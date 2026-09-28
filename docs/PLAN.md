@@ -420,6 +420,20 @@ with measurement, not opinion.
   Full narrative record now committed: `results/REPORT.md` +
   `results/charts/` (rendered by `runner/plot.py` from the run JSONs).
 
+- **Extension 5 (2026-09-28, ternary second pass — still 44 runs).** Two
+  operator-requested probes, both measured negatives, no tier changes
+  (D16 amended ×5): **Bonsai-8B** (Q1_0, 1105 MiB) loads and answers a
+  trivial prompt in 5.4 s but prefills at ≈1.5 s/token beyond a
+  ~30-token knee (196 s @ 130 tok, 405 s @ 260 tok, >420 s @ ~520 tok) —
+  ≈26× Bonsai-4B per-token at matched length with the identical
+  Q1_0+F32 type set (verified from the GGUF headers); the suite projects
+  to ≈9–13 h of pure prefill, out of campaign budget (REPORT F18).
+  **Ternary-Bonsai-2-27B** (PTQ1_0, 5.67 GiB, multimodal per its mmproj
+  files) is unloadable in the ad129b0 build — ggml type 143 outside
+  `[0, 43)`, prism-ml-fork-only (REPORT F19). On-CPU ternary viability
+  in this build is 4B-and-below; backlog #35 (Vulkan A/B) now owns the
+  whole ternary ladder.
+
 - **Findings.** (1) The task-dependent floor from the reference video
   reproduces exactly: relational_compositional never exceeds 0.50 for
   any cheap arm (the ceiling held across the whole sweep until

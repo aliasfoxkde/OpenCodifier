@@ -189,7 +189,7 @@ versioned artifacts alongside model manifests, referenced by
 `calibrated_confidence = raw` with `calibration_version = "none"`, so
 the cache never conflates calibrated and uncalibrated results.
 
-## D16 — Decision-model picks: tier scheme (measured, Phase 13; amended ×4)
+## D16 — Decision-model picks: tier scheme (measured, Phase 13; amended ×5)
 
 **Decision (amended 2026-09-27, third pass — full-sweep frontier):** the
 tier scheme gains a frontier tier and the interactive reference moves:
@@ -272,7 +272,24 @@ Provenance findings folded into the record: (a) both community
 (D14); (b) their uploads omit the MTP block declared in config — GGUF
 conversion requires llama.cpp's `--no-mtp`.
 
-*Amendment history:* 2026-09-28 fourth pass (extension) — no tier changes;
+*Amendment history:* 2026-09-28 fifth pass (ternary second pass) — no
+tier changes, no new completed runs; two ternary candidates resolved as
+measured negatives. **Bonsai-8B** (Q1_0, 1105 MiB; `Bonsai-8B.gguf` and
+`Bonsai-8B-Q1_0.gguf` are byte-identical artifacts under two names)
+loads and answers a trivial prompt in 5.4 s, then prefills at ≈1.5
+s/token beyond a ~30-token knee (196 s @ 130 tokens, 405 s @ 260, >420 s
+@ ~520) — ≈26× Bonsai-4B per-token at matched length despite shipping
+the *same* Q1_0+F32 type set (verified from the GGUF headers); the
+120-item suite projects to ≈9–13 h of pure prefill, so the arm is out
+of campaign budget (REPORT F18). **Ternary-Bonsai-2-27B** (PTQ1_0,
+5.67 GiB, qwen3, multimodal per its mmproj files) is unloadable in the
+ad129b0 build: `output.weight has invalid ggml type 143. should be in
+[0, 43)` — prism-ml's packed type requires their own fork, and no other
+file in the repo is host-viable (F16 = 51 GB; PQ2_0 = the unreadable
+Ternary-8B family) (REPORT F19). Net: on-CPU ternary viability in this
+build is 4B-and-below; the #35 accelerator question now spans
+Q2_0_g64-at-8B, Q1_0-at-8B, and type-143 PTQ1_0-at-27B. 2026-09-28
+fourth pass (extension) — no tier changes;
 three arms added. **Bonsai-4B** (ternary, 546 MiB) posts the board's best
 accuracy-per-byte (0.650 — the 0.8B tier's accuracy at a quarter of the
 size) but at 4B-class latency (4.86 s p50), so it wins no tier; recorded

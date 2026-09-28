@@ -257,6 +257,27 @@ all (deterministic load failure on two fresh downloads; the F16 GGUF is
 16.4 GB — beyond this host's memory budget). Ternary ladders are a GPU
 question, not a CPU one.
 
+**Ternary second pass (2026-09-28): Bonsai-8B + Ternary-Bonsai-2-27B.**
+Bonsai-8B (Q1_0, qwen3, 1105 MiB; the repo's `Bonsai-8B.gguf` and
+`Bonsai-8B-Q1_0.gguf` are byte-identical — same SHA-256) **loads and
+answers, then falls off a prefill cliff with length**: a ~30-token probe
+completes in 5.4 s (prefill 5.07 s), ~130 tokens needs **196 s**, ~260
+tokens **405 s**, and ~520 tokens exceeds a 420 s timeout — ≈1.5 s of
+prefill per token beyond a ~30-token knee, ≈26× Bonsai-4B's per-token
+cost at matched length (4B medians: 4.63 s @ 34 tokens; 58–136 ms/token)
+on identical flags and hardware. Both files ship the *same* Q1_0+F32
+type set (verified from the GGUF headers), so the 4B row proves this
+build has a working Q1_0 fast path — the 8B cliff is a scale/kernel
+failure in the ad129b0 build, not a missing-format story. The 120-item
+suite (contexts ≤189 tokens) projects to ≈9–13 h of pure prefill:
+unmeasurable within campaign budget. Ternary-Bonsai-2-27B (PTQ1_0,
+5.67 GiB, qwen3, multimodal per its mmproj files) is **unloadable**:
+`output.weight` carries ggml type 143, outside the build's `[0, 43)`
+range — prism-ml's packed type exists only in their own fork, and the
+repo offers no usable fallback (F16 at 51 GB exceeds host RAM; PQ2_0 is
+the unreadable Ternary-8B format family). Net: on CPU, ternary-class
+viability in this build is 4B-and-below.
+
 ## Findings
 
 - **F1 — Tier scheme (D16 ×3).** Four measured tiers: MiMo-9B Q3_K_S
@@ -336,6 +357,23 @@ question, not a CPU one.
   the slowest sub-3B arm on the board by 3.2×, for 0.667. Community
   merges optimize benchmark flavor, not decision-tier latency; the
   ladder has no tier where this trade wins.
+- **F18 — Same quant types, opposite latency fate.** Bonsai-8B loads
+  (Q1_0+F32 — the same type set as Bonsai-4B, verified from the GGUF
+  headers) yet prefills at ≈1.5 s/token beyond a ~30-token knee (196 s @
+  130 tok, 405 s @ 260 tok, >420 s @ ~520 tok) — ≈26× Bonsai-4B's
+  per-token cost at matched length. A model that answers a trivial
+  prompt in 5.4 s can still be unrunnable at real context lengths:
+  per-token prefill must be probed at length, never inferred from model
+  size or a hello-world latency. (Operational footnote: the two files
+  are byte-identical artifacts under two names — only the SHA-256
+  manifest distinguishes them.)
+- **F19 — Custom ggml types lock GGUFs to their forks.**
+  Ternary-Bonsai-2-27B PTQ1_0 fails deterministically at load:
+  `output.weight has invalid ggml type 143. should be in [0, 43)` —
+  measurable only under prism-ml's own llama.cpp build. A model card
+  size ("TQ1_0 @ 5.95 GB") says nothing about whether a given runtime
+  can read the tensors; format support is a measured property of the
+  (build, artifact) pair, exactly like latency (F8/F16).
 
 ## Threats to validity
 
@@ -368,7 +406,9 @@ question, not a CPU one.
    complete for all three.
 10. **The Ternary-Bonsai-8B row is absent by measurement**, not omission:
     see F16 for the load/perf mechanisms. Nothing about its accuracy is
-    claimed here.
+    claimed here. The same holds for the 2026-09-28 second-pass probes —
+    Bonsai-8B (prefill cliff, F18) and Ternary-Bonsai-2-27B (unloadable,
+    F19) — each probed to a bounded budget and stopped there.
 
 ## Reproduction
 
@@ -415,3 +455,8 @@ hash is a changed artifact and invalidates the row (D14).
   X12 NEO MAX merge (0.667 @ 8.35 s — latency-toxic, F17), and
   Ternary-Bonsai-8B recorded as unmeasurable on this host. No tier
   changes (D16 extended ×1).
+- **2026-09-28 (ternary second pass)** — still 44 runs, no tier changes
+  (D16 extended ×2): Bonsai-8B Q1_0 measured to a prefill cliff — loads,
+  ≈1.5 s/token beyond a ~30-token knee, suite projects to 9–13 h (F18);
+  Ternary-Bonsai-2-27B PTQ1_0 recorded as unloadable (ggml type 143,
+  F19). On-CPU ternary viability in this build is 4B-and-below.
