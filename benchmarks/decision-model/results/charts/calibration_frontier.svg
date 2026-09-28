@@ -38,6 +38,7 @@
 <path d="M 373.2 226.9 L 378.2 235.9 L 368.2 235.9 Z" fill="#9467bd"/>
 <path d="M 373.2 226.9 L 378.2 235.9 L 368.2 235.9 Z" fill="#9467bd"/>
 <path d="M 284.2 299.1 L 289.2 308.1 L 279.2 308.1 Z" fill="#9467bd"/>
+<path d="M 373.8 226.9 L 378.8 235.9 L 368.8 235.9 Z" fill="#9467bd"/>
 <path d="M 226.9 308.1 L 231.9 317.1 L 221.9 317.1 Z" fill="#9467bd"/>
 <rect x="170.8" y="277.6" width="8" height="8" fill="#d62728"/>
 <path d="M 150.3 280.1 L 156.3 286.1 L 150.3 292.1 L 144.3 286.1 Z" fill="#8c564b"/>
@@ -82,6 +83,7 @@
 <text x="380.2" y="235.9" font-size="10" fill="#222">gte</text>
 <text x="380.2" y="235.9" font-size="10" fill="#222">gte-ONNX-fp32</text>
 <text x="291.2" y="308.1" font-size="10" fill="#222">gte-ONNX-int8</text>
+<text x="380.8" y="235.9" font-size="10" fill="#222">gte-ONNX-q4</text>
 <text x="119.1" y="105.1" font-size="10" fill="#222">MiMo-9B-Q3_K_S</text>
 <text x="138.5" y="114.1" font-size="10" fill="#222">Q3.5-4B-Q3_K_S</text>
 <text x="128.2" y="132.2" font-size="10" fill="#222">Q3.8-4B</text>

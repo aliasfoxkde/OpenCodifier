@@ -189,7 +189,7 @@ versioned artifacts alongside model manifests, referenced by
 `calibrated_confidence = raw` with `calibration_version = "none"`, so
 the cache never conflates calibrated and uncalibrated results.
 
-## D16 — Decision-model picks: tier scheme (measured, Phase 13; amended ×6)
+## D16 — Decision-model picks: tier scheme (measured, Phase 13; amended ×7)
 
 **Decision (amended 2026-09-27, third pass — full-sweep frontier):** the
 tier scheme gains a frontier tier and the interactive reference moves:
@@ -272,7 +272,19 @@ Provenance findings folded into the record: (a) both community
 (D14); (b) their uploads omit the MTP block declared in config — GGUF
 conversion requires llama.cpp's `--no-mtp`.
 
-*Amendment history:* 2026-09-28 sixth pass (embedding-rung bake-off) —
+*Amendment history:* 2026-09-28 seventh pass (blockwise int4 arm) — no
+tier changes; the Q4_0-analog question is measured closed. ORT 1.30's
+`MatMulNBits` quantizer (block 32, asymmetric, 4-bit) on the gte fp32
+graph yields a 226 MB build scoring **0.575 / ECE 0.330 — blended,
+per-class (0.47-0.75-0.50), and ECE identical to fp32 to the digit — at
+815.7 ms/item vs 811.4: no speedup** (REPORT F21). Blockwise 4-bit is
+therefore a *free memory fallback* (2.6× smaller at zero quality cost),
+not a speed play — the CPU MatMulNBits kernel does not beat fp32 GEMM
+at batch-1 encoder shapes; the fp32 runtime stands. Contrast F20: the
+int8 collapse was the *scheme* (per-channel dynamic), not quantization
+itself. q4f16 (int4 weights, fp16 activations) is untestable on this
+host — ORT's 4-bit op has no fp16-compute CPU path; that format belongs
+to QNN/CoreML-class EPs. Board stands at 48 runs. 2026-09-28 sixth pass (embedding-rung bake-off) —
 no tier changes; the **embedding rung's runtime moves to ONNX fp32**:
 the same gte-modernbert-base encoder on onnxruntime scores identically
 to the torch row to the digit (0.575 / ECE 0.330 / 0.45-0.78-0.50) at

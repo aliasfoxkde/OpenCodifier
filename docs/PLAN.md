@@ -447,6 +447,20 @@ with measurement, not opinion.
   three backends (onnx / torch / llamacpp) with identical downstream
   math.
 
+- **Extension 7 (2026-09-28, blockwise int4 arm — 48 runs).** The
+  operator's "try ONNX at Q4_0/q4f16" follow-up, measured: ORT 1.30's
+  `MatMulNBits` quantizer (block 32, asymmetric, 4-bit — the mechanical
+  Q4_0 analog; q4f16 has no CPU path in ORT's 4-bit op and is
+  untestable here) on the gte fp32 graph gives a 226 MB build scoring
+  **0.575 / ECE 0.330 — identical to fp32 to the digit — at 815.7 ms vs
+  811.4 ms: zero speedup** (D16 amended ×7, REPORT F21). Verdict: fp32
+  stays the rung's runtime; q4-b32 is the RAM-bound fallback. Two
+  lessons recorded: the F20 int8 collapse was the *scheme* (per-channel
+  dynamic), not quantization itself — blockwise affine scales survive
+  where dynamic int8 died; and "4-bit is faster" is LLM-decode
+  intuition that does not transfer to batch-1 encoder GEMM shapes on
+  AVX2.
+
 - **Findings.** (1) The task-dependent floor from the reference video
   reproduces exactly: relational_compositional never exceeds 0.50 for
   any cheap arm (the ceiling held across the whole sweep until

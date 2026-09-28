@@ -40,6 +40,7 @@
  "gte-modernbert-base": "3e85899d5728cb7de79781c0c3acfb91ccef9f875f1f7e0b3c9f3dd4b6a724ba",
  "gte-modernbert-onnx-fp32": "0e908b53502f034de57da3545e02db2c7ad60420de17ff894f2022eb6a8bef39",
  "gte-modernbert-onnx-int8": "8a30867605f9c8c4d5aef11b88bc5963cd852c03693dd7dec5ae6045e60bbf6c",
+ "gte-modernbert-onnx-q4-b32": "fae86b4e49ade6fe31e823536b4ef1c6533f8de6b541f1d2c689cf712084bf6d",
  "minilm": "759c3cd2b7fe7e93933ad23c4c9181b7396442a2ed746ec7c1d46192c469c46e",
  "qwen2.5-0.5b-instruct-q4_k_m.gguf": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
  "qwen2.5-1.5b-instruct-q4_k_m.gguf": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
