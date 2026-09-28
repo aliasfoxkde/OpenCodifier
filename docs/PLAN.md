@@ -52,7 +52,7 @@ Remaining risks tracked in §6 below.
 | 9 | `opencodifier-http` | **done** — axum **0.8** `/v1` (D12 amended), loopback gate, 26 tests incl. real-socket e2e |
 | 10 | `opencodifier-mcp` | **done** (2026-09-28) — rmcp **2.2.0** stdio server, §55 tool set, 9 client-driven e2e + 2 CLI stdio sessions (D17) |
 | 11 | E2E recipes + docs book + examples | **done** (85cd2ec) — `recipes/` 3 runnable graphs + captured responses; docs set + accessibility checked |
-| 12 | Release engineering (tag, release, GitForge pipeline green) | **done** (49bc224) — tag v0.1.0; pipeline of record green through GitForge (fe4b0871); v0.1.1 CI hardening (3bad2bb, run 8e8401f0) |
+| 12 | Release engineering (tag, release, GitForge pipeline green) | **done** (49bc224) — tag v0.1.0; pipeline of record green through GitForge (fe4b0871); v0.1.1 CI hardening (3bad2bb, run 8e8401f0); v0.2.0 with Phases 10/13/14/15 (c1c8166, tag v0.2.0, run 0ebd7318; CI-toolchain clippy fix c09e39d after run aaa2eefa) |
 | 13 | Decision-model benchmark: pick the model | **done** — `benchmarks/decision-model/`, thirteen arms; Qwen3.8-4B-Distill reference pick, tiered alternatives (D16, amended ×2) |
 | 14 | Confidence truthfulness: D15 calibration + §19 gates | **done** (2026-09-28) — `Calibration` trait + fitted temperature artifacts for the tier arms; the dead OOD channel is live and policy-gated |
 | 15 | §43 relational solver: exact proofs over extracted facts | **done** (2026-09-28) — `facts` + `relational` in the engine, default zero-ML stack; engine arm 0.483 → 0.683 @ 1.3 ms, relational 0.950 (D16 ×8) |
