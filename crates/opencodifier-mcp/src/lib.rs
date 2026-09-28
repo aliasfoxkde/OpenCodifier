@@ -184,6 +184,10 @@ impl OpenCodifierServer {
 // The handler's `call_tool` is async by trait definition, but the tools
 // themselves are synchronous (the engine is sync, and this stdio session is
 // strictly sequential) — the SDK's generated plumbing has nothing to await.
+// Newer clippy lints exactly that as `unused_async_trait_impl`; older
+// toolchains (the CI image's clippy) predate the lint, and `-D warnings`
+// turns the unknown name into an error, so the lint group is allowed too.
+#[allow(unknown_lints)]
 #[allow(clippy::unused_async_trait_impl)]
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for OpenCodifierServer {
