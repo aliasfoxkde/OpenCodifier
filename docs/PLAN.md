@@ -381,14 +381,43 @@ with measurement, not opinion.
   block their configs declare; GGUF conversion needs llama.cpp's
   `--no-mtp` flag (converted locally to bf16, 1.5 GB, clean export).
 
+- **Extension 3 (2026-09-27, full sweep — 41 runs).** Quant curves
+  (2B and 4B UD/k-quant ladders), a 9B MoE, tiny decoders, embedding and
+  decision-model references, a fork without a decision arm, and an
+  external Jev-class tune moved the tier scheme again (D16 amended ×3):
+  **MiMo-V2.6-9B Q3_K_S is the new frontier** (0.817, ECE 0.048, and the
+  first arm over the 0.50 relational ceiling at 0.525 — 14.3 s p50, MoE
+  so ~2× 4B latency), the **interactive reference moves to
+  Qwen3.5-4B** (Q3_K_S 0.800 / ECE 0.069 @ 6.8 s; UD-Q4_K_XL 0.800 @
+  4.9 s), and the balanced/fast tiers stand. The **2-bit cliff** is
+  0.617 at 4B and 0.383–0.450 at 2B; every ≥3-bit 4B quant is ≥ 0.775.
+  Tiny decoders (≤350M: Granite 0.342, Falcon-90M 0.275/0.267, Gemma
+  0.200, glm5.1-distill 0.250) all land below the 5.3 ms engine layer —
+  never ship them as decision arms. gte-modernbert-base zero-shot
+  (0.575) ties the engine blend with the best non-model relational score
+  (0.50) but ECE 0.330 — the embedding rung cannot gate anything before
+  D15 calibration. **Jev-Style-0.8B-Decision-v3 is an
+  interface-mismatch row, not a model-quality row** (0.217 / ECE 0.408 /
+  chat 0.0): its trained readout is per-option verdict slots
+  (`h·(w_yes − w_no)` at `->` positions with shipped group temperatures),
+  so both of this harness's readouts sit outside its trained interface —
+  zero transfer measured, native-readout arm is future work. Its
+  ecosystem (lawrence3699/jev-style) is nonetheless the closest external
+  analog to this codebase: decision-gated PreToolUse guard,
+  artifact-embedded group temperatures, automation-at-error-budget eval.
+
 - **Findings.** (1) The task-dependent floor from the reference video
   reproduces exactly: relational_compositional never exceeds 0.50 for
-  any cheap arm, so the confidence gate + escalation is mandatory, not
-  decorative. (2) The ladder's ordering is validated per class: the
+  any cheap arm (the ceiling held across the whole sweep until
+  MiMo-9B Q3_K_S reached 0.525 at 14.3 s/decision — a verifier-tier
+  exception, not an interactive one), so the confidence gate +
+  escalation is mandatory, not decorative. (2) The ladder's ordering is
+  validated per class: the
   lexical engine nearly solves attribute matching at 1/500th the
   latency, embeddings own paraphrase, and only the model adds the
   relational headroom it can. (3) Raw winner probability is NOT
-  calibrated anywhere (ECE 0.057–0.265, and even the best arm has no
+  calibrated anywhere (ECE 0.048–0.626 across the full sweep, and even
+  the best arm has no
   post-hoc calibration fitted) — §73's calibration mandate and D15 are
   confirmed by measurement before any confidence is exposed. (4) The
   constrained decision arm is bit-deterministic run-to-run on every

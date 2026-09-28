@@ -8,21 +8,30 @@ releases may break, and every breaking change is recorded in this file
 
 ## [Unreleased]
 
-Decision-model benchmark (PLAN Phase 13) — built and run:
+Decision-model benchmark (PLAN Phase 13) — built and swept to 41 runs:
 `benchmarks/decision-model/` holds a byte-locked 120-item
 candidate-conditioned suite (metadata_match / lexical_semantic /
-relational_compositional), three measured arms (the engine's lexical
-pipeline, a MiniLM embedding zero-shot, and llama.cpp
-`parallel-decision` constrained scoring across eleven GGUF models), and
-the committed summary + model manifest. **Qwen3.8-4B-Distill is the
-reference pick** (0.767 overall with a perfect 1.00 metadata class, ECE
-0.057 — best calibrated; D16 amended ×2 into a tier scheme), with
-Qwen3.5-2B as the balanced alternative (0.725, relational crown 0.50,
-half the latency) and Qwen3.5-0.8B as the fast tier (0.650 @ 613 ms).
+relational_compositional) and five measured arm types (the engine's
+lexical pipeline, embedding zero-shot, Laya-421M, llama.cpp
+`parallel-decision` constrained scoring across the GGUF board, and
+chat-only screens for forks without a decision arm), with the committed
+summary + model manifest. **D16 amended ×3 into a four-tier scheme:**
+MiMo-V2.6-9B Q3_K_S is the frontier (0.817, ECE 0.048 best, first arm
+over the 0.50 relational ceiling at 0.525 — MoE, 14.3 s p50, verifier
+tier); Qwen3.5-4B is the interactive reference (0.800 @ 4.9–6.8 s,
+superseding Qwen3.8-4B-Distill); Qwen3.5-2B stays balanced (0.725, best
+ECE 0.062) and Qwen3.5-0.8B fast (0.650 @ 613 ms). Measured and
+recorded: the 2-bit cliff (0.617 at 4B), the 9B IQ-quant latency
+reversal, the ≤350M tiny-decoder graveyard, and Jev-Style-0.8B-Decision-v3
+as an interface-mismatch row (0.217 — verdict-slot readout, zero
+transfer to candidate-id path scoring; labeled in the summary).
 Raw winner probability measured uncalibrated everywhere
-(ECE 0.057–0.265), so D15 calibration still blocks any confidence
-exposure, and the relational class (≤ 0.50 for every cheap arm) stays
-escalation territory.
+(ECE 0.048–0.626), so D15 calibration still blocks any confidence
+exposure, and the relational class stays escalation territory for
+everything interactive. Runner hardening: per-request `--timeout`
+(9B tails exceeded the old fixed 600 s and killed arms mid-run),
+chat-only screens included in the summary, and per-run caveat
+annotations.
 
 ## [0.1.1] — 2026-09-26
 
