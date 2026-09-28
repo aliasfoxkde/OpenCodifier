@@ -8,7 +8,7 @@ per artifact, D14). The charts in [`charts/`](charts/) are rendered by
 [`../runner/plot.py`](../runner/plot.py) directly from those run JSONs —
 they are a view of the record, never a source.
 
-**Status: 47 runs (2026-09-25 → 2026-09-28).** Binding tier picks are in
+**Status: 48 runs (2026-09-25 → 2026-09-28).** Binding tier picks are in
 `docs/DECISIONS.md` D16 (amended ×3, extended ×1); this report is the
 evidence behind them.
 
@@ -147,6 +147,7 @@ on-disk MiB at sweep time.
 | engine builtin-lexical | — | 0.88 / 0.23 / 0.35 | 0.483 | 0.115 | **5.3 ms** | yes |
 | embed gte-modernbert-base | — | 0.45 / 0.78 / 0.50 | 0.575 | 0.330 | 3374.8 ms* | yes |
 | embed gte-modernbert-onnx-fp32 | 596 | 0.45 / 0.78 / 0.50 | 0.575 | 0.330 | 811.4 ms* | yes |
+| embed gte-modernbert-onnx-q4-b32 | 226 | 0.47 / 0.75 / 0.50 | 0.575 | 0.330 | 815.7 ms* | yes |
 | embed gte-modernbert-onnx-int8 | 149 | 0.28 / 0.78 / 0.28 | 0.442 | 0.233 | 674.1 ms* | yes |
 | embed embeddinggemma-300M-Q8_0 | 319 | 0.62 / 0.62 / 0.25 | 0.500 | 0.256 | 634.9 ms* | yes |
 | embed minilm-l6-v2 | — | 0.30 / 0.62 / 0.35 | 0.425 | 0.172 | 107.0 ms* | yes |
@@ -301,6 +302,27 @@ moves to ONNX fp32** — same numbers as torch, 4.2× the speed — and the
 MiniLM arm's 107 ms/item (8 threads) remains the small/fast option of
 the rung. Thread-count confound noted in threats (#11).
 
+**Blockwise int4 arm (2026-09-28, the "Q4_0" question).** ORT 1.30's
+`MatMulNBits` quantizer (block_size 32, asymmetric, 4-bit — mechanically
+GGUF's Q4_0) on the same fp32 graph produces a 226 MB model (2.6× down
+from 596 MB) that **scores 0.575 / ECE 0.330 — blended, per-class
+(0.47-0.75-0.50), and ECE identical to fp32 to the digit — at
+815.7 ms/item, i.e. no speedup at all** (+0.5% vs fp32's 811.4). Two
+asymmetric results: (a) unlike dynamic int8 (0.442), blockwise 4-bit
+costs *nothing* in quality — per-32-block affine scales survive encoder
+weight distributions that per-channel dynamic int8 destroyed, and the
+word-embedding Gather is untouched either way (46 fp32 MatMuls in the
+attention path stay fp32); (b) the CPU `MatMulNBits` kernel does not
+beat fp32 GEMM at this shape (hidden 768, ≤256-token sequences,
+batch 1, AVX2 host) — dequant overhead cancels the 4× weight-bandwidth
+gain, so the "4-bit is faster" intuition is LLM-decode-shaped, not
+encoder-GEMM-shaped. q4f16 (int4 weights, fp16 activations) is not
+testable on this host: ORT's 4-bit op has no fp16-compute CPU path —
+that format belongs to QNN/CoreML-class EPs. Verdict: **fp32 stays the
+rung's runtime; the 226 MB q4-b32 build is a free memory fallback**
+(identical quality, 2.6× smaller) if a deployment is RAM-bound, never a
+speed play. Finding F21, threat #12 (quantizer op coverage).
+
 ## Findings
 
 - **F1 — Tier scheme (D16 ×3).** Four measured tiers: MiMo-9B Q3_K_S
@@ -406,6 +428,17 @@ the rung. Thread-count confound noted in threats (#11).
   to load outright (exporter defect). Runtimes and quant schemes are
   per-rung empirical questions — the ladder's "cheapest reliable
   mechanism" rule extends to the runtime layer.
+- **F21 — Blockwise 4-bit is quality-free and speed-free on the CPU
+  encoder rung.** ORT MatMulNBits (block 32, asymmetric — the Q4_0
+  analog) on gte: 0.575 / ECE 0.330 identical to fp32 to the digit at
+  226 MB (2.6× smaller) and +0.5% latency — memory fallback, not a
+  speed play. The int8 collapse (F20) is therefore a *scheme* failure,
+  not a "quantization kills encoders" fact: per-32-block affine scales
+  preserve what per-channel dynamic int8 destroyed. And the CPU
+  MatMulNBits kernel does not beat fp32 GEMM at batch-1 encoder shapes
+  — dequant overhead cancels weight-bandwidth savings, so "4-bit is
+  faster" is LLM-decode intuition that does not transfer. q4f16 is
+  untestable here (no fp16-compute CPU path in ORT's 4-bit op).
 
 ## Threats to validity
 
@@ -445,6 +478,10 @@ the rung. Thread-count confound noted in threats (#11).
     threads; the gte/gemma arms at 4 to match the torch reference).
     Cross-arm embed latency comparisons carry that factor; the bake-off
     verdict (F20) only compares arms run at identical thread counts.
+12. **MatMulNBits op coverage.** The int4 quantizer rewrites MatMul
+    nodes only — 46 attention-path MatMuls stay fp32 and the embedding
+    Gather is untouched — so the 226 MB q4 arm is not a whole-graph
+    4-bit result, and its numbers say nothing about fully-int4 encoders.
 
 ## Reproduction
 
@@ -503,3 +540,9 @@ hash is a changed artifact and invalidates the row (D14).
   (0.500 / ECE 0.256 / 634.9 ms; `llamacpp` backend added to
   run_embed.py), fp16 export unloadable and skipped. No tier changes
   (D16 amended ×6).
+- **2026-09-28 (blockwise int4 arm)** — 48 runs: gte ONNX q4-b32 (the
+  Q4_0-analog MatMulNBits build) scores fp32-identical blended/per-class/
+  ECE at 226 MB with no speedup — quality-free and speed-free (F21);
+  q4f16 untestable on the CPU host (no fp16-compute path). No tier
+  changes (D16 amended ×7); fp32 stays the rung's runtime, q4-b32 is the
+  RAM-bound fallback.

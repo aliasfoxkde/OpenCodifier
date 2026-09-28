@@ -8,7 +8,7 @@ releases may break, and every breaking change is recorded in this file
 
 ## [Unreleased]
 
-Decision-model benchmark (PLAN Phase 13) — built and swept to 47 runs:
+Decision-model benchmark (PLAN Phase 13) — built and swept to 48 runs:
 `benchmarks/decision-model/` holds a byte-locked 120-item
 candidate-conditioned suite (metadata_match / lexical_semantic /
 relational_compositional) and measured arm types (the engine's
@@ -39,7 +39,11 @@ gte ONNX-fp32 ties torch to the digit at 4.2× the CPU speed (811 ms vs
 3375 ms per item) and becomes the rung's runtime; int8 dynamic
 quantization rejected (0.442 for −17% latency); EmbeddingGemma-300M
 Q8_0 via llama.cpp recorded (0.500 / ECE 0.256); fp16 export unloadable
-(REPORT F20). Raw winner probability measured uncalibrated everywhere
+(REPORT F20); blockwise int4 (the Q4_0 analog via ORT MatMulNBits,
+block 32) measured quality-free AND speed-free — 0.575 / ECE 0.330
+identical to fp32 at 226 MB with no latency gain, so fp32 stays the
+rung's runtime and the q4 build is the RAM-bound fallback (REPORT F21;
+q4f16 untestable on CPU). Raw winner probability measured uncalibrated everywhere
 (ECE 0.048–0.626), so D15 calibration still blocks any confidence
 exposure, and the relational class stays escalation territory for
 everything interactive. Runner hardening: per-request `--timeout`
