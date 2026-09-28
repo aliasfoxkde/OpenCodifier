@@ -736,6 +736,14 @@ focused decision is weak.
 Backlog items that produce designs rather than code land here; each names
 its doc of record.
 
+- **Hosted API tier (task #41)** — designed, 2026-09-28:
+  `docs/HOSTED_TIER.md`. A deployment mode, not a product mode: the
+  identical binary, edge-owned auth/tenancy/quotas, VPS phases H0
+  (single-principal loopback behind an authenticated edge) → H1
+  (multi-principal, model lanes as workers) → H2 (deferred, saturation-
+  gated), and a cost story priced only against measured anchors (1.3 ms
+  engine / 613 ms fast / 4.9 s reference; $0.028–0.17/Mtok value anchor
+  from the Amortyx receipts).
 - **Amortyx integration (PLANNING.md §60–§62, task #40)** — designed,
   2026-09-28: `docs/INTEGRATION_AMORTYX.md`. Router decisions as typed IR
   (`amortyx.task_complexity` et al., §63 registry shape), ladder/latency
