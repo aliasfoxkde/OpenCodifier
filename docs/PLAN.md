@@ -730,3 +730,18 @@ focused decision is weak.
   (long-state `decide --trace --focus-budget`); fmt/clippy (1.98 +
   CI-exact 1.90)/test/doc/deny green; generator + suite + REPORT
   recorded in the benchmark.
+
+## Integration design notes (designs, not phases)
+
+Backlog items that produce designs rather than code land here; each names
+its doc of record.
+
+- **Amortyx integration (PLANNING.md §60–§62, task #40)** — designed,
+  2026-09-28: `docs/INTEGRATION_AMORTYX.md`. Router decisions as typed IR
+  (`amortyx.task_complexity` et al., §63 registry shape), ladder/latency
+  lane mapping (deterministic rungs only on the hot path), loopback
+  `/v1/decide` wire contract with abstain-degrades-to-heuristic, shadow
+  mode riding Amortyx's existing session-sticky holdout, the VIVERE
+  corpus path as read-only ledger consumer with no production claims,
+  and §62 training with versioned datasets. No code yet by design —
+  implementation follows the shadow-evidence promotion gate.

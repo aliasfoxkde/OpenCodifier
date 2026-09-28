@@ -10,6 +10,10 @@ releases may break, and every breaking change is recorded in this file
 
 ### Added
 
+- Amortyx integration design (`docs/INTEGRATION_AMORTYX.md`, PLANNING
+  §60–§62): router decisions as typed IR, ladder/latency lane mapping,
+  loopback `/v1/decide` contract, shadow mode on Amortyx's holdout, the
+  VIVERE corpus path, and versioned training datasets. Design only.
 - Focused-question extraction (§45, PLAN Phase 16, D18): with a
   `FocusPolicy` configured (`EngineConfig::with_focus`, CLI
   `--focus-budget`), questions on state longer than the token budget are
