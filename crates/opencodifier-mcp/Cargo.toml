@@ -10,9 +10,9 @@ authors.workspace = true
 publish = false
 
 [dependencies]
-opencodifier-core = { path = "../opencodifier-core", version = "0.1.0" }
-opencodifier-engine = { path = "../opencodifier-engine", version = "0.1.0" }
-opencodifier-schema = { path = "../opencodifier-schema", version = "0.1.0" }
+opencodifier-core = { path = "../opencodifier-core", version = "0.2.0" }
+opencodifier-engine = { path = "../opencodifier-engine", version = "0.2.0" }
+opencodifier-schema = { path = "../opencodifier-schema", version = "0.2.0" }
 # D1 pins the MCP SDK: rmcp 2.2. The `server` feature (default) provides the
 # tool router and handler plumbing; `transport-io` adds the stdio transport
 # (tokio stdin/stdout) that `opencodifier mcp serve` runs on.

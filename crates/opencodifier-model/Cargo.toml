@@ -14,9 +14,9 @@ categories = ["science", "text-processing"]
 workspace = true
 
 [dependencies]
-opencodifier-core = { path = "../opencodifier-core", version = "0.1.0" }
-opencodifier-engine = { path = "../opencodifier-engine", version = "0.1.0" }
-opencodifier-runtime = { path = "../opencodifier-runtime", version = "0.1.0" }
+opencodifier-core = { path = "../opencodifier-core", version = "0.2.0" }
+opencodifier-engine = { path = "../opencodifier-engine", version = "0.2.0" }
+opencodifier-runtime = { path = "../opencodifier-runtime", version = "0.2.0" }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

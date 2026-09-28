@@ -14,7 +14,7 @@ categories = ["data-structures", "parser-implementations"]
 workspace = true
 
 [dependencies]
-opencodifier-core = { path = "../opencodifier-core", version = "0.1.0" }
+opencodifier-core = { path = "../opencodifier-core", version = "0.2.0" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
