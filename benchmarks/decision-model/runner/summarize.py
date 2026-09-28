@@ -93,6 +93,8 @@ def main() -> int:
         ece_s = f"{ece:.3f}" if ece is not None else "—"
         p50_s = f"{p50:.1f}ms" if p50 is not None else "—"
         label = f"{name} (chat screen)" if d.get("chat_only_screen") else name
+        if d.get("caveat"):
+            label += " (caveat)"
         lines.append(
             f"| {label} | {fmt_class_table(m['accuracy_by_class'])} | {acc:.3f} "
             f"| {ece_s} | {p50_s} | {det_s} |"
@@ -107,6 +109,8 @@ def main() -> int:
 
     lines += ["", "## Notes", ""]
     for name, d in results:
+        if d.get("caveat"):
+            lines.append(f"- `{name}` caveat: {d['caveat']}")
         if d.get("chat"):
             cm = d["chat"]["metrics"]
             lines.append(

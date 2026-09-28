@@ -189,9 +189,56 @@ versioned artifacts alongside model manifests, referenced by
 `calibrated_confidence = raw` with `calibration_version = "none"`, so
 the cache never conflates calibrated and uncalibrated results.
 
-## D16 — Decision-model pick: Qwen3.8-4B-Distill (measured, Phase 13; amended ×2)
+## D16 — Decision-model picks: tier scheme (measured, Phase 13; amended ×3)
 
-**Decision (amended 2026-09-26, second pass — Qwen3.8 distills):**
+**Decision (amended 2026-09-27, third pass — full-sweep frontier):** the
+tier scheme gains a frontier tier and the interactive reference moves:
+
+- **Frontier / verifier tier: MiMo-V2.6-Distill-Qwen-9B Q3_K_S** (sha256
+  in the manifest) — **0.817 overall (1.00 / 0.93 / 0.525), ECE 0.048 —
+  best calibrated measured, and the first arm over the 0.50 relational
+  ceiling.** p50 14.3 s, 4.26 GB, bit-deterministic. MiMo-V2.6 is MoE
+  (its RL trainer's own notes say so), which is why 9B runs at ~2× 4B
+  latency, not dense-9B ~2.3×. Slot: verifier stage and bulk/offline
+  decisions where 14 s/decision fits the D9 budget — never the
+  interactive path. Q3_K_M ties its accuracy (0.817) but loses
+  calibration (0.081) and latency (18.4 s); IQ3_XXS trades to 0.783 at
+  10.6 s.
+- **Reference (interactive): Qwen3.5-4B Q3_K_S** — 0.800 (1.00 / 0.95 /
+  0.45), ECE 0.069, p50 6.8 s; **UD-Q4_K_XL is the fastest 0.800**
+  (4.9 s, ECE 0.074). This supersedes Qwen3.8-4B-Distill (0.767) on
+  accuracy at the same latency class. Every ≥3-bit 4B quant measured is
+  ≥ 0.775; the **2-bit cliff is 0.617** (UD-IQ2_XXS; 0.383–0.450 at 2B)
+  — quants at or below 2 bits are never shippable for decisions.
+- **Balanced: Qwen3.5-2B** unchanged (0.725, best 2B-class ECE 0.062,
+  relational 0.50, p50 1.7 s); its UD-Q6_K_XL variant is the
+  accuracy-lead option (0.758, ECE 0.079, +25% latency) when a decision
+  point needs it.
+- **Fast: Qwen3.5-0.8B** unchanged (0.650 @ 613 ms, ECE 0.074).
+- **Measured out:** every ≤350M decoder (Granite-350M 0.342, Falcon-90M
+  0.275/0.267, Gemma-270M 0.200, glm5.1-distill 0.250 — all below the
+  5.3 ms engine layer they would need to justify); gte-modernbert-base
+  zero-shot (0.575, ties the engine blend, best relational 0.50 at
+  3.4 s — but ECE 0.330, unusable as a gate before D15 calibration) and
+  Laya-421M (0.475) stay embedding-rung references, not decision arms.
+- **Interface-mismatch row (not a quality rejection):**
+  Jev-Style-0.8B-Decision-v3 scores 0.217 / ECE 0.408 / chat 0.0 through
+  this harness because its trained readout is per-option verdict slots
+  (`h·(w_yes − w_no)` at each option's `->` position, shipped group
+  temperatures) — candidate-id token paths and JSON answers are outside
+  its trained interface, and zero transfer was measured. A native
+  verdict-slot readout is the #25 arm type. (The surrounding jev-style
+  project remains the closest external analog to this codebase: a
+  decision-gated PreToolUse guard, artifact-embedded group temperatures
+  with in-artifact fit quality, automation-at-error-budget eval —
+  reference designs for #40 and D15/#34.)
+- **Latency findings:** importance-matrix quants are not uniformly
+  slower — at 9B, IQ3_XXS (10.6 s) beats Q3_K_S (14.3 s), inverting the
+  4B pattern (IQ3_XXS 15.7 s vs K_S 6.8 s there). K2-Horizon (fork
+  without `/v1/decision`) screens chat-only: 7B 0.800 / 4B 0.700 /
+  1B 0.725 at 9.1 s sampled p50 — labeled non-comparable in the summary.
+
+**Second pass (2026-09-26 — Qwen3.8 distills):**
 **Qwen3.8-4B-Distill** (empero-ai, Q4_K_M GGUF, sha256 `dec96e8c…`, see
 `benchmarks/decision-model/results/models.manifest.json`) is the reference
 model for the candidate-conditioned decision layer: **0.767 overall
@@ -225,7 +272,12 @@ Provenance findings folded into the record: (a) both community
 (D14); (b) their uploads omit the MTP block declared in config — GGUF
 conversion requires llama.cpp's `--no-mtp`.
 
-*Amendment history:* 2026-09-26 first pass — **Qwen3.5-2B**, moved from
+*Amendment history:* 2026-09-27 third pass — tier scheme gains the
+MiMo-9B Q3_K_S frontier (first model over the relational ceiling), the
+interactive reference moves from Qwen3.8-4B-Distill to Qwen3.5-4B
+(K-quant or UD-Q4_K_XL), the 2-bit cliff and the 9B IQ-quant latency
+reversal are recorded, and Jev-Style-0.8B is entered as an
+interface-mismatch row. 2026-09-26 first pass — **Qwen3.5-2B**, moved from
 Gemma because a 3-item gap was noise while calibration (0.062 vs 0.236),
 relational (0.50 vs 0.45), half the parameters, and ~57% of the latency
 were not. 2026-09-25 original — **gemma-3-4b-it** (Q4_K_M GGUF, sha256
@@ -240,14 +292,16 @@ ONNX re-entry gate is D2. Any backend that can produce candidate-conditioned
 logits is admissible; the pick names the weights, not the server.
 
 **Conditions carried forward (blocking exposure, not the pick):**
-- Raw winner probability is uncalibrated at every model (ECE 0.057–0.265
-  across the thirteen arms; even the best, Qwen3.8-4B-Distill, has had no
-  post-hoc calibration fitted). D15 calibration must be fit per class
-  before any confidence leaves the runtime (§73 confirmed by measurement).
-- relational_compositional tops out at 0.50 (Qwen3.5-2B); the reference
-  pick scores 0.35 there — that class stays escalation/verifier territory
-  regardless of model choice, which is precisely why a relational-weak
-  reference is tolerable.
+- Raw winner probability is uncalibrated at every model (ECE 0.048–0.626
+  across the forty-one runs; even the best, MiMo-9B Q3_K_S at 0.048, has
+  had no post-hoc calibration fitted). D15 calibration must be fit per
+  class before any confidence leaves the runtime (§73 confirmed by
+  measurement).
+- relational_compositional held at ≤ 0.50 for every arm until MiMo-9B
+  Q3_K_S reached 0.525 at 14.3 s/decision; every interactive-tier pick
+  scores 0.35–0.50 there — that class stays escalation/verifier
+  territory for anything latency-bounded, which is precisely why a
+  relational-weak interactive reference is tolerable.
 - The ladder holds: the lexical engine at 5.3 ms keeps metadata_match
   (0.88 vs 1.00 for the best model at ~700× the latency); a model call is
   only bought when cheaper layers abstain.
