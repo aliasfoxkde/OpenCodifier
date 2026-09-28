@@ -8,7 +8,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use opencodifier_engine::{EngineConfig, EngineHandle};
+use opencodifier_engine::EngineHandle;
 use opencodifier_http::ServerConfig;
 
 use crate::args::ServeArgs;
@@ -16,7 +16,7 @@ use crate::error::{
     CODE_BIND_REQUIRES_ALLOW_REMOTE, CODE_INVALID_BIND, CODE_POLICY_INAPPLICABLE,
     CODE_RUNTIME_FAILED, CliError,
 };
-use crate::{graph, input, output};
+use crate::{input, output, runtime};
 
 /// Runs `serve`, blocking until the server shuts down on `Ctrl-C`.
 ///
@@ -58,10 +58,7 @@ fn assemble(args: &ServeArgs) -> Result<(SocketAddr, ServerConfig, EngineHandle)
         ));
     }
 
-    let config = match &args.graph {
-        Some(path) => EngineConfig::new(graph::load(path)?),
-        None => EngineConfig::with_default_pipeline()?,
-    };
+    let config = runtime::engine_config(args.graph.as_deref(), args.focus_budget)?;
 
     if let Some(path) = &args.policy {
         report_policy_limitation(path)?;
@@ -112,7 +109,7 @@ mod tests {
     }
 
     fn args(bind: &str, allow_remote: bool, policy: Option<PathBuf>) -> ServeArgs {
-        ServeArgs { bind: bind.to_string(), allow_remote, graph: None, policy }
+        ServeArgs { bind: bind.to_string(), allow_remote, graph: None, focus_budget: None, policy }
     }
 
     #[test]

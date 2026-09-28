@@ -115,6 +115,7 @@ pub mod engine;
 pub mod error;
 pub mod executor;
 pub mod facts;
+pub mod focus;
 pub mod graph;
 pub mod handle;
 pub mod lexical;
@@ -131,6 +132,9 @@ pub use engine::{DecisionEngine, EngineConfig};
 pub use error::{EngineError, EngineResult};
 pub use executor::RunReport;
 pub use facts::{Health, RelationalFact};
+pub use focus::{
+    DEFAULT_BUDGET_TOKENS, FocusPolicy, FocusSummary, FocusView, estimate_tokens, focus,
+};
 pub use graph::{DecisionGraph, GraphDocument, NodeKind, NodeSpec};
 pub use handle::{EngineHandle, EngineHealth};
 pub use lexical::{Bm25Index, negation_polarity, softmax, tokenize};

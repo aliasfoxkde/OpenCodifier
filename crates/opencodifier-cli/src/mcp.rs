@@ -9,11 +9,11 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use opencodifier_engine::{EngineConfig, EngineHandle};
+use opencodifier_engine::EngineHandle;
 
 use crate::args::{McpArgs, McpSubcommand};
 use crate::error::{CODE_MCP_SESSION_FAILED, CODE_RUNTIME_FAILED, CliError};
-use crate::graph;
+use crate::runtime;
 
 /// Runs `mcp`.
 ///
@@ -23,7 +23,7 @@ use crate::graph;
 /// [`CliError::engine`] when the runtime or the MCP session itself fails.
 pub(crate) fn run(args: &McpArgs) -> Result<(), CliError> {
     match &args.command {
-        McpSubcommand::Serve { graph } => serve(graph.as_deref()),
+        McpSubcommand::Serve { graph, focus_budget } => serve(graph.as_deref(), *focus_budget),
     }
 }
 
@@ -34,12 +34,8 @@ pub(crate) fn run(args: &McpArgs) -> Result<(), CliError> {
 /// [`CliError::input`] for a rejected `--graph` document, and
 /// [`CliError::engine`] when the runtime cannot be assembled or the MCP
 /// session fails.
-fn serve(graph_path: Option<&Path>) -> Result<(), CliError> {
-    let config = match graph_path {
-        Some(path) => EngineConfig::new(graph::load(path)?),
-        None => EngineConfig::with_default_pipeline()?,
-    };
-    let handle = EngineHandle::lexical(config)?;
+fn serve(graph_path: Option<&Path>, focus_budget: Option<usize>) -> Result<(), CliError> {
+    let handle = EngineHandle::lexical(runtime::engine_config(graph_path, focus_budget)?)?;
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|error| CliError::engine(CODE_RUNTIME_FAILED, error.to_string()))?;
     runtime

@@ -56,6 +56,7 @@ Remaining risks tracked in §6 below.
 | 13 | Decision-model benchmark: pick the model | **done** — `benchmarks/decision-model/`, thirteen arms; Qwen3.8-4B-Distill reference pick, tiered alternatives (D16, amended ×2) |
 | 14 | Confidence truthfulness: D15 calibration + §19 gates | **done** (2026-09-28) — `Calibration` trait + fitted temperature artifacts for the tier arms; the dead OOD channel is live and policy-gated |
 | 15 | §43 relational solver: exact proofs over extracted facts | **done** (2026-09-28) — `facts` + `relational` in the engine, default zero-ML stack; engine arm 0.483 → 0.683 @ 1.3 ms, relational 0.950 (D16 ×8) |
+| 16 | §45 focused-question extraction + reverse escalation | **done** (2026-09-28) — `focus` in the engine, `--focus-budget` on the CLI; long-suite A/B answer-identical on 120/120, views p50 93 tokens (D18) |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
@@ -668,3 +669,64 @@ aegis --format json scan --file . --baseline .aegis/baseline.json   # 0 new
 | MCP beta churn | server rewrite | stable 2025-11-25 via rmcp 2.2 only (D1) |
 | Coverage dip while scaffolding crates | gate failure | each phase lands with its tests; coverage task runs per phase, not once at the end |
 | GitHub mirror red | noise, not signal | harness policy: GitForge is the pipeline of record |
+
+## Phase 16 — §45 focused-question extraction + reverse escalation (done, 2026-09-28)
+
+A decision-model rung pays per token, and the cheap rungs before it read
+whole state text. When a state is much longer than the decision needs,
+the engine now builds a per-question **view**: the sentences that carry
+lexical evidence for the question and its candidates, in original order,
+within a token budget — and escalates back to the full state when the
+focused decision is weak.
+
+- **The extractor (`focus.rs`), deterministic and model-free.** Sentence
+  split on `.`/`!`/`?`/newline with delimiters attached (a kept view is
+  the original prose byte for byte); BM25 over sentence documents with
+  the question text plus every candidate description as the query, plus
+  a verbatim candidate-id mention bonus (the strongest relevance signal
+  there is). Sentences with zero evidence are never selected; facts are
+  structural and are never touched — only the text view shrinks.
+- **Recall-oriented budget.** The budget bounds the *median* view, not
+  every view: a decisive sentence longer than the whole budget is kept
+  whole rather than amputated, and when no sentence shows positive
+  evidence the extraction is blind and **declines** — the view is the
+  full state. Token estimate is the engine's deterministic bytes-over-4
+  (no tokenizer exists; D2); the estimate only has to be stable and
+  monotone, because it is a budget, not a measurement.
+- **Reverse escalation, at most once, before any gate.** When extraction
+  engaged and the focused distribution's top probability is below the
+  request policy's `min_confidence`, or its entropy trips the §19
+  entropy ceiling (disabled by default), the engine re-decides on the
+  full state *before* the confidence gate or the verifier sees an
+  answer. The fallback is therefore invisible to the gate but visible
+  in the trace.
+- **Cache honesty (D6/§64).** A focus policy folds into the cache
+  identity as `|focused-v1@<budget_tokens>` on the classifier's model
+  id, so changing the budget or turning focusing off invalidates cached
+  decisions without caller bookkeeping.
+- **Surface.** `FocusPolicy`/`FocusSummary`/`FocusView` +
+  `engine::EngineConfig::with_focus`; `--focus-budget TOKENS` on
+  `opencodifier decide`/`serve`/`mcp serve` (one shared
+  `runtime::engine_config` assembly). Trace detail keys
+  `focus_engaged/kept/total/tokens/escalated` appear only when a policy
+  is configured; `RunReport::focus` counts (`decided/engaged/escalated`)
+  are all zero without one, and `execution_json` grows its `"focus"`
+  key only when `decided > 0` — unfocused projections are byte-identical
+  to their pre-focus form.
+- **Measured (long-suite A/B through the real binary).**
+  `suite/suite_long.json` (derived, deterministic, ~3,681-token states)
+  run twice through `opencodifier serve` — full state vs
+  `--focus-budget 512`: **answer-identical on all 120 items**
+  (0.683 blended, ECE 0.094, same per-class, determinism replay exact on
+  both sides). 84/120 items extracted (views p50 **93 tokens**, ≤ 511,
+  out of ~145-sentence states); 36/120 declined blind (contexts with no
+  query vocabulary) and still matched; 42/84 engaged views escalated and
+  changed nothing. Extraction costs ~2.5 ms/item p50 at this scale
+  while deciding on ~4% of the state. REPORT.md carries the full A/B.
+- **Accept (met):** 12 `focus` unit tests (budget semantics, recall
+  rules, determinism, hostility, decline paths) + 7 engine integration
+  tests (engagement, no-escalation, escalation to the full state, cache
+  identity separation, projection byte-stability) + 1 CLI e2e
+  (long-state `decide --trace --focus-budget`); fmt/clippy (1.98 +
+  CI-exact 1.90)/test/doc/deny green; generator + suite + REPORT
+  recorded in the benchmark.

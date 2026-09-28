@@ -156,7 +156,7 @@ on-disk MiB at sweep time.
 
 | arm | size | acc (meta/lex/rel) | acc | ECE | p50 | det |
 |---|---|---|---|---|---|---|
-| engine builtin-lexical | — | 0.88 / 0.23 / 0.35 | 0.483 | 0.115 | **5.3 ms** | yes |
+| engine default (relational over lexical) | — | 0.88 / 0.23 / 0.95 | 0.683 | 0.094 | **1.3 ms** | yes |
 | embed gte-modernbert-base | — | 0.45 / 0.78 / 0.50 | 0.575 | 0.330 | 3374.8 ms* | yes |
 | embed gte-modernbert-onnx-fp32 | 596 | 0.45 / 0.78 / 0.50 | 0.575 | 0.330 | 811.4 ms* | yes |
 | embed gte-modernbert-onnx-q4-b32 | 226 | 0.47 / 0.75 / 0.50 | 0.575 | 0.330 | 815.7 ms* | yes |
@@ -203,6 +203,50 @@ on-disk MiB at sweep time.
 | qwen2.5-3b-instruct | 2008 | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2.58 s | yes |
 
 \* embedding rows report mean ms/item (`ms_per_item`), not a p50 block.
+
+### Long-context A/B: focused extraction (engine arm, §45)
+
+The committed suite's contexts are short (p50 ≈ 20 words), so focused
+extraction never engages on them. `suite/suite_long.json` (derived by
+`runner/make_long_suite.py`, deterministic, seed-inherited) pads every
+item's context to ~3,681 estimated tokens (p50) with distractor prose
+whose vocabulary is disjoint — asserted, not assumed — from the item's
+question, context, and candidate descriptions, and that names no
+candidate id and matches none of the fact grammar's patterns. Gold
+answers and candidates are unchanged. The A/B runs the same engine arm
+on the same padded suite twice, differing only in `--focus-budget`:
+
+| arm | context | acc (meta/lex/rel) | acc | ECE | p50 |
+|---|---|---|---|---|---|
+| engine default, full state | ~3,681 tok | 0.88 / 0.23 / 0.95 | 0.683 | 0.094 | 6.70 ms |
+| engine default, `--focus-budget 512` | views ≤ 512 tok | 0.88 / 0.23 / 0.95 | 0.683 | 0.094 | 9.22 ms |
+
+**Answer-identical on all 120 items** — the same choices, the same
+per-class accuracy, the same ECE, full determinism on both sides. The
+engagement tally explains why, and it is the interesting number:
+
+- **84/120 items extracted.** Engaged views kept a p50 of **93 tokens**
+  (min 12, max 511) out of ~3,681-token states of ~145 sentences (p50) —
+  the decision reads ~4% of the state.
+- **36/120 items declined to the full state.** All are lexical_semantic
+  items whose short prose context ("I think I was billed twice for the
+  same month.") shares *no* content vocabulary with the question or the
+  candidates — extraction is blind there, and blind extraction declines
+  rather than gambling. Every one of those 36 items still answered
+  correctly-identically to its full-state run.
+- **42/84 engaged views escalated** to the full state (the lexical
+  rung's softmax confidence sits below the 0.80 policy gate — a real
+  model rung would clear it more often). Escalation changed no answers;
+  it is the recall backstop doing nothing expensively.
+- Extraction costs ~2.5 ms/item p50 at this scale (BM25 over ~145
+  sentences) while deciding on ~40× fewer tokens.
+
+What this A/B does **not** claim: it measures benign dilution (vocab
+-disjoint filler), not adversarial distractors. A distractor engineered
+to out-score the decisive sentence on BM25 could still pull a view away
+from the evidence — which is precisely what reverse escalation exists to
+catch, and why the extractor stays deterministic and inspectable in the
+trace (`focus_engaged/kept/total/tokens/escalated`).
 
 ### Chat-only screens (sampled decode — non-comparable)
 
@@ -537,6 +581,14 @@ python3 runner/run_engine.py --binary target/release/opencodifier \
 python3 runner/run_embed.py --model-dir /path/to/minilm --out "$RUNS/embed__minilm.json"
 python3 runner/run_laya.py --out "$RUNS/laya__en.json"
 
+# long-context focused-extraction A/B (§45); regenerate the suite first
+python3 runner/make_long_suite.py
+python3 runner/run_engine.py --binary target/release/opencodifier \
+    --suite suite/suite_long.json --out "$RUNS/engine__lexical__long__full.json"
+python3 runner/run_engine.py --binary target/release/opencodifier \
+    --suite suite/suite_long.json --focus-budget 512 \
+    --out "$RUNS/engine__lexical__long__focused.json"
+
 # merge + render (then copy summary.md, models.manifest.json, charts/ in-tree)
 python3 runner/summarize.py --results-dir "$RUNS"
 python3 runner/plot.py --results-dir "$RUNS" --models-dir "$MODELS"
@@ -592,3 +644,11 @@ hash is a changed artifact and invalidates the row (D14).
   (D16 amended ×8); the retired `builtin-lexical-v1` calibration
   artifact was replaced by the no-artifact finding for the bimodal
   proof/delegate stack (CALIBRATION.md).
+- **2026-09-28 (focused-extraction A/B)** — +2 engine-suite runs on the
+  derived long suite (`suite_long.json`, contexts ~3,681 est. tokens):
+  the engine with `--focus-budget 512` is **answer-identical to the full
+  -state run on all 120 items** (0.683 blended, ECE 0.094, det both
+  sides) while engaged views read a p50 of 93 tokens; 36 items declined
+  blind to the full state, 42 of 84 engaged views escalated and changed
+  nothing (§45 feature, PLAN Phase 16). Extraction costs ~2.5 ms/item
+  p50 at this context scale. No board rows change; no tier changes.

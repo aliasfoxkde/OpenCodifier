@@ -8,7 +8,18 @@ releases may break, and every breaking change is recorded in this file
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- Focused-question extraction (§45, PLAN Phase 16, D18): with a
+  `FocusPolicy` configured (`EngineConfig::with_focus`, CLI
+  `--focus-budget`), questions on state longer than the token budget are
+  decided on a deterministic BM25 view of the evidence-bearing sentences,
+  with reverse escalation to the full state when the focused decision is
+  weak and a blind-decline rule that never gambles on an empty view.
+  Focus policies fold into cache identity (`focused-v1@<budget>`);
+  unfocused runs have no focus surface anywhere in the trace or report
+  projections. Long-suite A/B: answer-identical to full-state decisions
+  on 120/120 items with views at a p50 of 93 tokens.
 
 ## [0.2.0] — 2026-09-28
 

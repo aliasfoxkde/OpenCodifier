@@ -112,6 +112,13 @@ pub struct DecideArgs {
     #[arg(long)]
     pub trace: bool,
 
+    /// Decide each question on a focused view of at most this many
+    /// estimated tokens when the state exceeds it, escalating to the full
+    /// state when the focused decision is weak. Without the flag the full
+    /// state is always decided on.
+    #[arg(long, value_name = "TOKENS")]
+    pub focus_budget: Option<usize>,
+
     /// Exit 0 when the outcome is not decisive, instead of 2.
     #[arg(long)]
     pub abstain_is_success: bool,
@@ -153,6 +160,13 @@ pub struct ServeArgs {
     #[arg(long, value_name = "PATH")]
     pub graph: Option<PathBuf>,
 
+    /// Decide each question on a focused view of at most this many
+    /// estimated tokens when the state exceeds it, escalating to the full
+    /// state when the focused decision is weak. Without the flag the full
+    /// state is always decided on.
+    #[arg(long, value_name = "TOKENS")]
+    pub focus_budget: Option<usize>,
+
     /// JSON `DecisionPolicy`. Accepted and validated for symmetry with
     /// `decide`, but policy is per-request in the canonical IR, so no
     /// engine-level override exists: this flag does not change how serving
@@ -178,6 +192,13 @@ pub enum McpSubcommand {
         /// Graph JSON document replacing the built-in default pipeline.
         #[arg(long, value_name = "PATH")]
         graph: Option<PathBuf>,
+
+        /// Decide each question on a focused view of at most this many
+        /// estimated tokens when the state exceeds it, escalating to the
+        /// full state when the focused decision is weak. Without the flag
+        /// the full state is always decided on.
+        #[arg(long, value_name = "TOKENS")]
+        focus_budget: Option<usize>,
     },
 }
 

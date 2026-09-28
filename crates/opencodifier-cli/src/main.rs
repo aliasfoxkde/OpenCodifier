@@ -29,6 +29,7 @@ mod input;
 mod mcp;
 mod models;
 mod output;
+mod runtime;
 mod serve;
 
 use std::process::ExitCode;

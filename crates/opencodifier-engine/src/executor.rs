@@ -51,8 +51,9 @@ enum NodeOutput {
     Filtered(Vec<NarrowingOutcome>),
     /// Lexical scores for choice questions.
     Scored(Vec<LexicalScores>),
-    /// Distributions and answers for the questions this node decides.
-    Decided(Vec<QuestionDecision>),
+    /// Distributions and answers for the questions this node decides,
+    /// plus the run's focused-extraction counts.
+    Decided(Vec<QuestionDecision>, crate::focus::FocusSummary),
     /// Outcomes after the confidence gate and verifier cascade.
     Resolved(Vec<(QuestionId, DecisionOutcome, Option<bool>)>),
     /// Whether a branch condition held.
@@ -99,6 +100,10 @@ pub struct RunReport {
     pub(crate) skipped: Vec<NodeId>,
     pub(crate) narrowing: Vec<NarrowingOutcome>,
     pub(crate) lexical: Vec<LexicalScores>,
+    /// Focused-extraction counts for the run: all zero when no focus
+    /// policy is configured, so reports of unfocused engines are
+    /// unchanged.
+    pub(crate) focus: crate::focus::FocusSummary,
     pub(crate) outcomes: Vec<(QuestionId, DecisionOutcome)>,
 }
 
@@ -131,6 +136,13 @@ impl RunReport {
     #[must_use]
     pub fn cache_hit(&self) -> bool {
         self.cache_hit
+    }
+
+    /// Focused-extraction counts for this run. All zero when the engine
+    /// runs without a focus policy.
+    #[must_use]
+    pub fn focus(&self) -> crate::focus::FocusSummary {
+        self.focus
     }
 
     /// Nodes skipped by branch short-circuiting, in execution order.
@@ -168,6 +180,9 @@ pub(crate) struct GraphOutcome {
     pub(crate) narrowing: Vec<NarrowingOutcome>,
     pub(crate) lexical: Vec<LexicalScores>,
     pub(crate) skipped: Vec<NodeId>,
+    /// Focused-extraction counts for the run (all zero without a focus
+    /// policy).
+    pub(crate) focus: crate::focus::FocusSummary,
     pub(crate) waves: Vec<Vec<NodeId>>,
     pub(crate) parallel_waves: usize,
     pub(crate) threads: Vec<String>,
@@ -201,6 +216,8 @@ pub(crate) struct Executor<'a> {
     decisions: BTreeMap<QuestionId, QuestionDecision>,
     trace: DecisionTrace,
     skipped: BTreeSet<NodeId>,
+    /// Focused-extraction counts accumulated across decision nodes.
+    focus: crate::focus::FocusSummary,
 
     waves: Vec<Vec<NodeId>>,
     parallel_waves: usize,
@@ -241,6 +258,7 @@ impl<'a> Executor<'a> {
             decisions: BTreeMap::new(),
             trace: DecisionTrace::new(),
             skipped: BTreeSet::new(),
+            focus: crate::focus::FocusSummary::default(),
             waves: Vec::new(),
             parallel_waves: 0,
             threads: BTreeSet::new(),
@@ -426,8 +444,8 @@ impl<'a> Executor<'a> {
                 (NodeOutput::Scored(scored), entries)
             }
             NodeKind::Choice | NodeKind::Boolean | NodeKind::Score => {
-                let (decided, entries) = self.decide_questions(id, spec.kind)?;
-                (NodeOutput::Decided(decided), entries)
+                let (decided, focus, entries) = self.decide_questions(id, spec.kind)?;
+                (NodeOutput::Decided(decided, focus), entries)
             }
             NodeKind::Threshold => {
                 let (resolved, entries) = self.resolve_threshold(id)?;
@@ -510,37 +528,81 @@ impl<'a> Executor<'a> {
         &self,
         id: &str,
         kind: NodeKind,
-    ) -> EngineResult<(Vec<QuestionDecision>, Vec<TraceEntry>)> {
+    ) -> EngineResult<(Vec<QuestionDecision>, crate::focus::FocusSummary, Vec<TraceEntry>)> {
         let mut decided = Vec::new();
         let mut entries = Vec::new();
+        let mut focus = crate::focus::FocusSummary::default();
         for question in self.request.questions() {
             if !Self::wants(kind, question) {
                 continue;
             }
             let Some(narrowed) = self.prepare_question(question) else { continue };
-            let distribution = self.classifier.decide(&self.state, &narrowed)?;
-            let (distribution, clipped) = Self::clip(&distribution, &narrowed)?;
+            // Focused extraction (PLANNING.md §45): when configured and the
+            // state exceeds the budget, the classifier reads a per-question
+            // view; a weak view escalates to the full state before any
+            // gate sees the answer.
+            let view = self
+                .config
+                .focus
+                .map(|policy| crate::focus::focus(&self.state, &narrowed, &policy));
+            let (decide_state, extracted) = match &view {
+                Some(view) => (&view.state, view.extracted),
+                None => (&self.state, false),
+            };
+            let distribution = self.classifier.decide(decide_state, &narrowed)?;
+            let (mut distribution, mut clipped) = Self::clip(&distribution, &narrowed)?;
+            let mut escalated = false;
+            if extracted && Self::escalation_warranted(self.request.policy(), &distribution) {
+                let full = self.classifier.decide(&self.state, &narrowed)?;
+                let (full, full_clipped) = Self::clip(&full, &narrowed)?;
+                distribution = full;
+                clipped = full_clipped;
+                escalated = true;
+            }
             let decision = Self::decide_question(
                 &narrowed,
                 distribution,
                 self.request.policy(),
                 self.config.calibration.as_ref(),
             )?;
-            entries.push(TraceEntry::new(
-                id,
-                [
-                    ("question", FactValue::Text(question.id().to_string())),
-                    ("top", FactValue::Text(decision.distribution.top().key.clone())),
-                    ("probability", FactValue::Float(decision.distribution.top().probability)),
-                    ("calibrated", FactValue::Float(decision.report.calibrated_confidence)),
-                    ("ood", FactValue::Float(decision.report.ood_score)),
-                    ("model", FactValue::Text(self.classifier.model_id().to_owned())),
-                    ("clipped", FactValue::Integer(int(clipped))),
-                ],
-            ));
+            let mut detail = vec![
+                ("question", FactValue::Text(question.id().to_string())),
+                ("top", FactValue::Text(decision.distribution.top().key.clone())),
+                ("probability", FactValue::Float(decision.distribution.top().probability)),
+                ("calibrated", FactValue::Float(decision.report.calibrated_confidence)),
+                ("ood", FactValue::Float(decision.report.ood_score)),
+                ("model", FactValue::Text(self.classifier.model_id().to_owned())),
+                ("clipped", FactValue::Integer(int(clipped))),
+            ];
+            if let Some(view) = &view {
+                detail.push(("focus_engaged", FactValue::Boolean(view.extracted)));
+                detail.push(("focus_kept", FactValue::Integer(int(view.kept_sentences))));
+                detail.push(("focus_total", FactValue::Integer(int(view.total_sentences))));
+                detail.push(("focus_tokens", FactValue::Integer(int(view.estimated_tokens))));
+                detail.push(("focus_escalated", FactValue::Boolean(escalated)));
+            }
+            entries.push(TraceEntry::new(id, detail));
+            // Counts are kept only for engines that focus: an unfocused run
+            // must not grow a focus surface (the report accessor and the
+            // JSON projection both key on `decided > 0`).
+            if self.config.focus.is_some() {
+                focus = focus.record(view.as_ref().is_some_and(|view| view.extracted), escalated);
+            }
             decided.push(decision);
         }
-        Ok((decided, entries))
+        Ok((decided, focus, entries))
+    }
+
+    /// Whether a focused view's distribution is too weak to trust: below
+    /// the policy's accept gate, or flat enough to trip the §19 entropy
+    /// ceiling when one is set. Reverse escalation re-decides on the full
+    /// state rather than shipping a degraded answer.
+    fn escalation_warranted(
+        policy: &opencodifier_core::DecisionPolicy,
+        distribution: &Distribution,
+    ) -> bool {
+        distribution.top().probability < policy.min_confidence()
+            || distribution.entropy() >= policy.entropy_ceiling()
     }
 
     /// Applies the confidence gate and the verifier cascade to every
@@ -796,10 +858,13 @@ impl<'a> Executor<'a> {
                     }
                 }
             }
-            NodeOutput::Decided(decided) => {
+            NodeOutput::Decided(decided, focus) => {
                 for decision in decided {
                     self.decisions.insert(decision.answer.question_id().clone(), decision);
                 }
+                self.focus.decided += focus.decided;
+                self.focus.engaged += focus.engaged;
+                self.focus.escalated += focus.escalated;
             }
             NodeOutput::Resolved(resolved) => {
                 for (id, outcome, agreement) in resolved {
@@ -871,6 +936,7 @@ impl<'a> Executor<'a> {
             narrowing,
             lexical,
             skipped,
+            focus: self.focus,
             waves: std::mem::take(&mut self.waves),
             parallel_waves: self.parallel_waves,
             threads: self.threads.into_iter().collect(),
