@@ -9,6 +9,7 @@ members = [
     "crates/opencodifier-runtime",
     "crates/opencodifier-model",
     "crates/opencodifier-http",
+    "crates/opencodifier-mcp",
     "crates/opencodifier-cli",
 ]
 

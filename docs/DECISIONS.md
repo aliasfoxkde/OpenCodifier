@@ -424,3 +424,46 @@ logits is admissible; the pick names the weights, not the server.
   Qwen3.8-2B distill is the first arm whose chat baseline beats its
   decision score (0.700 vs 0.617) — reasoning-by-writing distills lose
   under forced token-path commitment.
+
+## D17 — MCP surface: rmcp 2.2 stdio, six decision tools (2026-09-28)
+
+`opencodifier-mcp` (PLAN Phase 10, §31/§55) serves the runtime to MCP
+hosts over **stdio only** — the transport is the local process's
+stdin/stdout, so the local-first posture is structural: there is no
+socket to bind and nothing remote to refuse (unlike HTTP's loopback
+gate, there is no flag that opens this surface outward).
+
+- **SDK pin stays at rmcp `=2.2` (D1).** rmcp 3.x exists (major line,
+  breaking API) and is **not** adopted; upgrading would be a new decision
+  with its own migration evidence. Phase 15's tool set, verbatim:
+  `codify_decide`, `codify_batch`, `codify_graph`, `codify_validate`,
+  `codify_verify`, `codify_explain`. §31's two model-dependent tools
+  (`classify`/`score`-shaped) wait for the model rungs, as planned.
+- **Thin surface, one pipeline.** Tools normalize through the schema
+  adapters and execute through `EngineHandle` — the identical stack HTTP
+  drives. The engine is sync (D5); the HTTP shell off-loads to blocking
+  threads because a concurrent server must protect unrelated
+  connections, while a stdio MCP session is strictly sequential, so MCP
+  calls the engine inline. That is a deliberate asymmetry, not an
+  inconsistency.
+- **Batch bound.** `codify_batch` accepts at most 16 requests
+  (`mcp.batch_too_large` above it) and decides items independently: one
+  item's refusal is that item's error envelope, never a failed batch.
+  The bound is transport hygiene, not a pipeline limit.
+- **Error discipline.** Tool failures are tool-level results
+  (`is_error: true`) carrying HTTP's exact envelope
+  (`{"error":{"code","message"}}`) under the same stable codes; the
+  crate's only own code is `mcp.batch_too_large`. Abstention is a
+  successful result with the typed outcome — §73's rule survives the
+  transport.
+- **Shared surfaces, one definition each.** The engine's graph-document
+  shim is public (`GraphDocument`) and HTTP's private mirror is deleted;
+  the execution-report JSON projection lives in the engine
+  (`opencodifier_engine::report::execution_json`) and both the CLI's
+  `--trace` and MCP `codify_explain` call it.
+- **`codify_graph` exposes the active graph document** (via the new
+  `EngineHandle::graph`): the identity decisions are cached under, node
+  count, parallelism, cache state, and the validated DAG itself. This is
+  local introspection of a local runtime, consistent with §31's
+  explainability stance; §32's deeper tool introspection remains future
+  work.

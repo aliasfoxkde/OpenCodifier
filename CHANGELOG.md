@@ -8,6 +8,20 @@ releases may break, and every breaking change is recorded in this file
 
 ## [Unreleased]
 
+MCP surface (PLAN Phase 10): `opencodifier-mcp` — six decision tools
+(`codify_decide`, `codify_batch`, `codify_graph`, `codify_validate`,
+`codify_verify`, `codify_explain`) served over stdio with rmcp 2.2.0
+(D1's pin, honored; the 3.x major line is not adopted — D17), wired as
+`opencodifier mcp serve`. Same engine as HTTP (`EngineHandle`), same
+error envelope and stable codes (one MCP-specific code:
+`mcp.batch_too_large`), same deterministic traces with no
+chain-of-thought; batch items are decided independently under a
+16-request cap. Two shared-surface folds landed with it: the engine's
+graph-document shim (`GraphDocument`) is now public and the HTTP
+surface's private mirror was deleted, and the execution-report JSON
+projection moved into the engine (`opencodifier_engine::report`)
+so CLI `--trace` and MCP `codify_explain` cannot drift.
+
 Decision-model benchmark (PLAN Phase 13) — built and swept to 48 runs:
 `benchmarks/decision-model/` holds a byte-locked 120-item
 candidate-conditioned suite (metadata_match / lexical_semantic /

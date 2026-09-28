@@ -26,9 +26,9 @@ mod decide;
 mod error;
 mod graph;
 mod input;
+mod mcp;
 mod models;
 mod output;
-mod report;
 mod serve;
 
 use std::process::ExitCode;

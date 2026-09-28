@@ -76,6 +76,10 @@ pub const CODE_OUTPUT_FAILED: &str = "cli.output_failed";
 /// Stable code reported when the async runtime cannot be built for `serve`.
 pub const CODE_RUNTIME_FAILED: &str = "cli.runtime_failed";
 
+/// The MCP serving session itself failed (handshake refused, session task
+/// ended abnormally). Internal error: exit 3.
+pub const CODE_MCP_SESSION_FAILED: &str = "mcp.session_failed";
+
 /// Everything the CLI can report, with the exit code it maps onto.
 #[derive(Debug)]
 pub enum CliError {

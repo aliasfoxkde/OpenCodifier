@@ -17,9 +17,14 @@ Jev), deterministic engine (graphs, rules, caches, BM25 narrowing),
 backend traits, and both primary interfaces are implemented and tested:
 
 - `opencodifier` CLI — `decide`, `graph validate`, `serve`,
-  `models verify` (see `--help` for the exit-code contract).
+  `mcp serve`, `models verify` (see `--help` for the exit-code contract).
 - `POST /v1/decide`, `POST /v1/graph/validate`, `GET /v1/healthz` —
   axum server, loopback-only unless explicitly told otherwise.
+- MCP — `opencodifier mcp serve` exposes `codify_decide`,
+  `codify_batch`, `codify_graph`, `codify_validate`, `codify_verify`,
+  and `codify_explain` as tools over stdio: point any MCP host at the
+  binary and the runtime's decisions become host-side tool calls. Stdio
+  only, so the surface is local by construction.
 
 The live plan is [`docs/PLAN.md`](docs/PLAN.md) and the founding
 document is [`docs/PLANNING.md`](docs/PLANNING.md). Try it with the
