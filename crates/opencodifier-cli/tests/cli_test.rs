@@ -632,3 +632,118 @@ fn help_exits_zero_and_documents_the_exit_codes() {
     assert!(help.contains("EXIT CODES"), "{help}");
     assert!(help.contains("--abstain-is-success"), "{help}");
 }
+
+#[test]
+fn mcp_serve_answers_a_real_session_over_stdio() {
+    // The full handshake a real MCP host performs, written line by line to
+    // the process's stdin: initialize, initialized notification, tool
+    // list, and one tool call. The server's replies are newline-delimited
+    // JSON-RPC on stdout.
+    let request = choice_request(permissive_policy());
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_opencodifier"))
+        .args(["mcp", "serve"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn opencodifier mcp serve");
+
+    let mut stdin = child.stdin.take().expect("stdin");
+    let messages = [
+        json!({
+            "jsonrpc": "2.0",
+            "id": 0,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": { "name": "cli-e2e", "version": "0.0.0" },
+            },
+        }),
+        json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }),
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": { "name": "codify_decide", "arguments": { "request": request } },
+        }),
+    ];
+    {
+        use std::io::Write as _;
+        for message in &messages {
+            writeln!(stdin, "{message}").expect("write a session line");
+        }
+    }
+    drop(stdin); // end of input: the session ends and the process exits
+
+    let output = child.wait_with_output().expect("session completes");
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf-8");
+    let replies: Vec<Value> = stdout
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).expect("each reply is one JSON document"))
+        .collect();
+    let by_id = |id: i64| -> Value {
+        replies
+            .iter()
+            .find(|reply| reply["id"] == json!(id))
+            .unwrap_or_else(|| panic!("no reply to id {id}; got {stdout}"))
+            .clone()
+    };
+
+    // The handshake names the runtime and its tools capability.
+    let initialized = by_id(0);
+    assert_eq!(initialized["result"]["serverInfo"]["name"], "opencodifier");
+    assert!(initialized["result"]["capabilities"]["tools"].is_object());
+
+    // The tool list is the Phase-15 set.
+    let tools = by_id(1)["result"]["tools"]
+        .as_array()
+        .expect("tool list")
+        .iter()
+        .map(|tool| tool["name"].as_str().expect("tool name").to_owned())
+        .collect::<Vec<_>>();
+    for name in [
+        "codify_batch",
+        "codify_decide",
+        "codify_explain",
+        "codify_graph",
+        "codify_validate",
+        "codify_verify",
+    ] {
+        assert!(tools.contains(&name.to_owned()), "missing {name} in {tools:?}");
+    }
+
+    // A tool call decides, and the canonical response rides in the
+    // structured content.
+    let decided = &by_id(2)["result"];
+    assert_eq!(decided["isError"], false);
+    let response = &decided["structuredContent"];
+    assert_eq!(response["answers"].as_array().expect("answers").len(), 1);
+    assert_eq!(response["answers"][0]["type"], "choice");
+    assert!(!response["trace"]["entries"].as_array().expect("trace").is_empty());
+}
+
+#[test]
+fn mcp_serve_refuses_an_unreadable_graph_document_before_the_session() {
+    let scratch = Scratch::new("mcp-graph");
+    let cyclic = scratch.write_json(
+        "cyclic.json",
+        &json!({
+            "version": 1,
+            "nodes": [
+                { "id": "a", "kind": "normalize", "depends_on": ["b"] },
+                { "id": "b", "kind": "filter", "depends_on": ["a"] },
+            ],
+        }),
+    );
+
+    opencodifier()
+        .args(["mcp", "serve", "--graph"])
+        .arg(&cyclic)
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("graph.cycle"));
+}

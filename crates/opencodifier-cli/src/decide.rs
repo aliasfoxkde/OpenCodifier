@@ -15,7 +15,7 @@ use opencodifier_schema::native::Native;
 
 use crate::args::DecideArgs;
 use crate::error::{CODE_ESCALATED, CliError};
-use crate::{input, output, report};
+use crate::{input, output};
 
 /// Runs `decide`.
 ///
@@ -39,7 +39,7 @@ pub(crate) fn run(args: &DecideArgs) -> Result<(), CliError> {
 
     output::print_json(&Native.encode_response(&response)?)?;
     if args.trace {
-        output::print_json(&report::execution_json(&executed))?;
+        output::print_json(&opencodifier_engine::execution_json(&executed))?;
     }
 
     finish(response.outcome(), args.abstain_is_success)

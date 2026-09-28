@@ -1,0 +1,32 @@
+[package]
+name = "opencodifier-mcp"
+description = "Model Context Protocol (MCP) surface for the OpenCodifier decision runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+opencodifier-core = { path = "../opencodifier-core", version = "0.1.0" }
+opencodifier-engine = { path = "../opencodifier-engine", version = "0.1.0" }
+opencodifier-schema = { path = "../opencodifier-schema", version = "0.1.0" }
+# D1 pins the MCP SDK: rmcp 2.2. The `server` feature (default) provides the
+# tool router and handler plumbing; `transport-io` adds the stdio transport
+# (tokio stdin/stdout) that `opencodifier mcp serve` runs on.
+rmcp = { version = "=2.2", features = ["transport-io"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["io-std", "rt-multi-thread"] }
+
+[dev-dependencies]
+# Integration tests drive the server through a real MCP client over an
+# in-process duplex transport.
+rmcp = { version = "=2.2", features = ["client"] }
+tokio = { version = "1", features = ["io-util", "macros"] }
+
+[lints]
+workspace = true

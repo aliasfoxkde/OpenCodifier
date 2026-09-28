@@ -99,6 +99,14 @@ impl EngineHandle {
         self.engine.config().identity.clone()
     }
 
+    /// The active decision graph, for interfaces that introspect the
+    /// pipeline (MCP `codify_graph`): the same validated DAG decisions run
+    /// on, not a reconstructed summary.
+    #[must_use]
+    pub fn graph(&self) -> &crate::graph::DecisionGraph {
+        &self.engine.config().graph
+    }
+
     /// The health snapshot behind `healthz`-style probes: liveness here
     /// is "the engine assembled and can answer", not a stub `ok` string.
     #[must_use]

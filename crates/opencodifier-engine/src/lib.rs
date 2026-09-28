@@ -120,6 +120,7 @@ pub mod handle;
 pub mod lexical;
 pub mod narrowing;
 pub mod relational;
+pub mod report;
 pub mod rules;
 
 pub use cache::{CacheConfig, CacheKey, CacheKeyBuilder, DecisionCache, EngineIdentity};
@@ -130,11 +131,12 @@ pub use engine::{DecisionEngine, EngineConfig};
 pub use error::{EngineError, EngineResult};
 pub use executor::RunReport;
 pub use facts::{Health, RelationalFact};
-pub use graph::{DecisionGraph, NodeKind, NodeSpec};
+pub use graph::{DecisionGraph, GraphDocument, NodeKind, NodeSpec};
 pub use handle::{EngineHandle, EngineHealth};
 pub use lexical::{Bm25Index, negation_polarity, softmax, tokenize};
 pub use narrowing::{LexicalScores, NarrowingOutcome};
 pub use relational::RelationalSolver;
+pub use report::execution_json;
 pub use rules::{Action, Condition, Rule, RuleEngine, RuleSet};
 
 #[cfg(test)]

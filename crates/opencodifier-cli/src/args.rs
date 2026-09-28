@@ -67,6 +67,8 @@ pub enum Command {
     Graph(GraphCommand),
     /// Serve the runtime over HTTP on the loopback interface.
     Serve(ServeArgs),
+    /// Model Context Protocol operations.
+    Mcp(McpArgs),
     /// Model artifact operations.
     Models(ModelsCommand),
 }
@@ -83,6 +85,7 @@ impl Command {
             Self::Decide(args) => crate::decide::run(&args),
             Self::Graph(graph) => crate::graph::run(&graph.command),
             Self::Serve(args) => crate::serve::run(&args),
+            Self::Mcp(args) => crate::mcp::run(&args),
             Self::Models(models) => crate::models::run(&models.command),
         }
     }
@@ -156,6 +159,26 @@ pub struct ServeArgs {
     /// decides, and the CLI says so on stderr.
     #[arg(long, value_name = "PATH")]
     pub policy: Option<PathBuf>,
+}
+
+/// Arguments of `opencodifier mcp`.
+#[derive(Debug, Args)]
+pub struct McpArgs {
+    /// The MCP operation to run.
+    #[command(subcommand)]
+    pub command: McpSubcommand,
+}
+
+/// MCP operations.
+#[derive(Debug, Subcommand)]
+pub enum McpSubcommand {
+    /// Serve the decision tools on stdin/stdout — the only transport the
+    /// local-first posture allows.
+    Serve {
+        /// Graph JSON document replacing the built-in default pipeline.
+        #[arg(long, value_name = "PATH")]
+        graph: Option<PathBuf>,
+    },
 }
 
 /// `opencodifier models …`

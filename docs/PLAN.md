@@ -50,7 +50,7 @@ Remaining risks tracked in §6 below.
 | 7 | `opencodifier-model` (candidate-conditioned scoring) | **done** (d3a5aa5) — `EmbeddingClassifier`, `ModelManifest`, serving contract; no weights in V1 |
 | 8 | `opencodifier-cli` | **done** — `decide`/`graph validate`/`serve`/`models verify`, D13 exit codes, 20 e2e tests |
 | 9 | `opencodifier-http` | **done** — axum **0.8** `/v1` (D12 amended), loopback gate, 26 tests incl. real-socket e2e |
-| 10 | `opencodifier-mcp` | pending |
+| 10 | `opencodifier-mcp` | **done** (2026-09-28) — rmcp **2.2.0** stdio server, §55 tool set, 9 client-driven e2e + 2 CLI stdio sessions (D17) |
 | 11 | E2E recipes + docs book + examples | **done** (85cd2ec) — `recipes/` 3 runnable graphs + captured responses; docs set + accessibility checked |
 | 12 | Release engineering (tag, release, GitForge pipeline green) | **done** (49bc224) — tag v0.1.0; pipeline of record green through GitForge (fe4b0871); v0.1.1 CI hardening (3bad2bb, run 8e8401f0) |
 | 13 | Decision-model benchmark: pick the model | **done** — `benchmarks/decision-model/`, thirteen arms; Qwen3.8-4B-Distill reference pick, tiered alternatives (D16, amended ×2) |
@@ -186,8 +186,9 @@ Remaining risks tracked in §6 below.
   the `ctrl_c` await — process-lifetime lines covered by the e2e
   suites whose profraw files cannot merge — and the defensive
   encode-error closure on engine-produced responses).
-- Phase 10 (MCP) remains planned; D1's `rmcp 2.2` pin is stale
-  (latest is 3.4.x) and will be corrected when that phase starts.
+- Phase 10 (MCP) shipped against D1's `rmcp 2.2` pin as written
+  (2.2.0); rmcp 3.x is a major-version line and is *not* adopted here —
+  the upgrade, if ever, is its own decision record (D17).
 
 ## Phase 11 — docs + recipes (done)
 
@@ -596,6 +597,55 @@ answers before it scores them:
   (classifier-swap invalidation, hand-set-identity override) + http e2e
   identity check updated; fmt/clippy/test/doc/deny/aegis green; engine
   arm re-measured, board at 49 runs.
+
+## Phase 10 — `opencodifier-mcp`: the Model Context Protocol surface (done, 2026-09-28)
+
+§31/§55: the runtime is driveable by MCP hosts as tools, over stdio, with
+no chain-of-thought anywhere. The crate is thin by the same rule the HTTP
+surface is thin: every tool normalizes through [`opencodifier_schema`] and
+executes through [`EngineHandle`] — there is no MCP-specific pipeline to
+drift.
+
+- **The server (`OpenCodifierServer`).** rmcp 2.2.0 (D1's pin, honored
+  verbatim; the 3.x line is a major version and is not adopted — D17)
+  with `#[tool_router]`/`#[tool]` over an `Arc<EngineHandle>`. The
+  engine is sync (D5); a stdio session is strictly sequential, so tools
+  call it inline (no `spawn_blocking`) — there is no concurrency here to
+  starve, unlike the concurrent HTTP server.
+- **The Phase-15 tool set (§55).** `codify_decide` (native request →
+  native response, `POST /v1/decide` as a tool), `codify_batch`
+  (independent per-item verdicts, in order, capped at
+  [`MAX_BATCH`] = 16 with `mcp.batch_too_large`), `codify_graph` (the
+  identity + the full validated graph document actually running, via the
+  new `EngineHandle::graph`), `codify_validate` (the engine's own
+  decode-and-validate path, `graph.*` codes verbatim), `codify_verify`
+  (the confidence-gate verdict: outcome, decisive flag, the full
+  multi-dimensional confidence report), and `codify_explain` (the
+  response's deterministic trace plus the executor run report — the
+  machine's record, never generated reasoning).
+- **One error envelope, shared with HTTP.** Tool failures are
+  tool-level results (`is_error: true`) carrying the same
+  `{"error":{"code","message"}}` document under the same stable codes
+  (`schema.*`, `graph.*`, `engine.*`); the crate's only own code is
+  `mcp.batch_too_large`. Abstention is `is_error: false` with the typed
+  outcome.
+- **Two shared-surface folds (no duplicate implementations).** The
+  engine's private `GraphRepr` serialization shim became the public
+  `GraphDocument` and the HTTP surface's private mirror of it was
+  deleted — one decode-and-validate path for both ingresses. The CLI's
+  `--trace` projection moved into the engine as
+  `opencodifier_engine::report::execution_json`, so CLI and MCP project
+  the run report through one function.
+- **CLI.** `opencodifier mcp serve [--graph PATH]` (clap v4, D13):
+  assembles the same engine as `serve`, serves stdio until the client
+  disconnects; session failure is exit 3 under `mcp.session_failed`.
+- **Accept (met):** 4 envelope unit tests + 10 server unit tests +
+  12 client-driven e2e tests (real rmcp `ClientHandler` over a duplex
+  transport: handshake, exact tool list, decide/batch/graph/validate/
+  verify/explain, hostile payload, oversize batch, abstention-is-
+  success, unknown-tool protocol error) + 2 CLI stdio e2e (a real
+  JSON-RPC session through the binary; `--graph` refusal before any
+  session); fmt/clippy/test/doc/deny/aegis green.
 
 ## Quality gates (every phase, no exceptions)
 

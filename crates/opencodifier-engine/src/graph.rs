@@ -189,18 +189,26 @@ impl NodeSpec {
     }
 }
 
-/// Serialization shim: the wire format is a version plus a node array, and
-/// reading one always re-validates.
-#[derive(Deserialize)]
-struct GraphRepr {
-    version: u64,
-    nodes: Vec<NodeSpec>,
+/// The graph document: the wire format a declared graph travels in — a
+/// version plus a node array (PLANNING.md §27).
+///
+/// Interfaces decode a payload into this struct and hand it to
+/// [`DecisionGraph::try_from`], which always re-validates: reading a graph
+/// and accepting it are the same act, never two. The type lives in the
+/// engine because its `nodes` are the engine's own [`NodeSpec`]s — HTTP and
+/// MCP decode through it so neither carries a private mirror of the shape.
+#[derive(Debug, Clone, Deserialize)]
+pub struct GraphDocument {
+    /// Graph version, folded into cache keys.
+    pub version: u64,
+    /// Declared nodes, validated by [`DecisionGraph::new`].
+    pub nodes: Vec<NodeSpec>,
 }
 
-impl TryFrom<GraphRepr> for DecisionGraph {
+impl TryFrom<GraphDocument> for DecisionGraph {
     type Error = EngineError;
 
-    fn try_from(repr: GraphRepr) -> EngineResult<Self> {
+    fn try_from(repr: GraphDocument) -> EngineResult<Self> {
         Self::new(repr.version, repr.nodes)
     }
 }
@@ -211,7 +219,7 @@ impl TryFrom<GraphRepr> for DecisionGraph {
 /// trace ordering are deterministic regardless of the order the graph was
 /// declared in.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(try_from = "GraphRepr")]
+#[serde(try_from = "GraphDocument")]
 pub struct DecisionGraph {
     version: u64,
     nodes: Vec<NodeSpec>,
