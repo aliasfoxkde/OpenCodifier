@@ -33,48 +33,109 @@ pub enum RiskLevel {
 /// Semantics, for a decision with calibrated confidence `c`:
 ///
 /// ```text
-/// c >= min_confidence      -> ACCEPT
+/// c >= min_confidence      -> ACCEPT (unless an uncertainty gate trips)
 /// c <  verify_below        -> run verifier
 /// c <  abstain_below       -> ABSTAIN (or escalate, per caller)
 /// in between               -> accept only after verification
 /// ```
 ///
-/// The gates must satisfy `abstain_below <= verify_below <=
+/// The uncertainty gates (PLANNING.md §19) demote an otherwise-accepted
+/// decision to verification when the confidence report shows the input
+/// was not cleanly decidable: entropy at or above `entropy_ceiling`, a
+/// margin below `min_margin`, or an OOD score above `ood_ceiling`. Their
+/// defaults disable them, so a policy behaves as before unless the
+/// operator opts in.
+///
+/// The confidence gates must satisfy `abstain_below <= verify_below <=
 /// min_confidence`, otherwise the cascade is contradictory.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(try_from = "RawDecisionPolicy")]
+#[serde(into = "RawDecisionPolicy", try_from = "RawDecisionPolicy")]
 pub struct DecisionPolicy {
     min_confidence: f64,
     verify_below: f64,
     abstain_below: f64,
     risk: RiskLevel,
+    /// Entropy (bits) at or above which a decision may not be accepted
+    /// outright. `f64::INFINITY` disables the gate.
+    entropy_ceiling: f64,
+    /// Margin below which a decision may not be accepted outright.
+    /// `0.0` disables the gate.
+    min_margin: f64,
+    /// OOD score above which a decision may not be accepted outright.
+    /// `f64::INFINITY` disables the gate.
+    ood_ceiling: f64,
 }
 
 /// Deserialization mirror for [`DecisionPolicy`]; conversion validates.
-#[derive(Debug, Deserialize)]
+/// The uncertainty gates default to disabled so older payloads (and the
+/// byte-locked wire fixtures) deserialize unchanged, and a disabled gate
+/// is omitted from serialization entirely: the canonical form of a
+/// policy with the §19 gates off is byte-identical to the pre-§19 form,
+/// so cache keys do not shift for engines that do not opt in.
+#[derive(Debug, Deserialize, Serialize)]
 struct RawDecisionPolicy {
     min_confidence: f64,
     verify_below: f64,
     abstain_below: f64,
     risk: RiskLevel,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    entropy_ceiling: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    min_margin: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ood_ceiling: Option<f64>,
+}
+
+impl From<DecisionPolicy> for RawDecisionPolicy {
+    fn from(policy: DecisionPolicy) -> Self {
+        // Disabled gates serialize as absent, keeping the canonical form
+        // byte-stable for engines that have not opted into the §19 gates
+        // (cache keys do not shift; wire fixtures stay locked).
+        Self {
+            min_confidence: policy.min_confidence,
+            verify_below: policy.verify_below,
+            abstain_below: policy.abstain_below,
+            risk: policy.risk,
+            entropy_ceiling: (policy.entropy_ceiling != f64::INFINITY)
+                .then_some(policy.entropy_ceiling),
+            min_margin: (policy.min_margin != 0.0).then_some(policy.min_margin),
+            ood_ceiling: (policy.ood_ceiling != f64::INFINITY).then_some(policy.ood_ceiling),
+        }
+    }
 }
 
 impl TryFrom<RawDecisionPolicy> for DecisionPolicy {
     type Error = CoreError;
 
     fn try_from(raw: RawDecisionPolicy) -> CoreResult<Self> {
-        Self::new(raw.min_confidence, raw.verify_below, raw.abstain_below, raw.risk)
+        let policy = Self::new(raw.min_confidence, raw.verify_below, raw.abstain_below, raw.risk)?;
+        let policy = match raw.entropy_ceiling {
+            Some(ceiling) => policy.with_entropy_ceiling(ceiling)?,
+            None => policy,
+        };
+        let policy = match raw.min_margin {
+            Some(margin) => policy.with_min_margin(margin)?,
+            None => policy,
+        };
+        match raw.ood_ceiling {
+            Some(ceiling) => policy.with_ood_ceiling(ceiling),
+            None => Ok(policy),
+        }
     }
 }
 
 impl DecisionPolicy {
     /// Gate defaults from PLANNING.md §63: accept ≥ 0.80, verify < 0.65,
-    /// abstain < 0.50.
+    /// abstain < 0.50. The uncertainty gates default to disabled
+    /// (entropy ceiling and OOD ceiling infinite, minimum margin zero).
     pub const DEFAULTS: Self = Self {
         min_confidence: 0.80,
         verify_below: 0.65,
         abstain_below: 0.50,
         risk: RiskLevel::Low,
+        entropy_ceiling: f64::INFINITY,
+        min_margin: 0.0,
+        ood_ceiling: f64::INFINITY,
     };
 
     /// Validates and constructs a policy.
@@ -103,7 +164,76 @@ impl DecisionPolicy {
                 ),
             });
         }
-        Ok(Self { min_confidence, verify_below, abstain_below, risk })
+        Ok(Self {
+            min_confidence,
+            verify_below,
+            abstain_below,
+            risk,
+            entropy_ceiling: f64::INFINITY,
+            min_margin: 0.0,
+            ood_ceiling: f64::INFINITY,
+        })
+    }
+
+    /// Sets the entropy ceiling (PLANNING.md §19): a decision whose
+    /// distribution entropy reaches this many bits may not be accepted
+    /// outright and is routed to verification instead. `f64::INFINITY`
+    /// (the default) disables the gate.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidPolicy`] unless the ceiling is positive (or
+    /// exactly `f64::INFINITY`, which disables the gate).
+    pub fn with_entropy_ceiling(mut self, ceiling: f64) -> CoreResult<Self> {
+        if (!ceiling.is_finite() || ceiling <= 0.0) && ceiling != f64::INFINITY {
+            return Err(CoreError::InvalidPolicy {
+                reason: format!(
+                    "entropy_ceiling must be a positive number (or infinity to disable), \
+                     got {ceiling}"
+                ),
+            });
+        }
+        self.entropy_ceiling = ceiling;
+        Ok(self)
+    }
+
+    /// Sets the minimum margin (PLANNING.md §19): a decision whose
+    /// top-two probability gap falls below this may not be accepted
+    /// outright. `0.0` (the default) disables the gate.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidPolicy`] unless the margin is a finite value
+    /// in `[0, 1]`.
+    pub fn with_min_margin(mut self, margin: f64) -> CoreResult<Self> {
+        if !crate::error::is_unit_interval(margin) {
+            return Err(CoreError::InvalidPolicy {
+                reason: format!("min_margin must be a finite value in [0, 1], got {margin}"),
+            });
+        }
+        self.min_margin = margin;
+        Ok(self)
+    }
+
+    /// Sets the OOD ceiling (PLANNING.md §19): a decision whose
+    /// out-of-distribution score exceeds this may not be accepted
+    /// outright. `f64::INFINITY` (the default) disables the gate.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidPolicy`] unless the ceiling is a finite value
+    /// in `[0, 1]` or exactly `f64::INFINITY` (disabled).
+    pub fn with_ood_ceiling(mut self, ceiling: f64) -> CoreResult<Self> {
+        if ceiling != f64::INFINITY && !crate::error::is_unit_interval(ceiling) {
+            return Err(CoreError::InvalidPolicy {
+                reason: format!(
+                    "ood_ceiling must be a finite value in [0, 1] (or infinity to disable), \
+                     got {ceiling}"
+                ),
+            });
+        }
+        self.ood_ceiling = ceiling;
+        Ok(self)
     }
 
     /// Confidence at or above which a decision is accepted outright.
@@ -124,6 +254,31 @@ impl DecisionPolicy {
     /// The risk classification of the action this decision feeds.
     pub fn risk(&self) -> RiskLevel {
         self.risk
+    }
+
+    /// Entropy (bits) at or above which outright acceptance is refused.
+    pub fn entropy_ceiling(&self) -> f64 {
+        self.entropy_ceiling
+    }
+
+    /// Margin below which outright acceptance is refused.
+    pub fn min_margin(&self) -> f64 {
+        self.min_margin
+    }
+
+    /// OOD score above which outright acceptance is refused.
+    pub fn ood_ceiling(&self) -> f64 {
+        self.ood_ceiling
+    }
+
+    /// Whether the §19 uncertainty gates would demote this report to
+    /// verification: flat distribution (entropy), near-tie (margin), or
+    /// out-of-distribution input.
+    #[must_use]
+    pub fn uncertainty_gate_trips(&self, report: &crate::confidence::ConfidenceReport) -> bool {
+        report.entropy >= self.entropy_ceiling
+            || report.margin < self.min_margin
+            || report.ood_score > self.ood_ceiling
     }
 }
 

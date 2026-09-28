@@ -57,6 +57,17 @@ pub fn request(
     DecisionRequest::new(state, questions, DecisionPolicy::default(), metadata).unwrap()
 }
 
+/// A request with an explicit policy: the confidence gates the cascade
+/// reads are the request's, not the engine's.
+pub fn request_with_policy(
+    state: State,
+    questions: Vec<DecisionQuestion>,
+    policy: DecisionPolicy,
+    metadata: RequestMetadata,
+) -> DecisionRequest {
+    DecisionRequest::new(state, questions, policy, metadata).unwrap()
+}
+
 /// A request whose own execution-time ceiling is `limit`.
 pub fn request_with_limit(candidates: &[(&str, &str)], limit: Duration) -> DecisionRequest {
     let metadata = RequestMetadata {
@@ -135,6 +146,15 @@ pub fn five_candidates() -> Vec<(&'static str, &'static str)> {
 
 /// The value of an integer fact in a trace entry, if present.
 pub fn trace_int<'a>(
+    response: &'a DecisionResponse,
+    node: &str,
+    key: &str,
+) -> Option<&'a FactValue> {
+    trace_fact(response, node, key)
+}
+
+/// The value of any fact in the first trace entry of `node`, if present.
+pub fn trace_fact<'a>(
     response: &'a DecisionResponse,
     node: &str,
     key: &str,

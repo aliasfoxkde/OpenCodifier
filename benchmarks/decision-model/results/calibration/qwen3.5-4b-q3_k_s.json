@@ -1,0 +1,16 @@
+{
+  "format_version": 1,
+  "scheme": "temperature",
+  "model_id": "qwen3.5-4b-q3_k_s",
+  "calibration_version": 1,
+  "default_temperature": 1.671956,
+  "temperatures": {
+    "choice": 1.671956
+  },
+  "fit": {
+    "items": 120,
+    "ece_before": 0.068585,
+    "ece_after": 0.039069,
+    "source": "benchmarks/decision-model suite (seed 20260926, 120 items, single-run arm llama__Qwen3.5-4B-Q3_K_S.json, model Qwen3.5-4B-Q3_K_S.gguf); winner-vs-rest margin fit, in-sample"
+  }
+}

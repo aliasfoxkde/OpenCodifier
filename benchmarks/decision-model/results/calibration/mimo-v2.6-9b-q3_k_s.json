@@ -1,0 +1,16 @@
+{
+  "format_version": 1,
+  "scheme": "temperature",
+  "model_id": "mimo-v2.6-9b-q3_k_s",
+  "calibration_version": 1,
+  "default_temperature": 1.372218,
+  "temperatures": {
+    "choice": 1.372218
+  },
+  "fit": {
+    "items": 120,
+    "ece_before": 0.047623,
+    "ece_after": 0.026299,
+    "source": "benchmarks/decision-model suite (seed 20260926, 120 items, single-run arm llama__MiMo-V2.6-Distill-Qwen-9B-Q3_K_S.json, model MiMo-V2.6-Distill-Qwen-9B-Q3_K_S.gguf); winner-vs-rest margin fit, in-sample"
+  }
+}

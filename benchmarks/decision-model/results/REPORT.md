@@ -33,7 +33,12 @@ ceiling, at verifier-tier latency.
 Every decision arm on the board is **bit-deterministic** under a full
 double replay (`predictions_match`, `max_prob_delta = 0.0`). Raw winner
 probabilities are **uncalibrated everywhere** (ECE 0.048–0.626), which is
-why D15 calibration still gates any confidence exposure.
+why D15 calibration still gates any confidence exposure. The D15 fits
+themselves are now measured and committed: fitted temperature artifacts
+for the tier arms live in [`calibration/`](calibration/) with the
+before/after evidence in [`CALIBRATION.md`](CALIBRATION.md) — all LLM
+tiers are overconfident (T 0.84–1.67, frontier ECE 0.048 → 0.026), and
+the embedding rung's fit is degenerate (ordering-only, no artifact).
 
 ## Methodology
 

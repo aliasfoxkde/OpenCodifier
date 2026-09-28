@@ -81,6 +81,11 @@ python3 runner/summarize.py --results-dir "$RUNS"
 # 5. render the charts committed under results/charts/ (plain SVG, no deps;
 #    every mark is derived from the run JSONs — a view of the record)
 python3 runner/plot.py --results-dir "$RUNS" --models-dir /path/to/models
+
+# 6. fit the D15 temperature-calibration artifacts for the tier arms
+#    (committed under results/calibration/; evidence in results/CALIBRATION.md)
+python3 runner/fit_calibration.py --results-dir "$RUNS" \
+    --out-dir results/calibration
 ```
 
 Model weights never enter the repository; `models.manifest.json` (written by

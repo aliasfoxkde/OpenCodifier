@@ -520,13 +520,20 @@ impl<'a> Executor<'a> {
             let Some(narrowed) = self.prepare_question(question) else { continue };
             let distribution = self.classifier.decide(&self.state, &narrowed)?;
             let (distribution, clipped) = Self::clip(&distribution, &narrowed)?;
-            let decision = Self::decide_question(&narrowed, distribution, self.request.policy())?;
+            let decision = Self::decide_question(
+                &narrowed,
+                distribution,
+                self.request.policy(),
+                self.config.calibration.as_ref(),
+            )?;
             entries.push(TraceEntry::new(
                 id,
                 [
                     ("question", FactValue::Text(question.id().to_string())),
                     ("top", FactValue::Text(decision.distribution.top().key.clone())),
                     ("probability", FactValue::Float(decision.distribution.top().probability)),
+                    ("calibrated", FactValue::Float(decision.report.calibrated_confidence)),
+                    ("ood", FactValue::Float(decision.report.ood_score)),
                     ("model", FactValue::Text(self.classifier.model_id().to_owned())),
                     ("clipped", FactValue::Integer(int(clipped))),
                 ],
@@ -693,18 +700,25 @@ impl<'a> Executor<'a> {
     /// Turns a normalized distribution into an answer and a confidence
     /// report.
     ///
-    /// Calibration at V1 is the identity map: `calibrated_confidence` is
-    /// the top probability. That is temporary by design (PLANNING.md Rule 8,
-    /// §17) — raw softmax output is not calibrated confidence, and the
-    /// calibration layer arrives in Phase 9.
+    /// The confidence path is explicit (PLANNING.md §18, §73): the
+    /// configured [`Calibration`](crate::calibration::Calibration) maps the
+    /// raw top probability to calibrated confidence, and the OOD channel
+    /// carries the deterministic distributional signal (normalized entropy
+    /// — the only input-unlikeness evidence available before a trained
+    /// density model exists; see [`distributional_ood`]). Policy reads the
+    /// dimensions separately in `ConfidenceReport::outcome_for`; nothing
+    /// is fused silently.
     fn decide_question(
         question: &DecisionQuestion,
         distribution: Distribution,
         policy: &DecisionPolicy,
+        calibration: &dyn crate::calibration::Calibration,
     ) -> EngineResult<QuestionDecision> {
         let top = distribution.top().clone();
-        let report =
-            ConfidenceReport::from_distribution(&distribution, top.probability, 0.0, None)?;
+        let ood = distributional_ood(&distribution);
+        let calibrated =
+            calibration.calibrate(crate::calibration::question_class(question), &distribution);
+        let report = ConfidenceReport::from_distribution(&distribution, calibrated, ood, None)?;
         let outcome = ConfidenceReport::outcome_for(&report, policy);
         let answer = match question {
             DecisionQuestion::Choice(choice) => DecisionAnswer::Choice {
@@ -909,6 +923,32 @@ impl<'a> Executor<'a> {
             },
         }
     }
+}
+
+/// Deterministic distributional OOD proxy: the Shannon entropy of the
+/// surviving distribution normalized by its maximum, `H / log2 k` in
+/// `[0, 1]` (entropy is carried in bits, so the maximum is `log2 k`).
+/// A near-uniform distribution over the surviving answers is the only
+/// input-unlikeness signal the engine can produce without a trained
+/// density model — it says "this input gave the scorer nothing to
+/// separate the candidates with", which is exactly the flat-output
+/// symptom an OOD detector exists to catch. The density-ratio and
+/// embedding-distance detectors arrive with the model rungs (D2) and
+/// will replace this proxy; the channel and its policy gate
+/// (`ood_ceiling`) stay as they are.
+///
+/// Zero for degenerate distributions (fewer than two surviving entries).
+#[allow(clippy::cast_precision_loss)] // answer-set sizes are tiny
+fn distributional_ood(distribution: &Distribution) -> f64 {
+    let k = distribution.entries().len();
+    if k < 2 {
+        return 0.0;
+    }
+    let max_entropy = (k as f64).log2();
+    if max_entropy <= 0.0 {
+        return 0.0;
+    }
+    (distribution.entropy() / max_entropy).clamp(0.0, 1.0)
 }
 
 /// Severity ordering for combining per-question outcomes: a request is only

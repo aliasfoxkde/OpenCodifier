@@ -54,6 +54,7 @@ Remaining risks tracked in §6 below.
 | 11 | E2E recipes + docs book + examples | **done** (85cd2ec) — `recipes/` 3 runnable graphs + captured responses; docs set + accessibility checked |
 | 12 | Release engineering (tag, release, GitForge pipeline green) | **done** (49bc224) — tag v0.1.0; pipeline of record green through GitForge (fe4b0871); v0.1.1 CI hardening (3bad2bb, run 8e8401f0) |
 | 13 | Decision-model benchmark: pick the model | **done** — `benchmarks/decision-model/`, thirteen arms; Qwen3.8-4B-Distill reference pick, tiered alternatives (D16, amended ×2) |
+| 14 | Confidence truthfulness: D15 calibration + §19 gates | **done** (2026-09-28) — `Calibration` trait + fitted temperature artifacts for the tier arms; the dead OOD channel is live and policy-gated |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
@@ -499,6 +500,50 @@ with measurement, not opinion.
   committed — raw run JSONs stay out of tree (regenerable from the
   pinned suite + manifest on deterministic arms, and pure measurement
   data the scanner gate should not have to triage).
+
+## Phase 14 — confidence truthfulness: D15 calibration + §19 gates (done, 2026-09-28)
+
+The benchmark proved raw winner probability is uncalibrated everywhere
+(ECE 0.048–0.626) and the executor's OOD channel was dead. Both fixed,
+without changing behavior for engines that do not opt in:
+
+- **Calibration seam (`opencodifier-engine/src/calibration.rs`).**
+  `Calibration` trait (`calibrate(class, distribution) -> f64` +
+  `version()`), `IdentityCalibration` (raw, version 0 — D15's
+  "none"), and `TemperatureCalibration` loaded from a validated,
+  versioned artifact (`format_version 1`, `scheme "temperature"`,
+  per-class temperatures keyed by question kind, `deny_unknown_fields`,
+  `calibration_version >= 1`). Fitting is offline Python
+  (`runner/fit_calibration.py`: winner-vs-rest margin temperature fit,
+  golden-section NLL, no deps) — runtime stays Rust and deterministic.
+  `EngineConfig::calibration` defaults to identity; a fitted artifact's
+  `calibration_version` folds into the cache key (D6), so adopting one
+  invalidates cached decisions exactly as it must.
+- **Fitted artifacts committed** (`benchmarks/decision-model/results/
+  calibration/*.json`, six arms; evidence + method + limits in
+  `results/CALIBRATION.md`). All four LLM tiers are overconfident
+  (T 0.84–1.67; frontier MiMo-9B ECE 0.048 → 0.026). The embedding
+  rung's fit is **degenerate** (NLL falls to its T→∞ limit): gte
+  zero-shot scores are ordering evidence only — no artifact emitted,
+  and its scores must never gate by raw probability.
+- **§19 uncertainty gates live (`opencodifier-core/src/policy.rs`).**
+  `DecisionPolicy` gains `entropy_ceiling` / `min_margin` /
+  `ood_ceiling` (defaults disabled: ∞ / 0.0 / ∞), validated like the
+  confidence gates; `uncertainty_gate_trips` demotes an
+  otherwise-accepted decision to verification. The executor now
+  computes the deterministic distributional OOD proxy
+  (`entropy / log2(k)`, clamped to [0,1]; density-ratio detectors come
+  with model rungs, D2) and both `calibrated` and `ood` are trace
+  facts. `ConfidenceReport::outcome_for` applies the full cascade:
+  confidence, risk, then uncertainty gates. Disabled gates serialize as
+  absent (a `RawDecisionPolicy` mirror with `skip_serializing_if`), so
+  canonical policy bytes — and therefore cache keys — are unchanged for
+  engines that have not opted in; the byte-locked wire fixtures pass
+  untouched.
+- **Accept (met):** 12 calibration unit tests + 4 core gate tests + 2
+  engine integration tests (an artifact swap changes confidence AND
+  invalidates the cache; the OOD channel gates acceptance end-to-end
+  and is observable in the trace); fmt/clippy/test/doc/deny/aegis green.
 
 ## Quality gates (every phase, no exceptions)
 

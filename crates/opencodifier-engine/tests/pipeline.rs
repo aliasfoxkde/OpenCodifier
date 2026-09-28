@@ -12,11 +12,14 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use common::{
-    Cancelling, ClockAdvancing, choice_request, choice_request_with, config, engine, engine_with,
-    engine_with_clock, exclude_tag_rule, five_candidates, node, request_with_limit, rules,
-    state_with_fact, trace_int, two_way,
+    Cancelling, ClockAdvancing, choice_question, choice_request, choice_request_with, config,
+    engine, engine_with, engine_with_clock, exclude_tag_rule, five_candidates, node,
+    request_with_limit, request_with_policy, rules, state_with_fact, trace_fact, trace_int,
+    two_way,
 };
-use opencodifier_core::{DecisionOutcome, FactValue, NodeId, RequestMetadata, State};
+use opencodifier_core::{
+    DecisionOutcome, DecisionPolicy, FactValue, NodeId, RequestMetadata, State,
+};
 use opencodifier_engine::{
     Action, CacheConfig, Classifier, Condition, DecisionEngine, DecisionGraph, EngineConfig,
     EngineError, EngineIdentity, ManualClock, MockClassifier, NodeKind, Rule, SystemClock,
@@ -529,6 +532,95 @@ fn a_changed_identity_invalidates_cached_decisions() {
         "the builder must be applied"
     );
     assert_eq!(first.outcome(), DecisionOutcome::Accept);
+}
+
+#[test]
+fn a_calibration_artifact_changes_confidence_and_invalidates_cached_decisions() {
+    let request = choice_request(&[("local-small", "small local model"), ("cloud-large", "cloud")]);
+    let classifier: Arc<dyn Classifier> = two_way(("local-small", 0.9), ("cloud-large", 0.1));
+
+    // Identity calibration (the default): calibrated confidence is the
+    // raw top probability (D15), and a replay is a cache hit.
+    let raw = engine_with(config(1), Arc::clone(&classifier)).unwrap();
+    let (first, _) = raw.decide_with_report(&request).unwrap();
+    assert_eq!(first.confidence().calibrated_confidence, 0.9);
+    let (_, replay) = raw.decide_with_report(&request).unwrap();
+    assert!(replay.cache_hit());
+
+    // A fitted temperature artifact: flatter confidence, and a miss —
+    // the key now carries the artifact's calibration_version.
+    let flat_artifact = r#"{
+        "format_version": 1, "scheme": "temperature",
+        "model_id": "two-way-test", "calibration_version": 3,
+        "default_temperature": 2.0, "temperatures": {},
+        "fit": {"items": 120, "ece_before": 0.1, "ece_after": 0.02,
+                "source": "test fixture"}
+    }"#;
+    let flat = engine_with(
+        config(1).with_calibration(Arc::new(
+            opencodifier_engine::TemperatureCalibration::from_json(flat_artifact).unwrap(),
+        )),
+        classifier,
+    )
+    .unwrap();
+    let (calibrated, miss) = flat.decide_with_report(&request).unwrap();
+    assert!(!miss.cache_hit(), "a loaded artifact must invalidate cached raw decisions");
+    assert!(
+        calibrated.confidence().calibrated_confidence < 0.9,
+        "T=2 must flatten 0.9, got {}",
+        calibrated.confidence().calibrated_confidence
+    );
+    let (_, hit) = flat.decide_with_report(&request).unwrap();
+    assert!(hit.cache_hit());
+
+    // A refitted artifact (different version and temperature): another
+    // miss — cache keys distinguish every calibration the engine can
+    // load (D6), and T=1 restores the raw value.
+    let sharp_artifact = flat_artifact.replace('3', "4").replace("2.0", "1.0");
+    let sharp = engine_with(
+        config(1).with_calibration(Arc::new(
+            opencodifier_engine::TemperatureCalibration::from_json(&sharp_artifact).unwrap(),
+        )),
+        two_way(("local-small", 0.9), ("cloud-large", 0.1)),
+    )
+    .unwrap();
+    let (restored, refresh) = sharp.decide_with_report(&request).unwrap();
+    assert!(!refresh.cache_hit(), "a refitted artifact must produce a fresh key");
+    assert_eq!(restored.confidence().calibrated_confidence, 0.9);
+}
+
+#[test]
+fn the_ood_channel_is_live_and_gates_acceptance() {
+    // two_way(0.9, 0.1): entropy ≈ 0.325 nats over two surviving answers,
+    // so the distributional OOD proxy is ≈ 0.469. With the ceiling at
+    // 0.3, the confident answer (0.9 ≥ 0.8 min_confidence) may not be
+    // accepted outright — it must route to verification (PLANNING §19).
+    let candidates: Vec<(&str, &str)> =
+        vec![("local-small", "small local model"), ("cloud-large", "cloud")];
+    let classifier: Arc<dyn Classifier> = two_way(("local-small", 0.9), ("cloud-large", 0.1));
+
+    let (open, _) = engine_with(config(1), Arc::clone(&classifier))
+        .unwrap()
+        .decide_with_report(&choice_request(&candidates))
+        .unwrap();
+    let ood = open.confidence().ood_score;
+    assert!((ood - 0.469).abs() < 0.01, "the OOD proxy must be live, got {ood}");
+    assert_eq!(open.outcome(), DecisionOutcome::Accept);
+    assert!(
+        trace_fact(&open, "choice", "ood").is_some(),
+        "the OOD channel must be observable in the trace"
+    );
+
+    let policy = DecisionPolicy::default().with_ood_ceiling(0.3).unwrap();
+    let request = request_with_policy(
+        State::from_text("Summarize research across many sources and compare findings"),
+        vec![choice_question("model", &candidates)],
+        policy,
+        RequestMetadata::default(),
+    );
+    let (gated, _) =
+        engine_with(config(1), classifier).unwrap().decide_with_report(&request).unwrap();
+    assert_eq!(gated.outcome(), DecisionOutcome::Verify, "OOD above the ceiling must verify");
 }
 
 #[test]

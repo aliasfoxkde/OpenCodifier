@@ -189,6 +189,29 @@ versioned artifacts alongside model manifests, referenced by
 `calibrated_confidence = raw` with `calibration_version = "none"`, so
 the cache never conflates calibrated and uncalibrated results.
 
+**Amendment (2026-09-28, implemented as Phase 14).** The first shipped
+scheme is temperature scaling, not isotonic or Platt: the benchmark run
+JSONs record winner probability + correctness only, which fits a
+temperature exactly (winner-vs-rest margin fit) and nothing else.
+Concretely: `Calibration` trait in the engine (`calibrate(class,
+distribution) -> f64` + `version()`); `IdentityCalibration` = raw with
+version 0 ("none"); `TemperatureCalibration` from a validated JSON
+artifact (`format_version 1`, `scheme "temperature"`, temperatures
+keyed by question kind, `deny_unknown_fields`, `calibration_version ≥
+1` — 0 stays reserved for "none"). Artifact versions fold into cache
+keys via `EngineIdentity`, so adopting a refit invalidates cached
+decisions. Fitting is offline Python over benchmark runs
+(`benchmarks/decision-model/runner/fit_calibration.py`); the fitted
+artifacts for the D16 tier arms are committed under
+`benchmarks/decision-model/results/calibration/` with measured
+before/after ECE in `results/CALIBRATION.md`. The embedding rung's fit
+is degenerate (no finite temperature helps; scores are ordering-only),
+so no artifact is shipped for it — the per-model opt-in model means the
+engine refuses to fake confidence where the data says none exists.
+Per-class artifacts beyond the question-kind keys (task-level classes)
+wait on the IR carrying class tags; the fitter already prints the
+per-class spread, and it is large (0.5–13 across suite classes on 4B).
+
 ## D16 — Decision-model picks: tier scheme (measured, Phase 13; amended ×7)
 
 **Decision (amended 2026-09-27, third pass — full-sweep frontier):** the

@@ -1,0 +1,16 @@
+{
+  "format_version": 1,
+  "scheme": "temperature",
+  "model_id": "builtin-lexical-v1",
+  "calibration_version": 1,
+  "default_temperature": 0.602429,
+  "temperatures": {
+    "choice": 0.602429
+  },
+  "fit": {
+    "items": 120,
+    "ece_before": 0.115316,
+    "ece_after": 0.10778,
+    "source": "benchmarks/decision-model suite (seed 20260926, 120 items, single-run arm engine__builtin-lexical.json, model builtin-lexical-v1 (no ML)); winner-vs-rest margin fit, in-sample"
+  }
+}

@@ -172,6 +172,15 @@ pub enum EngineError {
         reason: String,
     },
 
+    /// A calibration artifact (D15) is structurally unusable: wrong
+    /// format version, an unknown scheme, a non-positive temperature, or
+    /// the reserved `calibration_version` 0.
+    #[error("invalid calibration artifact: {reason}")]
+    InvalidCalibration {
+        /// Why the artifact was rejected.
+        reason: String,
+    },
+
     /// Canonical serialization of a request for cache-key construction
     /// failed.
     #[error("failed to serialize canonical request: {reason}")]
@@ -232,6 +241,7 @@ impl EngineError {
             Self::InvalidDistribution { .. } => "engine.invalid_distribution",
             Self::DuplicateQuestion { .. } => "engine.duplicate_question",
             Self::InvalidConfig { .. } => "engine.invalid_config",
+            Self::InvalidCalibration { .. } => "calibration.invalid",
             Self::Serialization { .. } => "engine.serialization",
             Self::NodeFailed { .. } => "engine.node_failed",
             Self::ClassifierFailed { .. } => "engine.classifier_failed",
@@ -274,6 +284,7 @@ mod tests {
             EngineError::InvalidDistribution { question: "q".into(), reason: "r".into() },
             EngineError::DuplicateQuestion { question: "q".into() },
             EngineError::InvalidConfig { reason: "r".into() },
+            EngineError::InvalidCalibration { reason: "r".into() },
             EngineError::Serialization { reason: "r".into() },
             EngineError::NodeFailed { node: "n".into(), reason: "r".into() },
             EngineError::ClassifierFailed { model_id: "m".into(), reason: "r".into() },
@@ -290,8 +301,9 @@ mod tests {
         assert_eq!(errors[12].code(), "graph.invalid_node");
         assert_eq!(errors[13].code(), "rules.invalid");
         assert_eq!(errors[14].code(), "cache.miss_configured");
-        assert_eq!(errors[20].code(), "engine.classifier_failed");
-        assert_eq!(errors[20].to_string(), "classifier `m` failed: r");
+        assert_eq!(errors[18].code(), "calibration.invalid");
+        assert_eq!(errors[21].code(), "engine.classifier_failed");
+        assert_eq!(errors[21].to_string(), "classifier `m` failed: r");
     }
 
     #[test]

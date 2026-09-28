@@ -106,6 +106,7 @@
 //! ```
 
 pub mod cache;
+pub mod calibration;
 pub mod classifier;
 pub mod clock;
 pub mod engine;
@@ -118,6 +119,7 @@ pub mod narrowing;
 pub mod rules;
 
 pub use cache::{CacheConfig, CacheKey, CacheKeyBuilder, DecisionCache, EngineIdentity};
+pub use calibration::{Calibration, IdentityCalibration, TemperatureCalibration};
 pub use classifier::{Classifier, LexicalClassifier, MockClassifier};
 pub use clock::{CancellationToken, Clock, Deadline, ManualClock, SystemClock};
 pub use engine::{DecisionEngine, EngineConfig};
