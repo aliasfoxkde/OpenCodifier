@@ -55,6 +55,22 @@ rendered from the run JSONs by `runner/plot.py`) — methodology, complete
 board, quant ladders, findings F1–F17, threats to validity, and
 reproduction commands.
 
+Confidence truthfulness (PLAN Phase 14): the §73 calibration mandate
+and the dead OOD channel are both closed. The engine gains a
+`Calibration` seam — identity (raw, version 0) by default,
+`TemperatureCalibration` from validated versioned artifacts whose
+`calibration_version` folds into cache keys — plus §19 uncertainty
+gates on `DecisionPolicy` (entropy ceiling / minimum margin / OOD
+ceiling, disabled by default, byte-stable canonical form) fed by a live
+distributional OOD score (`entropy / log2(k)`) traced alongside the
+calibrated confidence. Fitted temperature artifacts for the six D16
+tier / rung arms ship under `benchmarks/decision-model/results/
+calibration/` (offline fitter `runner/fit_calibration.py`; evidence in
+`results/CALIBRATION.md`): LLM tiers are overconfident (T 0.84–1.67,
+frontier MiMo-9B ECE 0.048 → 0.026), and the embedding rung's fit is
+degenerate — no finite temperature calibrates gte zero-shot scores,
+which are ordering evidence only, so no artifact is shipped for it.
+
 ## [0.1.1] — 2026-09-26
 
 ### Added

@@ -15,14 +15,16 @@
 //! as the configured [`DecisionGraph`], executed by the wave executor, so
 //! the graph *is* the pipeline and the trace explains it.
 //!
-//! # Calibration (temporary)
+//! # Calibration
 //!
-//! At V1 the calibrated confidence of an answer is its top probability —
-//! identity calibration. That is explicitly temporary (PLANNING.md Rule 8,
-//! §17): raw softmax output is not calibrated confidence, and a temperature
-//! scaling layer arrives in Phase 9. `calibration_version` is part of every
-//! cache key, so swapping calibration in later invalidates cached
-//! decisions automatically.
+//! Calibrated confidence is produced by the [`Calibration`] in
+//! [`EngineConfig::calibration`] — the identity map by default (raw top
+//! probability, `calibration_version 0`), or a validated
+//! [`TemperatureCalibration`](crate::calibration::TemperatureCalibration)
+//! artifact fitted offline (D15). The
+//! calibration's own version is folded
+//! into every cache key, so swapping or refitting an artifact invalidates
+//! cached decisions automatically (D6).
 //!
 //! # Cancellation
 //!
@@ -37,6 +39,7 @@ use std::time::Duration;
 use opencodifier_core::{DecisionRequest, DecisionResponse, DecisionTrace, FactValue, TraceEntry};
 
 use crate::cache::{CacheConfig, CacheKey, CacheKeyBuilder, DecisionCache, EngineIdentity};
+use crate::calibration::{Calibration, IdentityCalibration};
 use crate::classifier::Classifier;
 use crate::clock::{CancellationToken, Clock, Deadline};
 use crate::error::{EngineError, EngineResult};
@@ -57,6 +60,11 @@ pub struct EngineConfig {
     pub graph: DecisionGraph,
     /// Deterministic rules, run before any scoring.
     pub rules: Arc<RuleEngine>,
+    /// The calibration applied to raw classifier probabilities before any
+    /// policy gate reads them (D15). Identity by default; a fitted
+    /// [`TemperatureCalibration`](crate::calibration::TemperatureCalibration)
+    /// makes `calibrated_confidence` mean calibrated confidence.
+    pub calibration: Arc<dyn Calibration>,
     /// Maximum threads used per wave. `1` disables parallel execution.
     pub parallelism: usize,
     /// When `true` (the default), only deterministic evidence may remove
@@ -81,6 +89,7 @@ impl EngineConfig {
             identity: EngineIdentity::default(),
             graph,
             rules: Arc::new(RuleEngine::default()),
+            calibration: Arc::new(IdentityCalibration),
             parallelism: available_parallelism(),
             safe_mode: true,
             lexical_prune_limit: None,
@@ -112,6 +121,15 @@ impl EngineConfig {
     #[must_use]
     pub fn with_rules(mut self, rules: Arc<RuleEngine>) -> Self {
         self.rules = rules;
+        self
+    }
+
+    /// Sets the calibration (D15). The calibration's own `version()` is
+    /// what cache keys fold in, so loading a refitted artifact invalidates
+    /// cached decisions without touching [`EngineConfig::identity`].
+    #[must_use]
+    pub fn with_calibration(mut self, calibration: Arc<dyn Calibration>) -> Self {
+        self.calibration = calibration;
         self
     }
 
@@ -255,7 +273,13 @@ impl DecisionEngine {
     ) -> EngineResult<(DecisionResponse, RunReport)> {
         self.validate(request)?;
         let canonical = CacheKeyBuilder::normalized_request(request);
-        let key = CacheKeyBuilder::build(&canonical, &self.config.identity)?;
+        // The loaded calibration's version governs cache keys (D6): a
+        // refitted artifact invalidates cached decisions automatically.
+        let identity = EngineIdentity {
+            calibration_version: self.config.calibration.version(),
+            ..self.config.identity.clone()
+        };
+        let key = CacheKeyBuilder::build(&canonical, &identity)?;
         let timeout =
             request.metadata().limits.max_execution_time.min(self.config.max_execution_time);
         let deadline = Deadline::after(self.clock.as_ref(), timeout);
