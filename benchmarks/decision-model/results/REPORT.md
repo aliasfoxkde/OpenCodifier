@@ -8,7 +8,7 @@ per artifact, D14). The charts in [`charts/`](charts/) are rendered by
 [`../runner/plot.py`](../runner/plot.py) directly from those run JSONs —
 they are a view of the record, never a source.
 
-**Status: 44 runs (2026-09-25 → 2026-09-28).** Binding tier picks are in
+**Status: 47 runs (2026-09-25 → 2026-09-28).** Binding tier picks are in
 `docs/DECISIONS.md` D16 (amended ×3, extended ×1); this report is the
 evidence behind them.
 
@@ -146,6 +146,9 @@ on-disk MiB at sweep time.
 |---|---|---|---|---|---|---|
 | engine builtin-lexical | — | 0.88 / 0.23 / 0.35 | 0.483 | 0.115 | **5.3 ms** | yes |
 | embed gte-modernbert-base | — | 0.45 / 0.78 / 0.50 | 0.575 | 0.330 | 3374.8 ms* | yes |
+| embed gte-modernbert-onnx-fp32 | 596 | 0.45 / 0.78 / 0.50 | 0.575 | 0.330 | 811.4 ms* | yes |
+| embed gte-modernbert-onnx-int8 | 149 | 0.28 / 0.78 / 0.28 | 0.442 | 0.233 | 674.1 ms* | yes |
+| embed embeddinggemma-300M-Q8_0 | 319 | 0.62 / 0.62 / 0.25 | 0.500 | 0.256 | 634.9 ms* | yes |
 | embed minilm-l6-v2 | — | 0.30 / 0.62 / 0.35 | 0.425 | 0.172 | 107.0 ms* | yes |
 | Laya-421M | — | 0.30 / 0.80 / 0.33 | 0.475 | 0.089 | 547.6 ms | yes |
 | Falcon-H1-Tiny-90M-Instruct | 56 | 0.23 / 0.28 / 0.33 | 0.275 | 0.462 | 459.4 ms | yes |
@@ -278,6 +281,26 @@ repo offers no usable fallback (F16 at 51 GB exceeds host RAM; PQ2_0 is
 the unreadable Ternary-8B format family). Net: on CPU, ternary-class
 viability in this build is 4B-and-below.
 
+**Embedding-rung runtime bake-off (2026-09-28).** The ONNX question —
+"does ONNX Runtime buy CPU speed here?" — answered with a controlled
+arm set: the *same* gte-modernbert-base encoder, same suite, same math,
+same 4 threads, three runtimes. **ONNX fp32 is identical in quality and
+4.2× faster than torch: 0.575 / ECE 0.330 / per-class 0.45-0.78-0.50,
+all three equal to the torch row to the digit, at 811.4 ms/item vs
+3374.8.** Dynamic int8 quantization collapses quality (0.442; metadata
+0.45→0.28, relational 0.50→0.28) for only −17% latency (674.1 ms) —
+rejected: it trades the rung's whole margin for a size/latency sliver.
+An fp16-weights export (294 MiB) is unloadable by onnxruntime 1.x
+(torch 2.14's legacy exporter emits a mixed-dtype LayerNormalization
+node); the proper fp16 route needs onnxconverter-common massaging and
+was not pursued — int8 already covers the size axis at half the bytes.
+EmbeddingGemma-300M Q8_0 via llama.cpp (319 MiB, new `llamacpp` backend
+in run_embed.py) scores 0.500 / ECE 0.256 / 634.9 ms — below gte on
+accuracy, better calibrated, no tier change. Net: **the embedding rung
+moves to ONNX fp32** — same numbers as torch, 4.2× the speed — and the
+MiniLM arm's 107 ms/item (8 threads) remains the small/fast option of
+the rung. Thread-count confound noted in threats (#11).
+
 ## Findings
 
 - **F1 — Tier scheme (D16 ×3).** Four measured tiers: MiMo-9B Q3_K_S
@@ -374,6 +397,15 @@ viability in this build is 4B-and-below.
   size ("TQ1_0 @ 5.95 GB") says nothing about whether a given runtime
   can read the tensors; format support is a measured property of the
   (build, artifact) pair, exactly like latency (F8/F16).
+- **F20 — ONNX buys CPU speed exactly where the architecture said it
+  would: the encoder rung.** Same model, same suite, same math: gte
+  ONNX-fp32 = torch to the digit on accuracy/ECE/per-class, 811 ms vs
+  3375 ms per item (4.2×). And its limits are equally measured: dynamic
+  int8 loses 0.133 accuracy for 17% latency (embedding geometry does
+  not survive weight-only quantization here), and an fp16 export fails
+  to load outright (exporter defect). Runtimes and quant schemes are
+  per-rung empirical questions — the ladder's "cheapest reliable
+  mechanism" rule extends to the runtime layer.
 
 ## Threats to validity
 
@@ -409,6 +441,10 @@ viability in this build is 4B-and-below.
     claimed here. The same holds for the 2026-09-28 second-pass probes —
     Bonsai-8B (prefill cliff, F18) and Ternary-Bonsai-2-27B (unloadable,
     F19) — each probed to a bounded budget and stopped there.
+11. **Embed-arm thread counts differ** (MiniLM 107 ms/item ran at 8
+    threads; the gte/gemma arms at 4 to match the torch reference).
+    Cross-arm embed latency comparisons carry that factor; the bake-off
+    verdict (F20) only compares arms run at identical thread counts.
 
 ## Reproduction
 
@@ -460,3 +496,10 @@ hash is a changed artifact and invalidates the row (D14).
   ≈1.5 s/token beyond a ~30-token knee, suite projects to 9–13 h (F18);
   Ternary-Bonsai-2-27B PTQ1_0 recorded as unloadable (ggml type 143,
   F19). On-CPU ternary viability in this build is 4B-and-below.
+- **2026-09-28 (embedding-rung bake-off)** — 47 runs: gte ONNX-fp32
+  (identical quality to torch at 4.2× the speed — the rung's runtime
+  moves to ONNX, F20), gte ONNX-int8 rejected (0.442, quality collapse
+  for −17% latency), EmbeddingGemma-300M Q8_0 via llama.cpp recorded
+  (0.500 / ECE 0.256 / 634.9 ms; `llamacpp` backend added to
+  run_embed.py), fp16 export unloadable and skipped. No tier changes
+  (D16 amended ×6).

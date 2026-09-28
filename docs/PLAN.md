@@ -434,6 +434,19 @@ with measurement, not opinion.
   in this build is 4B-and-below; backlog #35 (Vulkan A/B) now owns the
   whole ternary ladder.
 
+- **Extension 6 (2026-09-28, embedding-rung bake-off — 47 runs).**
+  Backlog #37 executed: the ONNX CPU-speed question answered with a
+  controlled arm set (same encoder, same suite, same math, same 4
+  threads). **gte ONNX-fp32 ties the torch row to the digit
+  (0.575 / ECE 0.330) at 811.4 ms/item vs 3374.8 — 4.2× faster — and
+  becomes the rung's runtime** (D16 amended ×6, REPORT F20); int8
+  dynamic quant rejected (0.442 for −17% latency); fp16 export
+  unloadable (torch 2.14 exporter emits a mixed-dtype LayerNorm);
+  EmbeddingGemma-300M Q8_0 recorded via a new `llamacpp` backend in
+  run_embed.py (0.500 / ECE 0.256 / 634.9 ms). run_embed.py now carries
+  three backends (onnx / torch / llamacpp) with identical downstream
+  math.
+
 - **Findings.** (1) The task-dependent floor from the reference video
   reproduces exactly: relational_compositional never exceeds 0.50 for
   any cheap arm (the ceiling held across the whole sweep until

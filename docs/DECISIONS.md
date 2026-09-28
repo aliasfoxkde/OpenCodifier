@@ -189,7 +189,7 @@ versioned artifacts alongside model manifests, referenced by
 `calibrated_confidence = raw` with `calibration_version = "none"`, so
 the cache never conflates calibrated and uncalibrated results.
 
-## D16 — Decision-model picks: tier scheme (measured, Phase 13; amended ×5)
+## D16 — Decision-model picks: tier scheme (measured, Phase 13; amended ×6)
 
 **Decision (amended 2026-09-27, third pass — full-sweep frontier):** the
 tier scheme gains a frontier tier and the interactive reference moves:
@@ -272,7 +272,20 @@ Provenance findings folded into the record: (a) both community
 (D14); (b) their uploads omit the MTP block declared in config — GGUF
 conversion requires llama.cpp's `--no-mtp`.
 
-*Amendment history:* 2026-09-28 fifth pass (ternary second pass) — no
+*Amendment history:* 2026-09-28 sixth pass (embedding-rung bake-off) —
+no tier changes; the **embedding rung's runtime moves to ONNX fp32**:
+the same gte-modernbert-base encoder on onnxruntime scores identically
+to the torch row to the digit (0.575 / ECE 0.330 / 0.45-0.78-0.50) at
+**811.4 ms/item vs 3374.8 — 4.2× faster on CPU** (REPORT F20). Dynamic
+int8 is rejected (0.442 — metadata 0.45→0.28, relational 0.50→0.28 —
+for −17% latency); an fp16-weights export is unloadable by onnxruntime
+(mixed-dtype LayerNormalization from torch 2.14's exporter) and
+skipped; EmbeddingGemma-300M Q8_0 via llama.cpp (319 MiB, new
+`llamacpp` backend in run_embed.py) records 0.500 / ECE 0.256 /
+634.9 ms — below the gte rung reference on accuracy, better
+calibrated, no tier. The board stands at 47 runs; gte (any runtime)
+remains embedding-rung reference only — ECE ≥ 0.330 keeps it behind
+the D15 calibration gate. 2026-09-28 fifth pass (ternary second pass) — no
 tier changes, no new completed runs; two ternary candidates resolved as
 measured negatives. **Bonsai-8B** (Q1_0, 1105 MiB; `Bonsai-8B.gguf` and
 `Bonsai-8B-Q1_0.gguf` are byte-identical artifacts under two names)

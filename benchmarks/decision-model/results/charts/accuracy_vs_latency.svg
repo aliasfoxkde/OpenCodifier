@@ -30,7 +30,10 @@
 <line x1="670.0" y1="56" x2="670.0" y2="462" stroke="#ddd"/>
 <text x="670.0" y="480" font-size="11" text-anchor="middle" fill="#444">60s</text>
 <text x="369" y="504" font-size="12" text-anchor="middle" fill="#333">single-decision p50 (log; embed arms plot mean ms/item)</text>
+<path d="M 421.1 267.5 L 426.1 276.5 L 416.1 276.5 Z" fill="#9467bd"/>
 <path d="M 512.5 226.9 L 517.5 235.9 L 507.5 235.9 Z" fill="#9467bd"/>
+<path d="M 434.5 226.9 L 439.5 235.9 L 429.5 235.9 Z" fill="#9467bd"/>
+<path d="M 424.4 299.1 L 429.4 308.1 L 419.4 308.1 Z" fill="#9467bd"/>
 <path d="M 323.7 308.1 L 328.7 317.1 L 318.7 317.1 Z" fill="#9467bd"/>
 <rect x="155.0" y="277.6" width="8" height="8" fill="#d62728"/>
 <path d="M 413.0 280.1 L 419.0 286.1 L 413.0 292.1 L 407.0 286.1 Z" fill="#8c564b"/>
@@ -71,7 +74,10 @@
 <circle cx="426.0" cy="331.2" r="4.5" fill="#7f7f7f"/>
 <circle cx="458.1" cy="227.4" r="4.5" fill="#7f7f7f"/>
 <circle cx="497.7" cy="177.8" r="4.5" fill="#7f7f7f"/>
+<text x="428.1" y="276.5" font-size="10" fill="#222">gemma-embd-300M 0.500</text>
 <text x="519.5" y="235.9" font-size="10" fill="#222">gte 0.575</text>
+<text x="441.5" y="235.9" font-size="10" fill="#222">gte-ONNX-fp32 0.575</text>
+<text x="431.4" y="308.1" font-size="10" fill="#222">gte-ONNX-int8 0.442</text>
 <text x="166.0" y="285.6" font-size="10" fill="#222">engine lexical 0.483</text>
 <text x="445.1" y="429.9" font-size="10" fill="#222">Jev-0.8B* 0.217</text>
 <text x="598.6" y="105.1" font-size="10" fill="#222">MiMo-9B-Q3_K_S 0.817</text>
