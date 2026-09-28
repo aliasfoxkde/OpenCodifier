@@ -10,6 +10,9 @@ releases may break, and every breaking change is recorded in this file
 
 ### Added
 
+- Hosted API tier design (`docs/HOSTED_TIER.md`): VPS phases,
+  edge-owned auth/tenancy, measured cost anchors, local/product
+  separation invariants. Design only.
 - Amortyx integration design (`docs/INTEGRATION_AMORTYX.md`, PLANNING
   §60–§62): router decisions as typed IR, ladder/latency lane mapping,
   loopback `/v1/decide` contract, shadow mode on Amortyx's holdout, the
