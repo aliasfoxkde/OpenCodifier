@@ -93,6 +93,14 @@ fields — canonical request with sorted candidates, graph version, model
 id, calibration version, engine semver. Other crates reference
 `CacheKey`, never re-derive it.
 
+**Amendment (2026-09-28, relational solver):** the model id in the key
+is the **live classifier's** id — `DecisionEngine::new` derives
+`identity.model_id` from `Classifier::model_id()` at construction, and
+wrapper classifiers compose their ids (`relational-v1|builtin-lexical-v1`),
+so a swapped or decorated classifier invalidates cached decisions
+without caller bookkeeping. A hand-set `EngineIdentity::model_id` is
+never trusted over the decider that actually runs.
+
 ## D7 — Float policy: decision math in Rust, f64
 
 All decision math is Rust-side f64 (softmax, calibration, margins,
@@ -212,7 +220,16 @@ Per-class artifacts beyond the question-kind keys (task-level classes)
 wait on the IR carrying class tags; the fitter already prints the
 per-class spread, and it is large (0.5–13 across suite classes on 4B).
 
-## D16 — Decision-model picks: tier scheme (measured, Phase 13; amended ×7)
+**Amendment (2026-09-28, relational solver):** an artifact ships only if
+the fit does not worsen ECE — in-sample NLL improves on nearly any
+1-parameter fit, so ECE is the shape check. The engine arm of record is
+now the relational solver's bimodal proof/delegate stack, whose global
+fit (T = 0.658) worsens ECE (0.094 → 0.097): no artifact ships, the
+arm keeps identity calibration, and the retired `builtin-lexical-v1`
+artifact was removed with the bare-lexical stack it described. The
+fitter enforces the gate.
+
+## D16 — Decision-model picks: tier scheme (measured, Phase 13; amended ×8)
 
 **Decision (amended 2026-09-27, third pass — full-sweep frontier):** the
 tier scheme gains a frontier tier and the interactive reference moves:
@@ -295,7 +312,24 @@ Provenance findings folded into the record: (a) both community
 (D14); (b) their uploads omit the MTP block declared in config — GGUF
 conversion requires llama.cpp's `--no-mtp`.
 
-*Amendment history:* 2026-09-28 seventh pass (blockwise int4 arm) — no
+*Amendment history:* **2026-09-28 eighth pass (relational solver, PLAN
+Phase 15) — the zero-ML floor is re-tiered.** The engine's default stack
+became the relational solver over the lexical classifier (exact proofs
+over extracted facts, delegating everything it cannot prove); the
+re-run engine arm on the byte-locked suite scores **0.683 blended
+(0.88 / 0.23 / 0.950) at 1.3 ms p50** (REPORT F22). Consequences: (a)
+**the fast tier is undercut on both axes** — Qwen3.5-0.8B (0.650 @
+613 ms, 537 MiB) is retained as the fast *model* tier for lexical-heavy
+residuals, but any deployment whose residual stream is metadata +
+relational structure should ride the engine floor instead: 0.683 @
+1.3 ms, zero MiB, zero download, bit-deterministic; (b) **the 0.50
+relational ceiling is now known to bind likelihoods, not proofs** —
+MiMo-9B keeps the model-arm crown (0.525 @ 14.3 s), while the runtime
+proves 0.950 where models guess; (c) the calibration of record for the
+engine arm stays identity — the global temperature fit worsens ECE on
+the bimodal proof/delegate distribution (CALIBRATION.md), and the old
+`builtin-lexical-v1` artifact was retired with the stack it described.
+Board stands at 49 runs. 2026-09-28 seventh pass (blockwise int4 arm) — no
 tier changes; the Q4_0-analog question is measured closed. ORT 1.30's
 `MatMulNBits` quantizer (block 32, asymmetric, 4-bit) on the gte fp32
 graph yields a 226 MB build scoring **0.575 / ECE 0.330 — blended,

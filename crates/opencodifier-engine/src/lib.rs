@@ -14,6 +14,8 @@
 //! | [`graph`] | §9, §10 — declarative, serializable decision DAG |
 //! | [`executor`] | §10 — topological waves, parallel nodes, timeout, cancellation, traces |
 //! | [`rules`] | §11 — deterministic rule engine (JSON wire format) |
+//! | [`facts`] | §43 — exact-grammar relational fact extraction from state text |
+//! | [`relational`] | §43 — the relational solver: proven answers, delegation for the rest |
 //! | [`narrowing`] | §45 — candidate narrowing under safe mode |
 //! | [`cache`] | §44, §64 — exact-decision cache, one key construction site |
 //! | [`lexical`] | §43 — hand-written BM25 scoring |
@@ -112,10 +114,12 @@ pub mod clock;
 pub mod engine;
 pub mod error;
 pub mod executor;
+pub mod facts;
 pub mod graph;
 pub mod handle;
 pub mod lexical;
 pub mod narrowing;
+pub mod relational;
 pub mod rules;
 
 pub use cache::{CacheConfig, CacheKey, CacheKeyBuilder, DecisionCache, EngineIdentity};
@@ -125,10 +129,12 @@ pub use clock::{CancellationToken, Clock, Deadline, ManualClock, SystemClock};
 pub use engine::{DecisionEngine, EngineConfig};
 pub use error::{EngineError, EngineResult};
 pub use executor::RunReport;
+pub use facts::{Health, RelationalFact};
 pub use graph::{DecisionGraph, NodeKind, NodeSpec};
 pub use handle::{EngineHandle, EngineHealth};
 pub use lexical::{Bm25Index, negation_polarity, softmax, tokenize};
 pub use narrowing::{LexicalScores, NarrowingOutcome};
+pub use relational::RelationalSolver;
 pub use rules::{Action, Condition, Rule, RuleEngine, RuleSet};
 
 #[cfg(test)]

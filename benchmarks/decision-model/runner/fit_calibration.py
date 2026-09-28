@@ -53,7 +53,10 @@ from pathlib import Path
 # Board arm -> artifact file stem. The D16 tier scheme plus the two
 # sub-LLM rungs; everything else on the board is analysis-only.
 ARMS: dict[str, str] = {
-    "engine__builtin-lexical.json": "builtin-lexical-v1",
+    # The engine arm of record is the relational solver over the lexical
+    # classifier (its live identity composes both ids); the bare lexical
+    # stack it replaced no longer ships as the default.
+    "engine__relational-v1.json": "relational-v1",
     "embed__gte-modernbert-onnx-fp32.json": "gte-modernbert-onnx-fp32",
     "llama__Qwen3.5-0.8B-q4_0.json": "qwen3.5-0.8b-q4_0",
     "llama__Qwen3.5-2B.json": "qwen3.5-2b-q4_k_m",
@@ -205,14 +208,26 @@ def main() -> None:
         run = json.loads(run_path.read_text())
         fitted = build_artifact(artifact_name, run, run_path)
         out_path = args.out_dir / f"{artifact_name}.json"
-        if fitted["degenerate"]:
-            # T -> inf wins: the constant 0.5 beats every finite
-            # temperature. No artifact - an infinite temperature is not a
-            # valid calibration (engine validation requires T > 0 finite),
-            # and the honest reading is that this rung's scores are
-            # ordering-only, not confidence.
+        # An artifact ships only if the fit does not worsen the headline
+        # calibration diagnostic. NLL (the fit objective) improves on any
+        # in-sample 1-parameter fit of enough items; ECE is the check that
+        # the rescaling is actually the right shape. A bimodal
+        # proof/delegate stack (hard 1.0s plus an underconfident lexical
+        # tail) is exactly where a single global temperature is the wrong
+        # tool, and its artifact must not ship.
+        helps = fitted["ece_after"] <= fitted["ece_before"]
+        if fitted["degenerate"] or not helps:
             out_path.unlink(missing_ok=True)
-            rows.append((artifact_name, float("inf"), fitted["ece_before"], float("nan")))
+            if fitted["degenerate"]:
+                # T -> inf wins: the constant 0.5 beats every finite
+                # temperature. No artifact - an infinite temperature is
+                # not a valid calibration (engine validation requires
+                # T > 0 finite), and the honest reading is that this
+                # rung's scores are ordering-only, not confidence.
+                rows.append((artifact_name, float("inf"), fitted["ece_before"], float("nan")))
+            else:
+                rows.append((artifact_name, fitted["temperature"], fitted["ece_before"],
+                             fitted["ece_after"]))
         else:
             out_path.write_text(json.dumps(fitted["artifact"], indent=2) + "\n")
             rows.append((artifact_name, fitted["temperature"], fitted["ece_before"], fitted["ece_after"]))
@@ -221,7 +236,9 @@ def main() -> None:
         )
         print(f"{artifact_name}: T={fitted['temperature']:.3f} "
               f"ECE {fitted['ece_before']:.3f} -> {fitted['ece_after']:.3f} [{per_class}]"
-              + ("  [DEGENERATE: T->inf, no artifact]" if fitted["degenerate"] else ""))
+              + ("  [DEGENERATE: T->inf, no artifact]" if fitted["degenerate"] else "")
+              + ("  [SKIP: ECE worsens, no artifact]"
+                 if not fitted["degenerate"] and not helps else ""))
 
     print()
     print("| artifact | T | ECE before | ECE after |")

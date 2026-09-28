@@ -132,6 +132,7 @@ def short(name: str) -> str:
         ("gte-modernbert-onnx-q4-b32", "gte-ONNX-q4"),
         ("gte-modernbert-base", "gte"),
         ("embeddinggemma-300M-Q8_0", "gemma-embd-300M"),
+        ("relational-v1|builtin-lexical-v1", "engine relational"),
         ("builtin-lexical", "engine lexical"),
         ("Jev-Style-0.8B-Decision-v3", "Jev-0.8B*"),
     ):
@@ -255,7 +256,7 @@ def chart_accuracy_latency(runs: list[tuple[str, dict]], out_dir: Path) -> None:
     # 0.50 relational-ceiling context: gridline only (accuracy axis).
     labeled = {
         "MiMo-9B-Q3_K_S", "Q3.5-4B-Q3_K_S", "Q3.5-4B-UD-Q4_K_XL", "Q3.5-2B",
-        "Q3.5-0.8B q4_0", "engine lexical", "gte", "gte-ONNX-fp32",
+        "Q3.5-0.8B q4_0", "engine relational", "engine lexical", "gte", "gte-ONNX-fp32",
         "gte-ONNX-int8", "gte-ONNX-q4", "gemma-embd-300M", "Jev-0.8B*",
     }
     labels = []
@@ -270,7 +271,7 @@ def chart_accuracy_latency(runs: list[tuple[str, dict]], out_dir: Path) -> None:
             ("decision arm (llama.cpp tree)", COLORS["q35-4b"]),
             ("MiMo-9B", COLORS["mimo"]),
             ("Qwen3.5-2B ladder", COLORS["q35-2b"]),
-            ("engine lexical (5.3ms)", COLORS["engine"]),
+            ("engine relational (1.3ms)", COLORS["engine"]),
             ("embedding zero-shot", COLORS["embed"]),
             ("Laya-421M", COLORS["laya"]),
             ("other decision arms", COLORS["other"]),
@@ -365,7 +366,9 @@ def chart_relational_ceiling(runs: list[tuple[str, dict]], out_dir: Path) -> Non
         "relational_compositional — the ceiling and who breaks it</text>",
         f'<text x="16" y="42" font-size="11" fill="#555">Top {top} arms by relational '
         'accuracy (candidate-conditioned decision arm unless noted). 0.50 held for '
-        'every arm until MiMo-9B Q3_K_S at 14.3 s p50 (verifier tier, D16).</text>',
+        'every model arm until MiMo-9B Q3_K_S at 14.3 s p50 (verifier tier, D16); the '
+        'deterministic relational solver (engine default, 1.3 ms p50) breaks the '
+        'ceiling outright at 0.950 — exact proofs, not likelihoods.</text>',
     ]
     plot_w = W - ML - MR
     x_for = lambda v: ML + v * plot_w
@@ -454,7 +457,7 @@ def chart_calibration(runs: list[tuple[str, dict]], out_dir: Path) -> None:
             ("decision arm", COLORS["q35-4b"]),
             ("MiMo-9B", COLORS["mimo"]),
             ("Qwen3.5-2B ladder", COLORS["q35-2b"]),
-            ("engine lexical", COLORS["engine"]),
+            ("engine relational", COLORS["engine"]),
             ("embedding zero-shot", COLORS["embed"]),
             ("Laya-421M", COLORS["laya"]),
             ("other decision arms", COLORS["other"]),

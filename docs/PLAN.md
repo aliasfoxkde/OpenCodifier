@@ -55,6 +55,7 @@ Remaining risks tracked in §6 below.
 | 12 | Release engineering (tag, release, GitForge pipeline green) | **done** (49bc224) — tag v0.1.0; pipeline of record green through GitForge (fe4b0871); v0.1.1 CI hardening (3bad2bb, run 8e8401f0) |
 | 13 | Decision-model benchmark: pick the model | **done** — `benchmarks/decision-model/`, thirteen arms; Qwen3.8-4B-Distill reference pick, tiered alternatives (D16, amended ×2) |
 | 14 | Confidence truthfulness: D15 calibration + §19 gates | **done** (2026-09-28) — `Calibration` trait + fitted temperature artifacts for the tier arms; the dead OOD channel is live and policy-gated |
+| 15 | §43 relational solver: exact proofs over extracted facts | **done** (2026-09-28) — `facts` + `relational` in the engine, default zero-ML stack; engine arm 0.483 → 0.683 @ 1.3 ms, relational 0.950 (D16 ×8) |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
@@ -544,6 +545,57 @@ without changing behavior for engines that do not opt in:
   engine integration tests (an artifact swap changes confidence AND
   invalidates the cache; the OOD channel gates acceptance end-to-end
   and is observable in the trace); fmt/clippy/test/doc/deny/aegis green.
+
+## Phase 15 — §43 relational solver: exact proofs over extracted facts (done, 2026-09-28)
+
+The benchmark's relational_compositional class exposed the gap between
+"BM25 over prose" and "knowing the state": every model arm plateaued at
+≤ 0.53 and the engine at 0.350. The cheapest-reliable-rung principle
+(§43) applied literally says the runtime should *prove* relational
+answers before it scores them:
+
+- **Exact-grammar fact extraction (`facts.rs`).** Sentences split on
+  `.`; each must match one pattern in full — `X depends on Y`,
+  `X is healthy|degraded|down|failing`, `X: s1, s2, …`,
+  `X comes back online only after Y` — into typed `RelationalFact`s.
+  Total on any input, conservative by construction; entity names are
+  `[A-Za-z0-9_-]` runs ≤ 64 chars, so hostile text cannot smuggle
+  structure.
+- **The relational solver (`relational.rs`), a Classifier decorator.**
+  Three general operators — root cause (transitive dependency closure),
+  healthiest group (strict argmax), first restored (gates-something,
+  waits-for-nothing) — compute over the *whole* extracted structure,
+  not the candidates. A proof stands only if it is unique, inside the
+  candidate set, and agreed by every operator; anything else delegates
+  to the inner classifier untouched. No question-text keywords: the
+  facts decide what fires. `model_id` composes
+  (`relational-v1|builtin-lexical-v1`).
+- **Cache-key honesty (D6/§64).** `DecisionEngine::new` now derives
+  `identity.model_id` from the live classifier's `model_id()`, so a
+  wrapped or swapped classifier changes keys without caller
+  bookkeeping; a hand-set identity model_id is never trusted. This was
+  a real (if latent) correctness gap: the composed id existed for cache
+  composition but nothing consumed it.
+- **Default stack.** `EngineHandle::lexical` (CLI/HTTP/MCP all route
+  through it) assembles solver-over-lexical: the base binary is more
+  useful with still zero ML.
+- **Measured (engine arm re-run on the byte-locked suite).**
+  relational_compositional 0.350 → **0.950**, blended 0.483 → **0.683**,
+  p50 5.3 ms → **1.3 ms**; metadata/lexical classes bit-identical (no
+  regression); determinism replay exact. Proofs leave at p = 1.0 and
+  were right 26/26; the two relational misses were delegated hedges.
+  D16 amended (×8): the zero-ML floor undercuts the fast tier
+  (0.683 @ 1.3 ms vs Qwen3.5-0.8B 0.650 @ 613 ms). Calibration: the
+  global temperature fit worsens ECE on the bimodal proof/delegate
+  stack, so no artifact ships (CALIBRATION.md finding 2); the retired
+  `builtin-lexical-v1` artifact was removed with the stack it
+  described.
+- **Accept (met):** 23 new engine unit tests (grammar totals/hostility,
+  per-operator proofs and abstentions, delegation, model-id
+  composition, solver-vs-bare regression) + 2 pipeline tests
+  (classifier-swap invalidation, hand-set-identity override) + http e2e
+  identity check updated; fmt/clippy/test/doc/deny/aegis green; engine
+  arm re-measured, board at 49 runs.
 
 ## Quality gates (every phase, no exceptions)
 

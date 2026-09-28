@@ -126,7 +126,7 @@ def main() -> int:
             ]
             if parts:
                 lines.append(f"- `{name}` bulk per-decision (batched contexts): {'; '.join(parts)}.")
-        if d.get("arm") == "engine_builtin_lexical":
+        if d.get("arm", "").startswith("engine__") or d.get("arm") == "engine_builtin_lexical":
             lines.append(
                 f"- `{name}` outcomes: {d['metrics'].get('outcomes')} — abstention/verify "
                 "routing is part of the engine contract, not a failure."

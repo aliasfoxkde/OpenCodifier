@@ -10,19 +10,29 @@ until it is calibrated.
 
 ## Fits
 
-| artifact | T | ECE before | ECE after |
-|---|---|---|---|
-| builtin-lexical-v1 | 0.602 | 0.115 | 0.108 |
-| gte-modernbert-onnx-fp32 | ∞ (degenerate) | 0.330 | — |
-| qwen3.5-0.8b-q4_0 | 0.629 | 0.074 | 0.054 |
-| qwen3.5-2b-q4_k_m | 0.843 | 0.062 | 0.054 |
-| qwen3.5-4b-q3_k_s | 1.672 | 0.069 | 0.039 |
-| qwen3.5-4b-ud-q4_k_xl | 1.400 | 0.074 | 0.058 |
-| mimo-v2.6-9b-q3_k_s | 1.372 | 0.048 | 0.026 |
+| arm | T | ECE before | ECE after | artifact |
+|---|---|---|---|---|
+| relational-v1 (engine default) | 0.658 | 0.094 | 0.097 | **not shipped** |
+| gte-modernbert-onnx-fp32 | ∞ (degenerate) | 0.330 | — | not shipped |
+| qwen3.5-0.8b-q4_0 | 0.629 | 0.074 | 0.054 | shipped |
+| qwen3.5-2b-q4_k_m | 0.843 | 0.062 | 0.054 | shipped |
+| qwen3.5-4b-q3_k_s | 1.672 | 0.069 | 0.039 | shipped |
+| qwen3.5-4b-ud-q4_k_xl | 1.400 | 0.074 | 0.058 | shipped |
+| mimo-v2.6-9b-q3_k_s | 1.372 | 0.048 | 0.026 | shipped |
+
+(The `builtin-lexical-v1` row from the first fit described the bare
+lexical stack, which the relational solver has since replaced as the
+engine default; its artifact was retired with the stack. Its numbers —
+T 0.602, ECE 0.115 → 0.108 — remain in git history.)
 
 Shipped artifacts (validated against the engine's `CalibrationArtifact`
-schema): `calibration/{builtin-lexical-v1,qwen3.5-0.8b-q4_0,qwen3.5-2b-q4_k_m,
+schema): `calibration/{qwen3.5-0.8b-q4_0,qwen3.5-2b-q4_k_m,
 qwen3.5-4b-q3_k_s,qwen3.5-4b-ud-q4_k_xl,mimo-v2.6-9b-q3_k_s}.json`.
+
+**Shipping gate (added with the relational fit):** an artifact ships
+only if the fit does not worsen ECE. NLL — the fit objective — improves
+on virtually any in-sample 1-parameter fit; ECE is the check that the
+rescaling has the right shape. The fitter now enforces this.
 
 Every artifact carries `calibration_version: 1` and keys its temperature
 on the `choice` question class (the engine's `question_class` name; the
@@ -35,10 +45,16 @@ suite is all-Choice, so the global fit and the class fit coincide).
    (1.672), Qwen3.5-2B least (0.843). ECE after the fit drops 27–44%
    relative (frontier MiMo-9B: 0.048 → 0.026). Confidence read off raw
    logits is systematically too high — the exact failure D15 exists for.
-2. **The sub-1GB engine rung is *under*confident** (lexical
-   builtin, `T = 0.602`): its scores hedge relative to their actual hit
-   rate. The correction is small (0.115 → 0.108) and in-sample; treat
-   the lexical artifact as optional.
+2. **The relational solver's proofs need no temperature, and its tail
+   rejects one.** On the new engine arm (relational-v1 over lexical),
+   every exact proof leaves at p = 1.0 and is right — 26/26 — while the
+   delegated lexical tail hedges at p ≈ 0.25–0.95. A single global
+   temperature (fit T = 0.658) sharpens the wrong half: NLL improves
+   (0.388 → 0.374) but ECE worsens (0.094 → 0.097), so **no artifact
+   ships** and the arm keeps identity calibration. The bimodal
+   proof/delegate structure is the point: certainty where the facts
+   prove it, soft evidence everywhere else. A per-mode calibration
+   (prove vs delegate) needs a class tag in the IR and is future work.
 3. **The embedding rung has no calibrated confidence at all.** The gte
    zero-shot fit is degenerate: NLL falls monotonically to its T→∞
    limit, so the best calibrated predictor is the constant 0.5 — no

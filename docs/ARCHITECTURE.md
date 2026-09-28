@@ -34,7 +34,13 @@ class before running (PLANNING.md §15, per-stage budgets in
    then (if configured) embeddings, until the candidate set fits budget.
 5. **Semantic scoring** — embedding similarity ranks surviving candidates.
 6. **Decision model** — candidate-conditioned scorer produces the answer
-   distribution (ONNX backend or deterministic fallback).
+   distribution (ONNX backend or deterministic fallback). The built-in
+   deterministic fallback is the **relational solver**: it extracts
+   relational facts from the state text with an exact grammar and
+   *proves* root-cause / healthiest / first-restored answers over the
+   whole extracted structure, answering only unique, candidate-set,
+   inter-operator-agreed proofs and delegating to the lexical
+   classifier for everything else (§43's cheapest reliable rung).
 7. **Calibration + confidence gate** — raw scores → calibrated confidence
    (`ConfidenceReport`); `outcome_for(policy)` routes to
    accept / verify / abstain.

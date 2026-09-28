@@ -20,9 +20,11 @@ use crate::error::CliError;
 const LONG_ABOUT: &str = "\
 The OpenCodifier decision runtime's command line.
 
-Local-first and deterministic-first: every subcommand is synchronous, fully
-offline, and decides through the built-in lexical classifier — the base
-binary is useful with no model files anywhere on the machine. Responses are
+Local-first and deterministic-first: every subcommand is synchronous,
+fully offline, and decides through the built-in zero-ML stack — the
+relational solver (exact proofs over extracted facts) over the lexical
+classifier. The base binary is useful with no model files anywhere on
+the machine. Responses are
 always printed in the canonical native format, the IR's own JSON projection.
 
 EXIT CODES

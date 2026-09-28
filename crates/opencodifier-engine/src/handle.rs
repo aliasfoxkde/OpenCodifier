@@ -13,7 +13,7 @@ use std::sync::Arc;
 use opencodifier_core::{DecisionRequest, DecisionResponse};
 
 use crate::cache::EngineIdentity;
-use crate::classifier::{Classifier, LexicalClassifier};
+use crate::classifier::Classifier;
 use crate::clock::SystemClock;
 use crate::engine::{DecisionEngine, EngineConfig};
 use crate::error::EngineResult;
@@ -44,15 +44,16 @@ impl EngineHandle {
         })
     }
 
-    /// The fully deterministic, zero-ML engine: built-in lexical
-    /// classifier only. This is the base binary's default posture —
-    /// useful with no model files anywhere on the machine.
+    /// The fully deterministic, zero-ML engine: the relational solver
+    /// (exact proofs over extracted facts) over the built-in lexical
+    /// classifier. This is the base binary's default posture — useful
+    /// with no model files anywhere on the machine.
     ///
     /// # Errors
     ///
     /// Propagates [`DecisionEngine::new`].
     pub fn lexical(config: EngineConfig) -> EngineResult<Self> {
-        Self::new(config, Arc::new(LexicalClassifier::new()), None)
+        Self::new(config, Arc::new(crate::relational::RelationalSolver::lexical()), None)
     }
 
     /// Decides a request through the full pipeline.
@@ -163,7 +164,14 @@ mod tests {
         assert_eq!(response.answers().len(), 1);
 
         let health = handle.health();
-        assert_eq!(health.identity, EngineIdentity::builtin());
+        // Built-in graph and calibration; the model id is the composed
+        // solver id, asserted below.
+        assert_eq!(health.identity.graph_version, EngineIdentity::builtin().graph_version);
+        assert_eq!(
+            health.identity.calibration_version,
+            EngineIdentity::builtin().calibration_version
+        );
+        assert_eq!(health.identity.engine_semver, EngineIdentity::builtin().engine_semver);
         assert!(health.nodes > 0);
         assert!(health.parallelism >= 1);
         assert!(health.cache_enabled);
@@ -171,7 +179,8 @@ mod tests {
         let (response_with_report, report) = handle.decide_with_report(&choice_request()).unwrap();
         assert_eq!(response_with_report.answers().len(), 1);
         assert!(!report.waves().is_empty());
-        assert_eq!(handle.identity().model_id, "builtin-lexical-v1");
+        // The composed id: solver over lexical, folded into the identity.
+        assert_eq!(handle.identity().model_id, "relational-v1|builtin-lexical-v1");
     }
 
     #[test]
