@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="520" viewBox="0 0 880 520" font-family="sans-serif">
+<text x="16" y="24" font-size="17" font-weight="bold">Calibration frontier — accuracy vs ECE of the winner probability</text>
+<text x="16" y="42" font-size="11" fill="#555">Raw (uncalibrated) winner probability, 10 equal-width bins, n=120. No arm ships calibration; D15 must fit temperatures before any confidence leaves the runtime.</text>
+<rect x="68" y="56" width="602" height="406" fill="#fafafa" stroke="#999"/>
+<line x1="68" y1="434.9" x2="670" y2="434.9" stroke="#ddd"/>
+<text x="60" y="438.9" font-size="11" text-anchor="end" fill="#444">0.2</text>
+<line x1="68" y1="380.8" x2="670" y2="380.8" stroke="#ddd"/>
+<text x="60" y="384.8" font-size="11" text-anchor="end" fill="#444">0.3</text>
+<line x1="68" y1="326.7" x2="670" y2="326.7" stroke="#ddd"/>
+<text x="60" y="330.7" font-size="11" text-anchor="end" fill="#444">0.4</text>
+<line x1="68" y1="272.5" x2="670" y2="272.5" stroke="#ddd"/>
+<text x="60" y="276.5" font-size="11" text-anchor="end" fill="#444">0.5</text>
+<line x1="68" y1="218.4" x2="670" y2="218.4" stroke="#ddd"/>
+<text x="60" y="222.4" font-size="11" text-anchor="end" fill="#444">0.6</text>
+<line x1="68" y1="164.3" x2="670" y2="164.3" stroke="#ddd"/>
+<text x="60" y="168.3" font-size="11" text-anchor="end" fill="#444">0.7</text>
+<line x1="68" y1="110.1" x2="670" y2="110.1" stroke="#ddd"/>
+<text x="60" y="114.1" font-size="11" text-anchor="end" fill="#444">0.8</text>
+<line x1="68" y1="56.0" x2="670" y2="56.0" stroke="#ddd"/>
+<text x="60" y="60.0" font-size="11" text-anchor="end" fill="#444">0.9</text>
+<line x1="68.0" y1="56" x2="68.0" y2="462" stroke="#ddd"/>
+<text x="68.0" y="480" font-size="11" text-anchor="middle" fill="#444">0.0</text>
+<line x1="160.6" y1="56" x2="160.6" y2="462" stroke="#ddd"/>
+<text x="160.6" y="480" font-size="11" text-anchor="middle" fill="#444">0.1</text>
+<line x1="253.2" y1="56" x2="253.2" y2="462" stroke="#ddd"/>
+<text x="253.2" y="480" font-size="11" text-anchor="middle" fill="#444">0.2</text>
+<line x1="345.8" y1="56" x2="345.8" y2="462" stroke="#ddd"/>
+<text x="345.8" y="480" font-size="11" text-anchor="middle" fill="#444">0.3</text>
+<line x1="438.5" y1="56" x2="438.5" y2="462" stroke="#ddd"/>
+<text x="438.5" y="480" font-size="11" text-anchor="middle" fill="#444">0.4</text>
+<line x1="531.1" y1="56" x2="531.1" y2="462" stroke="#ddd"/>
+<text x="531.1" y="480" font-size="11" text-anchor="middle" fill="#444">0.5</text>
+<line x1="623.7" y1="56" x2="623.7" y2="462" stroke="#ddd"/>
+<text x="623.7" y="480" font-size="11" text-anchor="middle" fill="#444">0.6</text>
+<text x="369" y="504" font-size="12" text-anchor="middle" fill="#333">ECE (lower is better)</text>
+<text x="18" y="259" font-size="12" fill="#333" text-anchor="middle" transform="rotate(-90 18 259)">accuracy</text>
+<path d="M 373.2 226.9 L 378.2 235.9 L 368.2 235.9 Z" fill="#9467bd"/>
+<path d="M 226.9 308.1 L 231.9 317.1 L 221.9 317.1 Z" fill="#9467bd"/>
+<rect x="170.8" y="277.6" width="8" height="8" fill="#d62728"/>
+<path d="M 150.3 280.1 L 156.3 286.1 L 150.3 292.1 L 144.3 286.1 Z" fill="#8c564b"/>
+<circle cx="284.1" cy="191.3" r="4.5" fill="#7f7f7f"/>
+<circle cx="495.7" cy="394.3" r="4.5" fill="#7f7f7f"/>
+<circle cx="325.6" cy="398.8" r="4.5" fill="#7f7f7f"/>
+<circle cx="446.0" cy="425.9" r="4.5" fill="#7f7f7f"/>
+<circle cx="265.1" cy="182.3" r="4.5" fill="#7f7f7f"/>
+<circle cx="274.8" cy="213.9" r="4.5" fill="#7f7f7f"/>
+<circle cx="313.6" cy="331.2" r="4.5" fill="#7f7f7f"/>
+<circle cx="140.2" cy="119.2" r="4.5" fill="#b8860b"/>
+<circle cx="142.6" cy="101.1" r="4.5" fill="#b8860b"/>
+<circle cx="112.1" cy="101.1" r="4.5" fill="#b8860b"/>
+<circle cx="282.5" cy="281.6" r="4.5" fill="#7f7f7f"/>
+<circle cx="136.9" cy="191.3" r="4.5" fill="#7f7f7f"/>
+<circle cx="264.6" cy="335.7" r="4.5" fill="#2ca02c"/>
+<circle cx="192.5" cy="299.6" r="4.5" fill="#2ca02c"/>
+<circle cx="193.2" cy="132.7" r="4.5" fill="#2ca02c"/>
+<circle cx="155.9" cy="146.2" r="4.5" fill="#2ca02c"/>
+<circle cx="150.5" cy="132.7" r="4.5" fill="#2ca02c"/>
+<circle cx="141.1" cy="132.7" r="4.5" fill="#2ca02c"/>
+<circle cx="171.1" cy="128.2" r="4.5" fill="#2ca02c"/>
+<circle cx="125.5" cy="150.7" r="4.5" fill="#2ca02c"/>
+<circle cx="154.5" cy="123.7" r="4.5" fill="#1f77b4"/>
+<circle cx="131.5" cy="110.1" r="4.5" fill="#1f77b4"/>
+<circle cx="140.8" cy="209.4" r="4.5" fill="#1f77b4"/>
+<circle cx="128.1" cy="114.6" r="4.5" fill="#1f77b4"/>
+<circle cx="159.9" cy="110.1" r="4.5" fill="#1f77b4"/>
+<circle cx="136.2" cy="110.1" r="4.5" fill="#1f77b4"/>
+<circle cx="158.7" cy="128.2" r="4.5" fill="#1f77b4"/>
+<circle cx="159.2" cy="236.4" r="4.5" fill="#7f7f7f"/>
+<circle cx="156.0" cy="209.4" r="4.5" fill="#7f7f7f"/>
+<circle cx="121.2" cy="128.2" r="4.5" fill="#7f7f7f"/>
+<circle cx="648.1" cy="434.9" r="4.5" fill="#7f7f7f"/>
+<circle cx="286.6" cy="137.2" r="4.5" fill="#7f7f7f"/>
+<circle cx="331.5" cy="407.9" r="4.5" fill="#7f7f7f"/>
+<circle cx="289.0" cy="358.2" r="4.5" fill="#7f7f7f"/>
+<circle cx="269.8" cy="331.2" r="4.5" fill="#7f7f7f"/>
+<circle cx="244.9" cy="227.4" r="4.5" fill="#7f7f7f"/>
+<circle cx="311.9" cy="177.8" r="4.5" fill="#7f7f7f"/>
+<text x="380.2" y="235.9" font-size="10" fill="#222">gte</text>
+<text x="119.1" y="105.1" font-size="10" fill="#222">MiMo-9B-Q3_K_S</text>
+<text x="138.5" y="114.1" font-size="10" fill="#222">Q3.5-4B-Q3_K_S</text>
+<text x="128.2" y="132.2" font-size="10" fill="#222">Q3.8-4B</text>
+<text x="655.1" y="438.9" font-size="10" fill="#222">gemma-3-270m-it</text>
+<rect x="682" y="55" width="12" height="12" fill="#1f77b4"/>
+<text x="700" y="66" font-size="11" fill="#333">decision arm</text>
+<rect x="682" y="73" width="12" height="12" fill="#b8860b"/>
+<text x="700" y="84" font-size="11" fill="#333">MiMo-9B</text>
+<rect x="682" y="91" width="12" height="12" fill="#2ca02c"/>
+<text x="700" y="102" font-size="11" fill="#333">Qwen3.5-2B ladder</text>
+<rect x="682" y="109" width="12" height="12" fill="#d62728"/>
+<text x="700" y="120" font-size="11" fill="#333">engine lexical</text>
+<rect x="682" y="127" width="12" height="12" fill="#9467bd"/>
+<text x="700" y="138" font-size="11" fill="#333">embedding zero-shot</text>
+<rect x="682" y="145" width="12" height="12" fill="#8c564b"/>
+<text x="700" y="156" font-size="11" fill="#333">Laya-421M</text>
+<rect x="682" y="163" width="12" height="12" fill="#7f7f7f"/>
+<text x="700" y="174" font-size="11" fill="#333">other decision arms</text>
+</svg>

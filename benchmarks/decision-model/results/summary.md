@@ -18,9 +18,12 @@ distribution — context for the decision rows, never comparable to them.
 | k2chat__K2-Horizon-4B-Q4_K_M.json (chat screen) | 1.00 / 0.93 / 0.17 | 0.700 | — | 4878.9ms | n/a (sampled) |
 | k2chat__K2-Horizon-7B-Q4_K_M.json (chat screen) | 1.00 / 0.95 / 0.45 | 0.800 | — | 9052.1ms | n/a (sampled) |
 | laya__en.json | 0.30 / 0.80 / 0.33 | 0.475 | 0.089 | 547.6ms | yes |
+| llama__Bonsai-4B.json | 0.93 / 0.70 / 0.33 | 0.650 | 0.233 | 4861.2ms | yes |
 | llama__Falcon-H1-Tiny-90M-Instruct.json | 0.23 / 0.28 / 0.33 | 0.275 | 0.462 | 459.4ms | yes |
 | llama__Falcon-H1-Tiny-Tool-Calling.json | 0.28 / 0.20 / 0.33 | 0.267 | 0.278 | 147.0ms | yes |
 | llama__Jev-Style-0.8B-Decision-v3-Q4_K_M.json (caveat) | 0.20 / 0.30 / 0.15 | 0.217 | 0.408 | 866.7ms | yes |
+| llama__LFM2.5-2.6B-Q3.8-TBrilliance-NEO-MAX-Q6_K.json | 0.95 / 0.78 / 0.28 | 0.667 | 0.213 | 8347.8ms | yes |
+| llama__LFM2.5-2.6B-Q4_K_M.json | 0.93 / 0.55 / 0.35 | 0.608 | 0.223 | 2546.8ms | yes |
 | llama__Llama-3.2-1B-Instruct.json | 0.47 / 0.35 / 0.35 | 0.392 | 0.265 | 996.5ms | yes |
 | llama__MiMo-V2.6-Distill-Qwen-9B-IQ3_XXS.json | 1.00 / 0.93 / 0.42 | 0.783 | 0.078 | 10570.2ms | yes |
 | llama__MiMo-V2.6-Distill-Qwen-9B-Q3_K_M.json | 1.00 / 0.93 / 0.53 | 0.817 | 0.081 | 18395.2ms | yes |
@@ -59,12 +62,15 @@ distribution — context for the decision rows, never comparable to them.
 - `k2chat__K2-Horizon-1B-Q4_K_M.json` chat (JSON-writing) baseline: acc 0.725, p50 1499ms — the token-by-token alternative the decision arm replaces.
 - `k2chat__K2-Horizon-4B-Q4_K_M.json` chat (JSON-writing) baseline: acc 0.700, p50 4879ms — the token-by-token alternative the decision arm replaces.
 - `k2chat__K2-Horizon-7B-Q4_K_M.json` chat (JSON-writing) baseline: acc 0.800, p50 9052ms — the token-by-token alternative the decision arm replaces.
+- `llama__Bonsai-4B.json` bulk per-decision (batched contexts): lexical_semantic: 996ms; metadata_match: 7338ms; relational_compositional: 1609ms.
 - `llama__Falcon-H1-Tiny-90M-Instruct.json` chat (JSON-writing) baseline: acc 0.217, p50 487ms — the token-by-token alternative the decision arm replaces.
 - `llama__Falcon-H1-Tiny-90M-Instruct.json` bulk per-decision (batched contexts): lexical_semantic: 172ms; metadata_match: 535ms; relational_compositional: 348ms.
 - `llama__Falcon-H1-Tiny-Tool-Calling.json` bulk per-decision (batched contexts): lexical_semantic: 36ms; metadata_match: 250ms; relational_compositional: 56ms.
 - `llama__Jev-Style-0.8B-Decision-v3-Q4_K_M.json` caveat: interface mismatch, not model quality: this tune is read at per-option verdict slots (h.(w_yes - w_no) at each option's "->" position, shipped jev_score/temperatures) and was never trained on candidate-id token paths or JSON chat answers, so both of this harness's readouts are outside its trained interface; the row measures the mismatch (determinism of the mechanism still holds). Native-readout arm = new harness work.
 - `llama__Jev-Style-0.8B-Decision-v3-Q4_K_M.json` chat (JSON-writing) baseline: acc 0.000, p50 4696ms — the token-by-token alternative the decision arm replaces.
 - `llama__Jev-Style-0.8B-Decision-v3-Q4_K_M.json` bulk per-decision (batched contexts): lexical_semantic: 319ms; metadata_match: 1911ms; relational_compositional: 470ms.
+- `llama__LFM2.5-2.6B-Q3.8-TBrilliance-NEO-MAX-Q6_K.json` bulk per-decision (batched contexts): lexical_semantic: 1221ms; metadata_match: 8398ms; relational_compositional: 1702ms.
+- `llama__LFM2.5-2.6B-Q4_K_M.json` bulk per-decision (batched contexts): lexical_semantic: 487ms; metadata_match: 3218ms; relational_compositional: 786ms.
 - `llama__Llama-3.2-1B-Instruct.json` chat (JSON-writing) baseline: acc 0.342, p50 780ms — the token-by-token alternative the decision arm replaces.
 - `llama__Llama-3.2-1B-Instruct.json` bulk per-decision (batched contexts): lexical_semantic: 167ms; metadata_match: 1344ms; relational_compositional: 285ms.
 - `llama__MiMo-V2.6-Distill-Qwen-9B-IQ3_XXS.json` bulk per-decision (batched contexts): lexical_semantic: 1674ms; metadata_match: 11649ms; relational_compositional: 2465ms.

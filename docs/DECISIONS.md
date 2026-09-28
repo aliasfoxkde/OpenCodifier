@@ -189,7 +189,7 @@ versioned artifacts alongside model manifests, referenced by
 `calibrated_confidence = raw` with `calibration_version = "none"`, so
 the cache never conflates calibrated and uncalibrated results.
 
-## D16 — Decision-model picks: tier scheme (measured, Phase 13; amended ×3)
+## D16 — Decision-model picks: tier scheme (measured, Phase 13; amended ×4)
 
 **Decision (amended 2026-09-27, third pass — full-sweep frontier):** the
 tier scheme gains a frontier tier and the interactive reference moves:
@@ -272,7 +272,19 @@ Provenance findings folded into the record: (a) both community
 (D14); (b) their uploads omit the MTP block declared in config — GGUF
 conversion requires llama.cpp's `--no-mtp`.
 
-*Amendment history:* 2026-09-27 third pass — tier scheme gains the
+*Amendment history:* 2026-09-28 fourth pass (extension) — no tier changes;
+three arms added. **Bonsai-4B** (ternary, 546 MiB) posts the board's best
+accuracy-per-byte (0.650 — the 0.8B tier's accuracy at a quarter of the
+size) but at 4B-class latency (4.86 s p50), so it wins no tier; recorded
+as a measured record and an accelerator-tier candidate, not a pick.
+**LFM2.5-2.6B** Q4_K_M (0.608 @ 2.55 s — first hybrid-conv architecture
+tested) is dominated by Qwen3.5-2B at the same latency; the DavidAU
+"X12 NEO MAX" merge (0.667 @ 8.35 s, best sub-3B lexical at 0.775) is
+latency-toxic and wins no tier. **Ternary-Bonsai-8B is not measurable on
+the CPU host** (g64 quant >10 CPU-hours per decision request; plain
+Q2_0/PQ2_0 tensors unreadable by the ad129b0 build; F16 exceeds host
+memory) — ternary-class weights are an accelerator question (feeds the
+#35 Vulkan A/B). 2026-09-27 third pass — tier scheme gains the
 MiMo-9B Q3_K_S frontier (first model over the relational ceiling), the
 interactive reference moves from Qwen3.8-4B-Distill to Qwen3.5-4B
 (K-quant or UD-Q4_K_XL), the 2-bit cliff and the 9B IQ-quant latency
@@ -293,7 +305,7 @@ logits is admissible; the pick names the weights, not the server.
 
 **Conditions carried forward (blocking exposure, not the pick):**
 - Raw winner probability is uncalibrated at every model (ECE 0.048–0.626
-  across the forty-one runs; even the best, MiMo-9B Q3_K_S at 0.048, has
+  across the forty-four runs; even the best, MiMo-9B Q3_K_S at 0.048, has
   had no post-hoc calibration fitted). D15 calibration must be fit per
   class before any confidence leaves the runtime (§73 confirmed by
   measurement).
