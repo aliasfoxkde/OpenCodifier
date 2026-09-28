@@ -6,8 +6,11 @@ request that exercises it and the response the runtime actually produced.
 Everything here was captured by running the recipes against the committed
 engine, not written by hand.
 
-All recipes use the zero-ML lexical engine (`opencodifier serve` never
-loads a model), so every number is reproducible on any machine.
+All recipes use the zero-ML engine (`opencodifier serve` never loads a
+model — the default stack is the relational solver over the lexical
+classifier), so every number is reproducible on any machine. The traces
+name the deciding stack by its composed model id
+(`relational-v1|builtin-lexical-v1`).
 
 ## The recipes
 

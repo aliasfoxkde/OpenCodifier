@@ -41,6 +41,7 @@
 <path d="M 373.8 226.9 L 378.8 235.9 L 368.8 235.9 Z" fill="#9467bd"/>
 <path d="M 226.9 308.1 L 231.9 317.1 L 221.9 317.1 Z" fill="#9467bd"/>
 <rect x="170.8" y="277.6" width="8" height="8" fill="#d62728"/>
+<rect x="150.7" y="169.3" width="8" height="8" fill="#d62728"/>
 <path d="M 150.3 280.1 L 156.3 286.1 L 150.3 292.1 L 144.3 286.1 Z" fill="#8c564b"/>
 <circle cx="284.1" cy="191.3" r="4.5" fill="#7f7f7f"/>
 <circle cx="495.7" cy="394.3" r="4.5" fill="#7f7f7f"/>
@@ -95,7 +96,7 @@
 <rect x="682" y="91" width="12" height="12" fill="#2ca02c"/>
 <text x="700" y="102" font-size="11" fill="#333">Qwen3.5-2B ladder</text>
 <rect x="682" y="109" width="12" height="12" fill="#d62728"/>
-<text x="700" y="120" font-size="11" fill="#333">engine lexical</text>
+<text x="700" y="120" font-size="11" fill="#333">engine relational</text>
 <rect x="682" y="127" width="12" height="12" fill="#9467bd"/>
 <text x="700" y="138" font-size="11" fill="#333">embedding zero-shot</text>
 <rect x="682" y="145" width="12" height="12" fill="#8c564b"/>

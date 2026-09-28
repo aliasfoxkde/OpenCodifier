@@ -51,8 +51,12 @@ use crate::error::{EngineError, EngineResult};
 pub struct EngineIdentity {
     /// Version of the executed decision graph.
     pub graph_version: u64,
-    /// Identifier of the deciding model (e.g. `builtin-lexical-v1`). A
-    /// classifier swap must bump this, not just the code version.
+    /// Identifier of the deciding model (e.g. `builtin-lexical-v1`). The
+    /// engine derives this from the live classifier's
+    /// [`Classifier::model_id`](crate::classifier::Classifier::model_id)
+    /// at construction — wrapper classifiers compose their ids — so a
+    /// swapped or decorated classifier invalidates cached decisions
+    /// without caller bookkeeping (PLANNING.md §64).
     pub model_id: String,
     /// Version of the calibration mapping applied to raw probabilities.
     pub calibration_version: u64,
@@ -63,6 +67,8 @@ pub struct EngineIdentity {
 impl EngineIdentity {
     /// Identity used until a calibration layer exists: the built-in
     /// lexical classifier, identity calibration, this crate's semver.
+    /// The `model_id` here is a label; [`crate::DecisionEngine`]
+    /// overwrites it with the live classifier's id.
     #[must_use]
     pub fn builtin() -> Self {
         Self {

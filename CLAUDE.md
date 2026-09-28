@@ -23,7 +23,7 @@ Outputs are machine-readable decisions with calibrated confidence. Abstention is
 Rust workspace (edition 2024, MSRV 1.90), crates under `crates/`:
 
 - `opencodifier-core` — canonical decision IR (shipped): validating constructors, stable error codes (`ir.*`), `trace_version` on traces, `#[non_exhaustive]` public enums, outcome routing in `ConfidenceReport::outcome_for`
-- `opencodifier-engine` — DAG executor, rule engine, candidate narrowing (metadata + hand-written BM25), exact-decision cache with the single normative `CacheKeyBuilder` (SHA-256), sync with `Clock`/`Deadline` traits
+- `opencodifier-engine` — DAG executor, rule engine, candidate narrowing (metadata + hand-written BM25), exact-decision cache with the single normative `CacheKeyBuilder` (SHA-256), relational solver (exact proofs over extracted facts; the default zero-ML stack via `EngineHandle::lexical`), `Calibration` seam, sync with `Clock`/`Deadline` traits
 - `opencodifier-schema` — native / OpenAI / Anthropic / Jev adapters over the IR (wire formats live only here)
 - `opencodifier-runtime` — `InferenceBackend`/`EmbeddingBackend` traits; `ort` behind the `onnx` feature only
 - `opencodifier-model` — candidate-conditioned decision model: logits from ONNX, all decision math in Rust f64

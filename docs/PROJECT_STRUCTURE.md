@@ -22,7 +22,7 @@ opencodifier/
 ├── crates/
 │   ├── opencodifier-core/      # canonical decision IR (done)
 │   ├── opencodifier-schema/    # native/OpenAI/Anthropic/Jev adapters (done)
-│   ├── opencodifier-engine/    # DAG executor, rules, caches, narrowing, BM25 (done)
+│   ├── opencodifier-engine/    # DAG executor, rules, caches, narrowing, BM25, relational solver (done)
 │   ├── opencodifier-runtime/   # InferenceBackend traits, mocks; `onnx` deferred by gate (done, D2)
 │   ├── opencodifier-model/     # decision serving contract + embedding classifier + manifests (done)
 │   ├── opencodifier-http/      # axum 0.8 /v1 API (done)

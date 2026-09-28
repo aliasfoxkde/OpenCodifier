@@ -50,9 +50,11 @@ commits only the merged evidence (see Results below):
 ```bash
 RUNS=/nas/Temp/work/oc-model-eval/runs   # out-of-tree
 
-# 1. engine baseline (no ML, no models needed)
+# 1. engine baseline (no ML, no models needed): the default stack is the
+#    relational solver over the lexical classifier; the run JSON's arm is
+#    the engine's live identity (e.g. relational-v1|builtin-lexical-v1)
 python3 runner/run_engine.py --binary target/release/opencodifier \
-    --out "$RUNS/engine__builtin-lexical.json"
+    --out "$RUNS/engine__relational-v1.json"
 
 # 2. embedding arm — three backends, identical math (mean pool, L2,
 #    cosine, softmax tau=1): onnx (default; model.onnx + tokenizer.json

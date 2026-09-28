@@ -511,27 +511,46 @@ fn a_branch_that_does_not_fire_skips_its_dependents() {
 #[test]
 fn a_changed_identity_invalidates_cached_decisions() {
     let request = choice_request(&[("local-small", "small local model"), ("cloud-large", "cloud")]);
-    let classifier: Arc<dyn Classifier> = two_way(("local-small", 0.9), ("cloud-large", 0.1));
-    let identity =
-        |model_id: &str| EngineIdentity { model_id: model_id.to_owned(), ..Default::default() };
+    let before_classifier: Arc<dyn Classifier> = Arc::new(
+        MockClassifier::new("mock/model-v1")
+            .with_script("model", vec![("local-small", 0.9), ("cloud-large", 0.1)])
+            .unwrap(),
+    );
+    let after_classifier: Arc<dyn Classifier> = Arc::new(
+        MockClassifier::new("mock/model-v2")
+            .with_script("model", vec![("local-small", 0.9), ("cloud-large", 0.1)])
+            .unwrap(),
+    );
 
-    let before =
-        engine_with(config(1).with_identity(identity("lexical-v1")), Arc::clone(&classifier))
-            .unwrap();
+    let before = engine_with(config(1), Arc::clone(&before_classifier)).unwrap();
     let (first, first_report) = before.decide_with_report(&request).unwrap();
     assert!(!first_report.cache_hit());
+    // The live classifier, not the hand-set identity, names the key.
+    assert_eq!(before.config().identity.model_id, "mock/model-v1");
 
-    // Same request, different model id: a different key, so a miss — the
-    // cached decision of the old model must not be served for the new one.
-    let after = engine_with(config(1).with_identity(identity("lexical-v2")), classifier).unwrap();
+    // Same request, different classifier id: a different key, so a miss —
+    // the cached decision of the old model must not be served for the
+    // new one. Swapping the classifier is all it takes; no caller has to
+    // remember to bump anything.
+    let after = engine_with(config(1), after_classifier).unwrap();
     let (_, second_report) = after.decide_with_report(&request).unwrap();
     assert!(!second_report.cache_hit(), "a swapped model must not inherit cached decisions");
-    assert_ne!(
-        before.config().identity.model_id,
-        after.config().identity.model_id,
-        "the builder must be applied"
-    );
+    assert_eq!(after.config().identity.model_id, "mock/model-v2");
     assert_eq!(first.outcome(), DecisionOutcome::Accept);
+}
+
+#[test]
+fn the_classifiers_id_overrides_a_hand_set_identity_model_id() {
+    let request = choice_request(&[("local-small", "small local model"), ("cloud-large", "cloud")]);
+    let classifier: Arc<dyn Classifier> = two_way(("local-small", 0.9), ("cloud-large", 0.1));
+    // Even a deliberate lie in the identity cannot make a `mock/two-way`
+    // decision cache under another model's name (PLANNING.md §64).
+    let lying = config(1)
+        .with_identity(EngineIdentity { model_id: "lexical-v9".into(), ..Default::default() });
+    let engine = engine_with(lying, classifier).unwrap();
+    assert_eq!(engine.config().identity.model_id, "mock/two-way");
+    let (_, report) = engine.decide_with_report(&request).unwrap();
+    assert!(!report.cache_hit());
 }
 
 #[test]

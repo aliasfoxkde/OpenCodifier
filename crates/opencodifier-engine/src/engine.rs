@@ -110,7 +110,10 @@ impl EngineConfig {
         Ok(Self::new(DecisionGraph::default_pipeline()?))
     }
 
-    /// Sets the cache-key identity.
+    /// Sets the cache-key identity. `graph_version`, `calibration_version`,
+    /// and `engine_semver` are honored as set; `model_id` is always
+    /// replaced by the live classifier's id at engine construction
+    /// (PLANNING.md §64 — the deciding model is the source of truth).
     #[must_use]
     pub fn with_identity(mut self, identity: EngineIdentity) -> Self {
         self.identity = identity;
@@ -222,6 +225,18 @@ impl DecisionEngine {
             });
         }
         let cache = DecisionCache::new(config.cache, Arc::clone(&clock))?;
+        // The live classifier governs the model component of every cache
+        // key (PLANNING.md §64): wrapper classifiers compose their ids
+        // (e.g. `relational-v1|builtin-lexical-v1`), so a swapped or
+        // decorated classifier changes keys without caller bookkeeping.
+        // A hand-set `identity.model_id` is never trusted over this.
+        let config = EngineConfig {
+            identity: EngineIdentity {
+                model_id: classifier.model_id().to_owned(),
+                ..config.identity
+            },
+            ..config
+        };
         Ok(Self {
             config,
             cache,

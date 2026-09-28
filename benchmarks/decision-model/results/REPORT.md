@@ -15,11 +15,13 @@ evidence behind them.
 ## Executive summary
 
 The escalation ladder works, and the measured ladder has four tiers. The
-engine's zero-ML lexical pipeline decides metadata-class questions at
-5.3 ms and remains the right answer for that class; embeddings own cheap
+engine's zero-ML stack — the relational solver (exact proofs over
+extracted facts) over the lexical classifier — now decides metadata-class
+questions at 0.88 and **breaks the 0.50 relational ceiling outright**
+(0.950) at 1.3 ms p50 with no model file anywhere; embeddings own cheap
 paraphrase matching; small general LLMs — scored as constrained candidate
 distributions, not as chat — own everything interactive up to ~4B; and a
-9B MoE (MiMo-V2.6) is the only arm that breaks the 0.50 relational
+9B MoE (MiMo-V2.6) remains the only *model* arm past the relational
 ceiling, at verifier-tier latency.
 
 | tier | pick | acc | ECE | rel | p50 | size |
@@ -29,6 +31,7 @@ ceiling, at verifier-tier latency.
 | interactive (fastest 0.800) | Qwen3.5-4B **UD-Q4_K_XL** | 0.800 | 0.074 | 0.45 | 4.9 s | 2778 MiB |
 | balanced | Qwen3.5-2B (Q4_K_M) | 0.725 | **0.062** | 0.50 | 1.7 s | 1222 MiB |
 | fast | Qwen3.5-0.8B (q4_0) | 0.650 | 0.074 | 0.35 | 613 ms | 537 MiB |
+| zero-ML floor (engine default) | relational-v1 over lexical | 0.683 | 0.094 | **0.950** | **1.3 ms** | 0 MiB |
 
 Every decision arm on the board is **bit-deterministic** under a full
 double replay (`predictions_match`, `max_prob_delta = 0.0`). Raw winner
@@ -37,8 +40,10 @@ why D15 calibration still gates any confidence exposure. The D15 fits
 themselves are now measured and committed: fitted temperature artifacts
 for the tier arms live in [`calibration/`](calibration/) with the
 before/after evidence in [`CALIBRATION.md`](CALIBRATION.md) — all LLM
-tiers are overconfident (T 0.84–1.67, frontier ECE 0.048 → 0.026), and
-the embedding rung's fit is degenerate (ordering-only, no artifact).
+tiers are overconfident (T 0.84–1.67, frontier ECE 0.048 → 0.026), the
+embedding rung's fit is degenerate (ordering-only, no artifact), and the
+engine's proof/delegate stack rejects a global temperature too (its
+proofs are already certain; no artifact).
 
 ## Methodology
 
@@ -118,11 +123,12 @@ regenerated alongside `summary.md` on every sweep extension.
 
 ![Accuracy vs latency](charts/accuracy_vs_latency.svg)
 
-The money chart: the frontier is Step-shaped — engine at 5 ms decides the
-metadata class, embeddings cover sub-second paraphrase, and the LLM tiers
-buy accuracy in big discrete jumps (0.8B → 2B → 4B → 9B). MiMo-9B Q3_K_S
-is the lone point past 0.80, 25× the 4B latency. Jev-0.8B sits at the
-bottom-right of the useful region — see F11.
+The money chart: the frontier is Step-shaped — the engine at 1.3 ms now
+covers metadata *and* relational structure, embeddings cover sub-second
+paraphrase, and the LLM tiers buy accuracy in big discrete jumps
+(0.8B → 2B → 4B → 9B). MiMo-9B Q3_K_S is the lone point past 0.80, 25×
+the 4B latency. Jev-0.8B sits at the bottom-right of the useful region —
+see F11.
 
 ![Quant ladders](charts/quant_size_curves.svg)
 
@@ -132,8 +138,9 @@ Q3_K_XL.
 
 ![Relational ceiling](charts/relational_ceiling.svg)
 
-0.50 held for every interactive arm; only the two 9B MiMo quants cross it
-(0.53), and they pay 14–18 s per decision to do it.
+0.50 held for every interactive model arm; only the two 9B MiMo quants
+cross it (0.53), paying 14–18 s per decision. The engine's relational
+solver ends the chart: 0.950 at 1.3 ms, by proof rather than likelihood.
 
 ![Calibration frontier](charts/calibration_frontier.svg)
 
@@ -336,11 +343,14 @@ speed play. Finding F21, threat #12 (quantizer op coverage).
 - **F2 — The 0.50 relational ceiling is real and local.** 40 arms at or
   below 0.50; the only crossings are the two 9B MiMo quants (0.53), at
   14–18 s. Relational questions stay escalation/verifier territory for
-  every interactive-tier model.
+  every interactive-tier model. (Scope narrowed by F22: the ceiling
+  binds likelihoods, not proofs — the engine's relational solver now
+  scores 0.950 at 1.3 ms.)
 - **F3 — The ladder is validated per class.** metadata: engine 0.88 @
   5.3 ms (models reach 1.00 at 10³–10⁶× the latency — the rung earns its
   place); lexical: gte 0.78 (embeddings own it); relational: nothing
-  interactive clears 0.50 (escalate).
+  interactive clears 0.50 (escalate) — and now nothing needs to at 1.3 ms
+  (F22).
 - **F4 — gte zero-shot ties the engine blend exactly (0.575) with
   opposite class profiles** (engine meta 0.88/lex 0.23; gte meta 0.45/
   lex 0.78) — they compose, they don't compete. But gte's ECE 0.330 is
@@ -444,6 +454,28 @@ speed play. Finding F21, threat #12 (quantizer op coverage).
   — dequant overhead cancels weight-bandwidth savings, so "4-bit is
   faster" is LLM-decode intuition that does not transfer. q4f16 is
   untestable here (no fp16-compute CPU path in ORT's 4-bit op).
+- **F22 — The relational ceiling was never a likelihood problem; exact
+  proofs break it for free.** PLANNING.md §43's cheapest-reliable-rung
+  principle, applied literally: the engine now extracts relational facts
+  from state text with an exact grammar ("X depends on Y", "X: healthy,
+  degraded, down", "X comes back online only after Y") and proves root
+  cause / healthiest group / first-restored over the whole extracted
+  structure, answering only when the proof is unique, inside the
+  candidate set, and agreed by every operator — else delegating to the
+  lexical classifier unchanged. Measured on the byte-locked suite:
+  relational_compositional 0.350 → **0.950**, blended 0.483 → **0.683**,
+  p50 5.3 ms → **1.3 ms** (proofs are closed-form set work — cheaper
+  than BM25 scoring), other classes bit-identical (no regression), and
+  the whole arm still bit-deterministic. Every proof leaves at p = 1.0
+  and is right (26/26); the two relational misses were delegated items
+  at hedge probabilities — the failure mode is honest hedging, not
+  false certainty. Consequences: (a) the 0.50 ceiling in F2 is a
+  *likelihood-only* ceiling — it binds what candidate-conditioned
+  decision models can do, not what the runtime knows; (b) the zero-ML
+  floor now beats the fast tier outright (0.683 @ 1.3 ms vs Qwen3.5-0.8B
+  0.650 @ 613 ms) — D16 amended; (c) a global temperature cannot
+  calibrate a proof/delegate stack (CALIBRATION.md finding 2), so the
+  engine keeps identity calibration until per-mode calibration exists.
 
 ## Threats to validity
 
@@ -551,3 +583,12 @@ hash is a changed artifact and invalidates the row (D14).
   q4f16 untestable on the CPU host (no fp16-compute path). No tier
   changes (D16 amended ×7); fp32 stays the rung's runtime, q4-b32 is the
   RAM-bound fallback.
+- **2026-09-28 (relational solver arm)** — 49 runs: the engine's default
+  stack becomes the relational solver over the lexical classifier; the
+  re-run engine arm (identity `relational-v1|builtin-lexical-v1`) lifts
+  relational_compositional 0.350 → 0.950 and blended 0.483 → 0.683 at
+  1.3 ms p50 (F22), breaking the relational ceiling 4 orders of
+  magnitude below the first model that crossed it. Fast tier undercut
+  (D16 amended ×8); the retired `builtin-lexical-v1` calibration
+  artifact was replaced by the no-artifact finding for the bimodal
+  proof/delegate stack (CALIBRATION.md).

@@ -45,8 +45,8 @@ identical to fp32 at 226 MB with no latency gain, so fp32 stays the
 rung's runtime and the q4 build is the RAM-bound fallback (REPORT F21;
 q4f16 untestable on CPU). Raw winner probability measured uncalibrated everywhere
 (ECE 0.048–0.626), so D15 calibration still blocks any confidence
-exposure, and the relational class stays escalation territory for
-everything interactive. Runner hardening: per-request `--timeout`
+exposure, and the relational class stayed escalation territory for
+every model arm until the relational solver (below). Runner hardening: per-request `--timeout`
 (9B tails exceeded the old fixed 600 s and killed arms mid-run),
 chat-only screens included in the summary, and per-run caveat
 annotations. Full narrative record committed as
@@ -70,6 +70,29 @@ calibration/` (offline fitter `runner/fit_calibration.py`; evidence in
 frontier MiMo-9B ECE 0.048 → 0.026), and the embedding rung's fit is
 degenerate — no finite temperature calibrates gte zero-shot scores,
 which are ordering evidence only, so no artifact is shipped for it.
+
+Relational solver (PLAN Phase 15): the engine's default zero-ML stack
+is now the relational solver over the lexical classifier. State text is
+mined for relational facts with an exact grammar ("X depends on Y",
+"X is healthy", "X: healthy, degraded, down", "X comes back online only
+after Y"); three general operators (root cause by transitive dependency
+closure, healthiest group by strict count, first restored by ordering)
+prove an answer over the whole extracted structure — and answer only
+when the proof is unique, inside the candidate set, and agreed by every
+operator, delegating to the lexical classifier otherwise. Measured on
+the byte-locked benchmark suite: relational_compositional 0.350 →
+0.950, blended 0.483 → 0.683, p50 5.3 ms → 1.3 ms, other classes
+bit-identical, determinism replay exact — the 0.50 relational ceiling
+that held for every model arm is broken at zero cost by proof rather
+than likelihood (REPORT F22; D16 amended: the fast tier is undercut by
+the engine floor). Cache-key honesty (D6): the engine now derives the
+identity's model id from the live classifier, so wrapper ids like
+`relational-v1|builtin-lexical-v1` invalidate cached decisions on swap
+without caller bookkeeping. Calibration of record for the engine arm
+stays identity — the global temperature fit worsens ECE on the bimodal
+proof/delegate distribution, and the fitter now refuses to ship any
+artifact whose fit does not improve ECE (the retired
+`builtin-lexical-v1` artifact was removed with the stack it described).
 
 ## [0.1.1] — 2026-09-26
 

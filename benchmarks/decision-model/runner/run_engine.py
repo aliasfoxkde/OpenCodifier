@@ -38,7 +38,7 @@ def post(url: str, payload: dict, timeout: float = 120.0) -> dict:
         return json.loads(r.read())
 
 
-def wait_health(port: int, proc: subprocess.Popen, deadline_s: float = 60.0) -> None:
+def wait_health(port: int, proc: subprocess.Popen, deadline_s: float = 60.0) -> dict:
     end = time.monotonic() + deadline_s
     while time.monotonic() < end:
         if proc.poll() is not None:
@@ -46,7 +46,7 @@ def wait_health(port: int, proc: subprocess.Popen, deadline_s: float = 60.0) -> 
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/v1/healthz", timeout=2) as r:
                 if r.status == 200:
-                    return
+                    return json.loads(r.read())
         except (urllib.error.URLError, ConnectionError, socket.timeout):
             time.sleep(0.2)
     raise RuntimeError("opencodifier serve did not become healthy in time")
@@ -138,7 +138,8 @@ def main() -> int:
     with open(args.out.with_suffix(".server.log"), "wb") as log:
         proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
     try:
-        wait_health(args.port, proc)
+        health = wait_health(args.port, proc)
+        model_id = health["identity"]["model_id"]
         rows = run_once(args.port, suite)
         rows2 = run_once(args.port, suite)
     finally:
@@ -168,8 +169,11 @@ def main() -> int:
         outcomes[r["outcome"]] = outcomes.get(r["outcome"], 0) + 1
 
     result = {
-        "arm": "engine_builtin_lexical",
-        "model": {"name": "builtin-lexical-v1 (no ML)"},
+        # The engine's live identity names the arm (e.g. the relational
+        # solver composes to `relational-v1|builtin-lexical-v1`), so the
+        # run JSON can never mislabel the deciding stack.
+        "arm": f"engine__{model_id}",
+        "model": {"name": f"{model_id} (no ML)"},
         "suite_sha256": hashlib.sha256(args.suite.read_bytes()).hexdigest(),
         "single": rows,
         "determinism": determinism,
