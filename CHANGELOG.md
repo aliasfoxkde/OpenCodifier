@@ -30,7 +30,12 @@ accuracy-per-byte (0.650 from 546 MiB) at 4B-class latency;
 Ternary-Bonsai-8B is unmeasurable on the CPU host (>10 CPU-hours per
 decision request / unreadable tensors); LFM2.5-2.6B (0.608) is dominated
 by Qwen3.5-2B; the DavidAU X12 NEO MAX merge (0.667 @ 8.35 s) is
-latency-toxic. Raw winner probability measured uncalibrated everywhere
+latency-toxic. Ternary second pass (2026-09-28): Bonsai-8B Q1_0 hits a
+measured prefill cliff (≈1.5 s/token past a ~30-token knee — suite
+projects to 9–13 h) and Ternary-Bonsai-2-27B PTQ1_0 is unloadable (ggml
+type 143, prism-ml-fork-only), so on-CPU ternary viability in the
+ad129b0 build is 4B-and-below. Raw winner probability measured
+uncalibrated everywhere
 (ECE 0.048–0.626), so D15 calibration still blocks any confidence
 exposure, and the relational class stays escalation territory for
 everything interactive. Runner hardening: per-request `--timeout`
