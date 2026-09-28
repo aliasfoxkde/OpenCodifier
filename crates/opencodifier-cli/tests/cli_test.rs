@@ -7,6 +7,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
 
+use std::fmt::Write as _;
 use std::fs;
 use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
@@ -609,6 +610,59 @@ fn serve_rejects_an_unparsable_bind() {
         .failure()
         .code(1)
         .stderr(predicates::str::contains("cli.invalid_bind"));
+}
+
+#[test]
+fn focus_budget_focuses_a_long_state_and_reports_it() {
+    // A state far over the budget with the model-relevant sentence buried
+    // in filler that shares no vocabulary with the question.
+    let mut text = String::new();
+    for index in 0..120 {
+        let _ = writeln!(
+            text,
+            "Ledger entry {index} records archived correspondence, scheduling minutiae \
+             and unrelated inventory counts."
+        );
+    }
+    text.push_str("The deep reasoning specialist is required by the proof.\n");
+    for index in 120..240 {
+        let _ = writeln!(
+            text,
+            "Appendix {index} catalogs vendor paperwork, logistics forms and further minutiae."
+        );
+    }
+    let mut request = choice_request(permissive_policy());
+    request["state"]["text"] = json!(text);
+
+    let scratch = Scratch::new("focus");
+    let payload = scratch.write_json("request.json", &request);
+
+    // Focused: the report carries the focus counts for the run.
+    let output = decide(&payload)
+        .arg("--trace")
+        .arg("--focus-budget")
+        .arg("64")
+        .output()
+        .expect("run opencodifier");
+    assert_eq!(output.status.code(), Some(0), "stderr: {:?}", output.stderr);
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf-8");
+    let documents: Vec<Value> = serde_json::Deserializer::from_str(&stdout)
+        .into_iter::<Value>()
+        .collect::<Result<_, _>>()
+        .expect("two JSON documents");
+    let report = &documents[1];
+    assert_eq!(report["focus"]["decided"], 1, "{report}");
+    assert_eq!(report["focus"]["engaged"], 1, "{report}");
+
+    // Unfocused: the same request has no focus surface at all.
+    let output = decide(&payload).arg("--trace").output().expect("run opencodifier");
+    assert_eq!(output.status.code(), Some(0), "stderr: {:?}", output.stderr);
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf-8");
+    let documents: Vec<Value> = serde_json::Deserializer::from_str(&stdout)
+        .into_iter::<Value>()
+        .collect::<Result<_, _>>()
+        .expect("two JSON documents");
+    assert!(documents[1].get("focus").is_none(), "{}", documents[1]);
 }
 
 #[test]

@@ -467,3 +467,57 @@ gate, there is no flag that opens this surface outward).
   local introspection of a local runtime, consistent with §31's
   explainability stance; §32's deeper tool introspection remains future
   work.
+
+## D18 — Focused-question extraction: recall-oriented views + reverse escalation (2026-09-28)
+
+PLAN Phase 16 (§45): a decision-model rung pays per token while every
+cheaper rung reads whole state. The engine may therefore decide a
+question on a **per-question view** of long state — but only under
+rules that make the view strictly safer than truncation:
+
+- **Extraction is deterministic, model-free, and recall-oriented.**
+  Sentences split with delimiters attached (kept views are the original
+  prose, byte for byte, in original order); BM25 over sentence
+  documents with question text + candidate descriptions as the query;
+  verbatim candidate-id mentions are unconditional evidence. Zero-
+  evidence sentences are never selected, so the *median* view sits near
+  the budget while every kept sentence earned its place. Token
+  accounting is the engine's bytes-over-4 estimate — a budget, not a
+  measurement (no tokenizer exists; D2).
+- **Blind extraction declines; decisive sentences are never amputated.**
+  When no sentence shows positive evidence the view is the full state;
+  when one sentence exceeds the whole budget it is kept whole. A view
+  that saves nothing is the full state. Dropping the one decisive
+  sentence is strictly worse than an over-long view, so recall beats
+  the budget everywhere they conflict.
+- **Reverse escalation, once, pre-gate.** If extraction engaged and the
+  focused top probability is below the request's `min_confidence`, or
+  entropy trips the §19 ceiling (default off), the engine re-decides on
+  the full state before any gate or verifier sees an answer. The
+  fallback cannot produce a *degraded accepted* answer; its cost is one
+  extra classify, and it is visible in the trace
+  (`focus_escalated`) and the report counts (`decided/engaged/
+  escalated`).
+- **Facts are never touched.** Only the text view shrinks; structural
+  facts pass through to every view. Hostile state text is content, not
+  instruction — a view feeds a classifier and nothing else, and no
+  policy/threshold/graph decision is ever read from state text
+  (§73, unchanged).
+- **Cache identity (D6 extension).** The focus policy folds into the
+  model-id component as `|focused-v1@<budget_tokens>`, so budget
+  changes and focus on/off invalidate cached decisions without caller
+  bookkeeping.
+- **Byte-stability for existing consumers.** Unfocused engines have no
+  focus surface at all: trace keys appear only when a policy is
+  configured, `RunReport::focus` is all zero without one, and
+  `execution_json` inserts `"focus"` only when `decided > 0`.
+- **Evidence (Phase 16).** Long-suite A/B through the real binary
+  (`suite_long.json`, ~3,681-token states): answer-identical to the
+  full-state run on 120/120 items at `--focus-budget 512`, engaged
+  views p50 93 tokens, 36 blind declines, 42 escalations (none
+  answer-changing), ~2.5 ms/item extraction overhead at this scale
+  (REPORT.md "Long-context A/B"). Measured limits: the A/B exercises
+  benign dilution, not adversarial distractors; a distractor that
+  out-scores the decisive sentence under BM25 remains the known failure
+  mode, caught (not prevented) by escalation — recorded as the
+  extractor's standing threat model.

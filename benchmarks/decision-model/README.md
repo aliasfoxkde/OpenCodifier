@@ -56,6 +56,14 @@ RUNS=/nas/Temp/work/oc-model-eval/runs   # out-of-tree
 python3 runner/run_engine.py --binary target/release/opencodifier \
     --out "$RUNS/engine__relational-v1.json"
 
+# 1b. long-context focused-extraction A/B (--focus-budget passes through
+#     to `serve`; the padded suite is generated, deterministic, and
+#     gitignored — see REPORT.md "Long-context A/B")
+python3 runner/make_long_suite.py
+python3 runner/run_engine.py --binary target/release/opencodifier \
+    --suite suite/suite_long.json --focus-budget 512 \
+    --out "$RUNS/engine__lexical__long__focused.json"
+
 # 2. embedding arm — three backends, identical math (mean pool, L2,
 #    cosine, softmax tau=1): onnx (default; model.onnx + tokenizer.json
 #    in a dir), torch (HF safetensors encoder dir), llamacpp (a GGUF

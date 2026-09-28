@@ -130,11 +130,21 @@ def main() -> int:
     ap.add_argument("--suite", type=Path, default=Path(__file__).parent.parent / "suite" / "suite.json")
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--port", type=int, default=8177)
+    ap.add_argument(
+        "--focus-budget",
+        type=int,
+        default=None,
+        help="pass --focus-budget to `serve`: decide on focused views of at "
+        "most this many estimated tokens (the A/B arm for PLANNING §45 "
+        "focused extraction)",
+    )
     args = ap.parse_args()
 
     suite = json.loads(args.suite.read_text())
     args.out.parent.mkdir(parents=True, exist_ok=True)
     cmd = [str(args.binary), "serve", "--bind", f"127.0.0.1:{args.port}"]
+    if args.focus_budget is not None:
+        cmd += ["--focus-budget", str(args.focus_budget)]
     with open(args.out.with_suffix(".server.log"), "wb") as log:
         proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
     try:

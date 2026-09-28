@@ -18,7 +18,7 @@ use crate::narrowing::{LexicalScores, NarrowingOutcome};
 /// Builds the execution-report document for trace-style output.
 #[must_use]
 pub fn execution_json(report: &RunReport) -> Value {
-    json!({
+    let mut document = json!({
         "waves": report.waves()
             .iter()
             .map(|wave| wave.iter().map(node_id).collect::<Vec<_>>())
@@ -36,7 +36,23 @@ pub fn execution_json(report: &RunReport) -> Value {
                 json!({ "question": question.to_string(), "outcome": outcome_json(*outcome) })
             })
             .collect::<Vec<_>>(),
-    })
+    });
+    // Focus counts appear only for engines that focus, so the projection
+    // of an unfocused run is byte-identical to its pre-focus form.
+    let focus = report.focus();
+    if focus.decided > 0
+        && let Some(object) = document.as_object_mut()
+    {
+        object.insert(
+            "focus".to_owned(),
+            json!({
+                "decided": focus.decided,
+                "engaged": focus.engaged,
+                "escalated": focus.escalated,
+            }),
+        );
+    }
+    document
 }
 
 /// A node id as a plain string.

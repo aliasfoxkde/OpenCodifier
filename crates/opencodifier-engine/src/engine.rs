@@ -78,6 +78,12 @@ pub struct EngineConfig {
     /// Engine-side ceiling on request execution time; the effective
     /// deadline is the smaller of this and the request's own limit.
     pub max_execution_time: Duration,
+    /// Per-question focused extraction over long state (`None`, the
+    /// default, decides on the full state). When set, questions whose
+    /// state exceeds the budget are decided on a focused view, with
+    /// reverse escalation to the full state when the focused decision is
+    /// weak (PLANNING.md §45).
+    pub focus: Option<crate::focus::FocusPolicy>,
 }
 
 impl EngineConfig {
@@ -95,6 +101,7 @@ impl EngineConfig {
             lexical_prune_limit: None,
             cache: CacheConfig::default(),
             max_execution_time: opencodifier_core::Limits::default().max_execution_time,
+            focus: None,
         }
     }
 
@@ -170,6 +177,14 @@ impl EngineConfig {
         self.max_execution_time = max_execution_time;
         self
     }
+
+    /// Enables per-question focused extraction with the given policy.
+    /// `None` (the default) decides on the full state.
+    #[must_use]
+    pub fn with_focus(mut self, focus: Option<crate::focus::FocusPolicy>) -> Self {
+        self.focus = focus;
+        self
+    }
 }
 
 /// A reasonable default thread budget.
@@ -230,13 +245,18 @@ impl DecisionEngine {
         // (e.g. `relational-v1|builtin-lexical-v1`), so a swapped or
         // decorated classifier changes keys without caller bookkeeping.
         // A hand-set `identity.model_id` is never trusted over this.
-        let config = EngineConfig {
-            identity: EngineIdentity {
-                model_id: classifier.model_id().to_owned(),
-                ..config.identity
-            },
-            ..config
+        // Focused extraction decorates the same way (D6): the budget is
+        // part of what a cached decision decided on, so
+        // `|focused-v1@<budget>` rides on the model id and any policy
+        // change invalidates the affected keys.
+        let model_id = match config.focus {
+            Some(policy) => {
+                format!("{}|focused-v1@{}", classifier.model_id(), policy.budget_tokens)
+            }
+            None => classifier.model_id().to_owned(),
         };
+        let config =
+            EngineConfig { identity: EngineIdentity { model_id, ..config.identity }, ..config };
         Ok(Self {
             config,
             cache,
@@ -338,6 +358,7 @@ impl DecisionEngine {
             skipped: outcome.skipped,
             narrowing: outcome.narrowing,
             lexical: outcome.lexical,
+            focus: outcome.focus,
             outcomes: outcome.outcomes,
         };
         self.cache.insert(key, response.clone());
