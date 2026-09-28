@@ -15,7 +15,7 @@ latency, and run-twice determinism:
 | arm | runner | mechanism |
 |---|---|---|
 | `engine_builtin_lexical` | `run_engine.py` | OpenCodifier's own engine (`opencodifier serve`, builtin lexical pipeline) — the zero-ML baseline every model must beat to earn its latency |
-| `embedding_zero_shot` | `run_embed.py` | MiniLM ONNX cosine + softmax — the "embedding similarity" layer of the ladder (gte-modernbert ran through the same arm) |
+| `embedding_zero_shot` | `run_embed.py` | Cosine + softmax over an encoder — the "embedding similarity" layer of the ladder; backends: `onnx` (MiniLM / gte-ONNX), `torch` (gte HF), `llamacpp` (GGUF embedding models via llama-server) |
 | `laya_decision` | `run_laya.py` | Laya-421M, a small purpose-trained decision model, same suite |
 | `llama_decision` | `run_llama.py` | llama.cpp `parallel-decision` branch (`POST /v1/decision`): every candidate id scored as a token path forked from one cached prefix; tree mode returns the exact constrained distribution, nothing is sampled |
 | `llama_decision` chat baseline | `run_llama.py --skip-chat` opt-out | the same questions written as JSON by ordinary token-by-token chat completion at temperature 0 — what the decision arm replaces |
@@ -54,9 +54,19 @@ RUNS=/nas/Temp/work/oc-model-eval/runs   # out-of-tree
 python3 runner/run_engine.py --binary target/release/opencodifier \
     --out "$RUNS/engine__builtin-lexical.json"
 
-# 2. embedding arm (models/minilm/{model.onnx,tokenizer.json})
+# 2. embedding arm — three backends, identical math (mean pool, L2,
+#    cosine, softmax tau=1): onnx (default; model.onnx + tokenizer.json
+#    in a dir), torch (HF safetensors encoder dir), llamacpp (a GGUF
+#    embedding model served by llama-server; needs --llama-dir)
 python3 runner/run_embed.py --model-dir /path/to/minilm \
     --out "$RUNS/embed__minilm.json"
+python3 runner/run_embed.py --backend torch --threads 4 \
+    --model-dir /path/to/gte-modernbert-base \
+    --out "$RUNS/embed__gte-modernbert-base.json"
+python3 runner/run_embed.py --backend llamacpp --threads 4 \
+    --model-dir /path/to/embeddinggemma-300M-Q8_0.gguf \
+    --llama-dir /path/to/llama.cpp \
+    --out "$RUNS/embed__embeddinggemma-300M-Q8_0.json"
 
 # 3. decision arm per GGUF model (downloads are operator-supplied; the
 #    runner records each file's SHA-256 into the results; --timeout

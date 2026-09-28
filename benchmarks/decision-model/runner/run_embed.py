@@ -6,19 +6,26 @@ and each candidate description, followed by a softmax over the cosines.
 This is the "embedding similarity" layer of the OpenCodifier escalation
 ladder: cheap, fully local (CPU), no tokens generated.
 
-Two backends, identical math (mean pooling, L2 norm, cosine, softmax tau=1):
+Three backends, identical math (mean pooling, L2 norm, cosine, softmax
+tau=1):
 
 - onnx (default): onnxruntime + tokenizers over a MiniLM-style encoder
   exported to ONNX with its tokenizer.json, e.g. Xenova/all-MiniLM-L6-v2:
   models/minilm/model.onnx models/minilm/tokenizer.json
 - torch: transformers over an HF safetensors encoder directory (e.g.
   Alibaba-NLP/gte-modernbert-base); needs torch + transformers.
+- llamacpp: a GGUF embedding model served by llama-server (`--embedding`),
+  e.g. embeddinggemma-300M-Q8_0.gguf; needs --llama-dir with the llama.cpp
+  build. The server's pooled embedding is L2-normalized client-side so the
+  downstream math is identical to the other backends.
 
 Usage:
   python3 runner/run_embed.py --model-dir /path/to/minilm \
       --out results/embed__minilm.json
   python3 runner/run_embed.py --backend torch --model-dir .../gte-modernbert-base \
       --out results/embed__gte-modernbert.json
+  python3 runner/run_embed.py --backend llamacpp --model-dir .../embeddinggemma.gguf \
+      --llama-dir /path/to/llama.cpp --out results/embed__embeddinggemma.json
 """
 
 from __future__ import annotations
@@ -104,11 +111,113 @@ class TorchEncoder:
         return (mean / norm).numpy()
 
 
-def make_encoder(backend: str, model_dir: Path, max_len: int, threads: int):
+class LlamaCppEncoder:
+    """GGUF embedding model served by llama-server's /v1/embeddings route.
+
+    The server pools (model-default / --pooling) and L2-normalizes by
+    default; vectors are re-normalized client-side so the math downstream
+    is identical to the other backends. The server process is owned by
+    this instance and terminated on close.
+    """
+
+    def __init__(
+        self,
+        model_dir: Path,
+        max_len: int = 256,
+        threads: int = 8,
+        llama_dir: Path | None = None,
+        build_dir: str = "build-pd",
+        port: int = 8393,
+        llamacpp_branch: str = "unknown",
+    ):
+        import atexit
+        import subprocess
+        import time
+        import urllib.error
+        import urllib.request
+
+        if model_dir.is_file():
+            gguf = model_dir
+        else:
+            found = sorted(model_dir.glob("*.gguf"))
+            if len(found) != 1:
+                raise ValueError(
+                    f"--model-dir must be a .gguf file or a dir with exactly one, got {len(found)}"
+                )
+            gguf = found[0]
+        if llama_dir is None:
+            raise ValueError("--llama-dir is required for the llamacpp backend")
+        self.gguf = gguf
+        self.port = port
+        self.llamacpp_branch = llamacpp_branch
+        bin_path = llama_dir / build_dir / "bin" / "llama-server"
+        self.proc = subprocess.Popen(
+            [
+                str(bin_path),
+                "-m",
+                str(gguf),
+                "--port",
+                str(port),
+                "--embedding",
+                "-c",
+                "2048",
+                "-fa",
+                "on",
+                "-t",
+                str(threads),
+                "-ngl",
+                "0",
+                "--parallel",
+                "1",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        atexit.register(self.close)
+        base = f"http://127.0.0.1:{port}"
+        deadline = time.monotonic() + 300.0
+        while time.monotonic() < deadline:
+            if self.proc.poll() is not None:
+                raise RuntimeError(f"llama-server exited early with {self.proc.returncode}")
+            try:
+                with urllib.request.urlopen(f"{base}/health", timeout=5) as r:
+                    if r.status == 200:
+                        break
+            except (urllib.error.URLError, OSError):
+                time.sleep(1.0)
+        else:
+            self.close()
+            raise RuntimeError("llama-server did not become healthy in 300 s")
+        self.base = base
+
+    def encode(self, texts: list[str]) -> np.ndarray:
+        import json
+        import urllib.request
+
+        req = urllib.request.Request(
+            f"{self.base}/v1/embeddings",
+            data=json.dumps({"input": texts}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=600) as r:
+            resp = json.load(r)
+        data = sorted(resp["data"], key=lambda d: d["index"])
+        vec = np.array([d["embedding"] for d in data], dtype=np.float32)
+        norm = np.clip(np.linalg.norm(vec, axis=1, keepdims=True), 1e-12, None)
+        return vec / norm
+
+    def close(self) -> None:
+        if self.proc.poll() is None:
+            self.proc.kill()
+
+
+def make_encoder(backend: str, model_dir: Path, max_len: int, threads: int, **kwargs):
     if backend == "onnx":
         return Encoder(model_dir, max_len=max_len, threads=threads)
     if backend == "torch":
         return TorchEncoder(model_dir, max_len=max_len, threads=threads)
+    if backend == "llamacpp":
+        return LlamaCppEncoder(model_dir, max_len=max_len, threads=threads, **kwargs)
     raise ValueError(f"unknown backend: {backend}")
 
 
@@ -119,6 +228,9 @@ def encoder_provenance(backend: str, model_dir: Path) -> dict:
             "sha256_model_onnx": sha256_file(model_dir / "model.onnx"),
             "sha256_tokenizer": sha256_file(model_dir / "tokenizer.json"),
         }
+    if backend == "llamacpp":
+        gguf = model_dir if model_dir.is_file() else sorted(model_dir.glob("*.gguf"))[0]
+        return {"name": gguf.stem, "sha256_gguf": sha256_file(gguf)}
     import torch
     import transformers
 
@@ -178,13 +290,39 @@ def main() -> int:
     ap.add_argument("--model-dir", type=Path, required=True)
     ap.add_argument("--suite", type=Path, default=Path(__file__).parent.parent / "suite" / "suite.json")
     ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--backend", choices=["onnx", "torch"], default="onnx")
+    ap.add_argument("--backend", choices=["onnx", "torch", "llamacpp"], default="onnx")
     ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--max-len", type=int, default=256)
+    ap.add_argument(
+        "--llama-dir",
+        type=Path,
+        default=None,
+        help="llama.cpp checkout holding <build-dir>/bin/llama-server (llamacpp backend)",
+    )
+    ap.add_argument("--build-dir", default="build-pd", help="build subdir under --llama-dir")
+    ap.add_argument("--port", type=int, default=8393, help="llama-server port (llamacpp backend)")
+    ap.add_argument(
+        "--llamacpp-branch",
+        default="parallel-decision ad129b0",
+        help="fork/branch provenance recorded for the llamacpp backend",
+    )
     args = ap.parse_args()
 
     suite = json.loads(args.suite.read_text())
-    enc = make_encoder(args.backend, args.model_dir, args.max_len, args.threads)
+    enc = make_encoder(
+        args.backend,
+        args.model_dir,
+        args.max_len,
+        args.threads,
+        llama_dir=args.llama_dir,
+        build_dir=args.build_dir,
+        port=args.port,
+        llamacpp_branch=args.llamacpp_branch,
+    )
+    provenance = encoder_provenance(args.backend, args.model_dir)
+    if args.backend == "llamacpp":
+        provenance["llamacpp_branch"] = args.llamacpp_branch
+        provenance["server_flags"] = "--embedding -c 2048 -fa on -t <threads> -ngl 0 --parallel 1"
 
     rows, t1 = run_once(enc, suite)
     rows2, t2 = run_once(enc, suite)
@@ -201,7 +339,7 @@ def main() -> int:
 
     result = {
         "arm": "embedding_zero_shot",
-        "model": encoder_provenance(args.backend, args.model_dir),
+        "model": provenance,
         "suite_sha256": hashlib.sha256(args.suite.read_bytes()).hexdigest(),
         "config": {
             "pooling": "mean",

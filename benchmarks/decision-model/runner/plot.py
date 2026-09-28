@@ -127,7 +127,10 @@ def short(name: str) -> str:
         ("-q4_k_m", ""),
         ("-q4_0", " q4_0"),
         ("UD-", "UD-"),
+        ("gte-modernbert-onnx-fp32", "gte-ONNX-fp32"),
+        ("gte-modernbert-onnx-int8", "gte-ONNX-int8"),
         ("gte-modernbert-base", "gte"),
+        ("embeddinggemma-300M-Q8_0", "gemma-embd-300M"),
         ("builtin-lexical", "engine lexical"),
         ("Jev-Style-0.8B-Decision-v3", "Jev-0.8B*"),
     ):
@@ -251,7 +254,8 @@ def chart_accuracy_latency(runs: list[tuple[str, dict]], out_dir: Path) -> None:
     # 0.50 relational-ceiling context: gridline only (accuracy axis).
     labeled = {
         "MiMo-9B-Q3_K_S", "Q3.5-4B-Q3_K_S", "Q3.5-4B-UD-Q4_K_XL", "Q3.5-2B",
-        "Q3.5-0.8B q4_0", "engine lexical", "gte", "Jev-0.8B*",
+        "Q3.5-0.8B q4_0", "engine lexical", "gte", "gte-ONNX-fp32",
+        "gte-ONNX-int8", "gemma-embd-300M", "Jev-0.8B*",
     }
     labels = []
     for name, fam, kind, x, y, acc, p50 in pts:
@@ -437,7 +441,10 @@ def chart_calibration(runs: list[tuple[str, dict]], out_dir: Path) -> None:
         kind = FILL["llama"] if name.startswith("llama__") else FILL[family(name)]
         out.append(marker(x, y, kind, COLORS[family(name)]))
         s = short(name)
-        if s in {"MiMo-9B-Q3_K_S", "Q3.8-4B", "Q3.5-4B-Q3_K_S", "gte", "gemma-3-270m-it"}:
+        if s in {
+            "MiMo-9B-Q3_K_S", "Q3.8-4B", "Q3.5-4B-Q3_K_S", "gte",
+            "gte-ONNX-fp32", "gte-ONNX-int8", "gemma-embd-300M", "gemma-3-270m-it",
+        }:
             labels.append((s, x, y, acc))
     out += label_points(labels)
     out += legend(

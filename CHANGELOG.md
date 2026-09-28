@@ -8,14 +8,14 @@ releases may break, and every breaking change is recorded in this file
 
 ## [Unreleased]
 
-Decision-model benchmark (PLAN Phase 13) — built and swept to 44 runs:
+Decision-model benchmark (PLAN Phase 13) — built and swept to 47 runs:
 `benchmarks/decision-model/` holds a byte-locked 120-item
 candidate-conditioned suite (metadata_match / lexical_semantic /
-relational_compositional) and five measured arm types (the engine's
-lexical pipeline, embedding zero-shot, Laya-421M, llama.cpp
-`parallel-decision` constrained scoring across the GGUF board, and
-chat-only screens for forks without a decision arm), with the committed
-summary + model manifest. **D16 amended ×4 into a four-tier scheme:**
+relational_compositional) and measured arm types (the engine's
+lexical pipeline, embedding zero-shot over three backends, Laya-421M,
+llama.cpp `parallel-decision` constrained scoring across the GGUF
+board, and chat-only screens for forks without a decision arm), with
+the committed summary + model manifest. **D16 amended ×4 into a four-tier scheme:**
 MiMo-V2.6-9B Q3_K_S is the frontier (0.817, ECE 0.048 best, first arm
 over the 0.50 relational ceiling at 0.525 — MoE, 14.3 s p50, verifier
 tier); Qwen3.5-4B is the interactive reference (0.800 @ 4.9–6.8 s,
@@ -34,8 +34,12 @@ latency-toxic. Ternary second pass (2026-09-28): Bonsai-8B Q1_0 hits a
 measured prefill cliff (≈1.5 s/token past a ~30-token knee — suite
 projects to 9–13 h) and Ternary-Bonsai-2-27B PTQ1_0 is unloadable (ggml
 type 143, prism-ml-fork-only), so on-CPU ternary viability in the
-ad129b0 build is 4B-and-below. Raw winner probability measured
-uncalibrated everywhere
+ad129b0 build is 4B-and-below. Embedding-rung bake-off (2026-09-28):
+gte ONNX-fp32 ties torch to the digit at 4.2× the CPU speed (811 ms vs
+3375 ms per item) and becomes the rung's runtime; int8 dynamic
+quantization rejected (0.442 for −17% latency); EmbeddingGemma-300M
+Q8_0 via llama.cpp recorded (0.500 / ECE 0.256); fp16 export unloadable
+(REPORT F20). Raw winner probability measured uncalibrated everywhere
 (ECE 0.048–0.626), so D15 calibration still blocks any confidence
 exposure, and the relational class stays escalation territory for
 everything interactive. Runner hardening: per-request `--timeout`

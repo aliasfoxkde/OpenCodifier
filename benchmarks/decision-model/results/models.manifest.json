@@ -38,6 +38,8 @@
  "glm5.1-distill-Q4_K_M.gguf": "47e149d2de40f3d187f98ee54b75a3c37ee1c52772409f84f39acd7f2cdbdf2f",
  "granite-4.0-350m-Q4_K_M.gguf": "771c588a49607f274a2bba3185733607ebe6f74b996ab90e2d6bee0d98bcec52",
  "gte-modernbert-base": "3e85899d5728cb7de79781c0c3acfb91ccef9f875f1f7e0b3c9f3dd4b6a724ba",
+ "gte-modernbert-onnx-fp32": "0e908b53502f034de57da3545e02db2c7ad60420de17ff894f2022eb6a8bef39",
+ "gte-modernbert-onnx-int8": "8a30867605f9c8c4d5aef11b88bc5963cd852c03693dd7dec5ae6045e60bbf6c",
  "minilm": "759c3cd2b7fe7e93933ad23c4c9181b7396442a2ed746ec7c1d46192c469c46e",
  "qwen2.5-0.5b-instruct-q4_k_m.gguf": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
  "qwen2.5-1.5b-instruct-q4_k_m.gguf": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
