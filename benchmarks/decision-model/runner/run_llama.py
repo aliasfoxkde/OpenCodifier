@@ -9,6 +9,10 @@ two arms:
   constrained distribution, nothing is sampled, so scoring is deterministic.
 - chat arm (optional): the same questions as JSON-writing chat completions
   at temperature 0 — the token-by-token baseline the decision arm replaces.
+- `--skip-decision`: chat-baseline-only run for forks without
+  `POST /v1/decision` (e.g. MBZUAI-IFM/llama.cpp `model/K2Horizon`). The
+  result carries `"arm": "llama_chat_baseline_only"` and no decision
+  metrics; it is a screen, not comparable to decision-arm accuracy.
 
 For each model the runner measures accuracy per difficulty class, expected
 calibration error of the winner probability, per-decision latency single
@@ -66,7 +70,7 @@ def wait_health(port: int, proc: subprocess.Popen, deadline_s: float = 300.0) ->
     raise RuntimeError("llama-server did not become healthy in time")
 
 
-def decide_single(port: int, suite: dict, it: dict) -> dict:
+def decide_single(port: int, suite: dict, it: dict, timeout: float) -> dict:
     payload = {
         "instructions": suite["instructions"],
         "schema": {
@@ -80,7 +84,7 @@ def decide_single(port: int, suite: dict, it: dict) -> dict:
         "mode": "tree",
     }
     t0 = time.monotonic()
-    resp = post(f"http://127.0.0.1:{port}/v1/decision", payload)
+    resp = post(f"http://127.0.0.1:{port}/v1/decision", payload, timeout)
     wall_ms = (time.monotonic() - t0) * 1000.0
     res = resp["results"][0]
     field = res["fields"]["choice"]
@@ -96,10 +100,10 @@ def decide_single(port: int, suite: dict, it: dict) -> dict:
     }
 
 
-def run_suite(port: int, suite: dict, items: list[dict]) -> list[dict]:
+def run_suite(port: int, suite: dict, items: list[dict], timeout: float) -> list[dict]:
     out = []
     for it in items:
-        r = decide_single(port, suite, it)
+        r = decide_single(port, suite, it, timeout)
         out.append(
             {
                 "id": it["id"],
@@ -116,7 +120,7 @@ def run_suite(port: int, suite: dict, items: list[dict]) -> list[dict]:
     return out
 
 
-def run_batched(port: int, suite: dict, items: list[dict]) -> dict:
+def run_batched(port: int, suite: dict, items: list[dict], timeout: float) -> dict:
     """Bulk phase: all contexts of one class in a single call.
 
     Contexts in one call must share the schema, so this only works when the
@@ -141,7 +145,7 @@ def run_batched(port: int, suite: dict, items: list[dict]) -> dict:
             "mode": "tree",
         }
         t0 = time.monotonic()
-        resp = post(f"http://127.0.0.1:{port}/v1/decision", payload)
+        resp = post(f"http://127.0.0.1:{port}/v1/decision", payload, timeout)
         wall_ms = (time.monotonic() - t0) * 1000.0
         timings = resp.get("timings", {})
         preds = [r["fields"]["choice"]["value"] for r in resp["results"]]
@@ -162,7 +166,9 @@ def run_batched(port: int, suite: dict, items: list[dict]) -> dict:
     return out
 
 
-def run_chat(port: int, suite: dict, items: list[dict], max_tokens: int) -> list[dict]:
+def run_chat(
+    port: int, suite: dict, items: list[dict], max_tokens: int, timeout: float
+) -> list[dict]:
     out = []
     for it in items:
         opts = "\n".join(f"- {c['id']}: {c['description']}" for c in it["candidates"])
@@ -183,7 +189,7 @@ def run_chat(port: int, suite: dict, items: list[dict], max_tokens: int) -> list
             "chat_template_kwargs": {"enable_thinking": False},
         }
         t0 = time.monotonic()
-        resp = post(f"http://127.0.0.1:{port}/v1/chat/completions", payload)
+        resp = post(f"http://127.0.0.1:{port}/v1/chat/completions", payload, timeout)
         wall_ms = (time.monotonic() - t0) * 1000.0
         text = resp["choices"][0]["message"]["content"]
         pred = None
@@ -260,7 +266,14 @@ def main() -> int:
     ap.add_argument("--threads", type=int, default=12)
     ap.add_argument("--ctx", type=int, default=8192)
     ap.add_argument("--decision-seqs", type=int, default=24)
+    ap.add_argument("--build-dir", default="build-pd", help="build subdir under --llama-dir holding bin/llama-server")
+    ap.add_argument("--llamacpp-branch", default=LBRANCH, help="fork/branch provenance recorded in the result")
     ap.add_argument("--skip-chat", action="store_true")
+    ap.add_argument(
+        "--skip-decision",
+        action="store_true",
+        help="chat-baseline-only screen for forks without POST /v1/decision",
+    )
     ap.add_argument("--skip-batched", action="store_true")
     ap.add_argument(
         "--chat-only",
@@ -268,6 +281,13 @@ def main() -> int:
         help="re-run only the chat baseline, merging into the existing out file",
     )
     ap.add_argument("--chat-max-tokens", type=int, default=512)
+    ap.add_argument(
+        "--timeout",
+        type=float,
+        default=600.0,
+        help="per-request client timeout in seconds; raise for large models "
+        "whose tail-latency requests can exceed the default",
+    )
     args = ap.parse_args()
 
     suite = json.loads(args.suite.read_text())
@@ -276,7 +296,7 @@ def main() -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
     cmd = [
-        str(args.llama_dir / "build-pd" / "bin" / "llama-server"),
+        str(args.llama_dir / args.build_dir / "bin" / "llama-server"),
         "-m", str(model_path),
         "--port", str(args.port),
         "-c", str(args.ctx),
@@ -284,19 +304,62 @@ def main() -> int:
         "-t", str(args.threads),
         "--jinja",
         "--parallel", "1",
-        "--decision-seqs", str(args.decision_seqs),
-        "-ngl", "0",
     ]
+    if not args.skip_decision:
+        cmd += ["--decision-seqs", str(args.decision_seqs)]
+    cmd += ["-ngl", "0"]
     print("spawn:", " ".join(cmd), flush=True)
     with open(args.out.with_suffix(".server.log"), "wb") as log:
         proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
     try:
         wait_health(args.port, proc)
 
+        if args.skip_decision:
+            chat_rows = run_chat(args.port, suite, items, args.chat_max_tokens, args.timeout)
+            chat = {
+                "rows": chat_rows,
+                "metrics": {
+                    "accuracy": sum(1 for r in chat_rows if r["pred"] == r["answer"])
+                    / len(chat_rows),
+                    "accuracy_by_class": {
+                        cls: sum(1 for r in chat_rows if r["class"] == cls and r["pred"] == r["answer"])
+                        / sum(1 for r in chat_rows if r["class"] == cls)
+                        for cls in sorted({r["class"] for r in chat_rows})
+                    },
+                    "p50_ms": sorted(r["wall_ms"] for r in chat_rows)[len(chat_rows) // 2],
+                    "mean_ms": sum(r["wall_ms"] for r in chat_rows) / len(chat_rows),
+                    "max_tokens": args.chat_max_tokens,
+                    "thinking_disabled": True,
+                },
+            }
+            result = {
+                "arm": "llama_chat_baseline_only",
+                "llamacpp_branch": args.llamacpp_branch,
+                "model": {"file": args.model, "sha256": sha256_file(model_path)},
+                "suite_sha256": hashlib.sha256(args.suite.read_bytes()).hexdigest(),
+                "config": {
+                    "threads": args.threads,
+                    "ctx": args.ctx,
+                    "ngl": 0,
+                    "device": "cpu",
+                    "decision_arm": False,
+                },
+                "chat": chat,
+            }
+            args.out.write_text(json.dumps(result, sort_keys=True, indent=1) + "\n")
+            cm = chat["metrics"]
+            print(
+                f"chat-only acc={cm['accuracy']:.3f} "
+                f"per_class={ {k: round(v, 3) for k, v in cm['accuracy_by_class'].items()} } "
+                f"p50={cm['p50_ms']:.0f}ms (decision arm skipped: fork has no /v1/decision)",
+                flush=True,
+            )
+            return 0
+
         if args.chat_only:
             prior_path = args.out
             prior = json.loads(prior_path.read_text()) if prior_path.exists() else None
-            chat_rows = run_chat(args.port, suite, items, args.chat_max_tokens)
+            chat_rows = run_chat(args.port, suite, items, args.chat_max_tokens, args.timeout)
             chat = {
                 "rows": chat_rows,
                 "metrics": {
@@ -324,8 +387,8 @@ def main() -> int:
             )
             return 0
 
-        single = run_suite(args.port, suite, items)
-        single_again = run_suite(args.port, suite, items)
+        single = run_suite(args.port, suite, items, args.timeout)
+        single_again = run_suite(args.port, suite, items, args.timeout)
         max_delta = max(
             abs(a["prob"] - b["prob"]) for a, b in zip(single, single_again)
         )
@@ -337,11 +400,13 @@ def main() -> int:
         }
 
         batched = (
-            run_batched(args.port, suite, items) if not args.skip_batched else None
+            run_batched(args.port, suite, items, args.timeout)
+            if not args.skip_batched
+            else None
         )
         chat = None
         if not args.skip_chat:
-            chat_rows = run_chat(args.port, suite, items, args.chat_max_tokens)
+            chat_rows = run_chat(args.port, suite, items, args.chat_max_tokens, args.timeout)
             chat = {
                 "rows": chat_rows,
                 "metrics": {
@@ -385,6 +450,7 @@ def main() -> int:
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, sort_keys=True, indent=1) + "\n")
+    m = result["metrics"]
     m = result["metrics"]
     print(
         f"acc={m['accuracy']:.3f} ece={m['ece']:.3f} "

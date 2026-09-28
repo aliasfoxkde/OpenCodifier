@@ -4,16 +4,21 @@
 Scores each item by cosine similarity between the embedded context+question
 and each candidate description, followed by a softmax over the cosines.
 This is the "embedding similarity" layer of the OpenCodifier escalation
-ladder: cheap, fully local (ONNX Runtime, CPU), no tokens generated.
+ladder: cheap, fully local (CPU), no tokens generated.
 
-Requires: onnxruntime, tokenizers, and a MiniLM-style encoder exported to
-ONNX with its tokenizer.json, e.g. Xenova/all-MiniLM-L6-v2:
+Two backends, identical math (mean pooling, L2 norm, cosine, softmax tau=1):
 
+- onnx (default): onnxruntime + tokenizers over a MiniLM-style encoder
+  exported to ONNX with its tokenizer.json, e.g. Xenova/all-MiniLM-L6-v2:
   models/minilm/model.onnx models/minilm/tokenizer.json
+- torch: transformers over an HF safetensors encoder directory (e.g.
+  Alibaba-NLP/gte-modernbert-base); needs torch + transformers.
 
 Usage:
   python3 runner/run_embed.py --model-dir /path/to/minilm \
       --out results/embed__minilm.json
+  python3 runner/run_embed.py --backend torch --model-dir .../gte-modernbert-base \
+      --out results/embed__gte-modernbert.json
 """
 
 from __future__ import annotations
@@ -27,7 +32,6 @@ import time
 from pathlib import Path
 
 import numpy as np
-import onnxruntime as ort
 from tokenizers import Tokenizer
 
 
@@ -43,6 +47,8 @@ class Encoder:
     """Mean-pooled, L2-normalized sentence embeddings from a MiniLM ONNX."""
 
     def __init__(self, model_dir: Path, max_len: int = 256, threads: int = 8):
+        import onnxruntime as ort
+
         self.tok = Tokenizer.from_file(str(model_dir / "tokenizer.json"))
         self.tok.enable_truncation(max_length=max_len)
         self.tok.enable_padding(pad_id=0, pad_token="[PAD]", length=None)
@@ -71,6 +77,60 @@ class Encoder:
         mean = summed / counts
         norm = np.clip(np.linalg.norm(mean, axis=1, keepdims=True), 1e-12, None)
         return mean / norm
+
+
+class TorchEncoder:
+    """Mean-pooled, L2-normalized embeddings from an HF safetensors encoder."""
+
+    def __init__(self, model_dir: Path, max_len: int = 256, threads: int = 8):
+        import torch
+        from transformers import AutoModel, AutoTokenizer
+
+        self.max_len = max_len
+        torch.set_num_threads(threads)
+        torch.set_grad_enabled(False)
+        self.tok = AutoTokenizer.from_pretrained(model_dir)
+        self.model = AutoModel.from_pretrained(model_dir)
+        self.model.eval()
+
+    def encode(self, texts: list[str]) -> np.ndarray:
+        batch = self.tok(
+            texts, padding=True, truncation=True, max_length=self.max_len, return_tensors="pt"
+        )
+        out = self.model(**batch).last_hidden_state
+        mask = batch["attention_mask"][:, :, None].to(out.dtype)
+        mean = (out * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1e-9)
+        norm = mean.norm(dim=1, keepdim=True).clamp(min=1e-12)
+        return (mean / norm).numpy()
+
+
+def make_encoder(backend: str, model_dir: Path, max_len: int, threads: int):
+    if backend == "onnx":
+        return Encoder(model_dir, max_len=max_len, threads=threads)
+    if backend == "torch":
+        return TorchEncoder(model_dir, max_len=max_len, threads=threads)
+    raise ValueError(f"unknown backend: {backend}")
+
+
+def encoder_provenance(backend: str, model_dir: Path) -> dict:
+    if backend == "onnx":
+        return {
+            "name": model_dir.name,
+            "sha256_model_onnx": sha256_file(model_dir / "model.onnx"),
+            "sha256_tokenizer": sha256_file(model_dir / "tokenizer.json"),
+        }
+    import torch
+    import transformers
+
+    return {
+        "name": model_dir.name,
+        "sha256_model_safetensors": sha256_file(model_dir / "model.safetensors"),
+        "sha256_tokenizer": sha256_file(model_dir / "tokenizer.json"),
+        "torch_transformers_versions": {
+            "torch": torch.__version__,
+            "transformers": transformers.__version__,
+        },
+    }
 
 
 def run_once(enc: Encoder, suite: dict) -> tuple[list[dict], float]:
@@ -118,10 +178,13 @@ def main() -> int:
     ap.add_argument("--model-dir", type=Path, required=True)
     ap.add_argument("--suite", type=Path, default=Path(__file__).parent.parent / "suite" / "suite.json")
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--backend", choices=["onnx", "torch"], default="onnx")
+    ap.add_argument("--threads", type=int, default=8)
+    ap.add_argument("--max-len", type=int, default=256)
     args = ap.parse_args()
 
     suite = json.loads(args.suite.read_text())
-    enc = Encoder(args.model_dir)
+    enc = make_encoder(args.backend, args.model_dir, args.max_len, args.threads)
 
     rows, t1 = run_once(enc, suite)
     rows2, t2 = run_once(enc, suite)
@@ -138,13 +201,17 @@ def main() -> int:
 
     result = {
         "arm": "embedding_zero_shot",
-        "model": {
-            "name": args.model_dir.name,
-            "sha256_model_onnx": sha256_file(args.model_dir / "model.onnx"),
-            "sha256_tokenizer": sha256_file(args.model_dir / "tokenizer.json"),
-        },
+        "model": encoder_provenance(args.backend, args.model_dir),
         "suite_sha256": hashlib.sha256(args.suite.read_bytes()).hexdigest(),
-        "config": {"pooling": "mean", "similarity": "cosine", "softmax": "tau=1", "device": "cpu"},
+        "config": {
+            "pooling": "mean",
+            "similarity": "cosine",
+            "softmax": "tau=1",
+            "device": "cpu",
+            "backend": args.backend,
+            "max_len": args.max_len,
+            "threads": args.threads,
+        },
         "single": rows,
         "determinism": determinism,
         "metrics": {

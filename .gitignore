@@ -29,3 +29,6 @@ lcov.info
 *.swp
 *~
 .DS_Store
+
+# Python bytecode (benchmark runners)
+__pycache__/
