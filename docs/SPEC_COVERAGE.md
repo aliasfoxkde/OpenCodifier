@@ -6,7 +6,10 @@ document is the check that every *section* of the spec has a landing
 place, not just every tracked phase. Verdicts: **done** (implemented,
 tested, in the default build), **partial** (some of the section shipped;
 the rest named), **designed** (design of record exists, no code),
-**planned** (spec'd, nothing yet).
+**planned** (spec'd, nothing yet), and the qualified dones
+**done-as-decided** / **done-as-documented** / **done-runtime**
+(landed in a scoped form the evidence states — e.g. the WASM runtime
+shipped while the browser demo rides §58).
 
 ## Foundation (§§1–8)
 
@@ -45,7 +48,7 @@ the rest named), **designed** (design of record exists, no code),
 | 26 | Reranking | done | `Reranker` trait (`LexicalReranker`/`EmbeddingReranker`), the `rerank` node permutes never removes; trace discloses the order (D21, 18h) |
 | 27 | Model Runtime | done | `InferenceBackend`/`EmbeddingBackend`; `ort` behind the `onnx` feature (D2) |
 | 28 | Why ONNX + Burn | done-as-decided | D2; Burn unexamined until ONNX fails a need |
-| 29 | WASM | planned | §57; no `opencodifier-wasm` crate yet |
+| 29 | WASM | done-runtime | `opencodifier-wasm` compiled for `wasm32-unknown-unknown`; `WasmEngine` (decide/validate/run/identity) proven in Node over the real artifact; model rung stays native (D23, 18j) |
 | 30 | Tokenization | partial | deterministic bytes-over-4 estimate (D2) everywhere a budget needs one; no tokenizer — deliberate while no model arm runs in-process |
 
 ## Interfaces and delivery (§§31–39)
@@ -73,7 +76,7 @@ the rest named), **designed** (design of record exists, no code),
 | 54 | Phase 14 — Reranking | done | see §26 |
 | 55 | Phase 15 — MCP | done | Phase 10 in PLAN numbering (D17) |
 | 56 | Phase 16 — Recipes and Skills | done | `recipes/` (3 tutorial graphs + the twelve §34 fleet recipes with `recipe list`/`recipe install`, 18g) + `skills/` (§33, 2026-09-28) |
-| 57 | Phase 17 — WASM | planned | crate absent; §68 (WASM security) rides on it |
+| 57 | Phase 17 — WASM | done-runtime | `wasm-pack --target nodejs` artifact + Node smoke test (`just check-wasm`); browser demo rides §58 (D23, 18j) |
 | 58 | Phase 18 — CLI / Distribution | partial | CLI done; release matrix (Win/macOS/ARM64), Homebrew/winget/cargo-publish unstarted (GitForge releases exist for Linux x86_64) |
 | 59 | Phase 19 — Benchmarking | done | criterion baselines per release + the Phase 13 decision-model benchmark (D16) |
 
@@ -87,7 +90,7 @@ the rest named), **designed** (design of record exists, no code),
 | 65 | Explainability | done | deterministic execution trace, `trace_version`, no chain-of-thought |
 | 66 | Security | done | hostile-input rule, loopback gate, aegis gate in CI |
 | 67 | Resource Limits | done | `RequestMetadata.limits` enforced (input bytes/questions/candidates/graph nodes/time/retrieval) |
-| 68 | WASM Security | planned | with §57 |
+| 68 | WASM Security | done-runtime | structural posture: no fs/net/telemetry/dynamic-native/storage in the dependency tree (enforced by a manifest test); hostile input → typed codes; platform seams declared (D23, 18j) |
 | 69 | V1 Acceptance Criteria | done | per-phase acceptance in `docs/PLAN.md`; v0.2.0 cut |
 | 70 | V1 Performance Goals | done | D9 per-stage budgets, criterion-measured |
 | 71 | V1.1 | planned | semantic cache, reranker, hybrid retrieval, multilingual, graph optimizer |
@@ -122,7 +125,7 @@ the rest named), **designed** (design of record exists, no code),
 8. ~~**§51 graph optimizer**, **§53 retrieval node**, **§26/§54 rerank node** (with §24's `embedding` node)~~ **done** — D21/D22 records, `optimize()` with fleet equivalence, semantic nodes over the `EmbeddingBackend` seam.
 
 **Larger efforts (own phases):**
-9. **§57+§68 WASM** (`opencodifier-wasm`, browser demo, WASM security).
+9. ~~**§57+§68 WASM**~~ **runtime done** — `opencodifier-wasm` over the zero-ML stack, Node-proven artifact (D23, 18j); the browser demo rides §58.
 10. **§58 distribution matrix** (cross-platform releases, Homebrew/winget/crates.io).
 11. **§15/§16 training pipeline** (with §62's shadow-ledger dataset discipline).
 12. **§60 implementation** — Amortyx integration per the promotion gate.

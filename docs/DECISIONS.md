@@ -716,3 +716,56 @@ the passes whose "optimizations" would be guesses.
   cache identity). Equivalence proofs: per-pass unit tests plus a
   fleet-wide test that optimizes every committed recipe graph and
   asserts identical decisions.
+
+## D23 — The WASM boundary is the zero-ML decision runtime (2026-09-29)
+
+PLANNING §57 asks for `opencodifier-wasm` (CPU/SIMD/threads/WebGPU) with
+a browser demo; §68 fixes the security posture. V1.1 lands the boundary,
+not the model path:
+
+- **What compiles to `wasm32-unknown-unknown`:** `core` + `engine` +
+  `schema` (and `runtime`'s traits). These are sync, allocation-only,
+  IO-free crates — verified by `cargo check --target
+  wasm32-unknown-unknown`, not assumed. The WASM crate depends on
+  nothing else: no tokio, no axum, no `ort`, no filesystem, no
+  networking, no environment access, no storage API of any kind (§68's
+  IndexedDB clause is satisfied vacuously until a storage adapter
+  exists, and the crate is the only place one may ever live).
+- **The exposed engine is the base posture.** `WasmEngine` assembles
+  `EngineHandle::lexical` over the default pipeline — relational solver
+  over BM25, exactly the zero-ML stack the native base binary ships.
+  Wire formats go through the `schema` native adapter only; the browser
+  never sees IR internals unvalidated.
+- **The model rung stays native for now — stated, not hidden.** §57's
+  WebGPU/ONNX-Web path would put `ort` in the browser; that is a
+  runtime choice (D2 territory) with its own supply-chain and
+  integrity story (§68's "model downloads explicit and integrity
+  checked"). No browser model path ships until that record exists.
+  The WASM build's usefulness does not depend on it: deterministic
+  decisions, rules, narrowing, and traces run fully client-side.
+- **Security posture is structural, not promised (§68).** No dynamic
+  native code: the artifact is pure wasm, no `-sys` crates, no JS
+  shims beyond `wasm-bindgen`'s glue. No telemetry: there is no
+  output channel. All input is hostile: every entry point decodes
+  through the validating schema adapters and returns typed errors;
+  nothing from a request can touch policy, thresholds, graph
+  structure, or paths (PLANNING §73 carries over unchanged).
+- **Verification without a browser.** The artifact is built with
+  `wasm-pack --target nodejs` and exercised in Node — decide,
+  validate, hostile-input refusals — because the same wasm module the
+  browser loads is the module the harness runs. The browser demo
+  (§57's drag/drop page) is presentation on top of the exact artifact
+  the Node harness proves; it stays out of V1.1 and rides the
+  distribution phase (§58) rather than blocking the runtime.
+- **The platform seam the Node harness forced into the open.** The
+  first artifact trapped: `std::time::Instant::now()` has no source on
+  `wasm32-unknown-unknown` (a wasm module reads the *host's* monotonic
+  clock), and `std::thread::spawn` is unavailable there. Both are now
+  declared seams, not runtime surprises: `clock.rs` re-exports
+  `std::time::Instant` natively and the `web-time` reading on wasm32
+  (target-gated dependency — the native tree gains nothing), and the
+  executor's parallel-wave path is compile-time gated off on wasm32, so
+  `RunReport::parallel_waves` is 0 there by construction. Deadline
+  math, cache TTLs, and the sequential wave path are the same code on
+  every target; only the reading and the thread count are the
+  platform's.

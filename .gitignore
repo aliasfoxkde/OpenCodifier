@@ -1,5 +1,7 @@
 # Build artifacts
 /target
+# wasm-pack output (§57): rebuilt by `just check-wasm`, never committed
+/crates/opencodifier-wasm/pkg
 
 # Coverage output
 /coverage

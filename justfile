@@ -48,6 +48,19 @@ machete:
 e2e port='8188':
     python3 scripts/e2e_validate.py --binary target/release/opencodifier --port {{port}}
 
+# The WASM artifact proof (PLAN 18j, D23): host tests, the wasm32 compile,
+# a wasm-pack --target nodejs build, and the Node smoke test over the real
+# artifact. NOT part of `just ci` — Node and wasm-pack are not CI
+# dependencies; run this when the wasm boundary itself changes.
+check-wasm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export TMPDIR="${TMPDIR:-/nas/Temp/tmp}"
+    cargo test -p opencodifier-wasm
+    cargo check -p opencodifier-wasm --target wasm32-unknown-unknown
+    (cd crates/opencodifier-wasm && wasm-pack build --target nodejs --out-dir pkg)
+    node crates/opencodifier-wasm/tests/node/smoke.cjs
+
 # Pins for `just ci-image`; the Dockerfile ARG is the pin of record — keep
 # the two in sync. Override via env when re-pinning.
 aegis_src := env_var_or_default('AEGIS_SRC', '/nas/Temp/repos/aegis')

@@ -35,7 +35,9 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use crate::clock::Instant;
 
 use opencodifier_core::{ChoiceQuestion, DecisionQuestion, DecisionRequest, DecisionResponse};
 use serde::{Deserialize, Serialize};
