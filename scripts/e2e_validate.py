@@ -58,6 +58,19 @@ def post(base: str, path: str, payload, timeout: float = 60.0):
             return e.code, body
 
 
+def get(base: str, path: str, timeout: float = 10.0):
+    """GET JSON; returns (status, parsed-body-or-text). Never raises on HTTP 4xx/5xx."""
+    try:
+        with urllib.request.urlopen(base + path, timeout=timeout) as r:
+            body = r.read().decode()
+            try:
+                return r.status, json.loads(body)
+            except json.JSONDecodeError:
+                return r.status, body
+    except urllib.error.HTTPError:
+        return e.code, {}  # metadata endpoints answer errors with a code
+
+
 def wait_health(base: str, deadline_s: float = 30.0) -> bool:
     end = time.monotonic() + deadline_s
     while time.monotonic() < end:
@@ -115,6 +128,7 @@ def main() -> int:
         check("serve: healthz reachable", True)
 
         run_http_checks(base)
+        run_surface_checks(base)
         if not args.skip_mcp:
             run_mcp_checks(args.binary)
     finally:
@@ -287,6 +301,60 @@ def _exit() -> int:
     print(f"\n{len(CHECKS) - len(failed)}/{len(CHECKS)} e2e checks passed",
           flush=True)
     return 1 if failed else 0
+
+
+def run_surface_checks(base: str) -> None:
+    """PLAN 18e: the §36 metadata + batch + validate surface."""
+    # --- /v1/validate ------------------------------------------------------
+    q = {"type": "boolean", "id": "needs_tools",
+         "text": "Does resolving this require touching external tools?"}
+    st, resp = post(base, "/v1/validate", decide_payload(q))
+    check("validate: 200 valid:true with question count",
+          st == 200 and isinstance(resp, dict) and resp.get("valid") is True
+          and resp.get("questions") == 1,
+          json.dumps(resp)[:120])
+    bad = decide_payload(q)
+    del bad["policy"]
+    st, resp = post(base, "/v1/validate", bad)
+    code = (resp.get("error") or {}).get("code", "?") if isinstance(resp, dict) else "?"
+    check("validate: missing policy is a 400 schema.*",
+          st == 400 and str(code).startswith("schema."), f"status={st} code={code}")
+
+    # --- /v1/batch ---------------------------------------------------------
+    st, resp = post(base, "/v1/batch", {
+        "requests": [decide_payload(q), {"state": {"text": 7}},
+                     decide_payload(q)]})
+    results = resp.get("results", []) if isinstance(resp, dict) else []
+    item_error = results[1].get("error", {}) if len(results) > 1 else {}
+    check("batch: independent items, per-item error envelope",
+          st == 200 and resp.get("count") == 3 and len(results) == 3
+          and results[0].get("response", {}).get("answers")
+          and str(item_error.get("code", "")).startswith("schema."),
+          f"count={resp.get('count') if isinstance(resp, dict) else resp!r} "
+          f"err={item_error.get('code') if isinstance(item_error, dict) else item_error!r}")
+    st, resp = post(base, "/v1/batch",
+        {"requests": [decide_payload(q)] * 17})
+    code = (resp.get("error") or {}).get("code", "?") if isinstance(resp, dict) else "?"
+    check("batch: 17 items refused up front",
+          st == 400 and code == "schema.limit_exceeded",
+          f"status={st} code={code} body={str(resp)[:80]}")
+
+    # --- /v1/models + /v1/capabilities -------------------------------------
+    st, models = get(base, "/v1/models")
+    lanes = models.get("models", []) if isinstance(models, dict) else []
+    check("models: exactly the active decision lane",
+          st == 200 and len(lanes) == 1 and lanes[0].get("role") == "decision"
+          and lanes[0].get("active") is True and lanes[0].get("id"),
+          json.dumps(lanes)[:120])
+    st, caps = get(base, "/v1/capabilities")
+    kinds = caps.get("decision_kinds", []) if isinstance(caps, dict) else []
+    endpoints = caps.get("endpoints", []) if isinstance(caps, dict) else []
+    check("capabilities: kinds, batch limit, cache probe, endpoints",
+          st == 200 and sorted(kinds) == ["boolean", "choice", "score"]
+          and caps.get("max_batch") == 16
+          and isinstance(caps.get("cache", {}).get("enabled"), bool)
+          and "/v1/decide" in endpoints and "/v1/batch" in endpoints,
+          f"kinds={kinds} max_batch={caps.get('max_batch') if isinstance(caps, dict) else '?'}")
 
 
 if __name__ == "__main__":

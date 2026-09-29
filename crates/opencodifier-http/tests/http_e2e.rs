@@ -324,3 +324,99 @@ async fn a_graph_beyond_the_node_limit_is_a_400_before_validation() {
     let body: Value = response.json().await.unwrap();
     assert_eq!(error_code(&body), "schema.limit_exceeded", "body: {body}");
 }
+
+/// GETs a path, as a metadata probe would.
+async fn get_json(base_url: &str, path: &str) -> reqwest::Response {
+    client().get(format!("{base_url}{path}")).send().await.unwrap()
+}
+
+#[tokio::test]
+async fn batch_decides_independently_and_reports_per_item_errors() {
+    let server = spawn_server().await;
+    // Item 0 decides; item 1 is hostile garbage; item 2 decides. One
+    // item's refusal must not touch its neighbours.
+    let body = json!({
+        "requests": [
+            choice_payload(&DecisionPolicy::default()).parse::<Value>().unwrap(),
+            json!({"state": {"text": 42}}),
+            choice_payload(&DecisionPolicy::default()).parse::<Value>().unwrap(),
+        ],
+    });
+    let response = post_json(&server.base_url, "/v1/batch", &body.to_string())
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+
+    assert_eq!(response["count"], 3, "batch: {response}");
+    let results = response["results"].as_array().unwrap();
+    assert_eq!(results.len(), 3);
+    assert_eq!(results[0]["response"]["answers"][0]["type"], "choice");
+    assert_eq!(results[2]["response"]["answers"][0]["type"], "choice");
+    let error = &results[1]["error"];
+    assert!(error["code"].as_str().unwrap_or_default().starts_with("schema."), "item 1: {error}");
+    // The malformed item is still a 200: the batch was well-formed, the
+    // item is where the failure lives.
+}
+
+#[tokio::test]
+async fn batch_over_the_limit_is_refused_up_front() {
+    let server = spawn_server().await;
+    let items: Vec<Value> = (0..=opencodifier_engine::MAX_BATCH)
+        .map(|_| choice_payload(&DecisionPolicy::default()).parse::<Value>().unwrap())
+        .collect();
+    let response =
+        post_json(&server.base_url, "/v1/batch", &json!({ "requests": items }).to_string())
+            .await
+            .json::<Value>()
+            .await
+            .unwrap();
+
+    assert_eq!(error_code(&response), "schema.limit_exceeded", "response: {response}");
+}
+
+#[tokio::test]
+async fn validate_preflights_a_payload_without_deciding() {
+    let server = spawn_server().await;
+    let ok =
+        post_json(&server.base_url, "/v1/validate", &choice_payload(&DecisionPolicy::default()))
+            .await
+            .json::<Value>()
+            .await
+            .unwrap();
+    assert_eq!(ok["valid"], true, "validate: {ok}");
+    assert_eq!(ok["questions"], 1);
+
+    let bad = post_json(&server.base_url, "/v1/validate", "{\"state\": {}}")
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    // Nested serde failures surface as the adapter's invalid_value on the
+    // enclosing field (the MissingField variant is for IR-level misses).
+    assert_eq!(error_code(&bad), "schema.invalid_value", "bad: {bad}");
+    assert!(bad["error"]["message"].as_str().unwrap().contains("missing field"));
+}
+
+#[tokio::test]
+async fn models_and_capabilities_report_the_active_lane() {
+    let server = spawn_server().await;
+    let expected_model = server.handle.identity().model_id;
+
+    let models = get_json(&server.base_url, "/v1/models").await.json::<Value>().await.unwrap();
+    let lanes = models["models"].as_array().unwrap();
+    assert_eq!(lanes.len(), 1, "models: {models}");
+    assert_eq!(lanes[0]["id"], expected_model.as_str());
+    assert_eq!(lanes[0]["role"], "decision");
+    assert_eq!(lanes[0]["active"], true);
+
+    let caps = get_json(&server.base_url, "/v1/capabilities").await.json::<Value>().await.unwrap();
+    let kinds = caps["decision_kinds"].as_array().unwrap();
+    assert_eq!(kinds.len(), 3, "capabilities: {caps}");
+    assert_eq!(caps["max_batch"], opencodifier_engine::MAX_BATCH);
+    assert_eq!(caps["cache"]["enabled"], true);
+    assert_eq!(caps["identity"]["model_id"], expected_model.as_str());
+    let endpoints = caps["endpoints"].as_array().unwrap();
+    assert!(endpoints.iter().any(|entry| entry == "/v1/decide"));
+    assert!(endpoints.iter().any(|entry| entry == "/v1/batch"));
+}

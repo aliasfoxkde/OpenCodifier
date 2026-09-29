@@ -845,6 +845,15 @@ in between. Ordered so each step's output feeds the next.
   `/v1/validate`, `/v1/models`, `/v1/capabilities` (semantic-cache probe
   too), each with contract tests from 18d's harness. Accept: every
   documented endpoint returns a spec-shaped answer, contract tests in CI.
+  Status: 4 of 5 landed — `/v1/batch` (engine-owned `MAX_BATCH=16`
+  shared with MCP `codify_batch`, per-item error envelopes, 200 on any
+  well-formed batch), `/v1/validate` (decode-only preflight), `/v1/models`
+  + `/v1/capabilities` (single active lane; `decision_kinds` pinned to the
+  IR by test), `/v1/healthz` already existed. 16 Rust contract tests + 6
+  new checks in `scripts/e2e_validate.py` (19/19). **Deferred:**
+  `/v1/graph/run` — running a client-supplied graph needs a DECISIONS.md
+  record first (assembly semantics, resource caps, cache-key identity of
+  ad-hoc graphs); tracked as 18e's remainder, not silently dropped.
 - **18f — §63 Decision Registry.** Artifact format (versioned, hashed,
   D6-style identity) + loader + a registry-backed routing example; the
   seam noted in `codec.rs` becomes the format. Accept: format doc in

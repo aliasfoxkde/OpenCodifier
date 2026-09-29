@@ -57,11 +57,10 @@ use crate::envelope::{Failure, respond};
 
 /// Maximum number of requests one `codify_batch` call accepts.
 ///
-/// The batch tool exists so a client can amortize transport round trips,
-/// not so it can enqueue work: each item is still decided and limited
-/// independently, and a runaway batch is refused up front with
-/// `mcp.batch_too_large`.
-pub const MAX_BATCH: usize = 16;
+/// The engine owns the policy (PLANNING.md §36 `POST /v1/batch` shares
+/// it); re-exported so MCP callers keep a stable path. A runaway batch
+/// is refused up front with `mcp.batch_too_large`.
+pub use opencodifier_engine::MAX_BATCH;
 
 /// The MCP server: the six Phase-15 decision tools over an assembled
 /// [`EngineHandle`].
