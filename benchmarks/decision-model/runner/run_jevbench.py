@@ -1,0 +1,527 @@
+#!/usr/bin/env python3
+"""Run OpenCodifier arms through the OFFICIAL JevBench harness.
+
+Methodology: benchmarks/decision-model/JEVBENCH.md. The harness is the
+authors' own package (fstandhartinger/jevbench, MIT), imported from a local
+clone — their runner, their scoring (argmax for choice/noul, expected value
+for score, multi-class Brier, top-label ECE), their serial no-retry budget
+semantics: failed or invalid answers count as incorrect, and no probability
+distribution is ever synthesized. Raw evidence lands outside both repos.
+
+Arms (--arm):
+  engine      OpenCodifier `serve` (default deterministic stack) over the
+              native /v1/decide endpoint, one question per JevBench item:
+              choice -> ChoiceQuestion (criteria -> candidate descriptions),
+              noul -> BooleanQuestion (p(yes) from the IR answer; the item's
+              false:/true: criteria are folded into the question text),
+              score -> ScoreQuestion (level descriptions folded into the
+              question text — the IR's ScoreLevel carries labels only).
+              Probabilities are emitted only where the IR really carries
+              them (noul p(yes); score / choice `distribution` when present
+              in the native response). Winner-probability-only answers stay
+              label-only: splitting the rest-mass evenly would invent
+              calibration. An abstaining engine answer is ok=False — their
+              runner scores that incorrect, which is the honest outcome.
+  fork_4b     The parallel-decision fork's POST /v1/decision (tree mode)
+              against an already-running server (--port). Label-only: the
+              fork emits winner probability and drops the rest (D15), and
+              inventing the tail is exactly what the harness forbids.
+  jev_native  Jev-Style-0.8B-Decision-v3 through its native verdict-slot
+              readout (see run_jev_native.py) — the comparability bridge
+              against the authors' published 64.1% official-harness row.
+              noul renders as a two-option choice (no/yes with the item's
+              criteria); score renders levels as options; both mappings are
+              recorded in the result.
+
+Every arm replays the whole suite (--replay, default on) and records a
+determinism block in the manifest.
+
+Usage:
+  python3 runner/run_jevbench.py --arm engine \
+      --binary ../../target/release/opencodifier \
+      --tasks $REF/datasets/public/easy.jsonl,... \
+      --out-dir /nas/Temp/work/oc-model-eval/runs/jevbench/engine
+
+`$REF` is the jevbench clone (commit recorded in the manifest). Results and
+raw evidence must live outside both repositories (their Runner enforces it).
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+RUNNER_DIR = Path(__file__).parent
+sys.path.insert(0, str(RUNNER_DIR))
+
+
+def _load_harness(ref: Path):
+    sys.path.insert(0, str(ref))
+    from jevbench.runner import Runner  # noqa: PLC0415 (harness import)
+    from jevbench.adapters.base import DecisionResult  # noqa: PLC0415
+    from jevbench.budget import Ledger  # noqa: PLC0415
+    from jevbench.summarize import summarize  # noqa: PLC0415
+    from jevbench.tasks import dataset_hash, load_jsonl  # noqa: PLC0415
+    return Runner, DecisionResult, Ledger, dataset_hash, load_jsonl, summarize
+
+
+def harness_commit(ref: Path) -> str:
+    out = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=ref, capture_output=True, text=True, check=True
+    )
+    return out.stdout.strip()
+
+
+def fold_criteria(text: str, criteria) -> str:
+    """Render a JevBench rubric into question text for codecs that cannot
+    carry it structurally. The item's own content, never invented."""
+    if not criteria:
+        return text
+    if isinstance(criteria, dict):
+        parts = [f"{k}: {v}" for k, v in criteria.items()]
+    else:  # ordered list (score levels, in labels order)
+        parts = [f"{i}: {d}" for i, d in enumerate(criteria)]
+    return f"{text} Rubric — " + "; ".join(parts) + "."
+
+
+def choice_candidates(t) -> list[dict]:
+    """labels + criteria -> native candidates. Criteria-less items (92 of
+    231) carry the label as its own description — a rendering choice, and
+    the raw record says so."""
+    criteria = t.question.get("criteria")
+    if isinstance(criteria, dict):
+        return [{"id": lab, "description": criteria.get(lab, lab)} for lab in t.labels]
+    if isinstance(criteria, list):
+        return [
+            {"id": lab, "description": criteria[i] if i < len(criteria) else lab}
+            for i, lab in enumerate(t.labels)
+        ]
+    return [{"id": lab, "description": lab} for lab in t.labels]
+
+
+def probs_from_distribution(dist, labels: list[str]):
+    """Native `distribution` -> probs over the exact label set, or None when
+    it does not cover the labels (never renormalize a partial dict). The
+    native serde shape is `{"entries": [{"key": k, "probability": p}]}`."""
+    if isinstance(dist, dict) and isinstance(dist.get("entries"), list):
+        dist = {
+            e["key"]: e["probability"]
+            for e in dist["entries"]
+            if isinstance(e, dict) and "key" in e and "probability" in e
+        }
+    if not isinstance(dist, dict):
+        return None
+    if set(dist) != set(labels):
+        return None
+    probs = {lab: float(dist[lab]) for lab in labels}
+    total = sum(probs.values())
+    if not 0.99 <= total <= 1.01:
+        return None
+    return probs
+
+
+class EngineAdapter:
+    name = "opencodifier-engine"
+    price_input_per_m = 0.0
+    price_output_per_m = 0.0
+
+    def __init__(self, binary: Path, port: int, timeout_s: float, log_path: Path | None = None):
+        self.binary = binary
+        self.port = port
+        self.timeout_s = timeout_s
+        self.log_path = log_path
+        self.proc = None
+        self.warnings: list[str] = []
+
+    def load(self):
+        from run_engine import wait_health  # noqa: PLC0415 (shared, tested)
+
+        # Server output is evidence: if the serve process dies mid-run the
+        # harness stop rule fires and the reason must be on disk.
+        sink = open(self.log_path, "wb") if self.log_path else subprocess.DEVNULL
+        self.proc = subprocess.Popen(
+            [str(self.binary), "serve", "--bind", f"127.0.0.1:{self.port}"],
+            stdout=sink,
+            stderr=subprocess.STDOUT,
+        )
+        wait_health(self.port, self.proc, deadline_s=60.0)
+
+    def reserve_estimate(self, _t):
+        return None
+
+    def _post(self, payload: dict):
+        import urllib.request  # noqa: PLC0415
+
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/v1/decide",
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=self.timeout_s) as r:
+            return json.loads(r.read())
+
+    def run(self, t) -> "DecisionResult":
+        from jevbench.adapters.base import DecisionResult  # noqa: PLC0415
+
+        qtype = t.question["type"]
+        started = time.perf_counter()
+        try:
+            if qtype == "choice":
+                question = {
+                    "type": "choice",
+                    "id": "decision",
+                    "text": t.question["instructions"],
+                    "candidates": choice_candidates(t),
+                }
+            elif qtype == "noul":
+                question = {
+                    "type": "boolean",
+                    "id": "decision",
+                    "text": fold_criteria(t.question["instructions"], t.question.get("criteria")),
+                }
+            elif qtype == "score":
+                question = {
+                    "type": "score",
+                    "id": "decision",
+                    "text": fold_criteria(t.question["instructions"], t.question.get("criteria")),
+                    # Native ScoreLevel is a struct; the JevBench labels are
+                    # the level labels, descriptions ride in the rubric text.
+                    "levels": [{"label": lab} for lab in t.labels],
+                }
+            else:
+                return DecisionResult(self.name, False, error=f"unhandled_type:{qtype}")
+            resp = self._post(
+                {
+                    # Native state is strict: facts must be present, even empty.
+                    "state": {
+                        "text": t.state if isinstance(t.state, str) else json.dumps(t.state),
+                        "facts": {},
+                    },
+                    "questions": [question],
+                    "policy": {
+                        "min_confidence": 0.8,
+                        "verify_below": 0.65,
+                        "abstain_below": 0.5,
+                        "risk": "low",
+                    },
+                    "metadata": {
+                        "request_id": f"jevbench-{t.id}",
+                        "limits": {
+                            "max_input_bytes": 1048576,
+                            "max_questions": 32,
+                            "max_candidates": 256,
+                            "max_graph_nodes": 128,
+                            "max_execution_time": {"secs": 10, "nanos": 0},
+                            "max_retrieval_results": 64,
+                        },
+                    },
+                }
+            )
+        except Exception as e:  # noqa: BLE001 — their Runner classifies failures
+            return DecisionResult(self.name, False, error=type(e).__name__)
+        latency = time.perf_counter() - started
+        ans = resp["answers"][0]
+        outcome = resp.get("outcome")
+        raw = {"request": question, "answer": ans, "outcome": outcome}
+        if outcome not in ("accept", "verify"):
+            # Abstention is a successful engine outcome and an incorrect
+            # JevBench answer; no guess is manufactured to dodge it.
+            return DecisionResult(
+                self.name, False, error=f"engine_{outcome}", latency_s=latency, raw=raw
+            )
+        probs = None
+        if qtype == "noul":
+            value = ans["value"]
+            # The IR's Boolean answer carries the confidence of the DECIDED
+            # value (verified in raw evidence: value=false, probability=0.64
+            # means p(no)=0.64), so p(yes) flips for a false answer. An
+            # exact 0.5 is the engine's tie — either value is consistent.
+            p = float(ans["probability"])
+            p_yes = p if value is True else 1.0 - p
+            tie = abs(p_yes - 0.5) < 1e-12
+            consistent = tie or ((p_yes > 0.5) is (value is True))
+            if not 0.0 <= p_yes <= 1.0 or not consistent:
+                self.warnings.append(f"{t.id}: value/probability disagree")
+                return DecisionResult(
+                    self.name, True, label="yes" if value else "no",
+                    probs_source="label_only_no_calibrated_distribution",
+                    latency_s=latency, raw=raw,
+                )
+            probs = {"no": 1.0 - p_yes, "yes": p_yes}
+            label = "yes" if value else "no"
+        elif qtype == "score":
+            probs = probs_from_distribution(ans.get("distribution"), t.labels)
+            if probs is None:
+                return DecisionResult(self.name, False, error="no_score_distribution",
+                                      latency_s=latency, raw=raw)
+            label = max(probs, key=probs.get)
+        else:
+            probs = probs_from_distribution(ans.get("distribution"), t.labels)
+            label = ans["choice"]
+        if probs is not None:
+            return DecisionResult(self.name, True, probs=probs, probs_source="native",
+                                  label=label, latency_s=latency, raw=raw)
+        # Winner-probability-only: the honest choice is label-only, not an
+        # invented split of the rest mass.
+        return DecisionResult(self.name, True, label=label,
+                              probs_source="label_only_no_calibrated_distribution",
+                              latency_s=latency, raw=raw)
+
+    def close(self):
+        if self.proc is not None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+
+
+class ForkAdapter:
+    """Parallel-decision fork, tree mode, against an already-running server.
+    Label-only: the fork emits winner probability and drops the rest (D15)."""
+
+    name = "pd-fork-tree"
+    price_input_per_m = 0.0
+    price_output_per_m = 0.0
+
+    def __init__(self, port: int, instructions: str, timeout_s: float):
+        self.port = port
+        self.instructions = instructions
+        self.timeout_s = timeout_s
+
+    def load(self):
+        from run_llama import wait_health  # noqa: PLC0415
+
+        import urllib.request  # noqa: PLC0415
+
+        with urllib.request.urlopen(f"http://127.0.0.1:{self.port}/health", timeout=5):
+            pass
+
+    def reserve_estimate(self, _t):
+        return None
+
+    def run(self, t) -> "DecisionResult":
+        from jevbench.adapters.base import DecisionResult  # noqa: PLC0415
+        from run_llama import post  # noqa: PLC0415 (shared, tested)
+
+        qtype = t.question["type"]
+        choices = list(t.labels)
+        description = t.question["instructions"]
+        if qtype == "noul":
+            description = fold_criteria(description, t.question.get("criteria"))
+        elif qtype == "score":
+            description = fold_criteria(description, t.question.get("criteria"))
+        payload = {
+            "instructions": self.instructions,
+            "schema": {"choice": {"type": "enum", "choices": choices, "description": description}},
+            "contexts": [t.state if isinstance(t.state, str) else json.dumps(t.state)],
+            "mode": "tree",
+        }
+        started = time.perf_counter()
+        try:
+            resp = post(f"http://127.0.0.1:{self.port}/v1/decision", payload, self.timeout_s)
+        except Exception as e:  # noqa: BLE001
+            return DecisionResult(self.name, False, error=type(e).__name__)
+        latency = time.perf_counter() - started
+        field = resp["results"][0]["fields"]["choice"]
+        label = field["value"]
+        raw = {"request": payload, "field": field}
+        if label not in choices:
+            return DecisionResult(self.name, False, error="out_of_set_label",
+                                  latency_s=latency, raw=raw)
+        return DecisionResult(self.name, True, label=label,
+                              probs_source="label_only_no_calibrated_distribution",
+                              latency_s=latency, raw=raw)
+
+
+class JevNativeBridgeAdapter:
+    """Jev-Style native verdict-slot readout — the comparability bridge.
+    Full softmax over options, so Brier/ECE are comparable with the
+    published 64.1% row."""
+
+    name = "jev-style-0.8b-native"
+    price_input_per_m = 0.0
+    price_output_per_m = 0.0
+
+    def __init__(self, model_dir: Path, threads: int, timeout_s: float):
+        self.model_dir = model_dir
+        self.threads = threads
+        self.timeout_s = timeout_s
+        self.engine = None
+
+    def load(self):
+        from run_jev_native import load_runtime  # noqa: PLC0415 (shared)
+
+        self.engine = load_runtime(self.model_dir, self.threads)
+
+    def reserve_estimate(self, _t):
+        return None
+
+    def run(self, t) -> "DecisionResult":
+        from jevbench.adapters.base import DecisionResult  # noqa: PLC0415
+
+        qtype = t.question["type"]
+        criteria = t.question.get("criteria")
+        if qtype == "noul":
+            c = criteria if isinstance(criteria, dict) else {}
+            options = {"no": c.get("false", "not held"), "yes": c.get("true", "held")}
+        elif qtype == "score":
+            descs = criteria if isinstance(criteria, list) else [lab for lab in t.labels]
+            options = {
+                lab: (descs[i] if isinstance(descs, list) and i < len(descs) else lab)
+                for i, lab in enumerate(t.labels)
+            }
+        else:
+            options = {c["id"]: c["description"] for c in choice_candidates(t)}
+        started = time.perf_counter()
+        try:
+            res = self.engine.decide(
+                t.state if isinstance(t.state, str) else json.dumps(t.state),
+                t.question["instructions"],
+                options=options,
+                category=None,
+            )
+        except Exception as e:  # noqa: BLE001
+            return DecisionResult(self.name, False, error=type(e).__name__)
+        latency = time.perf_counter() - started
+        probs = {lab: float(res["probabilities"][lab]) for lab in t.labels}
+        label = res["answer"]
+        raw = {"options": options, "probabilities": res["probabilities"]}
+        if label not in t.labels or abs(sum(probs.values()) - 1.0) > 1e-6:
+            return DecisionResult(self.name, False, error="invalid_distribution",
+                                  latency_s=latency, raw=raw)
+        return DecisionResult(self.name, True, probs=probs, probs_source="native",
+                              label=label, latency_s=latency, raw=raw)
+
+    def close(self):
+        if self.engine is not None:
+            self.engine.close()
+
+
+def replay_records(adapter, tasks, ref_dir: Path, out_dir: Path, runner_cls, ledger_cls):
+    """Second full pass for the determinism block (fresh ledger + raw dir)."""
+    replay_dir = out_dir / "replay"
+    replay_dir.mkdir(parents=True, exist_ok=True)
+    runner = runner_cls(adapter, ledger_cls(str(replay_dir / "ledger.jsonl"), cap_usd=0.0),
+                        raw_dir=replay_dir / "raw", default_reserve_usd=0.0)
+    return runner.run_all(tasks)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--arm", required=True, choices=["engine", "fork_4b", "jev_native"])
+    ap.add_argument("--ref", type=Path, default=Path("/nas/Temp/work/oc-model-eval/jevbench-ref"))
+    ap.add_argument("--tasks", type=str, required=True, help="comma-separated jsonl files")
+    ap.add_argument("--out-dir", type=Path, required=True)
+    ap.add_argument(
+        "--binary", type=Path, default=RUNNER_DIR.parents[2] / "target/release/opencodifier"
+    )
+    ap.add_argument("--port", type=int, default=8178)
+    ap.add_argument("--instructions", type=str, default="Select the correct option.")
+    ap.add_argument(
+        "--model-dir", type=Path, default=Path("/nas/Temp/work/oc-model-eval/jev-v3-native")
+    )
+    ap.add_argument("--threads", type=int, default=12)
+    ap.add_argument("--timeout", type=float, default=600.0)
+    ap.add_argument("--no-replay", action="store_true")
+    ap.add_argument("--limit", type=int, default=None)
+    args = ap.parse_args()
+
+    Runner, DecisionResult, Ledger, dataset_hash, load_jsonl, summarize = _load_harness(args.ref)
+
+    tasks = []
+    for part in args.tasks.split(","):
+        if part.strip():
+            tasks.extend(load_jsonl(part.strip()))
+    if args.limit:
+        tasks = tasks[: args.limit]
+
+    if args.arm == "engine":
+        adapter = EngineAdapter(
+            args.binary, args.port, args.timeout, log_path=args.out_dir / "server.log"
+        )
+    elif args.arm == "fork_4b":
+        adapter = ForkAdapter(args.port, args.instructions, args.timeout)
+    else:
+        adapter = JevNativeBridgeAdapter(args.model_dir, args.threads, args.timeout)
+
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    raw_dir = (args.out_dir / "raw").resolve()
+    ledger = Ledger(str(args.out_dir / "ledger.jsonl"), cap_usd=0.0)
+    # Every arm is local compute with zero tariff: nothing is billable, so
+    # the reserve is $0 rather than a pretend budget the run could "exceed".
+    runner = Runner(adapter, ledger, raw_dir=raw_dir, default_reserve_usd=0.0)
+
+    if hasattr(adapter, "load"):
+        t0 = time.perf_counter()
+        adapter.load()
+        print(f"[jevbench] warm load {time.perf_counter() - t0:.1f}s", flush=True)
+
+    try:
+        records = runner.run_all(tasks, results_path=args.out_dir / "results.jsonl")
+        replay = None
+        if not args.no_replay:
+            replay = replay_records(adapter, tasks, args.ref, args.out_dir, Runner, Ledger)
+    finally:
+        adapter.close()
+
+    summary = summarize(tasks, records, ledger_charged=ledger.charged, headline_only=True)
+    (args.out_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+
+    first = {r["task_id"]: r for r in records}
+    determinism = None
+    if replay is not None:
+        first_by_id = {r["task_id"]: r for r in replay}
+        same = sum(
+            1
+            for tid, r in first_by_id.items()
+            if tid in first and r["correct"] == first[tid]["correct"]
+        )
+        determinism = {
+            "attempted": len(replay),
+            "correct_match": same,
+            "predictions_match": same == len(records) == len(replay),
+        }
+        (args.out_dir / "results-replay.jsonl").write_text(
+            "".join(json.dumps(r, allow_nan=False) + "\n" for r in replay))
+
+    model_files = {}
+    if args.arm == "jev_native":
+        gguf = args.model_dir / "Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf"
+        if gguf.is_file():
+            model_files[gguf.name] = hashlib.sha256(gguf.read_bytes()).hexdigest()
+
+    manifest = {
+        "arm": args.arm,
+        "harness": {"repo": "fstandhartinger/jevbench", "commit": harness_commit(args.ref),
+                    "license": "MIT", "method": "docs/METHOD-v1.4.md (public split)"},
+        "dataset_sha256": dataset_hash(tasks),
+        "n_tasks": len(tasks),
+        "model_files": model_files,
+        "mapping_notes": {
+            "engine": "choice candidates from labels+criteria; no-criteria items use the "
+                      "label as description; noul -> boolean, criteria folded into text; "
+                      "score -> score question, level rubric folded into text; "
+                      "abstain -> ok=False (incorrect); winner-only -> label-only",
+            "fork_4b": "tree mode, label-only (fork drops non-winner mass, D15)",
+            "jev_native": "noul as two-option choice; score levels as options; softmax native",
+        }[args.arm],
+        "determinism": determinism,
+        "adapter_warnings": getattr(adapter, "warnings", []),
+        "charged_usd": ledger.charged,
+    }
+    (args.out_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    )
+    print(json.dumps({"arm": args.arm, "n": len(records),
+                      "summary_keys": sorted(summary.keys())}, sort_keys=True), flush=True)
+    return 0 if len(records) == len(tasks) else 3
+
+
+if __name__ == "__main__":
+    sys.exit(main())
