@@ -82,7 +82,7 @@ the rest named), **designed** (design of record exists, no code),
 | § | Section | Verdict | Evidence |
 |---|---|---|---|
 | 60–62 | Amortyx integration / shadow / training | designed | `docs/INTEGRATION_AMORTYX.md` — implementation follows its shadow-evidence promotion gate |
-| 63 | Decision Registry | planned | `codec.rs` notes the seam; no registry artifact format yet |
+| 63 | Decision Registry | done | `DecisionDefinition`/`Registry` in `opencodifier-schema/registry.rs` (D20); format doc `docs/REGISTRY.md`; recipe `recipes/registry/` with a derivation-pinned request |
 | 64 | Graph Versioning | done | version-folded cache keys (D6) |
 | 65 | Explainability | done | deterministic execution trace, `trace_version`, no chain-of-thought |
 | 66 | Security | done | hostile-input rule, loopback gate, aegis gate in CI |

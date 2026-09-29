@@ -859,6 +859,15 @@ in between. Ordered so each step's output feeds the next.
   D6-style identity) + loader + a registry-backed routing example; the
   seam noted in `codec.rs` becomes the format. Accept: format doc in
   `docs/`, round-trip tests, one recipe using it.
+  Status: complete (D20). `DecisionDefinition`/`Registry` in
+  `opencodifier-schema/registry.rs`: content-hashed identity (labels are
+  not identity), validating decode through the wire types' own
+  constructors, dynamic-vs-static candidate discipline, duplicate-id
+  refusal. Format doc `docs/REGISTRY.md`; 8 unit tests including a
+  derivation test that pins `recipes/registry/requests/model-selection.json`
+  to `instantiate()`'s exact output; the recipe's expected response was
+  captured against `minimal-choice.json` (`verify`, top 0.687).
+  SPEC_COVERAGE §63 → done.
 - **18g — §34 recipe fleet + `recipe install`.** The twelve recipe areas
   as runnable graphs + the install path. Accept: fleet in `recipes/`,
   install exercised by 18d's suite.

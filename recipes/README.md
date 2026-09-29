@@ -19,6 +19,7 @@ name the deciding stack by its composed model id
 | [`minimal-choice.json`](minimal-choice.json) | The smallest graph that can decide a choice question: normalize → filter → choice → threshold → output. The `filter` node is not optional — choice questions are decided only over candidates that survived narrowing, and a graph without narrowing abstains by design. | `verify` — top probability 0.687 sits between `verify_below` (0.65) and `min_confidence` (0.8), so the runtime asks for a second opinion instead of overclaiming. |
 | [`strict-verify.json`](strict-verify.json) | The full escalation ladder (rule, cache, filter, lexical) with a deliberately strict 0.95 gate. | `verify` — even the full pipeline's lexical evidence does not clear 0.95, and the refusal is the correct answer. |
 | [`boolean-score.json`](boolean-score.json) | A graph without a `choice` node: boolean and score questions only. | `abstain` — lexical evidence for both questions is below `abstain_below` (0.5). Abstention is a successful outcome (HTTP 200); the answers array still carries the full distributions. |
+| [`registry/`](registry/) | The §63 Decision Registry end to end (D20): [`registry/model-selection.definition.json`](registry/model-selection.definition.json) is a decision *definition*; its request is the exact output of `DecisionDefinition::instantiate` (pinned by a test, not hand-written), run through `minimal-choice.json`'s graph. | `verify` — the registry path feeds the same IR and engine as a hand-written request: top probability 0.687 for `local-glm`, between `verify_below` (0.65) and `min_confidence` (0.8). |
 
 Each recipe's request lives in [`requests/`](requests/) and its captured
 response in [`expected/`](expected/).
@@ -66,3 +67,10 @@ Expected outputs are captured, never hand-written:
 The engine is deterministic (D7: all decision math in Rust f64; no ML in
 the default build), so the same graph + request + fresh server always
 produces the same bytes.
+
+The registry recipe's *request* has the same rule with one step
+upstream: it is captured by
+`cargo test -p opencodifier-schema the_registry_recipe`, which
+instantiates the committed definition and refuses to pass until the
+file under [`registry/requests/`](registry/requests/) matches byte for
+byte.
