@@ -924,6 +924,13 @@ in between. Ordered so each step's output feeds the next.
   missing-backend refusal; NOT part of `just ci`), 7 host tests incl.
   a manifest scan asserting no tokio/axum/reqwest/ort/libloading/dlopen,
   §68 posture structural. Browser demo rides §58.
+- **18j (§58 remainder) — matrix recorded (D24), builds storm-gated.**
+  windows-x86_64-gnu: the full workspace compiles clean (measured 2026-
+  09-29); linux-aarch64 (cargo-zigbuild) and darwin x86_64/aarch64
+  staged pending quiet-window link+smoke; macOS artifacts state the
+  no-run/no-signing caveat in release notes. Registry publication
+  (crates.io/Homebrew/winget) is an outward action awaiting explicit
+  user go — never automatic.
 
 **Sequencing.** 18a/18b/18c are the coverage spine and gate everything
 else (no new surface lands untested after 18b). 18d precedes 18e–18g (the

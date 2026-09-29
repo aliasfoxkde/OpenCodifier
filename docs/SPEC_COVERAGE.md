@@ -77,7 +77,7 @@ shipped while the browser demo rides §58).
 | 55 | Phase 15 — MCP | done | Phase 10 in PLAN numbering (D17) |
 | 56 | Phase 16 — Recipes and Skills | done | `recipes/` (3 tutorial graphs + the twelve §34 fleet recipes with `recipe list`/`recipe install`, 18g) + `skills/` (§33, 2026-09-28) |
 | 57 | Phase 17 — WASM | done-runtime | `wasm-pack --target nodejs` artifact + Node smoke test (`just check-wasm`); browser demo rides §58 (D23, 18j) |
-| 58 | Phase 18 — CLI / Distribution | partial | CLI done; release matrix (Win/macOS/ARM64), Homebrew/winget/cargo-publish unstarted (GitForge releases exist for Linux x86_64) |
+| 58 | Phase 18 — CLI / Distribution | partial | CLI done; D24 matrix set by verification honesty: linux-x86_64 run-tested+e2e (GitForge releases), windows-x86_64-gnu compiles clean (link+smoke storm-gated), aarch64/macos staged; registry publication is outward opt-in |
 | 59 | Phase 19 — Benchmarking | done | criterion baselines per release + the Phase 13 decision-model benchmark (D16) |
 
 ## Integration, governance, examples (§§60–80)

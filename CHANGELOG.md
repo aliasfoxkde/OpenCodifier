@@ -10,10 +10,41 @@ releases may break, and every breaking change is recorded in this file
 
 ### Added
 
-- JevBench external-anchor runs (PLAN Phase 17, in progress): the
-  231-item public split through the official harness — engine arm
-  (rerun in flight), native verdict-slot bridge vs the published
-  64.1 % row, and the 4B fork arm. Results land in REPORT.md.
+- Semantic graph nodes and the D22 optimizer (PLAN 18h, D21/D22):
+  `embedding` (annotate-only), `retrieve` (`top_n`/`floor`,
+  floor-never-starves, every drop trace-named), and `rerank` (permutes,
+  never removes; `LexicalReranker`/`EmbeddingReranker`). Engines without
+  an embedding backend refuse such graphs at assembly
+  (`engine.missing_backend`); safe mode refuses `retrieve`; the
+  embedding backend rides engine identity and every cache key.
+  `opencodifier_engine::optimize` = dead-node elimination + pure-node
+  CSE (cache/threshold/output excluded), proven answer-identical on all
+  15 committed graphs.
+- WASM runtime (PLAN 18j, §57/§68, D23): `crates/opencodifier-wasm`
+  compiles the zero-ML stack for `wasm32-unknown-unknown`; `WasmEngine`
+  (decide / validate_graph / run_graph / identity) answers native-schema
+  JSON with typed error codes, proven in Node over the real artifact
+  (`just check-wasm`, not part of `just ci`). The model rung stays
+  native (D23).
+- `just check-wasm`: host tests, the wasm32 compile, a
+  `wasm-pack --target nodejs` build, and the Node smoke test.
+
+### Changed
+
+- Platform seams on wasm32 (D23): `Clock`'s `Instant` is
+  `std::time::Instant` natively and the `web-time` host-clock reading on
+  wasm32 (`std::time::Instant::now()` traps there; the dependency is
+  target-gated, the native tree is unchanged), and wave execution is
+  sequential on wasm32 (`std::thread::spawn` traps there;
+  `RunReport::parallel_waves` is 0 by construction). Native behavior
+  is byte-identical.
+
+### Deferred
+
+- JevBench external-anchor runs (PLAN Phase 17): the 231-item public
+  split through the official harness — engine arm (rerun in flight),
+  native verdict-slot bridge vs the published 64.1 % row, and the 4B
+  fork arm. Results land in REPORT.md. Storm-gated.
 - Params A/B on the 4B decision arm (threads/ctx/prompt diet) and the
   first native verdict-slot run on our 120-item suite: queued behind
   the shared-host load storm.
@@ -274,6 +305,8 @@ history.
   (563ad3f; folded from Unreleased — this item shipped in 0.1.0 but
   was left unstaged there).
 
-[Unreleased]: https://github.com/aliasfoxkde/OpenCodifier/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/aliasfoxkde/OpenCodifier/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.3.0
+[0.2.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.2.0
 [0.1.1]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.1.1
 [0.1.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.1.0
