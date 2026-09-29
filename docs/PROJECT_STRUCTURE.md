@@ -32,7 +32,7 @@ opencodifier/
 │
 ├── fixtures/                # wire-format fixtures per adapter (done, byte-locked)
 ├── recipes/                 # runnable decision graphs + captured responses (done)
-├── skills/                  # agent-facing usage skills (planned)
+├── skills/                  # agent-facing usage skills: 8 §33 areas (done)
 ├── models/                  # model artifacts (never committed; SHA-256 verified)
 ├── benchmarks/              # per-release criterion baselines (done for v0.1.0)
 │   └── decision-model/      # Phase 13 model-pick benchmark: byte-locked suite, arms, results

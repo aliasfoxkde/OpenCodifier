@@ -79,8 +79,19 @@ scaling on the winner-vs-rest margin, `q = p^(1/T) / (p^(1/T) +
 full distribution in log-prob space (`q_i = p_i^(1/T) / Σ_j p_j^(1/T)`,
 `TemperatureCalibration::rescale`); the two coincide for the top
 probability when the rest-mass moves coherently, which is the reading a
-policy gate uses. Refitting from full per-item distributions (top-k
-logged by the runner) is the clean fix and is noted as future work.
+policy gate uses. Refitting from full per-item distributions is the
+clean fix. **Located precisely (2026-09-28):** the parallel-decision
+server already computes the full per-value distribution —
+`llama_decision::result::field::probs` ("probability of every allowed
+value", normalized in `decision-engine.cpp` over tree path scores) — but
+`assemble()` emits only the winner's `f["probability"]` and drops the
+rest. The fix is fork-side and small: emit `f["probabilities"] =
+fr.probs` zipped with `sp.values` in `assemble()`, rebuild `build-pd`,
+record the provenance as `parallel-decision ad129b0+distribution`
+(`--llamacpp-branch`), then log `probs` in
+`run_llama.py::decide_single` rows. No runner-only path exists: the
+server does not send what the fit needs. Until then the margin
+temperature stands.
 
 Fits are **in-sample**: fitted and evaluated on the same 120 items.
 ECE-after values are consistency checks, not generalization claims —

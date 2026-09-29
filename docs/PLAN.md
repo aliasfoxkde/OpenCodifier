@@ -731,6 +731,17 @@ focused decision is weak.
   CI-exact 1.90)/test/doc/deny green; generator + suite + REPORT
   recorded in the benchmark.
 
+## Spec coverage map (audit, 2026-09-28)
+
+All 17 tracked phases are done; the §-by-§ check that every PLANNING
+section has a landing place lives in `docs/SPEC_COVERAGE.md`. Headline
+gaps it surfaces: the §36 HTTP surface is 3/9 endpoints, the §34
+recipe fleet partial (§33 skills shipped 2026-09-28 — `skills/` with all
+eight areas), §63 decision registry,
+§26/§53/§54 ML graph nodes (rerank/retrieve), §57 WASM, §58 distribution
+matrix, and the §15/§16 training path. The doc orders what remains by
+what needs the host quiet (cargo) vs what does not.
+
 ## Integration design notes (designs, not phases)
 
 Backlog items that produce designs rather than code land here; each names
