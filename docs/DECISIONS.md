@@ -521,3 +521,55 @@ rules that make the view strictly safer than truncation:
   out-scores the decisive sentence under BM25 remains the known failure
   mode, caught (not prevented) by escalation — recorded as the
   extractor's standing threat model.
+
+## D19 — `/v1/graph/run`: client-supplied graphs are ephemeral and content-addressed (2026-09-29)
+
+§36 lists `POST /v1/graph/run` among the primary endpoints: a client
+submits a graph document plus a canonical request, and the runtime
+decides through *that* graph instead of the built-in pipeline. That is
+the one surface where the client controls pipeline structure, so it
+gets the tightest rules in the runtime:
+
+- **Body and response.** `{"graph": <GraphDocument>, "request":
+  <canonical request>}`; the response is the standard native decision
+  envelope plus an `"identity"` object reporting the identity the run
+  actually executed under. Shape errors are `schema.*` (400); structural
+  graph failures are the engine's own `graph.*` codes, identical to
+  `/v1/graph/validate`. Abstention stays a `200` — §73's posture does
+  not bend for ad-hoc graphs.
+- **Content-addressed identity, never client-asserted.** The scoped
+  engine's `graph_version` is the first 8 bytes (big-endian) of
+  SHA-256 over the graph's canonical serialization (`version` + node
+  specs, serde field order). A client naming `graph_version: 1` gets a
+  hash instead; two runs of the same graph share one identity, and any
+  node edit changes the hash. This keeps §73's rule (cache keys fold
+  graph identity) true by construction: a decision made under graph A
+  can never be served for graph B.
+- **The shared serving cache is never consulted.** The scoped engine is
+  assembled fresh per request — ad-hoc graph runs are an
+  evaluation/inspection surface, not the serving path — so any cache it
+  has is created and dropped with the handle: a one-slot, one-second
+  private cache that serves at most a repeated question inside one
+  `decide` call. (The cache rejects a zero-capacity config by contract,
+  so "never the serving cache" is expressed as throwaway assembly, not
+  as a disabled flag.) Assembly is cheap (validation + rule
+  bookkeeping; no model loading under the lexical posture), so
+  per-request engines cost microseconds and no state survives the
+  request.
+- **What the client does not control.** Calibration, parallelism caps,
+  execution-time ceilings, and body limits are the host's; the scoped
+  engine carries no rule pack and no verifier — graph nodes plus the
+  built-in classifier are the whole pipeline. Node count is capped at
+  `limits.max_graph_nodes` (128) *before* construction, and the DAG
+  contract (ids, edges, cycles, single output) is enforced by the same
+  `DecisionGraph` constructor `/v1/graph/validate` uses — never a weaker
+  local copy.
+- **Engine surface, one definition.** `EngineHandle::ephemeral(graph)`
+  is the only constructor for scoped runs; it derives the
+  content-addressed identity and disables the shared cache internally.
+  HTTP composes it with the ordinary decode/decide/encode path — no
+  endpoint-local pipeline logic (D5 sync core; the async shell stays in
+  the interface crate).
+- **MCP parity deferred.** MCP `codify_graph` remains introspection
+  only; an ad-hoc execution tool would need the same identity rules and
+  is future work, not an omission.

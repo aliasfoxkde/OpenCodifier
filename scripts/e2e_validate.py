@@ -246,6 +246,36 @@ def run_http_checks(base: str) -> None:
     check("graph validate: cycle rejected 4xx with graph.*",
           400 <= st < 500 and "graph." in detail, f"status={st} {detail[:100]}")
 
+    # --- graph run: decide through a client-supplied graph (D19) ------------
+    pipeline = {"version": 1, "nodes": [
+        {"id": "normalize", "kind": "normalize"},
+        {"id": "rule", "kind": "rule", "depends_on": ["normalize"]},
+        {"id": "cache", "kind": "cache", "depends_on": ["normalize"]},
+        {"id": "boolean", "kind": "boolean", "depends_on": ["rule"]},
+        {"id": "score", "kind": "score", "depends_on": ["rule"]},
+        {"id": "filter", "kind": "filter", "depends_on": ["rule", "cache"]},
+        {"id": "lexical", "kind": "lexical", "depends_on": ["filter"]},
+        {"id": "choice", "kind": "choice", "depends_on": ["lexical"]},
+        {"id": "threshold", "kind": "threshold", "depends_on": ["choice", "boolean", "score"],
+         "threshold": 0.8},
+        {"id": "output", "kind": "output", "depends_on": ["threshold"]},
+    ]}
+    body = {"graph": pipeline, "request": decide_payload(q)}
+    st, resp = post(base, "/v1/graph/run", body)
+    ans = resp.get("response", {}).get("answers", [{}])[0] if isinstance(resp, dict) else {}
+    ident = resp.get("identity", {}) if isinstance(resp, dict) else {}
+    check("graph run: decides through the client graph, content-addressed identity",
+          st == 200 and ans.get("type") == "choice"
+          and isinstance(ident.get("graph_version"), int) and ident.get("graph_version") != 1
+          and isinstance(ident.get("model_id"), str),
+          f"status={st} answer={ans.get('type')} identity={json.dumps(ident)[:80]}")
+
+    body["graph"] = cyc
+    st, resp = post(base, "/v1/graph/run", body)
+    code = resp.get("error", {}).get("code", "") if isinstance(resp, dict) else ""
+    check("graph run: cyclic graph is 400 graph.cycle",
+          st == 400 and code == "graph.cycle", f"status={st} code={code}")
+
 
 def run_mcp_checks(binary: str) -> None:
     """MCP stdio handshake + tool list against the real binary."""

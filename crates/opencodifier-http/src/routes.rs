@@ -22,7 +22,7 @@ use axum::extract::{DefaultBodyLimit, State};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use opencodifier_core::{DecisionRequest, DecisionResponse, Limits};
-use opencodifier_engine::{DecisionGraph, EngineHandle, GraphDocument, MAX_BATCH};
+use opencodifier_engine::{DecisionGraph, EngineHandle, EngineResult, GraphDocument, MAX_BATCH};
 use opencodifier_schema::native::Native;
 use opencodifier_schema::{SchemaError, WireFormat};
 use serde_json::{Value, json};
@@ -49,6 +49,7 @@ pub fn router(handle: Arc<EngineHandle>) -> Router {
         .route("/v1/decide", post(decide))
         .route("/v1/batch", post(batch))
         .route("/v1/graph/validate", post(validate_graph))
+        .route("/v1/graph/run", post(graph_run))
         .route("/v1/validate", post(validate_request))
         .route("/v1/models", get(models))
         .route("/v1/capabilities", get(capabilities))
@@ -198,8 +199,8 @@ async fn capabilities(State(handle): State<Arc<EngineHandle>>) -> Json<Value> {
     Json(json!({
         "decision_kinds": DECISION_KINDS,
         "endpoints": [
-            "/v1/decide", "/v1/batch", "/v1/graph/validate", "/v1/validate",
-            "/v1/models", "/v1/capabilities", "/v1/healthz",
+            "/v1/decide", "/v1/batch", "/v1/graph/validate", "/v1/graph/run",
+            "/v1/validate", "/v1/models", "/v1/capabilities", "/v1/healthz",
         ],
         "max_batch": MAX_BATCH,
         "max_body_bytes": MAX_BODY_BYTES,
@@ -241,6 +242,64 @@ async fn validate_graph(body: Bytes) -> Result<Json<Value>, HttpError> {
     Ok(Json(json!({ "valid": true, "nodes": graph.nodes().len() })))
 }
 
+/// `POST /v1/graph/run` — decide one request through a client-supplied
+/// graph (D19).
+///
+/// The graph is the one piece of pipeline structure a client may steer,
+/// so every rule D19 sets is structural here, not conventional: the graph
+/// is capped and validated through the same constructor
+/// [`validate_graph`] uses, and execution goes through
+/// [`EngineHandle::ephemeral`], which derives a content-addressed
+/// identity and disables the shared cache — an ad-hoc run can never read
+/// a decision made under a different graph. The response carries that
+/// identity alongside the ordinary decision envelope, and abstention
+/// stays a `200`.
+async fn graph_run(body: Bytes) -> Result<Json<Value>, HttpError> {
+    let payload = parse_json(&body)?;
+    let body: GraphRunBody = serde_json::from_value(payload).map_err(|error| {
+        HttpError::from(SchemaError::invalid_value("graph_run", error.to_string()))
+    })?;
+
+    let limits = Limits::default();
+    if body.graph.nodes.len() > limits.max_graph_nodes {
+        return Err(HttpError::Schema(SchemaError::limit(
+            "max_graph_nodes",
+            body.graph.nodes.len(),
+            limits.max_graph_nodes,
+        )));
+    }
+    let graph = DecisionGraph::try_from(body.graph).map_err(HttpError::Graph)?;
+
+    let request: DecisionRequest =
+        Native.decode_request(&body.request, &limits).map_err(HttpError::from)?;
+
+    // Assembly and decide are both synchronous (D5): one blocking task
+    // builds the scoped engine, decides, and drops it.
+    let (response, identity) = tokio::task::spawn_blocking(move || -> EngineResult<_> {
+        let handle = EngineHandle::ephemeral(graph)?;
+        let response = handle.decide(&request)?;
+        Ok((response, handle.identity()))
+    })
+    .await
+    .map_err(|_| HttpError::Engine(opencodifier_engine::EngineError::Cancelled))?
+    .map_err(HttpError::from)?;
+
+    let encoded = Native.encode_response(&response).map_err(|error| {
+        HttpError::Engine(opencodifier_engine::EngineError::Serialization {
+            reason: error.to_string(),
+        })
+    })?;
+    Ok(Json(json!({
+        "response": encoded,
+        "identity": {
+            "graph_version": identity.graph_version,
+            "model_id": identity.model_id,
+            "calibration_version": identity.calibration_version,
+            "engine_semver": identity.engine_semver,
+        },
+    })))
+}
+
 /// `GET /v1/healthz` — liveness plus the identity decisions are cached
 /// under.
 ///
@@ -276,6 +335,17 @@ struct BatchBody {
     /// Canonical decision requests, decided independently: one item's
     /// refusal never fails the batch, and every item answers in order.
     requests: Vec<Value>,
+}
+
+/// The `POST /v1/graph/run` body (D19): a graph document plus one
+/// canonical request to decide through it.
+#[derive(serde::Deserialize)]
+struct GraphRunBody {
+    /// The graph to execute, validated through the engine's own
+    /// constructor and capped at the IR's node limit before assembly.
+    graph: GraphDocument,
+    /// The canonical request decided under `graph`.
+    request: Value,
 }
 
 /// Parses a request body as JSON.
