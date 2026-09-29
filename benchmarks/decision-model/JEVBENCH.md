@@ -167,6 +167,31 @@ milliseconds. Acceptance criteria:
 4. **Provenance**: harness commit, dataset sha256, model sha256s, adapter
    source recorded in each result JSON; raw evidence outside both repos.
 
+## Results
+
+| arm | accuracy | macro | ECE | Brier | p50 / p95 | determinism | probs |
+|---|---:|---:|---:|---:|---|---|---|
+| engine (relational-v1) | 0.3766 | 0.4011 | 0.402 | 0.890 | 2.0 ms | 231/231 | native |
+| **jev_native bridge (0.8B-v3 Q4_K_M)** | **0.6494** | 0.6378 | **0.080** | 0.425 | 6.72 s / 103.8 s | 231/231 (labels + probs) | native |
+
+Bridge vs acceptance: (1) reproduction — 150/231 = 64.9 % vs the
+published 64.1 % (148/231), +0.9 pp, PASS; (2) schema discipline —
+`probability_sources: ["native"]`, zero synthesized rows, zero
+renormalizations, PASS; (3) determinism — full replay matches on
+predicted labels and probability vectors, PASS; (4) provenance —
+manifest records harness commit `9ec6f15`, dataset sha256
+`dc3995d8…`, model sha256 `0a19bc29…`, PASS. Raw evidence archived at
+`/nas/Temp/work/oc-model-eval/runs/jevbench/bridge-v1/` (results,
+replay, ledger, manifest; tmpfs originals volatile).
+
+Bridge family profile (accuracy): tool_selection 1.000, fact 1.000,
+intent 0.917, ordinal 0.917, routing 0.917, extraction 0.875,
+adequacy 0.833, routing_hard 0.800, policy 0.750, trap 0.750,
+judge_hard 0.529, probability 0.500, tradeoff 0.500, adversarial
+0.333, temporal_numeric 0.333, multi_hop 0.278, ambiguous 0.143,
+long_policy 0.105 — the mirror image of the engine's abstention-first
+profile on the same items.
+
 ## What OpenCodifier buys
 
 - **The external anchor.** Every number in REPORT.md so far is internal
