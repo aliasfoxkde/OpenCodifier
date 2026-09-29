@@ -10,6 +10,18 @@ releases may break, and every breaking change is recorded in this file
 
 ### Added
 
+- JevBench external-anchor runs (PLAN Phase 17, in progress): the
+  231-item public split through the official harness — engine arm
+  (rerun in flight), native verdict-slot bridge vs the published
+  64.1 % row, and the 4B fork arm. Results land in REPORT.md.
+- Params A/B on the 4B decision arm (threads/ctx/prompt diet) and the
+  first native verdict-slot run on our 120-item suite: queued behind
+  the shared-host load storm.
+
+## [0.3.0] — 2026-09-29
+
+### Added
+
 - Agent-facing skills (§33, `skills/`): the shared calling protocol
   plus all eight skill areas — routing, model-selection, tool-selection,
   tool-gating, context-pruning, escalation, verification,
@@ -34,6 +46,18 @@ releases may break, and every breaking change is recorded in this file
   unfocused runs have no focus surface anywhere in the trace or report
   projections. Long-suite A/B: answer-identical to full-state decisions
   on 120/120 items with views at a p50 of 93 tokens.
+- Native verdict-slot arm (`benchmarks/decision-model/NATIVE_VERDICT_ARM.md`,
+  `runner/run_jev_native.py`): Jev-Style-0.8B-Decision-v3 measured through
+  its own trained interface (verdict-slot logits, shipped temperature
+  artifact) instead of the D16 tree-mode mismatch rows (0.217/0.0);
+  manifest-verified reference runtime, determinism replay, runner-side
+  honesty rules.
+- JevBench external-anchor methodology (`benchmarks/decision-model/JEVBENCH.md`,
+  `runner/run_jevbench.py`): the 231-item public split through the
+  authors' own harness (their runner, scoring, no-synthesized-probability
+  rule), IR mapping, the 64.1 % comparability bridge, published anchor
+  rows, and smoke-verified wire facts; PLAN.md Phase 17 opens the
+  workstream.
 
 ## [0.2.0] — 2026-09-28
 
