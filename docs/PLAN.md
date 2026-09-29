@@ -774,6 +774,76 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   replay determinism ✅, all 231 in one run ✅. Bridge reproduction,
   fork arm, and the REPORT.md section pending.
 
+## Phase 18 — hardening pass (coverage, lints, e2e, remaining §-items)
+
+The 99 % test/code/doc-coverage target and the strictest-lint posture are
+their own phase, not an afterthought of feature phases. Ground rules: the
+measurement arms of Phase 17 share this host with CI; cargo-heavy steps
+(census runs, e2e suites) need the same quiet-host window discipline as
+the benchmark arms — plan them for windows, author the code/tests CPU-light
+in between. Ordered so each step's output feeds the next.
+
+- **18a — Coverage census (needs quiet host, ~one `just test-cov` run).**
+  Run the gated coverage (92/91/90 lines/functions/regions today) and
+  produce a per-crate gap table committed to `docs/COVERAGE.md`: uncovered
+  lines grouped by module, each tagged `testable-now` (input-shaping,
+  error paths, adapters) or `needs-harness` (fault injection, time, I/O).
+  Accept: table exists, every gap classified, no unexamined crate.
+- **18b — Gap tests (CPU-light authoring, gated by 18a's table).** Tests
+  for every `testable-now` gap, in each crate's `tests/` per the harness
+  rules; `needs-harness` gaps get a named harness plan (mock `Clock`,
+  fault-injection providers) instead of being skipped silently. Accept:
+  `just test-cov` at **≥99 % lines / ≥99 % functions / ≥99 % regions** or
+  an explicit per-gap waiver with reason in `docs/COVERAGE.md`.
+- **18c — Strict lints.** Census `missing_docs` warnings (`cargo doc` run
+  needed), document-and-deny: `missing_docs` deny after the docs are
+  written; audit any remaining warn-level lint in the workspace lint table.
+  Accept: workspace lints all deny-level, `cargo clippy --workspace
+  --all-targets -- -D warnings` and `RUSTDOCFLAGS="-D warnings" cargo doc`
+  stay green, CI proves it.
+- **18d — E2E validation suite.** One scripted pass that builds the
+  release binary, serves on loopback, and exercises every interface: native
+  `/v1/decide` (choice/boolean/score), Anthropic + OpenAI adapter shapes,
+  `/v1/systemone`, MCP stdio handshake, one recipe run, cache-hit identity,
+  abstain path, limits path. Committed as a `just` recipe + GitForge CI
+  stage. Accept: green stage in CI on the release binary; the suite is the
+  release gate for every future cut.
+- **18e — §36 HTTP surface completion.** `/v1/batch`, `/v1/graph/run`,
+  `/v1/validate`, `/v1/models`, `/v1/capabilities` (semantic-cache probe
+  too), each with contract tests from 18d's harness. Accept: every
+  documented endpoint returns a spec-shaped answer, contract tests in CI.
+- **18f — §63 Decision Registry.** Artifact format (versioned, hashed,
+  D6-style identity) + loader + a registry-backed routing example; the
+  seam noted in `codec.rs` becomes the format. Accept: format doc in
+  `docs/`, round-trip tests, one recipe using it.
+- **18g — §34 recipe fleet + `recipe install`.** The twelve recipe areas
+  as runnable graphs + the install path. Accept: fleet in `recipes/`,
+  install exercised by 18d's suite.
+- **18h — Graph nodes (§53 retrieval, §26/§54 rerank, §51 optimizer).**
+  Own sub-phase after 18e: `retrieve` node over the §24 embedding seam,
+  rerank node, then a first real optimizer pass (constant-folding +
+  dead-branch elimination on serializable DAGs). Each needs a DECISIONS.md
+  record before code. Accept: node types in the IR with tests, optimizer
+  with before/after equivalence proofs on the recipe fleet.
+- **18i — Measurement-queue completion (storm-gated; runs in quiet
+  windows).** #32 params A/B (attempt 3 driver waiting), #25 our-suite
+  native verdict-slot run, fork rebuild on `d15-full-distribution` + D15
+  refit, fork_4b JevBench arm (upgraded to native Brier/ECE by the fork
+  patch), #35 Vulkan APU arm, #42 vision probe. Accept: each lands in
+  REPORT.md with its honesty rules; the queue is ordered by information
+  value (bridge > params > native > fork > vision > Vulkan).
+- **18j — Distribution + WASM (§57, §58, §68).** Own phases after the
+  core is hard: cross-platform release matrix, Homebrew/winget/crates.io;
+  `opencodifier-wasm` with the §68 security posture. Accept: per §58/§57
+  rows in SPEC_COVERAGE flipping to done with evidence.
+
+**Sequencing.** 18a/18b/18c are the coverage spine and gate everything
+else (no new surface lands untested after 18b). 18d precedes 18e–18g (the
+suite is their harness). 18h is decision-heavy — DECISIONS.md first. 18i
+fills quiet windows throughout. 18j last. WGCA/web-standards: no web
+frontend exists — the clause maps to 18d's HTTP contract suite and the
+API reference; noted here so it is not silently dropped.
+
 ## Spec coverage map (audit, 2026-09-28)
 
 All 17 tracked phases are done; the §-by-§ check that every PLANNING
