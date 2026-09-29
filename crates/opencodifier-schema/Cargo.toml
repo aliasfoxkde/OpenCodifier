@@ -17,6 +17,9 @@ workspace = true
 opencodifier-core = { path = "../opencodifier-core", version = "0.3.0" }
 serde.workspace = true
 serde_json.workspace = true
+# SHA-256 for definition identities (D20), the same primitive D6 uses
+# for cache keys.
+sha2.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

@@ -101,11 +101,13 @@ pub mod error;
 pub mod jev;
 pub mod native;
 pub mod openai;
+pub mod registry;
 pub(crate) mod support;
 
 pub use codec::{BoxedWireFormat, WireFormat};
 pub use error::{SchemaError, SchemaResult};
 pub use native::Native;
+pub use registry::{DecisionDefinition, Registry};
 
 #[cfg(test)]
 mod tests {

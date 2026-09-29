@@ -1,0 +1,43 @@
+{
+  "metadata": {
+    "limits": {
+      "max_candidates": 256,
+      "max_execution_time": {
+        "nanos": 0,
+        "secs": 10
+      },
+      "max_graph_nodes": 128,
+      "max_input_bytes": 1048576,
+      "max_questions": 32,
+      "max_retrieval_results": 64
+    },
+    "request_id": null
+  },
+  "policy": {
+    "abstain_below": 0.5,
+    "min_confidence": 0.8,
+    "risk": "low",
+    "verify_below": 0.65
+  },
+  "questions": [
+    {
+      "candidates": [
+        {
+          "description": "General coding and reasoning",
+          "id": "local-qwen"
+        },
+        {
+          "description": "Complex reasoning",
+          "id": "local-glm"
+        }
+      ],
+      "id": "amortyx.model_selection",
+      "text": "Which model should process the request?",
+      "type": "choice"
+    }
+  ],
+  "state": {
+    "facts": {},
+    "text": "complex reasoning over a large proof"
+  }
+}

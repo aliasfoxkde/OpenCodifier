@@ -573,3 +573,51 @@ gets the tightest rules in the runtime:
 - **MCP parity deferred.** MCP `codify_graph` remains introspection
   only; an ad-hoc execution tool would need the same identity rules and
   is future work, not an omission.
+
+## D20 — Decision Registry: definitions are content-hashed artifacts, requests stay canonical (2026-09-29)
+
+§63 wants decision definitions to become reusable artifacts: a named,
+versioned document carrying the question shape and the policy, from
+which a runtime builds a real request. The registry is bookkeeping over
+artifacts; it is never a second decision path.
+
+- **One type, one crate.** `DecisionDefinition` lives in
+  `opencodifier-schema` (`registry.rs`) next to the wire adapters: the
+  document is a wire format, and instantiation goes through the same
+  core constructors (`ChoiceQuestion::new`, `DecisionPolicy`'s
+  validating conversion) every other ingress uses — never a weaker
+  copy. Fields: `id` (dotted, non-empty), `version` (u64, ≥ 1),
+  `question` (`type` + `text`), `candidates` (a choice question's
+  static candidate list, or `{"dynamic": true}` for caller-supplied
+  ones), and an optional `policy` (absent = `DecisionPolicy::default`).
+- **Identity is content, labels are labels.** A definition's identity is
+  the SHA-256 hex of its canonical serialization (`content_hash()`).
+  `id` and `version` are labels for humans and tooling — naming a
+  version does not make two different documents the same artifact, and
+  editing a document changes its identity even if the labels do not
+  move. This is D6's discipline applied one level up.
+- **Definition identity never enters cache keys.** The instantiated
+  `DecisionRequest` is canonical and cache keys fold the request content
+  plus engine identity (D6), nothing else. Two definitions that
+  instantiate to byte-identical requests legitimately share a cached
+  decision — the decision depends on the request, not on which artifact
+  produced it. Provenance stays artifact-side; instantiation does not
+  smuggle the definition id into `RequestMetadata`, where it would
+  perturb keys.
+- **Instantiation is total or refuses.** A choice definition with
+  dynamic candidates needs the caller's candidate list at
+  instantiation; a static one refuses extra candidates rather than
+  silently merging. Question text and candidates go through the same
+  validating constructors as any wire request, so an invalid definition
+  fails at load with the adapter's own `schema.*` codes — a registry
+  cannot hold a definition the engine would refuse.
+- **The registry itself is boring on purpose.** `Registry` indexes
+  definitions by `id` and rejects duplicate ids at construction —
+  lookup, not discovery; no filesystem, no network, no reload. Loading
+  documents from disk is the caller's job (CLI, tests, recipes), which
+  keeps the crate sync and local-first.
+- **Recipe, not ceremony.** One recipe demonstrates the path:
+  definition → instantiate → decide through a committed graph, with the
+  response captured by the same procedure as every other recipe — the
+  registry has to earn its place in the fleet, not ship as an unused
+  library.
