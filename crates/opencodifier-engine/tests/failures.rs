@@ -24,8 +24,8 @@ use opencodifier_core::{
     Limits, RequestMetadata, State,
 };
 use opencodifier_engine::{
-    Classifier, Condition, DecisionEngine, EngineConfig, EngineError, ManualClock, MockClassifier,
-    NodeKind, SystemClock,
+    Calibration, Classifier, Condition, DecisionEngine, EngineConfig, EngineError, ManualClock,
+    MockClassifier, NodeKind, SystemClock,
 };
 
 /// A classifier that panics for one question id and delegates the rest.
@@ -216,6 +216,49 @@ fn a_survivor_with_no_mass_becomes_certain_rather_than_dropped() {
         other => panic!("expected a choice answer, got {other:?}"),
     }
     assert_eq!(report.lexical()[0].scores().len(), 1, "narrowing kept one candidate");
+}
+
+/// A calibration that reports a confidence the IR cannot represent.
+///
+/// [`Calibration`] is a public seam (D15), so a mis-fitted artifact can hand
+/// back a value outside `[0, 1]`. Nothing downstream re-derives confidence,
+/// which is exactly why the response constructor is the last gate: an
+/// answer whose confidence is not a probability fails the run.
+#[derive(Debug)]
+struct Overconfident;
+
+impl Calibration for Overconfident {
+    fn calibrate(&self, _class: &str, _distribution: &Distribution) -> f64 {
+        1.5
+    }
+
+    fn version(&self) -> u64 {
+        9
+    }
+}
+
+#[test]
+fn a_calibration_that_breaks_the_confidence_invariant_fails_the_run() {
+    let config = config(1).with_calibration(Arc::new(Overconfident));
+    let engine = engine_with(config, two_way(("local-small", 0.9), ("cloud-large", 0.1))).unwrap();
+    let request = choice_request(&[("local-small", "small local model")]);
+
+    let error = engine.decide(&request).unwrap_err();
+    // The engine reports IR failures under the umbrella code and keeps the
+    // core message, which names the value that broke the invariant.
+    assert_eq!(error.code(), "ir.invalid", "{error}");
+    assert!(error.to_string().contains("out of range: 1.5"), "{error}");
+    // A run that produced no response produced nothing cacheable either:
+    // the next caller must decide again, not inherit the failure.
+    assert_eq!(engine.cache().len().unwrap(), 0);
+
+    // The same request decides fine under the identity calibration, so the
+    // failure above is the out-of-range value and not the pipeline.
+    let sane = engine_with(common::config(1), two_way(("local-small", 0.9), ("cloud-large", 0.1)))
+        .unwrap();
+    let response = sane.decide(&request).unwrap();
+    assert_eq!(response.outcome(), DecisionOutcome::Accept);
+    assert_eq!(sane.cache().len().unwrap(), 1);
 }
 
 #[test]

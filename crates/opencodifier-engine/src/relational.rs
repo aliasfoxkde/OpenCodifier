@@ -403,6 +403,43 @@ mod tests {
     }
 
     #[test]
+    fn the_root_cause_walks_transitive_dependencies() {
+        let solver = RelationalSolver::lexical();
+        // A three-hop chain: the proof has to follow `app -> db -> net` to
+        // the bottom before it can say that nothing *below* `app` is also
+        // failing. Only then is `app` the root cause.
+        let deep = "web depends on app. app depends on db. db depends on net. app is failing.";
+        let distribution = decide(&solver, deep, &["web", "app", "db", "net"]);
+        assert_eq!(distribution.top().key, "app");
+        assert_eq!(distribution.top().probability, 1.0);
+
+        // The same walk in the other direction: a failing node whose
+        // transitive dependencies hold another failing node is a symptom,
+        // not a cause, so the deeper failure wins.
+        let symptom = "web depends on app. app depends on db. app is failing. db is failing.";
+        let distribution = decide(&solver, symptom, &["web", "app", "db"]);
+        assert_eq!(distribution.top().key, "db");
+        assert_eq!(distribution.top().probability, 1.0);
+    }
+
+    #[test]
+    fn single_entity_health_reports_count_towards_the_healthiest() {
+        let solver = RelationalSolver::lexical();
+        // One stated status is as much evidence as a group report: `north`
+        // has one healthy report against two entities with none.
+        let text = "north is healthy. south: down, down. east: degraded, degraded.";
+        let distribution = decide(&solver, text, &["north", "south", "east"]);
+        assert_eq!(distribution.top().key, "north");
+        assert_eq!(distribution.top().probability, 1.0);
+
+        // Both forms aggregate for the same entity instead of competing.
+        let combined = "north is healthy. north: healthy, down. south: down, down.";
+        let distribution = decide(&solver, combined, &["north", "south"]);
+        assert_eq!(distribution.top().key, "north");
+        assert_eq!(distribution.top().probability, 1.0);
+    }
+
+    #[test]
     fn the_solver_decides_where_bare_lexical_only_orders() {
         // The regression this module exists for: on relational state text
         // the wrapped stack commits to the proven answer; bare BM25 only

@@ -706,6 +706,31 @@ mod tests {
     }
 
     #[test]
+    fn a_poisoned_cache_degrades_to_no_caching() {
+        // Injected at the only seam that can poison the lock — a panic while
+        // a slot is held. Cached data is derived state, so the cache must
+        // keep answering: probes miss, inserts are dropped rather than
+        // failing a decision that already succeeded, and the inspector says
+        // why instead of deadlocking.
+        let clock = std::sync::Arc::new(ManualClock::new());
+        let cache = DecisionCache::new(CacheConfig::default(), clock.clone()).unwrap();
+        let inner = &cache.inner;
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = inner.lock().expect("the lock is healthy before the injection");
+            panic!("a worker died holding the cache lock");
+        }));
+
+        let key = CacheKeyBuilder::build(&request(&["a"]), &EngineIdentity::builtin()).unwrap();
+        assert!(cache.get(&key).is_none(), "a probe cannot report a broken cache");
+        cache.insert(key, response());
+        assert!(cache.get(&key).is_none(), "the response must not be stored");
+
+        let error = cache.len().expect_err("the lock is still poisoned");
+        assert!(matches!(error, EngineError::CacheMisconfigured { .. }));
+        assert!(error.to_string().contains("cache lock poisoned"), "{error}");
+    }
+
+    #[test]
     fn an_insert_drops_entries_that_expired_before_it() {
         // Expiry is checked on the way in as well as the way out: the stale
         // entry below is removed by the insert that follows it, so the

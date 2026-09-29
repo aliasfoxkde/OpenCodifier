@@ -247,6 +247,24 @@ mod tests {
     }
 
     #[test]
+    fn a_panicked_reader_does_not_wedge_the_clock() {
+        // Injected at the only seam that can poison the offset lock: a panic
+        // while a reader holds it. A clock that one panicked reader could
+        // wedge forever would take every later deadline check with it, so
+        // the lock recovers instead.
+        let clock = ManualClock::new();
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = clock.offset.lock().expect("the lock is healthy before the injection");
+            panic!("a reader died holding the offset lock");
+        }));
+
+        assert_eq!(clock.elapsed(), Duration::ZERO, "the recovered lock reads the old offset");
+        clock.advance(Duration::from_millis(25));
+        assert_eq!(clock.elapsed(), Duration::from_millis(25));
+        assert!(clock.now() > clock.start);
+    }
+
+    #[test]
     fn types_are_debug_and_send_sync() {
         fn assert_bounds<T: std::fmt::Debug + Send + Sync>() {}
         assert_bounds::<SystemClock>();

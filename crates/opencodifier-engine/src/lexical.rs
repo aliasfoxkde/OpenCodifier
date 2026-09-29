@@ -363,4 +363,19 @@ mod tests {
         assert_eq!(Bm25Index::new(["a b"]), Bm25Index::new(["a b"]));
         assert_ne!(Bm25Index::new(["a b"]), Bm25Index::new(["a c"]));
     }
+
+    #[test]
+    fn length_normalization_degrades_to_plain_saturation_without_an_average() {
+        // Documents of nothing but stop words index to zero tokens each, so
+        // the average document length is 0 and dividing by it is undefined:
+        // the frequency term falls back to saturation alone instead of
+        // producing NaN.
+        let index = Bm25Index::new(["the and of", "if then when"]);
+        assert_eq!(index.score_all("coding reasoning"), vec![0.0, 0.0]);
+        assert!((index.saturated_frequency(2, 0.0) - 2.0 * (K1 + 1.0) / (2.0 + K1)).abs() < 1e-12);
+        assert!(!index.saturated_frequency(2, 0.0).is_nan());
+        // With an average to normalize against the same hit scores lower.
+        let normalized = Bm25Index::new(["coding coding coding", "coding"]);
+        assert!(normalized.saturated_frequency(2, 3.0) < index.saturated_frequency(2, 0.0));
+    }
 }
