@@ -84,6 +84,11 @@ pub struct EngineConfig {
     /// reverse escalation to the full state when the focused decision is
     /// weak (PLANNING.md §45).
     pub focus: Option<crate::focus::FocusPolicy>,
+    /// The optional embedding backend backing the semantic nodes
+    /// (`embedding`, `retrieve`, embedding `rerank`) — PLANNING.md §24.
+    /// `None` (the default) keeps the engine zero-ML; graphs that need
+    /// the backend are refused at assembly (D21), never degraded.
+    pub embedding: Option<Arc<dyn opencodifier_runtime::EmbeddingBackend>>,
 }
 
 impl EngineConfig {
@@ -102,6 +107,7 @@ impl EngineConfig {
             cache: CacheConfig::default(),
             max_execution_time: opencodifier_core::Limits::default().max_execution_time,
             focus: None,
+            embedding: None,
         }
     }
 
@@ -185,6 +191,17 @@ impl EngineConfig {
         self.focus = focus;
         self
     }
+
+    /// Sets the embedding backend backing the semantic nodes (D21).
+    /// `None` keeps the engine zero-ML.
+    #[must_use]
+    pub fn with_embedding(
+        mut self,
+        embedding: Option<Arc<dyn opencodifier_runtime::EmbeddingBackend>>,
+    ) -> Self {
+        self.embedding = embedding;
+        self
+    }
 }
 
 /// A reasonable default thread budget.
@@ -240,6 +257,36 @@ impl DecisionEngine {
             });
         }
         let cache = DecisionCache::new(config.cache, Arc::clone(&clock))?;
+        // Semantic nodes name their backend requirement in the graph; an
+        // engine without the backend refuses the graph at assembly
+        // instead of deciding with less evidence than the author asked
+        // for (D21). Safe mode refuses retrieval pruning for the same
+        // reason it refuses the lexical prune knob (PLANNING.md §45):
+        // semantic evidence may order, and only an explicit engine-level
+        // opt-out may let it eliminate.
+        for node in config.graph.nodes() {
+            let needs_embedding = match node.kind {
+                crate::graph::NodeKind::Embedding | crate::graph::NodeKind::Retrieve => true,
+                crate::graph::NodeKind::Rerank => node.reranker.as_deref() == Some("embedding"),
+                _ => false,
+            };
+            if needs_embedding && config.embedding.is_none() {
+                return Err(EngineError::MissingBackend {
+                    node: node.id.to_string(),
+                    backend: "embedding".to_owned(),
+                });
+            }
+            if config.safe_mode && node.kind == crate::graph::NodeKind::Retrieve {
+                return Err(EngineError::InvalidConfig {
+                    reason: format!(
+                        "safe mode forbids retrieval pruning: node `{}` eliminates candidates \
+                         on semantic evidence; assemble the engine with `with_safe_mode(false)` \
+                         to run `retrieve` nodes",
+                        node.id
+                    ),
+                });
+            }
+        }
         // The live classifier governs the model component of every cache
         // key (PLANNING.md §64): wrapper classifiers compose their ids
         // (e.g. `relational-v1|builtin-lexical-v1`), so a swapped or
@@ -255,8 +302,17 @@ impl DecisionEngine {
             }
             None => classifier.model_id().to_owned(),
         };
-        let config =
-            EngineConfig { identity: EngineIdentity { model_id, ..config.identity }, ..config };
+        let config = EngineConfig {
+            identity: EngineIdentity {
+                model_id,
+                embedding_model: config
+                    .embedding
+                    .as_ref()
+                    .map_or_else(|| "none".to_owned(), |backend| backend.model_id().to_owned()),
+                ..config.identity
+            },
+            ..config
+        };
         Ok(Self {
             config,
             cache,

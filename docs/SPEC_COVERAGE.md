@@ -40,9 +40,9 @@ the rest named), **designed** (design of record exists, no code),
 | 21 | Abstention | done | successful outcome, never an error; D13 exit codes |
 | 22 | Batch Inference | partial | multi-question requests + benchmark batched mode; the `/v1/batch` HTTP endpoint is not implemented (§36) |
 | 23 | Cache Architecture | done | exact-decision cache, normative `CacheKeyBuilder`, version-folded keys (D6/§64) |
-| 24 | Embeddings | partial | `EmbeddingBackend` trait + `EmbeddingClassifier` + benchmark bake-off (F20: ORT fp32 rung); no `embedding` graph node yet (declared, not built) |
+| 24 | Embeddings | done | `EmbeddingBackend` trait + `EmbeddingClassifier` + benchmark bake-off (F20: ORT fp32 rung); the `embedding` graph node annotates through it, assembly refuses graphs that need a missing backend (D21, 18h) |
 | 25 | No Mandatory Vector Search | done | lexical path complete with zero ML |
-| 26 | Reranking | planned | node kind declared in the engine docs; no implementation |
+| 26 | Reranking | done | `Reranker` trait (`LexicalReranker`/`EmbeddingReranker`), the `rerank` node permutes never removes; trace discloses the order (D21, 18h) |
 | 27 | Model Runtime | done | `InferenceBackend`/`EmbeddingBackend`; `ort` behind the `onnx` feature (D2) |
 | 28 | Why ONNX + Burn | done-as-decided | D2; Burn unexamined until ONNX fails a need |
 | 29 | WASM | planned | §57; no `opencodifier-wasm` crate yet |
@@ -57,7 +57,7 @@ the rest named), **designed** (design of record exists, no code),
 | 33 | Skills | done | `skills/` — README protocol + all eight §33 areas (routing, model-selection, tool-selection, tool-gating, context-pruning, escalation, verification, memory-selection) |
 | 34 | Built-in Recipes | done | the twelve §34 areas as runnable graphs + paired requests + captured responses under `recipes/`; `opencodifier recipe list` / `recipe install [--dest] [--force]` ship the fleet inside the binary (`include_str!`), installed bytes byte-identical to the committed copies (18g) |
 | 35 | CLI | done | `decide`/`graph validate`/`serve`/`models verify`/`mcp serve`/`recipe list`/`recipe install`, D13 exit codes, `--focus-budget` |
-| 36 | HTTP API | partial | `POST /v1/decide`, `/v1/graph/validate`, `GET /v1/healthz` shipped; **not shipped:** `/v1/batch`, `/v1/graph/run`, `POST /v1/validate`, `/v1/systemone` compat, `GET /v1/models`, `/v1/capabilities` |
+| 36 | HTTP API | done | all six §36 endpoints: `/v1/decide`, `/v1/batch`, `/v1/graph/validate`, `/v1/graph/run` (D19), `/v1/validate`, `/v1/systemone`, plus `/v1/models`, `/v1/capabilities`, `/v1/healthz`; 20 contract tests + 30-check e2e suite (18e) |
 | 37 | Local Server | done | loopback default, explicit `--host` flag, gate-tested |
 | 38 | Privacy | done | no telemetry/cloud/accounts; explicit downloads; SHA-256 manifests (D14) |
 | 39 | Project Layout | done | `docs/PROJECT_STRUCTURE.md` matches the tree |
@@ -67,12 +67,12 @@ the rest named), **designed** (design of record exists, no code),
 | § | Phase | Verdict | Evidence |
 |---|---|---|---|
 | 40–50 | Phases 0–10 | done | `docs/PLAN.md` rows 0–10 |
-| 51 | Phase 11 — Graph Optimization | planned | no optimizer; graphs are hand-authored DAGs |
-| 52 | Phase 12 — Embeddings | partial | see §24 |
-| 53 | Phase 13 — Retrieval | planned | no `retrieve` node; `max_retrieval_results` policy limit exists |
-| 54 | Phase 14 — Reranking | planned | see §26 |
+| 51 | Phase 11 — Graph Optimization | done | `optimize()` = dead-node elimination + pure-node CSE only (D22: no folding/early-exit), fleet equivalence proofs |
+| 52 | Phase 12 — Embeddings | done | see §24; `embedding_model` rides engine identity and every cache key (D21) |
+| 53 | Phase 13 — Retrieval | done | the `retrieve` node narrows by `top_n`/`floor`, floor-never-starves keep-top-1, every drop trace-named (D21, 18h) |
+| 54 | Phase 14 — Reranking | done | see §26 |
 | 55 | Phase 15 — MCP | done | Phase 10 in PLAN numbering (D17) |
-| 56 | Phase 16 — Recipes and Skills | done | `recipes/` (3 runnable graphs, Phase 11) + `skills/` (§33, 2026-09-28) |
+| 56 | Phase 16 — Recipes and Skills | done | `recipes/` (3 tutorial graphs + the twelve §34 fleet recipes with `recipe list`/`recipe install`, 18g) + `skills/` (§33, 2026-09-28) |
 | 57 | Phase 17 — WASM | planned | crate absent; §68 (WASM security) rides on it |
 | 58 | Phase 18 — CLI / Distribution | partial | CLI done; release matrix (Win/macOS/ARM64), Homebrew/winget/cargo-publish unstarted (GitForge releases exist for Linux x86_64) |
 | 59 | Phase 19 — Benchmarking | done | criterion baselines per release + the Phase 13 decision-model benchmark (D16) |
@@ -119,7 +119,7 @@ the rest named), **designed** (design of record exists, no code),
 5. **§36 HTTP surface completion** — `/v1/batch`, `/v1/graph/run`, `/v1/validate`, `/v1/systemone`, `/v1/models`, `/v1/capabilities`.
 6. **§34 recipe fleet + `recipe install`** — the twelve recipe areas.
 7. **§63 Decision Registry** — artifact format + loader.
-8. **§51 graph optimizer**, **§53 retrieval node**, **§26/§54 rerank node** (with §24's `embedding` node).
+8. ~~**§51 graph optimizer**, **§53 retrieval node**, **§26/§54 rerank node** (with §24's `embedding` node)~~ **done** — D21/D22 records, `optimize()` with fleet equivalence, semantic nodes over the `EmbeddingBackend` seam.
 
 **Larger efforts (own phases):**
 9. **§57+§68 WASM** (`opencodifier-wasm`, browser demo, WASM security).

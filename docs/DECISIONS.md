@@ -621,3 +621,98 @@ artifacts; it is never a second decision path.
   response captured by the same procedure as every other recipe — the
   registry has to earn its place in the fleet, not ship as an unused
   library.
+
+## D21 — Retrieval and rerank are explicit, disclosed narrowing stages (2026-09-29)
+
+PLANNING §24/§52 (embeddings), §53 (retrieval), §26/§54 (reranking) land
+as three graph node kinds — `embedding`, `retrieve`, `rerank` — plus two
+engine seams. The design keeps every §73 rule intact while making the
+spec's `50 → metadata → BM25/embedding → 10 → reranker → 3 → decision`
+pipeline expressible as a plain DAG.
+
+- **Three nodes, three honest jobs.** `embedding` only *annotates*: it
+  embeds the state text once per run and scores every surviving
+  candidate description by cosine, recording the scores — it never
+  removes or reorders. `retrieve` narrows: per choice question it keeps
+  the top `top_n` candidates whose semantic score clears `floor`, and
+  every dropped candidate is named in the trace with its score — never
+  silent. `rerank` reorders: it rebuilds each choice question's
+  candidate list in the reranker's score order — it never removes.
+- **A floor that cannot starve.** If the floor would eliminate every
+  surviving candidate, `retrieve` keeps the top-1 and lets the
+  confidence gate — not a narrowing artifact — decide the question's
+  fate. Narrowing stages never manufacture an abstention.
+- **The Reranker seam is a trait with two implementations.**
+  `Reranker::rerank(query, candidates) → Vec<ScoredCandidate>` exactly
+  as §26 sketches it. `LexicalReranker` is the zero-ML default (BM25
+  over candidate descriptions, the same primitive as the `lexical`
+  node); `EmbeddingReranker` is cosine over an `EmbeddingBackend`
+  (PLANNING §24). The node spec names its reranker (`"lexical"` |
+  `"embedding"`); the engine never silently substitutes one for the
+  other.
+- **Missing backend ⇒ refuse at assembly, never at request time.** The
+  handle carries the optional embedding backend; a graph naming
+  `embedding`/`retrieve`/embedding-`rerank` nodes on a handle without
+  one fails assembly with `engine.missing_backend` before a socket
+  opens. The zero-ML base binary stays useful with no model — by
+  refusing graphs that need one, not by degrading them into lies.
+- **Safe mode refuses retrieval pruning, same rule as the prune knob.**
+  `retrieve` is semantic pruning with extra disclosure. Safe mode (the
+  default) rejects any graph containing a `retrieve` node at assembly,
+  exactly as it rejects the `lexical_prune_limit` knob; the opt-out is
+  explicit (`with_safe_mode(false)`), per-engine, and never per-request.
+  Hostile input cannot switch it.
+- **The embedding backend is part of engine identity.** `EngineIdentity`
+  gains `embedding_model` (default `"none"`), folded into every cache
+  key by the single normative `CacheKeyBuilder`. An embedding swap or
+  upgrade invalidates cached decisions exactly as a classifier swap
+  does (§73, §64) — semantic scores feed narrowing, so they are decision
+  inputs and get identity like any other.
+- **Node validation is additive and strict.** `retrieve` requires
+  `top_n ≥ 1`; `floor` only means something on `retrieve`;
+  `reranker` only on `rerank`; unknown knobs on other kinds are ignored
+  by serde but rejected by the validator, because a graph that carries
+  dead knobs is a graph the author did not mean.
+
+## D22 — The optimizer only removes the unobservable (2026-09-29)
+
+PLANNING §51 wants a decision compiler. V1.1 ships the two passes whose
+correctness is provable over the DAG's actual semantics — and refuses
+the passes whose "optimizations" would be guesses.
+
+- **Equivalence is over decisions, not traces.** Two graphs are
+  equivalent when every request produces identical answers, outcome,
+  and confidence. Traces legitimately differ (fewer nodes executed);
+  they are instrumentation, not output. Everything below is measured
+  against that definition, fleet-wide: every recipe graph decides
+  byte-identically (answers, outcome, confidence, identity's model
+  fields) optimized and unoptimized.
+- **Pass 1 — dead-node elimination is reachability from `output`,
+  minus the cache.** A node no `output`-reachable path contains can
+  never contribute to a response — with one exception: `cache` is
+  observable across requests (it probes/reports the key and a later
+  request reads the same cache), so cache nodes are never eliminated,
+  however unreachable. Everything else is a pure function of its
+  dependencies.
+- **Pass 2 — CSE over identical pure specs.** Two nodes with equal
+  `(kind, depends_on, knobs)` in the pure set (`normalize`, `rule`,
+  `filter`, `lexical`, `embedding`, `retrieve`, `rerank`, `choice`,
+  `boolean`, `score`, `branch`) compute the same value against the same
+  wave snapshot, so dependents re-point to the first and the duplicate
+  disappears. `cache` is excluded (side-effecting), `threshold` and
+  `output` excluded (unique, response-shaping). Duplicate entries in a
+  `depends_on` list are dropped as part of normalization.
+- **What V1.1 refuses, and why.** Constant folding has no constants
+  worth folding (rule conditions read hostile input; folding one input
+  path specializes the graph to a benchmark). Early exit and
+  parallelization hints change wave structure and therefore traces and
+  timing contracts for gains the per-stage budgets (D9) have not asked
+  for. Candidate pruning is not a graph transform at all — it is
+  narrowing, and D21 already owns its disclosure rules. The optimizer
+  that ships is small enough to prove.
+- **Surface.** `opencodifier_engine::optimize(graph) → DecisionGraph`
+  (pure, returns a fresh graph; `graph_version` is preserved — D6 keys
+  on the author's version, and optimization must not silently change
+  cache identity). Equivalence proofs: per-pass unit tests plus a
+  fleet-wide test that optimizes every committed recipe graph and
+  asserts identical decisions.

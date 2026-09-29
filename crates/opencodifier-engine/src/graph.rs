@@ -68,6 +68,18 @@ pub enum NodeKind {
     /// Conditional short-circuit: dependents are skipped when `when` is
     /// false.
     Branch,
+    /// Embeds the state text once and scores surviving candidate
+    /// descriptions by cosine (PLANNING.md §24, §52; D21). Annotates
+    /// only — never removes, never reorders.
+    Embedding,
+    /// Narrows each choice question to the top `top_n` semantically
+    /// scored candidates above `floor` (PLANNING.md §53; D21). Every
+    /// dropped candidate is named in the trace; the floor can never
+    /// empty a question.
+    Retrieve,
+    /// Reorders surviving candidates by a named reranker (PLANNING.md
+    /// §26, §54; D21). Never removes.
+    Rerank,
     /// Terminal node; exactly one per graph.
     Output,
 }
@@ -87,6 +99,9 @@ impl NodeKind {
             Self::Score => "score",
             Self::Threshold => "threshold",
             Self::Branch => "branch",
+            Self::Embedding => "embedding",
+            Self::Retrieve => "retrieve",
+            Self::Rerank => "rerank",
             Self::Output => "output",
         }
     }
@@ -115,13 +130,34 @@ pub struct NodeSpec {
     /// Branch condition for `branch` nodes; must be absent elsewhere.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub when: Option<Condition>,
+    /// How many candidates `retrieve` keeps per choice question
+    /// (`retrieve` nodes: required, ≥ 1; absent elsewhere).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_n: Option<usize>,
+    /// Lowest semantic score `retrieve` keeps (`retrieve` nodes only,
+    /// finite in [0, 1]; absent elsewhere).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floor: Option<f64>,
+    /// Which reranking signal a `rerank` node uses: `"lexical"` or
+    /// `"embedding"` (`rerank` nodes: required; absent elsewhere).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reranker: Option<String>,
 }
 
 impl NodeSpec {
     /// Builds a node from an already-validated id.
     #[must_use]
     pub fn new(id: NodeId, kind: NodeKind) -> Self {
-        Self { id, kind, depends_on: Vec::new(), threshold: None, when: None }
+        Self {
+            id,
+            kind,
+            depends_on: Vec::new(),
+            threshold: None,
+            when: None,
+            top_n: None,
+            floor: None,
+            reranker: None,
+        }
     }
 
     /// Builds a node from a raw id string, validating it.
@@ -147,6 +183,30 @@ impl NodeSpec {
     #[must_use]
     pub fn with_condition(mut self, condition: Condition) -> Self {
         self.when = Some(condition);
+        self
+    }
+
+    /// Declares how many candidates `retrieve` keeps, consuming and
+    /// returning `self`.
+    #[must_use]
+    pub fn with_top_n(mut self, top_n: usize) -> Self {
+        self.top_n = Some(top_n);
+        self
+    }
+
+    /// Declares the lowest semantic score `retrieve` keeps, consuming and
+    /// returning `self`.
+    #[must_use]
+    pub fn with_floor(mut self, floor: f64) -> Self {
+        self.floor = Some(floor);
+        self
+    }
+
+    /// Declares which reranking signal a `rerank` node uses, consuming
+    /// and returning `self`.
+    #[must_use]
+    pub fn with_reranker(mut self, reranker: impl Into<String>) -> Self {
+        self.reranker = Some(reranker.into());
         self
     }
 
@@ -182,10 +242,72 @@ impl NodeSpec {
                 }
             }
         }
+        // Narrowing knobs are kind-specific; a knob on the wrong kind is
+        // a graph the author did not mean (D21).
+        if self.top_n.is_some() || self.floor.is_some() || self.reranker.is_some() {
+            match self.kind {
+                NodeKind::Retrieve => {}
+                NodeKind::Rerank if self.top_n.is_none() && self.floor.is_none() => {}
+                _ => {
+                    return Err(invalid(
+                        "only `retrieve` takes top_n/floor, and only `rerank` takes reranker"
+                            .to_owned(),
+                    ));
+                }
+            }
+        }
+        if self.kind == NodeKind::Retrieve {
+            match self.top_n {
+                Some(0) | None => {
+                    return Err(invalid(
+                        "retrieve nodes must declare top_n of at least 1".to_owned(),
+                    ));
+                }
+                Some(_) => {}
+            }
+            if let Some(floor) = self.floor
+                && (!floor.is_finite() || !(0.0..=1.0).contains(&floor))
+            {
+                return Err(invalid(format!("floor must be finite in [0, 1], got {floor}")));
+            }
+        }
+        if self.kind == NodeKind::Rerank {
+            match self.reranker.as_deref() {
+                Some("lexical" | "embedding") => {}
+                _ => {
+                    return Err(invalid(
+                        "rerank nodes must declare reranker as \"lexical\" or \"embedding\""
+                            .to_owned(),
+                    ));
+                }
+            }
+        }
         if let Some(condition) = &self.when {
             condition.validate()?;
         }
         Ok(())
+    }
+
+    /// Whether this kind is a pure function of its dependencies and
+    /// knobs — the set the optimizer's CSE pass may merge (D22). `cache`
+    /// is observable across requests and `threshold`/`output` shape the
+    /// response, so none of them qualify.
+    #[must_use]
+    pub fn is_pure(&self) -> bool {
+        matches!(
+            self.kind,
+            NodeKind::Normalize
+                | NodeKind::Rule
+                | NodeKind::Filter
+                | NodeKind::Lexical
+                | NodeKind::Embedding
+                | NodeKind::Retrieve
+                | NodeKind::Rerank
+                | NodeKind::Choice
+                | NodeKind::Boolean
+                | NodeKind::Score
+                | NodeKind::Branch
+        )
     }
 }
 

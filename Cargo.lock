@@ -1114,6 +1114,8 @@ version = "0.3.0"
 dependencies = [
  "criterion",
  "opencodifier-core",
+ "opencodifier-runtime",
+ "opencodifier-schema",
  "proptest",
  "serde",
  "serde_json",

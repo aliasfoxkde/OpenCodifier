@@ -216,6 +216,33 @@ pub enum EngineError {
     /// A core IR error (invalid request, invalid distribution, ...).
     #[error(transparent)]
     Core(#[from] CoreError),
+
+    /// The graph needs a semantic backend the engine was not assembled
+    /// with (an `embedding`/`retrieve` node, or an embedding `rerank`,
+    /// on a handle without an embedding backend). Refused at assembly —
+    /// before any request — because a silent degrade would decide with
+    /// less evidence than the graph's author asked for (D21).
+    #[error(
+        "graph node `{node}` requires the {backend} backend, which this engine was not assembled with"
+    )]
+    MissingBackend {
+        /// The node that named the requirement.
+        node: String,
+        /// Which backend kind the node needs.
+        backend: String,
+    },
+
+    /// A semantic backend failed while scoring (embedding call failed,
+    /// dimension mismatch, ...). The failing party is identified by its
+    /// model id, mirroring [`EngineError::ClassifierFailed`].
+    #[error("backend `{model_id}` failed: {reason}")]
+    BackendFailed {
+        /// The [`EmbeddingBackend::model_id`](opencodifier_runtime::EmbeddingBackend::model_id)
+        /// of the failing backend.
+        model_id: String,
+        /// What went wrong inside the backend.
+        reason: String,
+    },
 }
 
 impl EngineError {
@@ -245,6 +272,8 @@ impl EngineError {
             Self::Serialization { .. } => "engine.serialization",
             Self::NodeFailed { .. } => "engine.node_failed",
             Self::ClassifierFailed { .. } => "engine.classifier_failed",
+            Self::MissingBackend { .. } => "engine.missing_backend",
+            Self::BackendFailed { .. } => "engine.backend_failed",
             Self::Core(_) => "ir.invalid",
         }
     }
