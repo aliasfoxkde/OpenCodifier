@@ -731,7 +731,7 @@ focused decision is weak.
   CI-exact 1.90)/test/doc/deny green; generator + suite + REPORT
   recorded in the benchmark.
 
-## Phase 17 — external anchor: JevBench public split (engine arm done)
+## Phase 17 — external anchor: JevBench public split (engine + bridge done)
 
 Every REPORT.md number so far is internal (our suite, our seeds). Phase 17
 measures OpenCodifier on a third-party suite with published rows for
@@ -765,14 +765,20 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   stretch tripping the infra stop rule (abstain now maps to the 422
   refusal bucket, still incorrect), and the hours-long "load wedge" was
   the runner's per-row fsync stalling on a contended ext4 journal —
-  the same 231 items take ~60 s on tmpfs. (2) native bridge run + 64.1 %
-  comparison — in flight. (3) fork_4b run on a quiet-host window (D16
-  config). (4) REPORT.md JevBench section + D16/PLAN notes. (5) optional:
-  the fork-side full-distribution patch (D15) upgrades the fork arm from
-  label-only to native Brier/ECE.
+  the same 231 items take ~60 s on tmpfs. (2) ✅ native bridge run —
+  **0.6494 (150/231)** vs the published 64.1 % (148/231), +0.9 pp on the
+  authors' own harness; ECE 0.080 (their stack is calibrated here, ours
+  is not), Brier 0.425, p50 6.72 s, replay determinism 231/231 on
+  labels *and* probability vectors, `probability_sources: ["native"]`
+  only; archived `runs/jevbench/bridge-v1`. (3) fork_4b run on a quiet-host
+  window (D16 config). (4) ✅ REPORT.md JevBench section + JEVBENCH.md
+  results table. (5) optional: the fork-side full-distribution patch
+  (D15) upgrades the fork arm from label-only to native Brier/ECE
+  (patch written both sides, inert until fork rebuild).
 - **Accept (partial):** engine arm: zero synthesized probabilities ✅,
-  replay determinism ✅, all 231 in one run ✅. Bridge reproduction,
-  fork arm, and the REPORT.md section pending.
+  replay determinism ✅, all 231 in one run ✅. Bridge reproduction ✅
+  (+0.9 pp), bridge schema discipline ✅, bridge determinism ✅,
+  REPORT/JEVBENCH sections ✅. fork_4b arm pending quiet host.
 
 ## Phase 18 — hardening pass (coverage, lints, e2e, remaining §-items)
 
@@ -801,13 +807,21 @@ in between. Ordered so each step's output feeds the next.
   Accept: workspace lints all deny-level, `cargo clippy --workspace
   --all-targets -- -D warnings` and `RUSTDOCFLAGS="-D warnings" cargo doc`
   stay green, CI proves it.
-- **18d — E2E validation suite.** One scripted pass that builds the
-  release binary, serves on loopback, and exercises every interface: native
-  `/v1/decide` (choice/boolean/score), Anthropic + OpenAI adapter shapes,
-  `/v1/systemone`, MCP stdio handshake, one recipe run, cache-hit identity,
-  abstain path, limits path. Committed as a `just` recipe + GitForge CI
-  stage. Accept: green stage in CI on the release binary; the suite is the
-  release gate for every future cut.
+- **18d — E2E validation suite.** ✅ One scripted pass (`scripts/e2e_validate.py`,
+  `just e2e`, GitForge `e2e` stage + GitHub mirror) against the release
+  binary: healthz identity, native `/v1/decide` choice/boolean/score,
+  cache-engage identity (identical decision content, `cache_hit` false→
+  true), abstain-as-200, malformed state → 400 `schema.*`, oversized
+  body → 413, graph validate (clean DAG + cycle → `graph.cycle`), and
+  the MCP stdio handshake with the full tool list. Amended while
+  building it: the shipped HTTP surface is exactly the three routes in
+  `routes.rs` — `/v1/systemone` and Anthropic/OpenAI HTTP shapes do not
+  exist (those wire formats are `opencodifier-schema` library adapters,
+  covered by crate tests; §36 endpoints are 18e). The suite also
+  caught two real facts: `policy` is a required request field, and the
+  first run's leaked serve process silently served later runs from warm
+  cache (now guarded by a pre-flight port check). Accept: 13/13 checks
+  green on the release binary; CI stage proves it per push.
 - **18e — §36 HTTP surface completion.** `/v1/batch`, `/v1/graph/run`,
   `/v1/validate`, `/v1/models`, `/v1/capabilities` (semantic-cache probe
   too), each with contract tests from 18d's harness. Accept: every

@@ -392,12 +392,29 @@ scoring drift against every published row is zero by construction.
 | arm | n | accuracy | macro | ECE | Brier | p50 | status |
 |---|---:|---:|---:|---:|---:|---:|---|
 | **engine** (`relational-v1` via `/v1/decide`) | 231 | **0.3766** | 0.4011 | 0.402 | 0.890 | **2.0 ms** | done, det 231/231 |
-| jev_native bridge (0.8B verdict-slot) | 231 | — | — | — | — | — | in flight |
+| **jev_native bridge** (Jev-Style-0.8B-v3 Q4_K_M verdict slot) | 231 | **0.6494** | 0.6378 | 0.080 | 0.425 | 6.72 s | done, det 231/231 |
 | fork_4b (tree mode, D16 config) | 231 | — | — | — | — | — | pending quiet host |
 
 Published anchors for the same split: hosted Jev 86.6 %, llm-qwen3.5-4b
 80.5 % / 651 ms, Jev-Style-2B 73.6 %, decider-2b 71.0 %, open-jev-2b
 64.5 %, Jev-Style-0.8B 64.1 % (our bridge row), Laya 58.4 %.
+
+**Reading the bridge row.** 0.6494 (150/231) vs the published 64.1 %
+(148/231) is a +0.9 pp reproduction delta on the authors' own harness —
+the bridge holds. Their native stack is also *calibrated* on this
+distribution (ECE 0.080 vs our engine's 0.402) and answers with native
+distributions only (`probability_sources: ["native"]`, zero
+synthesized or renormalized rows). Determinism: full 231/231 replay
+matches on both predicted labels and probability vectors. Latency is a
+different world from the engine — 6.72 s p50 (95th percentile 104 s) on
+CPU under shared-host load, ≈3 400× the engine's 2.0 ms. Family profile
+is the mirror image of the engine's: strongest where text patterns are
+clean (tool_selection 12/12, fact 12/12, intent 0.917, extraction
+0.875) and weakest exactly where the engine's abstention-first posture
+is honest (long_policy 0.105, ambiguous 0.143, multi_hop 0.278). The
+bridge establishes comparability for any future model-slot arm; it does
+not change the architecture claim — it is the expensive tier the ladder
+escalates to.
 
 **Reading the engine row honestly.** 0.3766 is barely above the 0.3176
 chance floor and far below every trained row. The ladder that scores
@@ -706,3 +723,13 @@ hash is a changed artifact and invalidates the row (D14).
   probabilities; the trained field rows sit 58–87 %. Bridge (native
   verdict-slot vs the 0.8B published 64.1 %) and the fork_4b arm
   pending.
+- **2026-09-29 (external anchor, bridge arm)** — jev_native bridge done:
+  **0.6494 (150/231)** vs the published 64.1 % (148/231) on the
+  authors' own harness — a +0.9 pp reproduction, bridge holds. ECE
+  0.080 (their stack is calibrated on this distribution; ours is not),
+  Brier 0.425, p50 6.72 s, full 231/231 replay determinism on labels
+  and probability vectors, `probability_sources: ["native"]` only.
+  Family profile mirrors the engine: strong on clean-text families
+  (tool_selection/fact 1.000), weak exactly where the engine abstains
+  honestly (long_policy 0.105, ambiguous 0.143). fork_4b pending quiet
+  host. Archived `runs/jevbench/bridge-v1`.

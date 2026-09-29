@@ -49,6 +49,16 @@ jobs:
           export RUSTDOCFLAGS="-D warnings"
           cargo doc --workspace --no-deps
 
+  - name: e2e
+    image: opencodifier-ci-rust:1
+    needs: [test]
+    timeout: 30m
+    steps:
+      - name: Release binary
+        run: cargo build --release
+      - name: End-to-end validation (serve + MCP, PLAN 18d)
+        run: python3 scripts/e2e_validate.py --binary target/release/opencodifier --port 8188
+
   - name: supply-chain
     image: opencodifier-ci-rust:1
     needs: [lint]

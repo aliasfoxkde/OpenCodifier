@@ -43,6 +43,11 @@ scan:
 machete:
     cargo machete
 
+# End-to-end validation of the release binary (PLAN 18d): serve + MCP over
+# the real wire. Requires a prior `just build-release`.
+e2e port='8188':
+    python3 scripts/e2e_validate.py --binary target/release/opencodifier --port {{port}}
+
 # Pins for `just ci-image`; the Dockerfile ARG is the pin of record — keep
 # the two in sync. Override via env when re-pinning.
 aegis_src := env_var_or_default('AEGIS_SRC', '/nas/Temp/repos/aegis')
