@@ -100,14 +100,20 @@ the rest named), **designed** (design of record exists, no code),
 
 ## What remains, ordered (the actionable distillation)
 
-**CPU-light (doable on a busy host):**
-2. **D15 full-distribution refit prep** — runner change: log top-k candidate
-   probabilities per decision so calibration can refit beyond winner-vs-rest
-   (noted as future work in Phase 14).
-3. **#25 MBLI arm design** — the per-option verdict-slot readout interface
-   (Jev-Style-v3) as a benchmark arm type; design now, run when the host frees.
-4. **#39 JevBench methodology** — pick the published comparison rows and the
-   A/B protocol; run later.
+**CPU-light (doable on a busy host) — consumed 2026-09-29:**
+2. ~~D15 full-distribution refit prep~~ **done** — the fork emits the full
+   per-choice softmax (`fields.<f>.distribution`, branch
+   `d15-full-distribution` in the out-of-tree llama.cpp checkout) and
+   `run_llama.py` records it as per-item `probs`; rebuild + validation wait
+   for a quiet-host window, after which calibration refits beyond
+   winner-vs-rest and the fork_4b JevBench arm upgrades to native Brier/ECE.
+3. ~~#25 MBLI arm design~~ **done** — `benchmarks/decision-model/NATIVE_VERDICT_ARM.md`
+   + `runner/run_jev_native.py` (verdict-slot readout, manifest-verified
+   reference runtime); first run queued behind the params A/B.
+4. ~~#39 JevBench methodology~~ **done** — `benchmarks/decision-model/JEVBENCH.md`
+   + `runner/run_jevbench.py`; engine arm complete (231/231, acc 0.3766,
+   p50 2.0 ms, det 231/231 — `results/REPORT.md` external-anchor section),
+   bridge arm in replay, fork_4b pending.
 
 **Needs the host quiet (cargo builds/tests):**
 5. **§36 HTTP surface completion** — `/v1/batch`, `/v1/graph/run`, `/v1/validate`, `/v1/systemone`, `/v1/models`, `/v1/capabilities`.
