@@ -799,18 +799,33 @@ in between. Ordered so each step's output feeds the next.
   The first census attempt was contaminated (stale `llvm-cov-target`
   instrumentation reported ghost files at 0 %); the purge recipe and
   the ghost-file check are recorded in COVERAGE.md.
-- **18b — Gap tests (CPU-light authoring, gated by 18a's table).** Tests
-  for every `testable-now` gap, in each crate's `tests/` per the harness
-  rules; `needs-harness` gaps get a named harness plan (mock `Clock`,
-  fault-injection providers) instead of being skipped silently. Accept:
-  `just test-cov` at **≥99 % lines / ≥99 % functions / ≥99 % regions** or
-  an explicit per-gap waiver with reason in `docs/COVERAGE.md`.
-- **18c — Strict lints.** Census `missing_docs` warnings (`cargo doc` run
-  needed), document-and-deny: `missing_docs` deny after the docs are
-  written; audit any remaining warn-level lint in the workspace lint table.
-  Accept: workspace lints all deny-level, `cargo clippy --workspace
-  --all-targets -- -D warnings` and `RUSTDOCFLAGS="-D warnings" cargo doc`
-  stay green, CI proves it.
+- **18b — Gap tests (CPU-light authoring, gated by 18a's table).**
+  ✅ Done 2026-09-29: 18 tests across five crates closed every
+  reachable gap — line-truth misses went 121 → 78, and all 78
+  remaining lines are classified unreachable-by-construction in
+  `docs/COVERAGE.md`'s waiver table (`#[non_exhaustive]` future-
+  variant arms, `Distribution::from_pairs` arms fed by data the
+  constructors preclude, guards implied by an earlier check, serde
+  infallibility). Highlights: mutex-poisoning fault injection for the
+  cache and clock (real panic under the held lock, degraded-but-correct
+  service asserted), the IR's last-line confidence validation pinned
+  via a public-seam `Calibration`, and real-SIGINT tests for `serve`
+  and the HTTP shutdown signal. Acceptance is via PLAN's explicit
+  per-gap waiver clause: the text-column numbers (98.69 % lines /
+  96.02 % functions / 97.91 % regions) cannot reach 99 % without
+  covering construction-unreachable code, and COVERAGE.md documents
+  the three measurement views so the residual is understood rather
+  than chased. (The 18a census had the text table's Lines and Regions
+  columns swapped; COVERAGE.md carries the correction.)
+- **18c — Strict lints.** ✅ Done 2026-09-29: the census collapsed to a
+  proof rather than a backlog — every crate wires workspace lints and
+  CI's `-D warnings` lint lane was green, so `missing_docs` (plus
+  `rust_2018_idioms`, `clippy::all`, `clippy::pedantic`) had zero
+  violations and were flipped warn → deny directly. A bare local
+  `cargo clippy --workspace --all-targets` is now as strict as CI.
+  Accept: workspace lints all deny-level (the four pedantic waivers
+  remain, documented with reasons), clippy and rustdoc green — CI
+  proves it per push.
 - **18d — E2E validation suite.** ✅ One scripted pass (`scripts/e2e_validate.py`,
   `just e2e`, GitForge `e2e` stage + GitHub mirror) against the release
   binary: healthz identity, native `/v1/decide` choice/boolean/score,
