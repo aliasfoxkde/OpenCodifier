@@ -76,6 +76,18 @@ pub const CODE_OUTPUT_FAILED: &str = "cli.output_failed";
 /// Stable code reported when the async runtime cannot be built for `serve`.
 pub const CODE_RUNTIME_FAILED: &str = "cli.runtime_failed";
 
+/// Stable code reported when `recipe install` is given a name the built-in
+/// fleet does not carry.
+pub const CODE_UNKNOWN_RECIPE: &str = "cli.unknown_recipe";
+
+/// Stable code reported when `recipe install` would replace an existing
+/// installation without `--force`.
+pub const CODE_RECIPE_EXISTS: &str = "cli.recipe_exists";
+
+/// Stable code reported when the recipe installation directory cannot be
+/// created or written.
+pub const CODE_UNWRITABLE_DESTINATION: &str = "cli.unwritable_destination";
+
 /// The MCP serving session itself failed (handshake refused, session task
 /// ended abnormally). Internal error: exit 3.
 pub const CODE_MCP_SESSION_FAILED: &str = "mcp.session_failed";

@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "normalize",
+      "kind": "normalize"
+    },
+    {
+      "id": "rule",
+      "kind": "rule",
+      "depends_on": [
+        "normalize"
+      ]
+    },
+    {
+      "id": "cache",
+      "kind": "cache",
+      "depends_on": [
+        "normalize"
+      ]
+    },
+    {
+      "id": "score",
+      "kind": "score",
+      "depends_on": [
+        "rule",
+        "cache"
+      ]
+    },
+    {
+      "id": "threshold",
+      "kind": "threshold",
+      "depends_on": [
+        "score"
+      ],
+      "threshold": 0.6
+    },
+    {
+      "id": "output",
+      "kind": "output",
+      "depends_on": [
+        "threshold"
+      ]
+    }
+  ]
+}

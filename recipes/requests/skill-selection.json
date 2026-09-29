@@ -1,0 +1,51 @@
+{
+  "state": {
+    "text": "select the skill that should own this repository task",
+    "facts": {}
+  },
+  "questions": [
+    {
+      "type": "choice",
+      "id": "skill",
+      "text": "Which skill should handle this task?",
+      "candidates": [
+        {
+          "id": "rust-review",
+          "description": "Review Rust changes"
+        },
+        {
+          "id": "python-test",
+          "description": "Test Python tooling"
+        },
+        {
+          "id": "docs-write",
+          "description": "Write project documentation"
+        },
+        {
+          "id": "bench-run",
+          "description": "Run benchmarks"
+        }
+      ]
+    }
+  ],
+  "policy": {
+    "min_confidence": 0.7,
+    "verify_below": 0.55,
+    "abstain_below": 0.45,
+    "risk": "low"
+  },
+  "metadata": {
+    "request_id": "recipe-skill-selection-0001",
+    "limits": {
+      "max_input_bytes": 1048576,
+      "max_questions": 32,
+      "max_candidates": 256,
+      "max_graph_nodes": 128,
+      "max_execution_time": {
+        "secs": 10,
+        "nanos": 0
+      },
+      "max_retrieval_results": 64
+    }
+  }
+}

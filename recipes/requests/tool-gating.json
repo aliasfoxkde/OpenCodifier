@@ -1,0 +1,33 @@
+{
+  "state": {
+    "text": "decide whether the request may run a tool that changes files",
+    "facts": {}
+  },
+  "questions": [
+    {
+      "type": "boolean",
+      "id": "tool_allowed",
+      "text": "May this request run a tool?"
+    }
+  ],
+  "policy": {
+    "min_confidence": 0.9,
+    "verify_below": 0.8,
+    "abstain_below": 0.7,
+    "risk": "critical"
+  },
+  "metadata": {
+    "request_id": "recipe-tool-gating-0001",
+    "limits": {
+      "max_input_bytes": 1048576,
+      "max_questions": 32,
+      "max_candidates": 256,
+      "max_graph_nodes": 128,
+      "max_execution_time": {
+        "secs": 10,
+        "nanos": 0
+      },
+      "max_retrieval_results": 64
+    }
+  }
+}

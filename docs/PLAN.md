@@ -868,9 +868,21 @@ in between. Ordered so each step's output feeds the next.
   to `instantiate()`'s exact output; the recipe's expected response was
   captured against `minimal-choice.json` (`verify`, top 0.687).
   SPEC_COVERAGE §63 → done.
-- **18g — §34 recipe fleet + `recipe install`.** The twelve recipe areas
-  as runnable graphs + the install path. Accept: fleet in `recipes/`,
-  install exercised by 18d's suite.
+- **18g — §34 recipe fleet + `recipe install`.** Status: complete. The
+  twelve §34 decision areas are runnable recipes under `recipes/` —
+  graph + request + captured response each (5 verify, 7 abstain outcomes;
+  abstention is the honest zero-ML posture, not a gap).
+  `opencodifier recipe list` names the fleet; `recipe install <name>
+  [--dest DIR] [--force]` writes the three files into a project-local
+  directory (default `./recipes`), refusing to clobber without `--force`
+  (`cli.recipe_exists`) and refusing unknown names (`cli.unknown_recipe`).
+  The fleet ships inside the binary via `include_str!`
+  (`crates/opencodifier-cli/src/recipes.rs`), so installed bytes are
+  byte-identical to the committed copies — asserted by unit and
+  integration tests and by the e2e suite. 18d's suite grew 21 → 30
+  checks (list coverage, install byte-identity, overwrite guard, and
+  decide-through-install matching the captured outcome on a fresh
+  server). SPEC_COVERAGE §34 → done.
 - **18h — Graph nodes (§53 retrieval, §26/§54 rerank, §51 optimizer).**
   Own sub-phase after 18e: `retrieve` node over the §24 embedding seam,
   rerank node, then a first real optimizer pass (constant-folding +

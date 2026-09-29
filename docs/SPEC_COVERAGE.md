@@ -55,8 +55,8 @@ the rest named), **designed** (design of record exists, no code),
 | 31 | MCP | done | rmcp 2.2 stdio server, six `codify_*` tools (D17) |
 | 32 | MCP Tool Introspection | done | rmcp schema introspection |
 | 33 | Skills | done | `skills/` — README protocol + all eight §33 areas (routing, model-selection, tool-selection, tool-gating, context-pruning, escalation, verification, memory-selection) |
-| 34 | Built-in Recipes | partial | `recipes/` ships 3 runnable graphs + captured responses (Phase 11); §34 lists 12 recipe areas and an `opencodifier recipe install` command that don't exist |
-| 35 | CLI | done | `decide`/`graph validate`/`serve`/`models verify`/`mcp serve`, D13 exit codes, `--focus-budget` |
+| 34 | Built-in Recipes | done | the twelve §34 areas as runnable graphs + paired requests + captured responses under `recipes/`; `opencodifier recipe list` / `recipe install [--dest] [--force]` ship the fleet inside the binary (`include_str!`), installed bytes byte-identical to the committed copies (18g) |
+| 35 | CLI | done | `decide`/`graph validate`/`serve`/`models verify`/`mcp serve`/`recipe list`/`recipe install`, D13 exit codes, `--focus-budget` |
 | 36 | HTTP API | partial | `POST /v1/decide`, `/v1/graph/validate`, `GET /v1/healthz` shipped; **not shipped:** `/v1/batch`, `/v1/graph/run`, `POST /v1/validate`, `/v1/systemone` compat, `GET /v1/models`, `/v1/capabilities` |
 | 37 | Local Server | done | loopback default, explicit `--host` flag, gate-tested |
 | 38 | Privacy | done | no telemetry/cloud/accounts; explicit downloads; SHA-256 manifests (D14) |

@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "nodes": [
+    {
+      "id": "normalize",
+      "kind": "normalize"
+    },
+    {
+      "id": "filter",
+      "kind": "filter",
+      "depends_on": [
+        "normalize"
+      ]
+    },
+    {
+      "id": "lexical",
+      "kind": "lexical",
+      "depends_on": [
+        "filter"
+      ]
+    },
+    {
+      "id": "choice",
+      "kind": "choice",
+      "depends_on": [
+        "lexical"
+      ]
+    },
+    {
+      "id": "threshold",
+      "kind": "threshold",
+      "depends_on": [
+        "choice"
+      ],
+      "threshold": 0.55
+    },
+    {
+      "id": "output",
+      "kind": "output",
+      "depends_on": [
+        "threshold"
+      ]
+    }
+  ]
+}

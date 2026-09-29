@@ -844,3 +844,96 @@ fn mcp_serve_refuses_an_unreadable_graph_document_before_the_session() {
         .code(1)
         .stderr(predicates::str::contains("graph.cycle"));
 }
+
+#[test]
+fn recipe_list_names_the_twelve_areas() {
+    let output =
+        opencodifier().args(["recipe", "list"]).output().expect("run opencodifier recipe list");
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8(output.stdout).expect("list is utf-8");
+    for name in [
+        "model-routing",
+        "task-classification",
+        "tool-selection",
+        "tool-gating",
+        "context-pruning",
+        "cache-eligibility",
+        "skill-selection",
+        "memory-selection",
+        "escalation",
+        "verification",
+        "document-relevance",
+        "code-review-risk",
+    ] {
+        assert!(stdout.contains(name), "list is missing `{name}`: {stdout}");
+    }
+}
+
+#[test]
+fn recipe_installs_the_fleet_files_and_overwrite_requires_force() {
+    let scratch = Scratch::new("recipe-install");
+    let dest = scratch.path().join("fleet");
+
+    opencodifier()
+        .args(["recipe", "install", "model-routing"])
+        .arg("--dest")
+        .arg(&dest)
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("ok: installed recipe"));
+
+    let target = dest.join("model-routing");
+    for file in ["graph.json", "request.json", "expected-response.json"] {
+        assert!(target.join(file).is_file(), "{file} was not installed");
+    }
+
+    // The installed graph runs: the same DAG contract `graph validate`
+    // applies to any document applies to an installed recipe.
+    opencodifier()
+        .args(["graph", "validate"])
+        .arg(target.join("graph.json"))
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("ok: graph"));
+
+    // The installed bytes are the shipped bytes — identical to the
+    // committed fleet copies the binary was built from.
+    let committed =
+        fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../../recipes/model-routing.json"))
+            .expect("committed fleet graph");
+    assert_eq!(
+        fs::read(target.join("graph.json")).expect("installed graph"),
+        committed,
+        "install must reproduce the committed fleet bytes"
+    );
+
+    // A second install would clobber a captured expected response, so it
+    // refuses until --force says otherwise.
+    opencodifier()
+        .args(["recipe", "install", "model-routing"])
+        .arg("--dest")
+        .arg(&dest)
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("cli.recipe_exists"));
+    opencodifier()
+        .args(["recipe", "install", "model-routing", "--force"])
+        .arg("--dest")
+        .arg(&dest)
+        .assert()
+        .success();
+}
+
+#[test]
+fn recipe_install_rejects_an_unknown_name() {
+    let scratch = Scratch::new("recipe-unknown");
+    opencodifier()
+        .args(["recipe", "install", "does-not-exist"])
+        .arg("--dest")
+        .arg(scratch.path())
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("cli.unknown_recipe"));
+}

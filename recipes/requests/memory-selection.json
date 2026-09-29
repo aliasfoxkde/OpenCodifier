@@ -1,0 +1,47 @@
+{
+  "state": {
+    "text": "decide which memory scope a newly learned fact belongs in",
+    "facts": {}
+  },
+  "questions": [
+    {
+      "type": "choice",
+      "id": "memory_scope",
+      "text": "Which memory scope should hold this fact?",
+      "candidates": [
+        {
+          "id": "session",
+          "description": "Dies with the session"
+        },
+        {
+          "id": "project",
+          "description": "Scoped to this repository"
+        },
+        {
+          "id": "global",
+          "description": "Follows the user everywhere"
+        }
+      ]
+    }
+  ],
+  "policy": {
+    "min_confidence": 0.7,
+    "verify_below": 0.55,
+    "abstain_below": 0.45,
+    "risk": "low"
+  },
+  "metadata": {
+    "request_id": "recipe-memory-selection-0001",
+    "limits": {
+      "max_input_bytes": 1048576,
+      "max_questions": 32,
+      "max_candidates": 256,
+      "max_graph_nodes": 128,
+      "max_execution_time": {
+        "secs": 10,
+        "nanos": 0
+      },
+      "max_retrieval_results": 64
+    }
+  }
+}

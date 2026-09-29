@@ -21,6 +21,45 @@ name the deciding stack by its composed model id
 | [`boolean-score.json`](boolean-score.json) | A graph without a `choice` node: boolean and score questions only. | `abstain` — lexical evidence for both questions is below `abstain_below` (0.5). Abstention is a successful outcome (HTTP 200); the answers array still carries the full distributions. |
 | [`registry/`](registry/) | The §63 Decision Registry end to end (D20): [`registry/model-selection.definition.json`](registry/model-selection.definition.json) is a decision *definition*; its request is the exact output of `DecisionDefinition::instantiate` (pinned by a test, not hand-written), run through `minimal-choice.json`'s graph. | `verify` — the registry path feeds the same IR and engine as a hand-written request: top probability 0.687 for `local-glm`, between `verify_below` (0.65) and `min_confidence` (0.8). |
 
+### The fleet (§34)
+
+The twelve decision areas of PLANNING.md §34, one runnable recipe each.
+These ship *inside the binary*: `opencodifier recipe list` prints this
+table and `opencodifier recipe install <name>` writes the same three
+files (byte-identical to the committed copies) into a directory of your
+project. Several abstain with the paired request — on the zero-ML
+default stack that is the honest, correct outcome, and it demonstrates
+the posture (an abstention is a successful outcome) better than a
+forced answer would.
+
+| Recipe | Area | Outcome with the paired request |
+|--------|------|---------------------------------|
+| [`model-routing.json`](model-routing.json) | Route a request to a model | `verify` (0.681) |
+| [`task-classification.json`](task-classification.json) | Classify a task's workflow class | `abstain` (0.25) |
+| [`tool-selection.json`](tool-selection.json) | Pick the tool for a step | `abstain` (0.333) |
+| [`tool-gating.json`](tool-gating.json) | Gate whether a tool may run at all | `verify` (0.76) |
+| [`context-pruning.json`](context-pruning.json) | How much context survives pruning | `verify` (0.571) |
+| [`cache-eligibility.json`](cache-eligibility.json) | May this be answered from cache | `verify` (0.64) |
+| [`skill-selection.json`](skill-selection.json) | Which skill owns the task | `abstain` (0.25) |
+| [`memory-selection.json`](memory-selection.json) | Which memory scope holds a fact | `abstain` (0.333) |
+| [`escalation.json`](escalation.json) | Escalate to a human (0.95 gate) | `abstain` (0.571) |
+| [`verification.json`](verification.json) | Does an answer need verification | `verify` (0.703) |
+| [`document-relevance.json`](document-relevance.json) | Score a document's relevance | `abstain` (0.333) |
+| [`code-review-risk.json`](code-review-risk.json) | Score a change's review risk | `abstain` (0.25) |
+
+Installing and running one:
+
+```bash
+opencodifier recipe install model-routing
+opencodifier serve --bind 127.0.0.1:8971 --graph recipes/model-routing/graph.json
+curl -s -X POST http://127.0.0.1:8971/v1/decide -H 'Content-Type: application/json' \
+  --data-binary @recipes/model-routing/request.json
+```
+
+An install refuses to overwrite an existing directory unless `--force`
+is passed (`cli.recipe_exists`), and unknown names are input errors
+(`cli.unknown_recipe`).
+
 Each recipe's request lives in [`requests/`](requests/) and its captured
 response in [`expected/`](expected/).
 
