@@ -200,10 +200,17 @@ or the harness source, not assumed:
   value** (raw evidence: `value=false, probability=0.64` = p(no) 0.64), so
   p(yes) = 1 − p for a false answer. This contradicts the Jev wire format's
   p(yes) convention — the Jev codec translates; the native codec does not.
-- **Abstention maps to incorrect.** The engine's policy (min_confidence
-  0.8, abstain_below 0.5) abstains readily on 2-option items; their runner
-  scores a failed answer incorrect, which is the honest mapping — an
-  abstaining engine is a system with no answer, not a half-right one.
+- **Abstention maps to incorrect — and to their 422 refusal bucket.** The
+  engine's policy (min_confidence 0.8, abstain_below 0.5) abstains readily
+  on 2-option items; their runner scores a failed answer incorrect, which
+  is the honest mapping — an abstaining engine is a system with no answer,
+  not a half-right one. But the refusal must carry `status_code=422`:
+  their runner counts a not-ok record as an infrastructure error unless it
+  is a 422 (their comment: "a 422 is the system refusing this input, not
+  an outage"), and 3 consecutive infra errors stop the run. The engine's
+  abstain pattern is deterministic, so both engine runs stopped at exactly
+  item 186 (3 consecutive abstains) before the classification — an
+  item-triggered stop that masqueraded as a load wedge twice.
 - **Their `Runner` opens results files exclusively** (`open("x")`) and
   keeps raw evidence keyed by sha256 of the task id — reruns need a fresh
   out-dir; the ledger enforces budget from reservations, so local zero-tariff

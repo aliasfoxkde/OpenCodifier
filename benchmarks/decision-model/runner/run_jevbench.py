@@ -194,7 +194,9 @@ class EngineAdapter:
                     "levels": [{"label": lab} for lab in t.labels],
                 }
             else:
-                return DecisionResult(self.name, False, error=f"unhandled_type:{qtype}")
+                # Structural per-item refusal, same 422 bucket as abstain.
+                return DecisionResult(self.name, False, status=422,
+                                      error=f"unhandled_type:{qtype}")
             resp = self._post(
                 {
                     # Native state is strict: facts must be present, even empty.
@@ -230,9 +232,17 @@ class EngineAdapter:
         raw = {"request": question, "answer": ans, "outcome": outcome}
         if outcome not in ("accept", "verify"):
             # Abstention is a successful engine outcome and an incorrect
-            # JevBench answer; no guess is manufactured to dodge it.
+            # JevBench answer; no guess is manufactured to dodge it. Status
+            # 422 is the runner's "system refused this input" bucket (their
+            # runner.py: a 422 counts wrong but is not an outage, so it does
+            # not feed the 3-consecutive-infra-errors stop rule) — an
+            # abstain is a per-item policy refusal, not an infrastructure
+            # failure, and the engine's abstain pattern is deterministic
+            # (runs v1 and v2 both stopped at 185/231 on 3 consecutive
+            # abstains before this classification).
             return DecisionResult(
-                self.name, False, error=f"engine_{outcome}", latency_s=latency, raw=raw
+                self.name, False, status=422, error=f"engine_{outcome}",
+                latency_s=latency, raw=raw,
             )
         probs = None
         if qtype == "noul":
