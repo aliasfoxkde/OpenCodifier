@@ -27,14 +27,18 @@ authors = ["OpenCodifier contributors"]
 # The engine is pure safe Rust; any unsafe block must be a reviewed,
 # documented exception added locally with justification.
 unsafe_code = "forbid"
-# Doc coverage is enforced by CI (`-D warnings`), not by taste.
-missing_docs = "warn"
+# Deny-level since 18c: every public item is documented, so a missing
+# doc is a new violation, not a cleanup backlog.
+missing_docs = "deny"
 missing_debug_implementations = "deny"
-rust_2018_idioms = { level = "warn", priority = -1 }
+rust_2018_idioms = { level = "deny", priority = -1 }
 
 [workspace.lints.clippy]
-all = { level = "warn", priority = -1 }
-pedantic = { level = "warn", priority = -1 }
+# Deny-level since 18c (18a verified zero violations): the gate no
+# longer depends on CI passing `-D warnings` — a bare local
+# `cargo clippy` is just as strict.
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
 
 # Pedantic lints that fight idiomatic library APIs are waived here, once,
 # with reasons — not scattered through the code.
