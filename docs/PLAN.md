@@ -790,11 +790,15 @@ the benchmark arms — plan them for windows, author the code/tests CPU-light
 in between. Ordered so each step's output feeds the next.
 
 - **18a — Coverage census (needs quiet host, ~one `just test-cov` run).**
-  Run the gated coverage (92/91/90 lines/functions/regions today) and
-  produce a per-crate gap table committed to `docs/COVERAGE.md`: uncovered
-  lines grouped by module, each tagged `testable-now` (input-shaping,
-  error paths, adapters) or `needs-harness` (fault injection, time, I/O).
-  Accept: table exists, every gap classified, no unexamined crate.
+  ✅ Done 2026-09-29: `docs/COVERAGE.md` — baseline **97.47 % lines /
+  95.56 % functions / 98.20 % regions** (19 230 lines), per-crate table,
+  every gap ≥ 5 lines classified `testable-now` / `needs-harness` /
+  `mixed` with the 18b plan or waiver named. ~425 of 487 missed lines
+  are reachable by normal tests; the embedding-model-file, cache-
+  concurrency, and executor-deadline slices carry the waiver plans.
+  The first census attempt was contaminated (stale `llvm-cov-target`
+  instrumentation reported ghost files at 0 %); the purge recipe and
+  the ghost-file check are recorded in COVERAGE.md.
 - **18b — Gap tests (CPU-light authoring, gated by 18a's table).** Tests
   for every `testable-now` gap, in each crate's `tests/` per the harness
   rules; `needs-harness` gaps get a named harness plan (mock `Clock`,
