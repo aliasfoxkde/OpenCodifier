@@ -89,9 +89,15 @@ def decide_single(port: int, suite: dict, it: dict, timeout: float) -> dict:
     res = resp["results"][0]
     field = res["fields"]["choice"]
     usage = resp.get("usage", {}) or res.get("usage", {})
+    # Fork builds after 2026-09-29 also emit the full per-choice softmax
+    # (`distribution`) next to the winner-only `probability`; record it when
+    # present so calibration gets native Brier/ECE instead of winner-only
+    # margins. Absent (stock ad129b0 binary) the row is unchanged.
+    dist = field.get("distribution")
     return {
         "value": field["value"],
         "probability": field["probability"],
+        **({"probs": dist} if isinstance(dist, dict) else {}),
         "server_ms": resp.get("timings", {}).get("per_decision_ms"),
         "prefill_ms": resp.get("timings", {}).get("prefill_ms"),
         "cached_tokens": usage.get("cached_tokens"),
@@ -111,6 +117,7 @@ def run_suite(port: int, suite: dict, items: list[dict], timeout: float) -> list
                 "answer": it["answer"],
                 "pred": r["value"],
                 "prob": r["probability"],
+                **({"probs": r["probs"]} if "probs" in r else {}),
                 "server_ms": r["server_ms"],
                 "prefill_ms": r["prefill_ms"],
                 "cached_tokens": r["cached_tokens"],
