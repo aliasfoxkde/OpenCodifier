@@ -731,6 +731,42 @@ focused decision is weak.
   CI-exact 1.90)/test/doc/deny green; generator + suite + REPORT
   recorded in the benchmark.
 
+## Phase 17 — external anchor: JevBench public split (in progress)
+
+Every REPORT.md number so far is internal (our suite, our seeds). Phase 17
+measures OpenCodifier on a third-party suite with published rows for
+comparable systems. Methodology of record:
+`benchmarks/decision-model/JEVBENCH.md` (dataset and harness verified
+against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
+231 public items; choice 139 / noul 74 / score 18; mean chance 0.3176).
+
+- **Harness discipline.** The authors' own harness runs our arms — their
+  runner, their scoring (argmax for choice/noul, expected value for
+  score, multi-class Brier, top-label ECE), their serial no-retry budget
+  semantics, raw evidence outside both repos. Zero scoring drift against
+  every published row is the whole point.
+- **The bridge row.** Jev-Style-0.8B-Decision-v3 Q4_K_M through its
+  native verdict-slot readout first: its authors self-ran exactly these
+  weights on exactly these 231 items with the official harness and
+  published **64.1 % (148/231)**. Reproducing that within a few points
+  validates adapter and environment; every other row we produce then
+  transfers to the published context.
+- **Arms.** engine (default deterministic stack over `/v1/decide`;
+  abstain → incorrect, winner-only → label-only — never an invented
+  tail), fork_4b (tree mode, label-only per D15), jev_native (native
+  probs). `runner/run_jevbench.py`, wire facts smoke-verified and
+  recorded in JEVBENCH.md.
+- **Sub-steps.** (1) engine arm complete run (v2 rerun in flight after
+  the v1 server wedge; server logs now captured); (2) native bridge run
+  + 64.1 % comparison; (3) fork_4b run on a quiet-host window (D16
+  config); (4) REPORT.md JevBench section + D16/PLAN notes; (5) optional:
+  the fork-side full-distribution patch (D15) upgrades the fork arm from
+  label-only to native Brier/ECE.
+- **Accept (unmet):** bridge reproduction; zero synthesized probabilities
+  in the raw evidence; replay determinism per arm; all 231 attempted in
+  one `run_all` per arm (their stop rule must not silently truncate — a
+  partial run is quarantined and rerun fresh, never patched up).
+
 ## Spec coverage map (audit, 2026-09-28)
 
 All 17 tracked phases are done; the §-by-§ check that every PLANNING

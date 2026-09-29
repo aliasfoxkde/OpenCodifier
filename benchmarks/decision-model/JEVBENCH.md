@@ -94,6 +94,9 @@ reimplementation). The harness is MIT; raw evidence lands outside both repos.
 92 items have `labels` with no per-label `criteria` (easy-fact style) — those
 candidates carry no description; adapters must not invent one. The engine arm
 runs criteria-less candidates through the same candidate list unchanged.
+35 items (multi_hop and friends) carry a **structured** `state` object; the
+adapters serialize it deterministically (`json.dumps`) into the `state` text
+channel, and the raw evidence records the exact rendered request.
 
 ## Arms (in run order)
 
@@ -177,6 +180,34 @@ milliseconds. Acceptance criteria:
 - **Calibration context.** Their Calibration axis (ECE + fidelity to gold
   distributions) and the published ECE of Jev-class models give D15's
   temperature artifacts an external reference point.
+
+## Wire facts verified in smoke (2026-09-28, `runner/run_jevbench.py --arm engine`)
+
+Facts the engine adapter depends on, each verified against the live engine
+or the harness source, not assumed:
+
+- **Native `state` is strict**: `{"text": ..., "facts": {}}` — an omitted
+  `facts` field is `schema.invalid_value` (the native codec rejects unknown
+  *and* missing fields by design).
+- **Native score `levels` are structs**: `[{"label": "0"}, ...]`; level
+  descriptions are not representable (the IR's `ScoreLevel` carries a label
+  only), so the JevBench rubric rides in the question text (`Rubric — 0:
+  ...; 1: ...` — the item's own content, never invented).
+- **Answer distributions** serialize as `{"entries": [{"key": k,
+  "probability": p}]}`; a full-probs emission requires exact label-set
+  coverage and an ~unit sum, else the item degrades to label-only.
+- **The Boolean answer's `probability` is the confidence of the DECIDED
+  value** (raw evidence: `value=false, probability=0.64` = p(no) 0.64), so
+  p(yes) = 1 − p for a false answer. This contradicts the Jev wire format's
+  p(yes) convention — the Jev codec translates; the native codec does not.
+- **Abstention maps to incorrect.** The engine's policy (min_confidence
+  0.8, abstain_below 0.5) abstains readily on 2-option items; their runner
+  scores a failed answer incorrect, which is the honest mapping — an
+  abstaining engine is a system with no answer, not a half-right one.
+- **Their `Runner` opens results files exclusively** (`open("x")`) and
+  keeps raw evidence keyed by sha256 of the task id — reruns need a fresh
+  out-dir; the ledger enforces budget from reservations, so local zero-tariff
+  arms pass `default_reserve_usd=0.0` rather than a pretend cap.
 
 ## Sources
 
