@@ -107,6 +107,19 @@ pub async fn serve_with_shutdown(
     handle: Arc<EngineHandle>,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> HttpResult<()> {
+    // Register the shutdown source *before* the socket opens. A signal
+    // future such as [`shutdown_signal`] only arms its handler on its
+    // first poll, so without this pre-poll there is a startup window in
+    // which the port accepts connections but a `SIGINT` still kills the
+    // process through the default disposition instead of draining it —
+    // wide on a loaded machine. Once the listener exists, the handler
+    // must exist too. An already-satisfied shutdown future honours the
+    // caller and never binds.
+    let mut shutdown: std::pin::Pin<Box<dyn Future<Output = ()> + Send>> = Box::pin(shutdown);
+    if pre_poll_shutdown(shutdown.as_mut()).is_ready() {
+        return Ok(());
+    }
+
     let listener = tokio::net::TcpListener::bind(config.bind)
         .await
         .map_err(|source| HttpError::Bind { addr: config.bind, source })?;
@@ -120,9 +133,20 @@ pub async fn serve_with_shutdown(
     }
 
     axum::serve(listener, router(handle))
-        .with_graceful_shutdown(shutdown)
+        .with_graceful_shutdown(async move { shutdown.as_mut().await })
         .await
         .map_err(HttpError::from)
+}
+
+/// Polls a shutdown future once with a no-op waker purely for its
+/// registration side effect. Returns the poll result so an already-satisfied
+/// future is not silently swallowed.
+fn pre_poll_shutdown(
+    shutdown: std::pin::Pin<&mut (dyn Future<Output = ()> + Send)>,
+) -> std::task::Poll<()> {
+    let waker = std::task::Waker::noop();
+    let mut context = std::task::Context::from_waker(waker);
+    shutdown.poll(&mut context)
 }
 
 /// Resolves when the operator interrupts the process (`Ctrl-C`).
@@ -195,6 +219,28 @@ mod tests {
             resolved.expect("shutdown deadline").is_ok(),
             "shutdown_signal must resolve on SIGINT, not be dropped"
         );
+    }
+
+    /// The shutdown contract is armed before the socket opens: a shutdown
+    /// future that is *already* satisfied ends the server without ever
+    /// binding, and [`shutdown_signal`]'s registration pre-poll means a
+    /// `SIGINT` delivered any time the port would accept is drained, not
+    /// defaulted.
+    #[tokio::test]
+    async fn an_already_satisfied_shutdown_never_binds() {
+        let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = probe.local_addr().unwrap();
+        drop(probe);
+
+        let config = ServerConfig::new(addr).unwrap();
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        shutdown_tx.send(()).unwrap();
+
+        let result = serve_with_shutdown(config, lexical_handle(), async move {
+            let _ = shutdown_rx.await;
+        })
+        .await;
+        assert!(result.is_ok(), "an already-satisfied shutdown ends cleanly: {result:?}");
     }
 
     #[tokio::test]
