@@ -14,6 +14,7 @@
 //!   || len64(model_id)
 //!   || len64(calibration_version_le64)
 //!   || len64(engine_semver)
+//!   || len64(embedding_model)
 //! )
 //! ```
 //!
@@ -45,7 +46,7 @@ use crate::error::{EngineError, EngineResult};
 
 /// The identity artifacts a cached decision depends on (PLANNING.md §64).
 ///
-/// Any change here invalidates every cached decision, because all four
+/// Any change here invalidates every cached decision, because all five
 /// fields are folded into the cache key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineIdentity {
@@ -62,6 +63,13 @@ pub struct EngineIdentity {
     pub calibration_version: u64,
     /// Engine semver. Bumped automatically from the crate version.
     pub engine_semver: String,
+    /// Identifier of the embedding backend backing the semantic nodes
+    /// (`embedding`, `retrieve`, embedding `rerank`), or `"none"` when
+    /// the engine runs without one. Semantic scores feed narrowing, so
+    /// they are decision inputs and get identity like any other model
+    /// (D21): swapping or upgrading the embedding backend invalidates
+    /// cached decisions exactly as swapping the classifier does.
+    pub embedding_model: String,
 }
 
 impl EngineIdentity {
@@ -76,6 +84,7 @@ impl EngineIdentity {
             model_id: "builtin-lexical-v1".to_owned(),
             calibration_version: 0,
             engine_semver: env!("CARGO_PKG_VERSION").to_owned(),
+            embedding_model: "none".to_owned(),
         }
     }
 }
@@ -218,6 +227,7 @@ impl CacheKeyBuilder {
         write_chunk(&mut hasher, identity.model_id.as_bytes());
         write_u64(&mut hasher, identity.calibration_version);
         write_chunk(&mut hasher, identity.engine_semver.as_bytes());
+        write_chunk(&mut hasher, identity.embedding_model.as_bytes());
         Ok(CacheKey(hasher.finalize().into()))
     }
 }

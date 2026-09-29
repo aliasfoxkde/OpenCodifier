@@ -883,12 +883,20 @@ in between. Ordered so each step's output feeds the next.
   checks (list coverage, install byte-identity, overwrite guard, and
   decide-through-install matching the captured outcome on a fresh
   server). SPEC_COVERAGE §34 → done.
-- **18h — Graph nodes (§53 retrieval, §26/§54 rerank, §51 optimizer).**
-  Own sub-phase after 18e: `retrieve` node over the §24 embedding seam,
-  rerank node, then a first real optimizer pass (constant-folding +
-  dead-branch elimination on serializable DAGs). Each needs a DECISIONS.md
-  record before code. Accept: node types in the IR with tests, optimizer
-  with before/after equivalence proofs on the recipe fleet.
+- **18h — Graph nodes (§53 retrieval, §26/§54 rerank, §51 optimizer).
+  DONE (2026-09-29).** D21/D22 records first, then code: `embedding`
+  (annotation), `retrieve` (`top_n`/`floor`, floor-never-starves keep-top-1,
+  every drop trace-named), `rerank` (permute never remove;
+  `LexicalReranker`/`EmbeddingReranker`); missing backend refused at
+  assembly (`engine.missing_backend`), safe mode refuses `retrieve`;
+  `embedding_model` rides engine identity and every cache key.
+  `optimize()` = dead-node elimination + pure-node CSE only (D22 bars
+  folding/early-exit; cache/threshold/output excluded from CSE; merges
+  dedupe rewritten deps), graph_version preserved, result revalidated via
+  `DecisionGraph::new`. Acceptance: 10-test `tests/semantic_nodes.rs`
+  integration suite + 9 optimizer tests incl. the fleet equivalence proof
+  (all 15 committed graphs decide identically optimized vs not); HTTP
+  identity JSONs carry `embedding_model` additively.
 - **18i — Measurement-queue completion (storm-gated; runs in quiet
   windows).** #32 params A/B (attempt 3 driver waiting), #25 our-suite
   native verdict-slot run, fork rebuild on `d15-full-distribution` + D15

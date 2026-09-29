@@ -101,15 +101,27 @@ proptest! {
         engine_semver in "[0-9.]{1,8}",
     ) {
         let request = request_over(&["a".to_owned(), "b".to_owned()]);
-        let identity = EngineIdentity { graph_version, model_id, calibration_version, engine_semver };
+        let identity = EngineIdentity {
+            graph_version,
+            model_id,
+            calibration_version,
+            engine_semver,
+            embedding_model: "none".to_owned(),
+        };
         let baseline = CacheKeyBuilder::build(&request, &identity).unwrap();
 
         let bumped_graph = EngineIdentity { graph_version: graph_version.wrapping_add(1), ..identity.clone() };
         let bumped_model = EngineIdentity { model_id: format!("{}-b", identity.model_id), ..identity.clone() };
         let bumped_calibration = EngineIdentity { calibration_version: calibration_version.wrapping_add(1), ..identity.clone() };
         let bumped_semver = EngineIdentity { engine_semver: format!("{}.1", identity.engine_semver), ..identity.clone() };
+        // A swapped embedding backend is part of what a decision decided
+        // on (D21): the key must move with it.
+        let bumped_embedding = EngineIdentity {
+            embedding_model: format!("{}-e", identity.embedding_model),
+            ..identity.clone()
+        };
 
-        for changed in [bumped_graph, bumped_model, bumped_calibration, bumped_semver] {
+        for changed in [bumped_graph, bumped_model, bumped_calibration, bumped_semver, bumped_embedding] {
             prop_assert_ne!(baseline, CacheKeyBuilder::build(&request, &changed).unwrap());
         }
     }

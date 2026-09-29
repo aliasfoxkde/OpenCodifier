@@ -50,6 +50,25 @@ impl EngineHandle {
         classifier: Arc<dyn Classifier>,
         verifier: Option<Arc<dyn Classifier>>,
     ) -> EngineResult<Self> {
+        Self::with_embedding(config, classifier, verifier, None)
+    }
+
+    /// Assembles the engine with an embedding backend backing the
+    /// semantic nodes (`embedding`, `retrieve`, embedding `rerank` —
+    /// PLANNING.md §24, §53; D21). Passing `None` is [`EngineHandle::new`].
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`DecisionEngine::new`] — including
+    /// [`crate::error::EngineError::MissingBackend`] when `embedding` is
+    /// `None` but the graph needs one.
+    pub fn with_embedding(
+        config: EngineConfig,
+        classifier: Arc<dyn Classifier>,
+        verifier: Option<Arc<dyn Classifier>>,
+        embedding: Option<Arc<dyn opencodifier_runtime::EmbeddingBackend>>,
+    ) -> EngineResult<Self> {
+        let config = config.with_embedding(embedding);
         Ok(Self {
             engine: DecisionEngine::new(config, Arc::new(SystemClock), classifier, verifier)?,
         })

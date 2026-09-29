@@ -40,6 +40,7 @@ use crate::engine::EngineConfig;
 use crate::error::{EngineError, EngineResult};
 use crate::graph::{NodeKind, NodeSpec};
 use crate::narrowing::{LexicalScores, NarrowingOutcome};
+use crate::rerank::{EmbeddingReranker, LexicalReranker, Reranker, cosine};
 
 /// What one node produced, ready to be merged into the run state.
 enum NodeOutput {
@@ -58,6 +59,40 @@ enum NodeOutput {
     Resolved(Vec<(QuestionId, DecisionOutcome, Option<bool>)>),
     /// Whether a branch condition held.
     Branched(bool),
+    /// Semantic (embedding) scores per choice question, best first —
+    /// annotation only, consumed by `retrieve` (D21).
+    Semantic(Vec<QuestionScores>),
+    /// Candidates each choice question's `retrieve` node dropped, plus
+    /// the score order of what it kept (D21).
+    Retrieved(Vec<QuestionPrune>),
+    /// The reranked candidate order per choice question (D21).
+    Reranked(Vec<QuestionOrder>),
+}
+
+/// Semantic scores for one choice question, ordered by score descending
+/// then candidate id ascending.
+#[derive(Debug, Clone)]
+pub(crate) struct QuestionScores {
+    pub(crate) question: QuestionId,
+    pub(crate) scores: Vec<(CandidateId, f64)>,
+}
+
+/// One `retrieve` node's effect on one choice question.
+#[derive(Debug, Clone)]
+pub(crate) struct QuestionPrune {
+    pub(crate) question: QuestionId,
+    /// Candidates dropped by the `floor/top_n` cut, each named (D21: never
+    /// silent).
+    pub(crate) dropped: Vec<CandidateId>,
+    /// The kept candidates in score order — the question's new order.
+    pub(crate) order: Vec<CandidateId>,
+}
+
+/// One `rerank` node's effect on one choice question.
+#[derive(Debug, Clone)]
+pub(crate) struct QuestionOrder {
+    pub(crate) question: QuestionId,
+    pub(crate) order: Vec<CandidateId>,
 }
 
 /// Everything one node execution produced.
@@ -213,6 +248,16 @@ pub(crate) struct Executor<'a> {
     /// Candidates removed by lexical pruning — only reachable with safe
     /// mode off (PLANNING.md §45).
     pruned_lexically: BTreeMap<QuestionId, Vec<CandidateId>>,
+    /// Semantic scores per choice question (from `embedding` nodes),
+    /// best first (D21).
+    semantic: BTreeMap<QuestionId, Vec<(CandidateId, f64)>>,
+    /// Candidates removed by `retrieve` nodes (D21) — every drop is
+    /// trace-disclosed by the node that made it.
+    pruned_semantically: BTreeMap<QuestionId, Vec<CandidateId>>,
+    /// Candidate order per choice question, from `retrieve`/`rerank`
+    /// nodes (D21). Candidates absent from the order keep their
+    /// relative position after the ordered ones.
+    reranked: BTreeMap<QuestionId, Vec<CandidateId>>,
     decisions: BTreeMap<QuestionId, QuestionDecision>,
     trace: DecisionTrace,
     skipped: BTreeSet<NodeId>,
@@ -255,6 +300,9 @@ impl<'a> Executor<'a> {
             narrowing: BTreeMap::new(),
             lexical: BTreeMap::new(),
             pruned_lexically: BTreeMap::new(),
+            semantic: BTreeMap::new(),
+            pruned_semantically: BTreeMap::new(),
+            reranked: BTreeMap::new(),
             decisions: BTreeMap::new(),
             trace: DecisionTrace::new(),
             skipped: BTreeSet::new(),
@@ -443,6 +491,18 @@ impl<'a> Executor<'a> {
                 let (scored, entries) = self.score_lexical(id);
                 (NodeOutput::Scored(scored), entries)
             }
+            NodeKind::Embedding => {
+                let (scored, entries) = self.score_semantic(id)?;
+                (NodeOutput::Semantic(scored), entries)
+            }
+            NodeKind::Retrieve => {
+                let (prunes, entries) = self.retrieve(id, spec)?;
+                (NodeOutput::Retrieved(prunes), entries)
+            }
+            NodeKind::Rerank => {
+                let (orders, entries) = self.rerank_candidates(id, spec)?;
+                (NodeOutput::Reranked(orders), entries)
+            }
             NodeKind::Choice | NodeKind::Boolean | NodeKind::Score => {
                 let (decided, focus, entries) = self.decide_questions(id, spec.kind)?;
                 (NodeOutput::Decided(decided, focus), entries)
@@ -521,6 +581,251 @@ impl<'a> Executor<'a> {
             results.push(scored);
         }
         (results, entries)
+    }
+
+    /// Scores the surviving candidates by embedding cosine similarity
+    /// (PLANNING.md §24, §53; D21).
+    ///
+    /// Annotation only: the scores never eliminate anything. The
+    /// `retrieve` node that consumes them does the narrowing — and names
+    /// every candidate it drops in the trace. Engines without a backend
+    /// never reach here: assembly refuses graphs that need one (D21).
+    fn score_semantic(&self, id: &str) -> EngineResult<(Vec<QuestionScores>, Vec<TraceEntry>)> {
+        let Some(backend) = self.config.embedding.as_ref() else {
+            return Err(EngineError::MissingBackend {
+                node: id.to_owned(),
+                backend: "embedding".to_owned(),
+            });
+        };
+        let mut results = Vec::new();
+        let mut entries = Vec::new();
+        for question in self.request.questions() {
+            let DecisionQuestion::Choice(choice) = question else { continue };
+            let in_play = self.candidates_in_play(choice);
+            let query = LexicalClassifier::query_for(&self.state, question);
+            let mut texts: Vec<&str> = vec![query.as_str()];
+            texts.extend(in_play.iter().map(Candidate::description));
+            let vectors = backend.embed(&texts).map_err(|error| EngineError::BackendFailed {
+                model_id: backend.model_id().to_owned(),
+                reason: error.to_string(),
+            })?;
+            if vectors.len() != texts.len() {
+                return Err(EngineError::BackendFailed {
+                    model_id: backend.model_id().to_owned(),
+                    reason: format!(
+                        "backend returned {} vectors for {} texts",
+                        vectors.len(),
+                        texts.len()
+                    ),
+                });
+            }
+            let query_vector = &vectors[0];
+            let mut scores: Vec<(CandidateId, f64)> = in_play
+                .iter()
+                .enumerate()
+                .map(|(index, candidate)| {
+                    (candidate.id().clone(), cosine(query_vector, &vectors[index + 1]))
+                })
+                .collect();
+            scores.sort_by(|left, right| {
+                right.1.total_cmp(&left.1).then_with(|| left.0.cmp(&right.0))
+            });
+            let top_score = scores.first().map_or(0.0, |(_, score)| *score);
+            entries.push(TraceEntry::new(
+                id,
+                [
+                    ("question", FactValue::Text(choice.id().to_string())),
+                    ("model", FactValue::Text(backend.model_id().to_owned())),
+                    ("dims", FactValue::Integer(int(vectors.first().map_or(0, Vec::len)))),
+                    ("scored", FactValue::Integer(int(scores.len()))),
+                    ("top_score", FactValue::Float(top_score)),
+                ],
+            ));
+            results.push(QuestionScores { question: choice.id().clone(), scores });
+        }
+        Ok((results, entries))
+    }
+
+    /// Narrows each choice question to the semantically best candidates
+    /// (PLANNING.md §53; D21).
+    ///
+    /// The two D21 invariants: the floor can never starve a question (an
+    /// empty keep-set falls back to the single best candidate), and every
+    /// dropped candidate is named with its score in the trace. Only
+    /// candidates still surviving deterministic stages may be dropped.
+    fn retrieve(
+        &self,
+        id: &str,
+        spec: &NodeSpec,
+    ) -> EngineResult<(Vec<QuestionPrune>, Vec<TraceEntry>)> {
+        // The graph validator requires `top_n >= 1`; the default is dead
+        // code for validated graphs but keeps the node total.
+        let top_n = spec.top_n.unwrap_or(1);
+        let floor = spec.floor.unwrap_or(0.0);
+        let mut prunes = Vec::new();
+        let mut entries = Vec::new();
+        for question in self.request.questions() {
+            let DecisionQuestion::Choice(choice) = question else { continue };
+            let Some(scores) = self.semantic.get(choice.id()) else {
+                return Err(EngineError::NodeFailed {
+                    node: id.to_owned(),
+                    reason: format!(
+                        "no semantic scores for question `{}`: `retrieve` requires an upstream \
+                         `embedding` node",
+                        choice.id()
+                    ),
+                });
+            };
+            let surviving = self.surviving_ids(choice);
+            let ranked: Vec<&(CandidateId, f64)> =
+                scores.iter().filter(|(candidate, _)| surviving.contains(candidate)).collect();
+            let above_floor: Vec<&(CandidateId, f64)> =
+                ranked.iter().copied().filter(|(_, score)| *score >= floor).collect();
+            let kept: Vec<&(CandidateId, f64)> = if above_floor.is_empty() {
+                ranked.iter().take(1).copied().collect()
+            } else {
+                above_floor.into_iter().take(top_n).collect()
+            };
+            let kept_ids: BTreeSet<&CandidateId> =
+                kept.iter().map(|(candidate, _)| candidate).collect();
+            let dropped: Vec<&(CandidateId, f64)> = ranked
+                .iter()
+                .copied()
+                .filter(|(candidate, _)| !kept_ids.contains(candidate))
+                .collect();
+            for (candidate, score) in &dropped {
+                entries.push(TraceEntry::new(
+                    id,
+                    [
+                        ("question", FactValue::Text(choice.id().to_string())),
+                        ("dropped_candidate", FactValue::Text(candidate.to_string())),
+                        ("score", FactValue::Float(*score)),
+                        ("floor", FactValue::Float(floor)),
+                    ],
+                ));
+            }
+            entries.push(TraceEntry::new(
+                id,
+                [
+                    ("question", FactValue::Text(choice.id().to_string())),
+                    ("kept", FactValue::Integer(int(kept.len()))),
+                    ("dropped", FactValue::Integer(int(dropped.len()))),
+                    ("top_n", FactValue::Integer(int(top_n))),
+                    ("floor", FactValue::Float(floor)),
+                    ("order", FactValue::Text(order_text(kept.iter().map(|(c, _)| c.as_str())))),
+                ],
+            ));
+            prunes.push(QuestionPrune {
+                question: choice.id().clone(),
+                dropped: dropped.iter().map(|(candidate, _)| (*candidate).clone()).collect(),
+                order: kept.iter().map(|(candidate, _)| (*candidate).clone()).collect(),
+            });
+        }
+        Ok((prunes, entries))
+    }
+
+    /// Reorders the surviving candidates with the node's named reranker
+    /// (PLANNING.md §26, §54; D21).
+    ///
+    /// A reranker is a second opinion on ordering: it permutes, never
+    /// removes, so the decision stage still sees every candidate
+    /// deterministic narrowing left alive.
+    fn rerank_candidates(
+        &self,
+        id: &str,
+        spec: &NodeSpec,
+    ) -> EngineResult<(Vec<QuestionOrder>, Vec<TraceEntry>)> {
+        let reranker: Box<dyn Reranker> = match spec.reranker.as_deref() {
+            Some("lexical") => Box::new(LexicalReranker),
+            Some("embedding") => {
+                let Some(backend) = self.config.embedding.as_ref() else {
+                    return Err(EngineError::MissingBackend {
+                        node: id.to_owned(),
+                        backend: "embedding".to_owned(),
+                    });
+                };
+                Box::new(EmbeddingReranker::new(Arc::clone(backend)))
+            }
+            // Both remaining arms are unreachable for a validated graph;
+            // a total match keeps the node honest if validation changes.
+            Some(other) => {
+                return Err(EngineError::NodeFailed {
+                    node: id.to_owned(),
+                    reason: format!("unknown reranker `{other}`"),
+                });
+            }
+            None => {
+                return Err(EngineError::NodeFailed {
+                    node: id.to_owned(),
+                    reason: "rerank nodes must name a reranker".to_owned(),
+                });
+            }
+        };
+        let mut results = Vec::new();
+        let mut entries = Vec::new();
+        for question in self.request.questions() {
+            let DecisionQuestion::Choice(choice) = question else { continue };
+            let surviving: Vec<Candidate> = self.candidates_in_play(choice);
+            if surviving.is_empty() {
+                continue;
+            }
+            let query = LexicalClassifier::query_for(&self.state, question);
+            let scored = reranker.rerank(query.as_str(), &surviving)?;
+            let order: Vec<CandidateId> =
+                scored.iter().map(|scored| scored.candidate.id().clone()).collect();
+            entries.push(TraceEntry::new(
+                id,
+                [
+                    ("question", FactValue::Text(choice.id().to_string())),
+                    ("reranker", FactValue::Text(reranker.model_id().to_owned())),
+                    ("count", FactValue::Integer(int(order.len()))),
+                    (
+                        "top",
+                        FactValue::Text(
+                            order
+                                .first()
+                                .map_or_else(String::new, std::string::ToString::to_string),
+                        ),
+                    ),
+                    ("order", FactValue::Text(order_text(order.iter().map(CandidateId::as_str)))),
+                ],
+            ));
+            results.push(QuestionOrder { question: choice.id().clone(), order });
+        }
+        Ok((results, entries))
+    }
+
+    /// The candidates of one choice question that are still in play: the
+    /// rule-filtered survivors when a `filter` node ran, the full
+    /// candidate list otherwise, always minus lexical and `retrieve`
+    /// prunes.
+    fn candidates_in_play(&self, choice: &ChoiceQuestion) -> Vec<Candidate> {
+        let base: Vec<Candidate> = match self.narrowing.get(choice.id()) {
+            Some(outcome) => outcome.surviving().to_vec(),
+            // No narrowing ran: every declared candidate is in play.
+            None => choice.candidates().to_vec(),
+        };
+        base.into_iter()
+            .filter(|candidate| self.is_surviving(choice.id(), candidate.id()))
+            .collect()
+    }
+
+    /// The candidate ids of one question still in play (see
+    /// [`Executor::candidates_in_play`]).
+    fn surviving_ids(&self, choice: &ChoiceQuestion) -> BTreeSet<CandidateId> {
+        self.candidates_in_play(choice)
+            .into_iter()
+            .map(|candidate| candidate.id().clone())
+            .collect()
+    }
+
+    /// Whether one candidate survived every pruning stage so far.
+    fn is_surviving(&self, question: &QuestionId, candidate: &CandidateId) -> bool {
+        !self.pruned_lexically.get(question).is_some_and(|pruned| pruned.contains(candidate))
+            && !self
+                .pruned_semantically
+                .get(question)
+                .is_some_and(|pruned| pruned.contains(candidate))
     }
 
     /// Asks the classifier about every question of this node's kind.
@@ -665,31 +970,38 @@ impl<'a> Executor<'a> {
     ///
     /// `None` for questions that are not choices and for questions whose
     /// candidates were all eliminated, which the assembler reports as
-    /// `NoValidCandidate` instead of failing the run.
+    /// `NoValidCandidate` instead of failing the run. Survivors are the
+    /// rule-filtered set minus lexical prunes minus `retrieve` prunes,
+    /// ordered by any `retrieve`/`rerank` node that ran (D21).
     fn prepare_question(&self, question: &DecisionQuestion) -> Option<DecisionQuestion> {
         let DecisionQuestion::Choice(choice) = question else { return Some(question.clone()) };
-        let outcome = self.narrowing.get(choice.id())?;
-        if outcome.is_starved() {
-            return None;
-        }
-        let narrowed = outcome.narrowed_question(choice)?;
-        let pruned = match self.pruned_lexically.get(choice.id()) {
-            Some(pruned) => pruned.as_slice(),
-            None => &[],
+        // The narrowed shape when a `filter` node ran; the full question
+        // otherwise — a semantic graph may narrow only through `retrieve`.
+        let narrowed = match self.narrowing.get(choice.id()) {
+            Some(outcome) => {
+                if outcome.is_starved() {
+                    return None;
+                }
+                outcome.narrowed_question(choice)?
+            }
+            None => choice.clone(),
         };
-        if pruned.is_empty() {
-            return Some(DecisionQuestion::Choice(narrowed));
-        }
-        let surviving: Vec<Candidate> = narrowed
+        let mut surviving: Vec<Candidate> = narrowed
             .candidates()
             .iter()
-            .filter(|candidate| !pruned.contains(candidate.id()))
+            .filter(|candidate| self.is_surviving(choice.id(), candidate.id()))
             .cloned()
             .collect();
         if surviving.is_empty() {
-            // Lexical pruning eliminated everything; that is starvation,
-            // reported rather than papered over.
+            // Pruning eliminated everything; that is starvation, reported
+            // rather than papered over. (`retrieve` keeps top-1, so only
+            // the lexical prune knob can get here.)
             return None;
+        }
+        if let Some(order) = self.reranked.get(choice.id()) {
+            surviving.sort_by_key(|candidate| {
+                order.iter().position(|kept| kept == candidate.id()).unwrap_or(usize::MAX)
+            });
         }
         let rebuilt = ChoiceQuestion::new(choice.id().as_str(), narrowed.text(), surviving).ok()?;
         Some(DecisionQuestion::Choice(rebuilt))
@@ -858,6 +1170,27 @@ impl<'a> Executor<'a> {
                     }
                 }
             }
+            NodeOutput::Semantic(scores) => {
+                for scored in scores {
+                    self.semantic.insert(scored.question, scored.scores);
+                }
+            }
+            NodeOutput::Retrieved(prunes) => {
+                for prune in prunes {
+                    if !prune.dropped.is_empty() {
+                        self.pruned_semantically
+                            .entry(prune.question.clone())
+                            .or_default()
+                            .extend(prune.dropped);
+                    }
+                    self.reranked.insert(prune.question, prune.order);
+                }
+            }
+            NodeOutput::Reranked(orders) => {
+                for order in orders {
+                    self.reranked.insert(order.question, order.order);
+                }
+            }
             NodeOutput::Decided(decided, focus) => {
                 for decision in decided {
                     self.decisions.insert(decision.answer.question_id().clone(), decision);
@@ -919,7 +1252,10 @@ impl<'a> Executor<'a> {
         let candidates_in = narrowing.iter().map(NarrowingOutcome::before).max().unwrap_or(0);
         let narrowed_out = narrowing.iter().map(NarrowingOutcome::after).max().unwrap_or(0);
         let lexically_pruned = self.pruned_lexically.values().map(Vec::len).max().unwrap_or(0);
-        let candidates_out = narrowed_out.saturating_sub(lexically_pruned);
+        let semantically_pruned =
+            self.pruned_semantically.values().map(Vec::len).max().unwrap_or(0);
+        let candidates_out =
+            narrowed_out.saturating_sub(lexically_pruned).saturating_sub(semantically_pruned);
         let metrics = DecisionMetrics {
             candidates_in,
             candidates_out,
@@ -1051,6 +1387,11 @@ fn outcome_name(outcome: DecisionOutcome) -> String {
 #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_possible_wrap)]
 fn int(value: usize) -> i64 {
     value as i64
+}
+
+/// The readable candidate-order fact: ids joined by `,` in kept order.
+fn order_text<'a>(ids: impl Iterator<Item = &'a str>) -> String {
+    ids.collect::<Vec<_>>().join(",")
 }
 
 /// The name of the thread a node ran on, recorded in the run report.

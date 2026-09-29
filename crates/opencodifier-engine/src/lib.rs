@@ -22,6 +22,8 @@
 //! | [`classifier`] | §13, §43 — `Classifier` trait, `MockClassifier`, `LexicalClassifier` |
 //! | [`clock`] | §10 — `Clock`, `Deadline`, `CancellationToken` |
 //! | [`engine`] | §43 — configuration and the orchestrating `DecisionEngine` |
+//! | [`rerank`] | §26, §54 — the reranker seam (permute, never remove) |
+//! | [`mod@optimize`] | §51 — equivalence-preserving graph optimization (D22) |
 //!
 //! # The cheap-mechanism-first principle
 //!
@@ -33,10 +35,12 @@
 //!
 //! # What is deliberately not here
 //!
-//! `embedding`, `classify`, `rerank`, `retrieve`, and `fuse` nodes wait for
-//! the ML runtime crate (Phases 6+); this crate has no ML dependency.
-//! `verify` is not a node either: verification is confidence-gated
-//! (PLANNING.md §19) and lives in the engine's verifier cascade.
+//! `classify` and `fuse` nodes wait for the model rungs (D2); the
+//! `embedding`, `retrieve`, and `rerank` nodes exist but stay zero-ML by
+//! default — without an embedding backend assembled, graphs naming them
+//! are refused at assembly, never degraded (D21). `verify` is not a node
+//! either: verification is confidence-gated (PLANNING.md §19) and lives in
+//! the engine's verifier cascade.
 //!
 //! # Example
 //!
@@ -120,8 +124,10 @@ pub mod graph;
 pub mod handle;
 pub mod lexical;
 pub mod narrowing;
+pub mod optimize;
 pub mod relational;
 pub mod report;
+pub mod rerank;
 pub mod rules;
 
 pub use cache::{CacheConfig, CacheKey, CacheKeyBuilder, DecisionCache, EngineIdentity};
@@ -139,8 +145,10 @@ pub use graph::{DecisionGraph, GraphDocument, NodeKind, NodeSpec};
 pub use handle::{EngineHandle, EngineHealth, MAX_BATCH};
 pub use lexical::{Bm25Index, negation_polarity, softmax, tokenize};
 pub use narrowing::{LexicalScores, NarrowingOutcome};
+pub use optimize::optimize;
 pub use relational::RelationalSolver;
 pub use report::execution_json;
+pub use rerank::{EmbeddingReranker, LexicalReranker, Reranker, ScoredCandidate};
 pub use rules::{Action, Condition, Rule, RuleEngine, RuleSet};
 
 #[cfg(test)]

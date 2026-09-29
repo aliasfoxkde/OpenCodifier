@@ -210,6 +210,7 @@ async fn capabilities(State(handle): State<Arc<EngineHandle>>) -> Json<Value> {
             "model_id": health.identity.model_id,
             "calibration_version": health.identity.calibration_version,
             "engine_semver": health.identity.engine_semver,
+            "embedding_model": health.identity.embedding_model,
         },
     }))
 }
@@ -296,6 +297,7 @@ async fn graph_run(body: Bytes) -> Result<Json<Value>, HttpError> {
             "model_id": identity.model_id,
             "calibration_version": identity.calibration_version,
             "engine_semver": identity.engine_semver,
+            "embedding_model": identity.embedding_model,
         },
     })))
 }
@@ -315,6 +317,7 @@ async fn healthz(State(handle): State<Arc<EngineHandle>>) -> Json<Value> {
             "model_id": health.identity.model_id,
             "calibration_version": health.identity.calibration_version,
             "engine_semver": health.identity.engine_semver,
+            "embedding_model": health.identity.embedding_model,
         },
         "nodes": health.nodes,
         "parallelism": health.parallelism,
