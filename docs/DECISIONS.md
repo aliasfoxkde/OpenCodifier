@@ -769,3 +769,40 @@ not the model path:
   math, cache TTLs, and the sequential wave path are the same code on
   every target; only the reading and the thread count are the
   platform's.
+
+## D24 — The distribution matrix is what this host can honestly verify (2026-09-29)
+
+PLANNING §58 asks for cross-platform release distribution. The matrix is
+set by verification honesty, not aspiration — every column names how it
+is proven, and nothing ships a claim its evidence cannot carry:
+
+- **linux-x86_64-gnu** — the platform of record: release-built,
+  run-tested, e2e-proven (30/30) on this host; GitForge releases carry
+  it today.
+- **windows-x86_64-gnu** — the full workspace (all ten crates incl.
+  `opencodifier-wasm`) compiles clean for
+  `x86_64-pc-windows-gnu` with the mingw linker present. Link + smoke
+  run pending a quiet window (compile under the load storm took 51
+  minutes; a link+run build is quiet-window work). Verification level
+  when built: link success + `file` PE magic + a stated
+  not-executed-here caveat, since this host cannot run Windows.
+- **linux-aarch64** — `aarch64-unknown-linux-{gnu,musl}` targets
+  installed, `cargo-zigbuild`/`zig` present for linking. Build + QEMU
+  smoke pending quiet.
+- **darwin x86_64/aarch64** — rust targets installed; `cargo-zigbuild`
+  can link Mach-O without an Apple SDK. Verification is link success +
+  `file` magic only: no macOS host runs it here, no codesigning or
+  notarization exists, and the artifact states that in its release
+  notes rather than implying support.
+- **Package-manager publication (crates.io, Homebrew, winget) is an
+  outward action, never an automatic one.** Each needs an account,
+  credentials outside the repo, and an explicit user go — the release
+  flow of record is GitForge releases; external registries are opt-in
+  follow-ups, listed in PLAN 18j's remainder.
+- **The WASM artifact rides releases** as `wasm-pack` output (built by
+  `just check-wasm`, gitignored in-tree): `pkg/` attached when a
+  release is cut, never committed.
+
+Rule the matrix enforces: a target either has named verification
+evidence or is named as pending — the release page never says
+"supported" where the truth is "compiles".
