@@ -731,7 +731,7 @@ focused decision is weak.
   CI-exact 1.90)/test/doc/deny green; generator + suite + REPORT
   recorded in the benchmark.
 
-## Phase 17 — external anchor: JevBench public split (in progress)
+## Phase 17 — external anchor: JevBench public split (engine arm done)
 
 Every REPORT.md number so far is internal (our suite, our seeds). Phase 17
 measures OpenCodifier on a third-party suite with published rows for
@@ -756,16 +756,23 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   tail), fork_4b (tree mode, label-only per D15), jev_native (native
   probs). `runner/run_jevbench.py`, wire facts smoke-verified and
   recorded in JEVBENCH.md.
-- **Sub-steps.** (1) engine arm complete run (v2 rerun in flight after
-  the v1 server wedge; server logs now captured); (2) native bridge run
-  + 64.1 % comparison; (3) fork_4b run on a quiet-host window (D16
-  config); (4) REPORT.md JevBench section + D16/PLAN notes; (5) optional:
+- **Sub-steps.** (1) ✅ engine arm complete run — 231/231 in one
+  `run_all`, accuracy **0.3766** (macro 0.4011, chance 0.3176), ECE
+  0.402, Brier 0.890, client-wall p50 **2.0 ms**; replay determinism
+  231/231; zero synthesized probabilities (coverage 1.0, abstain ~19 %
+  scored incorrect). Getting here killed two misdiagnoses: the v1/v2
+  stops at item 186 were the engine's deterministic 3-consecutive-abstain
+  stretch tripping the infra stop rule (abstain now maps to the 422
+  refusal bucket, still incorrect), and the hours-long "load wedge" was
+  the runner's per-row fsync stalling on a contended ext4 journal —
+  the same 231 items take ~60 s on tmpfs. (2) native bridge run + 64.1 %
+  comparison — in flight. (3) fork_4b run on a quiet-host window (D16
+  config). (4) REPORT.md JevBench section + D16/PLAN notes. (5) optional:
   the fork-side full-distribution patch (D15) upgrades the fork arm from
   label-only to native Brier/ECE.
-- **Accept (unmet):** bridge reproduction; zero synthesized probabilities
-  in the raw evidence; replay determinism per arm; all 231 attempted in
-  one `run_all` per arm (their stop rule must not silently truncate — a
-  partial run is quarantined and rerun fresh, never patched up).
+- **Accept (partial):** engine arm: zero synthesized probabilities ✅,
+  replay determinism ✅, all 231 in one run ✅. Bridge reproduction,
+  fork arm, and the REPORT.md section pending.
 
 ## Spec coverage map (audit, 2026-09-28)
 
