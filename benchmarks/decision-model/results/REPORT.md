@@ -379,6 +379,52 @@ rung's runtime; the 226 MB q4-b32 build is a free memory fallback**
 (identical quality, 2.6× smaller) if a deployment is RAM-bound, never a
 speed play. Finding F21, threat #12 (quantizer op coverage).
 
+## External anchor: JevBench public split (Phase 17)
+
+Every number above this section is internal (our suite, our seeds). The
+JevBench public split (231 items; choice 139 / noul 74 / score 18; mean
+chance accuracy 0.3176) is the first third-party ground truth with
+published rows for comparable Jev-class systems. Methodology of record:
+`../JEVBENCH.md` — the authors' own harness runs our arms (their runner,
+their scoring, serial no-retry, raw evidence outside both repos), so
+scoring drift against every published row is zero by construction.
+
+| arm | n | accuracy | macro | ECE | Brier | p50 | status |
+|---|---:|---:|---:|---:|---:|---:|---|
+| **engine** (`relational-v1` via `/v1/decide`) | 231 | **0.3766** | 0.4011 | 0.402 | 0.890 | **2.0 ms** | done, det 231/231 |
+| jev_native bridge (0.8B verdict-slot) | 231 | — | — | — | — | — | in flight |
+| fork_4b (tree mode, D16 config) | 231 | — | — | — | — | — | pending quiet host |
+
+Published anchors for the same split: hosted Jev 86.6 %, llm-qwen3.5-4b
+80.5 % / 651 ms, Jev-Style-2B 73.6 %, decider-2b 71.0 %, open-jev-2b
+64.5 %, Jev-Style-0.8B 64.1 % (our bridge row), Laya 58.4 %.
+
+**Reading the engine row honestly.** 0.3766 is barely above the 0.3176
+chance floor and far below every trained row. The ladder that scores
+0.683 blended on our internal suite does not transfer to items authored
+to defeat pattern-matching: its rule/metadata/lexical rungs find no
+purchase on adversarial third-party prose, and the confidence gate
+correctly refuses to guess — 44/231 items (19 %) abstained and scored
+incorrect, which is the designed behavior (§73: abstention is a
+successful outcome), not a malfunction. When it does answer it is
+overconfident (ECE 0.402 — the calibration seam's uncertainty gates are
+calibrated on our suite, not on this distribution). What the row
+establishes is the other half of the trade: **2.0 ms p50 client-wall**
+(≈325× the jev.page 4B server's claimed 651 ms) with byte-exact replay
+determinism over all 231 items. The external anchor says the zero-ML
+ladder is a fast prior and a router rung, not a general decider — which
+is what the architecture claims it is.
+
+Two measurement bugs died on the way to this row (both recorded in
+`../JEVBENCH.md`): the v1/v2 "wedges" at item 186 were the engine's
+deterministic 3-consecutive-abstain stretch tripping the harness's
+infrastructure stop rule (abstain now maps to the 422 refusal bucket —
+still incorrect, no longer run-stopping), and the hours-long crawl was
+the harness's per-row fsync stalling on a contended ext4 journal; the
+same 231 items take ~60 s with the run directory on tmpfs. Runs v1–v3
+are quarantined partials; the of-record run is `runs/jevbench/engine-v4`
+(out-of-tree), rerun fresh, never patched up.
+
 ## Findings
 
 - **F1 — Tier scheme (D16 ×3).** Four measured tiers: MiMo-9B Q3_K_S
@@ -652,3 +698,11 @@ hash is a changed artifact and invalidates the row (D14).
   blind to the full state, 42 of 84 engaged views escalated and changed
   nothing (§45 feature, PLAN Phase 16). Extraction costs ~2.5 ms/item
   p50 at this context scale. No board rows change; no tier changes.
+- **2026-09-29 (external anchor, engine arm)** — Phase 17 opens: the
+  JevBench public split (231 items, official harness, methodology in
+  `../JEVBENCH.md`) measures the engine against published Jev-class rows
+  for the first time. Engine arm done: 0.3766 (chance 0.3176) at 2.0 ms
+  p50, ECE 0.402, replay-deterministic 231/231, zero synthesized
+  probabilities; the trained field rows sit 58–87 %. Bridge (native
+  verdict-slot vs the 0.8B published 64.1 %) and the fork_4b arm
+  pending.
