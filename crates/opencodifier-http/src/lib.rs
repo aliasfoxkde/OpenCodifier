@@ -173,6 +173,30 @@ mod tests {
         assert!(matches!(error, HttpError::Bind { .. }), "expected Bind, got {error:?}");
     }
 
+    /// `shutdown_signal` is the production arm of [`serve`], and the only
+    /// honest way to end it is the interrupt it exists to wait for. The
+    /// task parks first (the handler registers on first poll), the signal is
+    /// delivered to this very process, and the future — not the process —
+    /// ends.
+    #[tokio::test]
+    async fn shutdown_signal_resolves_on_a_real_interrupt() {
+        let task = tokio::spawn(shutdown_signal());
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert!(!task.is_finished(), "shutdown_signal ended without an interrupt");
+
+        let interrupted = std::process::Command::new("kill")
+            .args(["-INT", &std::process::id().to_string()])
+            .status()
+            .is_ok_and(|status| status.success());
+        assert!(interrupted, "could not deliver SIGINT to this test process");
+
+        let resolved = tokio::time::timeout(std::time::Duration::from_secs(5), task).await;
+        assert!(
+            resolved.expect("shutdown deadline").is_ok(),
+            "shutdown_signal must resolve on SIGINT, not be dropped"
+        );
+    }
+
     #[tokio::test]
     async fn serve_with_shutdown_answers_then_ends_cleanly() {
         // Discover a free port, release it, and let the server claim it.

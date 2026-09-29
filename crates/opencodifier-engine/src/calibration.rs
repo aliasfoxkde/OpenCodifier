@@ -401,6 +401,62 @@ mod tests {
     }
 
     #[test]
+    fn an_artifact_without_a_model_id_is_rejected() {
+        // The model id is what stops an artifact fitted for one model being
+        // reused for another (D15), so a blank one is unusable even though
+        // every temperature is well formed.
+        let mut a = artifact(BTreeMap::new(), 2.0);
+        a.model_id = "   ".to_owned();
+        let error = TemperatureCalibration::from_artifact(a).expect_err("blank model id");
+        assert!(matches!(error, EngineError::InvalidCalibration { .. }));
+        assert_eq!(error.code(), "calibration.invalid");
+        assert!(error.to_string().contains("model_id"), "{error}");
+    }
+
+    #[test]
+    fn the_validated_artifact_is_readable_back() {
+        // Callers carry the artifact's provenance into logs and wire
+        // payloads; what comes back must be exactly what was validated.
+        let mut temperatures = BTreeMap::new();
+        temperatures.insert("choice".to_owned(), 1.91);
+        let calibration =
+            TemperatureCalibration::from_artifact(artifact(temperatures.clone(), 2.07))
+                .expect("valid");
+        let shown = calibration.artifact();
+        assert_eq!(shown.format_version, 1);
+        assert_eq!(shown.scheme, "temperature");
+        assert_eq!(shown.model_id, "test-model");
+        assert_eq!(shown.default_temperature, 2.07);
+        assert_eq!(shown.temperatures, temperatures);
+        assert_eq!(shown.fit.items, 120);
+    }
+
+    #[test]
+    fn a_degenerate_rescale_falls_back_to_the_identity() {
+        // A temperature tiny enough that every weight underflows to zero
+        // leaves no mass to normalize by: inventing a distribution would be
+        // worse than reporting the raw one, so the raw probabilities come
+        // back unchanged and calibrated confidence stays honest.
+        let d = dist(&[("a", 0.5), ("b", 0.3), ("c", 0.2)]);
+        assert_eq!(
+            TemperatureCalibration::rescale(&d, 1e-5),
+            vec![("a".to_owned(), 0.5), ("b".to_owned(), 0.3), ("c".to_owned(), 0.2)]
+        );
+
+        // Through the public path: `1e-5` is a validated temperature, so the
+        // calibration must still answer — with the raw top probability.
+        let calibration =
+            TemperatureCalibration::from_artifact(artifact(BTreeMap::new(), 1e-5)).expect("valid");
+        assert_eq!(calibration.calibrate("choice", &d), 0.5);
+        // A healthy temperature next to it does rescale — flattening this
+        // distribution lowers its top probability — so the identity above is
+        // the degenerate fit and not what temperature scaling does.
+        let flat =
+            TemperatureCalibration::from_artifact(artifact(BTreeMap::new(), 2.0)).expect("valid");
+        assert!(flat.calibrate("choice", &d) < 0.5);
+    }
+
+    #[test]
     fn json_round_trip_and_malformed_json() {
         let json = r#"{
             "format_version": 1,

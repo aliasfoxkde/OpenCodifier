@@ -563,6 +563,49 @@ fn serve_starts_serves_healthz_and_warns_about_inapplicable_policy() {
 }
 
 #[test]
+fn serve_ends_cleanly_when_the_operator_interrupts_it() {
+    // The one thing the assemble-level tests cannot do: deliver the real
+    // Ctrl-C that `serve` exists to wait for. A free port is claimed and
+    // released, the server is spawned onto it, and once it is accepting
+    // connections the same SIGINT a terminal sends goes to the process.
+    // The graceful shutdown returns `Ok(())`, so the exit code is `0`.
+    let probe = std::net::TcpListener::bind("127.0.0.1:0").expect("probe listener");
+    let addr = probe.local_addr().expect("probe address");
+    drop(probe);
+
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_opencodifier"))
+        .args(["serve", "--bind", &addr.to_string()])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn opencodifier serve");
+
+    let mut serving = false;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while std::time::Instant::now() < deadline {
+        if std::net::TcpStream::connect(addr).is_ok() {
+            serving = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    if !serving {
+        child.kill().ok();
+        panic!("serve never began accepting connections on {addr}");
+    }
+
+    let interrupted = std::process::Command::new("kill")
+        .args(["-INT", &child.id().to_string()])
+        .status()
+        .expect("run kill")
+        .success();
+    assert!(interrupted, "could not deliver SIGINT to the serve process");
+
+    let status = child.wait().expect("serve exits after the interrupt");
+    assert_eq!(status.code(), Some(0), "SIGINT must shut the server down gracefully");
+}
+
+#[test]
 fn serve_rejects_a_bad_graph_before_opening_the_socket() {
     let scratch = Scratch::new("serve-graph");
     let cyclic = scratch.write_json(

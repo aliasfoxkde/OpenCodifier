@@ -449,4 +449,79 @@ mod tests {
         let view = focus(&state, &question(), &FocusPolicy::new(0));
         assert!(!view.extracted);
     }
+
+    #[test]
+    fn an_unterminated_trailing_sentence_is_still_a_sentence() {
+        // Prose that just stops has no delimiter to end on; the last chunk
+        // is still a sentence, and it still ends where the text ends.
+        let text = "The deploy service is healthy.\nThe database depends on it";
+        let parts = sentences(text);
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[1].text, "The database depends on it");
+        assert_eq!(parts[1].range.end, text.len(), "the tail runs to the end of the text");
+        assert_eq!(parts[1].tokens, estimate_tokens("The database depends on it"));
+
+        // Through the public path: an over-budget state whose decisive
+        // sentence is the unterminated one is still focused onto it.
+        let mut state_text = String::new();
+        for index in 0..40 {
+            let _ = writeln!(
+                state_text,
+                "Appendix {index} catalogs logistics paperwork, vendor contracts and minutiae."
+            );
+        }
+        state_text.push_str("The deploy service is healthy and the database depends on it");
+        let view = focus(&State::from_text(state_text), &question(), &FocusPolicy::new(64));
+        assert!(view.extracted);
+        assert!(view.state.text().contains("deploy service is healthy"));
+    }
+
+    #[test]
+    fn a_state_with_no_sentence_boundaries_yields_no_sentences() {
+        // Whitespace never terminates a sentence, so a state that is nothing
+        // but space splits into zero of them: there is nothing to rank, and
+        // the honest view is the full state.
+        let state = State::from_text(" ".repeat(4096));
+        assert!(estimate_tokens(state.text()) > 64);
+        let view = focus(&state, &question(), &FocusPolicy::new(64));
+        assert!(!view.extracted);
+        assert_eq!(view.total_sentences, 0);
+        assert_eq!(view.state.text().len(), 4096);
+    }
+
+    #[test]
+    fn the_greedy_pick_stops_once_the_budget_is_spent() {
+        // Two candidate-bearing sentences and a budget that holds one: the
+        // first pick is taken whole and the second is refused, instead of
+        // quietly over-running the budget.
+        let mut text = String::from("The deploy service is healthy.\n");
+        text.push_str("The database service depends on it.\n");
+        text.push_str(&"filler about paperwork ".repeat(40));
+        let state = State::from_text(text);
+        assert!(estimate_tokens(state.text()) > 100);
+
+        let tight = focus(&state, &question(), &FocusPolicy::new(10));
+        assert!(tight.extracted);
+        assert_eq!(tight.kept_sentences, 1, "{tight:?}");
+
+        // The same state with room for both keeps both, so the cut above is
+        // the budget doing its work and not a quirk of the ranking.
+        let roomy = focus(&state, &question(), &FocusPolicy::new(100));
+        assert!(roomy.extracted);
+        assert_eq!(roomy.kept_sentences, 2);
+    }
+
+    #[test]
+    fn an_extraction_that_saves_nothing_returns_the_full_state() {
+        // One boundary-free sentence that carries all the evidence: the only
+        // possible view *is* the whole state, so calling it focused would
+        // cost exactly as much as the input it replaced.
+        let text = "The deploy service is healthy and the database depends on it for every request";
+        let state = State::from_text(text);
+        assert!(estimate_tokens(text) > 16);
+        let view = focus(&state, &question(), &FocusPolicy::new(16));
+        assert!(!view.extracted);
+        assert_eq!(view.state.text(), text);
+        assert_eq!(view.estimated_tokens, estimate_tokens(text));
+    }
 }

@@ -479,6 +479,54 @@ mod tests {
         assert_eq!(failure.code, "graph.cycle");
     }
 
+    #[test]
+    fn validate_reports_a_shape_error_as_a_schema_code() {
+        // `nodes` must be an array; anything else never reaches the engine,
+        // so the caller sees the adapter's code, not a `graph.*` one.
+        let not_a_graph = serde_json::json!({ "version": 1, "nodes": { "a": "rule" } });
+        let failure = OpenCodifierServer::validate_document(&not_a_graph).unwrap_err();
+        assert_eq!(failure.code, "schema.invalid_value");
+        assert!(failure.message.contains("graph"), "{}", failure.message);
+    }
+
+    #[test]
+    fn validate_refuses_a_pipeline_over_the_node_limit_before_building_it() {
+        // One node past the IR ceiling: the refusal is the adapter's limit
+        // code, raised before `DecisionGraph` is ever constructed.
+        let nodes: Vec<Value> = (0..=Limits::default().max_graph_nodes)
+            .map(|index| serde_json::json!({ "id": format!("n{index:04}"), "kind": "normalize" }))
+            .collect();
+        let oversized = serde_json::json!({ "version": 1, "nodes": nodes });
+        let failure = OpenCodifierServer::validate_document(&oversized).unwrap_err();
+        assert_eq!(failure.code, "schema.limit_exceeded");
+        assert!(failure.message.contains("max_graph_nodes"), "{}", failure.message);
+
+        // The ceiling itself is still a legal pipeline, so the check is
+        // strictly `>`: a chain from one entry node to one terminal `output`
+        // that is exactly `max_graph_nodes` long validates.
+        let limit = Limits::default().max_graph_nodes;
+        let mut nodes = vec![serde_json::json!({ "id": "n0000", "kind": "normalize" })];
+        for index in 1..limit - 1 {
+            nodes.push(serde_json::json!({
+                "id": format!("n{index:04}"),
+                "kind": "rule",
+                "depends_on": [format!("n{:04}", index - 1)],
+            }));
+        }
+        nodes.push(serde_json::json!({
+            "id": format!("n{:04}", limit - 1),
+            "kind": "output",
+            "depends_on": [format!("n{:04}", limit - 2)],
+        }));
+        let verdict = OpenCodifierServer::validate_document(&serde_json::json!({
+            "version": 1,
+            "nodes": nodes,
+        }))
+        .unwrap();
+        assert_eq!(verdict["valid"], true);
+        assert_eq!(verdict["nodes"], limit);
+    }
+
     #[tokio::test]
     async fn verify_reports_the_gate_verdict() {
         let call = respond(server().verify_document(&choice_document()));

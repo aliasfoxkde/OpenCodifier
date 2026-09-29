@@ -265,6 +265,28 @@ mod tests {
     }
 
     #[test]
+    fn empty_comma_slots_are_skipped() {
+        // A doubled comma in a group report is a blank slot, not a status:
+        // it is dropped so the rest of the report still parses.
+        assert_eq!(
+            extract("north: healthy, , down."),
+            vec![RelationalFact::HealthList {
+                entity: "north".into(),
+                statuses: vec![Health::Healthy, Health::Down]
+            }],
+        );
+        // A report whose every status slot is blank has no statuses to
+        // report, but the entity is still named.
+        assert_eq!(
+            extract("south: , , healthy."),
+            vec![RelationalFact::HealthList {
+                entity: "south".into(),
+                statuses: vec![Health::Healthy]
+            }],
+        );
+    }
+
+    #[test]
     fn is_total_on_hostile_input() {
         for text in ["", ".", "...", "   ", "a".repeat(10_000).as_str(), "depends on is :"] {
             let _ = extract(text); // must not panic; value irrelevant

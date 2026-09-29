@@ -149,6 +149,22 @@ mod tests {
     }
 
     #[test]
+    fn exposes_the_policy_and_metadata_it_was_built_with() {
+        let policy = DecisionPolicy::default();
+        let metadata =
+            RequestMetadata { request_id: Some("req-0001".to_owned()), limits: Limits::default() };
+        let request = DecisionRequest::new(
+            State::from_text("route this request"),
+            vec![sample_question()],
+            policy.clone(),
+            metadata.clone(),
+        )
+        .expect("valid");
+        assert_eq!(request.policy(), &policy);
+        assert_eq!(request.metadata(), &metadata);
+    }
+
+    #[test]
     fn rejects_empty_questions() {
         assert!(matches!(
             DecisionRequest::new(
