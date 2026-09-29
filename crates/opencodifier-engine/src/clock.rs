@@ -8,7 +8,7 @@
 //!
 //! # Semantics
 //!
-//! * [`Clock::now`] returns a `std::time::Instant` — a monotonic reading.
+//! * [`Clock::now`] returns an [`Instant`] — a monotonic reading.
 //!   Deadlines are immune to system-clock adjustments, cannot be shared
 //!   between processes, and are never serialized: a deadline is
 //!   request-scoped state, not data.
@@ -24,7 +24,21 @@
 
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+/// The engine's monotonic time point.
+///
+/// On native targets this is `std::time::Instant` re-exported — the type
+/// every clock, deadline, and cache slot has always used. On
+/// `wasm32-unknown-unknown` it is the same API supplied by the
+/// `web-time` crate, because `std::time::Instant::now()` traps there:
+/// a wasm module has no OS time source and must read the host's
+/// monotonic clock instead. The seam exists so the executor's deadline
+/// math is one code path on every target (D23).
+#[cfg(not(target_arch = "wasm32"))]
+pub use std::time::Instant;
+#[cfg(target_arch = "wasm32")]
+pub use web_time::Instant;
 
 /// Source of monotonic time.
 ///

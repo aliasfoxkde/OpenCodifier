@@ -28,7 +28,7 @@ opencodifier/
 │   ├── opencodifier-http/      # axum 0.8 /v1 API (done)
 │   ├── opencodifier-cli/       # clap CLI binary `opencodifier` (done)
 │   ├── opencodifier-mcp/       # rmcp 2.2 stdio server, six codify_* tools (done)
-│   └── opencodifier-wasm/      # browser target (planned)
+│   └── opencodifier-wasm/      # wasm32 binding: WasmEngine over the zero-ML stack (done; D23)
 │
 ├── fixtures/                # wire-format fixtures per adapter (done, byte-locked)
 ├── recipes/                 # runnable decision graphs + captured responses (done)

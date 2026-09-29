@@ -25,7 +25,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
-use std::time::Instant;
 
 use opencodifier_core::{
     Candidate, CandidateId, ChoiceQuestion, ConfidenceReport, DecisionAnswer, DecisionMetrics,
@@ -35,12 +34,22 @@ use opencodifier_core::{
 
 use crate::cache::CacheKey;
 use crate::classifier::{Classifier, LexicalClassifier};
-use crate::clock::{CancellationToken, Clock, Deadline};
+use crate::clock::{CancellationToken, Clock, Deadline, Instant};
 use crate::engine::EngineConfig;
 use crate::error::{EngineError, EngineResult};
 use crate::graph::{NodeKind, NodeSpec};
 use crate::narrowing::{LexicalScores, NarrowingOutcome};
 use crate::rerank::{EmbeddingReranker, LexicalReranker, Reranker, cosine};
+
+/// Whether wave execution may spawn worker threads at all. Native targets
+/// honor `EngineConfig::parallelism`; `wasm32` cannot spawn threads
+/// (`std::thread::spawn` traps there), so wave execution is sequential by
+/// construction and [`RunReport::parallel_waves`] stays zero — a compile
+/// time fact stated once here, not a runtime surprise in a browser (D23).
+#[cfg(not(target_arch = "wasm32"))]
+const THREADS_AVAILABLE: bool = true;
+#[cfg(target_arch = "wasm32")]
+const THREADS_AVAILABLE: bool = false;
 
 /// What one node produced, ready to be merged into the run state.
 enum NodeOutput {
@@ -383,7 +392,7 @@ impl<'a> Executor<'a> {
             .filter_map(|id| self.config.graph.node(id))
             .filter(|spec| !self.skipped.contains(&spec.id))
             .collect();
-        let parallel = runnable.len() > 1 && self.config.parallelism > 1;
+        let parallel = runnable.len() > 1 && self.config.parallelism > 1 && THREADS_AVAILABLE;
         if parallel {
             self.parallel_waves += 1;
         }

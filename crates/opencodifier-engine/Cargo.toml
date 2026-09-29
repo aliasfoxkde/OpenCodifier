@@ -21,6 +21,14 @@ serde_json = "1"
 sha2.workspace = true
 thiserror.workspace = true
 
+# Monotonic time on wasm32 (D23): `std::time::Instant::now()` traps on
+# `wasm32-unknown-unknown`, so the `Instant` seam in `clock.rs` reads the
+# host clock through `web-time` there. On native targets `web-time` is a
+# zero-dependency re-export of `std::time::Instant`, leaving the native
+# dependency tree unchanged.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-time = "1"
+
 [dev-dependencies]
 criterion = { version = "0.8", default-features = false }
 opencodifier-schema = { path = "../opencodifier-schema", version = "0.3.0" }

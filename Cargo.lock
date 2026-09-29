@@ -1121,6 +1121,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror",
+ "web-time",
 ]
 
 [[package]]
@@ -1182,6 +1183,17 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror",
+]
+
+[[package]]
+name = "opencodifier-wasm"
+version = "0.3.0"
+dependencies = [
+ "opencodifier-core",
+ "opencodifier-engine",
+ "opencodifier-schema",
+ "serde_json",
+ "wasm-bindgen",
 ]
 
 [[package]]

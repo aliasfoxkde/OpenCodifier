@@ -11,6 +11,7 @@ members = [
     "crates/opencodifier-http",
     "crates/opencodifier-mcp",
     "crates/opencodifier-cli",
+    "crates/opencodifier-wasm",
 ]
 
 [workspace.package]

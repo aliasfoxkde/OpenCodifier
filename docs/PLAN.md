@@ -908,6 +908,22 @@ in between. Ordered so each step's output feeds the next.
   core is hard: cross-platform release matrix, Homebrew/winget/crates.io;
   `opencodifier-wasm` with the §68 security posture. Accept: per §58/§57
   rows in SPEC_COVERAGE flipping to done with evidence.
+- **18j (WASM half) — DONE (2026-09-29); distribution (§58) remains.**
+  D23 record first, then `crates/opencodifier-wasm`: `WasmEngine`
+  (`decide`/`validate_graph`/`run_graph`/`identity`) over
+  `EngineHandle::lexical` — the base zero-ML posture in the browser —
+  with typed JSON errors (`{"code","message"}`, same codes as HTTP) at
+  every entry point. The first wasm-pack artifact trapped in Node, which
+  forced the platform seams D23 now records: `clock.rs`'s `Instant`
+  (std natively, `web-time` on wasm32, target-gated so the native tree
+  gains nothing) and sequential wave execution on wasm32
+  (`parallel_waves` = 0 by construction). Acceptance: `just check-wasm`
+  (host tests, `cargo check --target wasm32-unknown-unknown`,
+  `wasm-pack --target nodejs`, Node smoke over the real artifact —
+  decide round trip, determinism, hostile refusals, graph cycle,
+  missing-backend refusal; NOT part of `just ci`), 7 host tests incl.
+  a manifest scan asserting no tokio/axum/reqwest/ort/libloading/dlopen,
+  §68 posture structural. Browser demo rides §58.
 
 **Sequencing.** 18a/18b/18c are the coverage spine and gate everything
 else (no new surface lands untested after 18b). 18d precedes 18e–18g (the
