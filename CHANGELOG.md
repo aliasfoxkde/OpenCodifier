@@ -10,6 +10,13 @@ releases may break, and every breaking change is recorded in this file
 
 ### Added
 
+- Agent-facing skills (§33, `skills/`): the shared calling protocol
+  plus all eight skill areas — routing, model-selection, tool-selection,
+  tool-gating, context-pruning, escalation, verification,
+  memory-selection — each grounded in the shipped `/v1/decide` shape.
+- Spec coverage map (`docs/SPEC_COVERAGE.md`): every PLANNING section
+  §§1–80 mapped to the implemented tree with an honest verdict and an
+  ordered remaining-work list.
 - Hosted API tier design (`docs/HOSTED_TIER.md`): VPS phases,
   edge-owned auth/tenancy, measured cost anchors, local/product
   separation invariants. Design only.
