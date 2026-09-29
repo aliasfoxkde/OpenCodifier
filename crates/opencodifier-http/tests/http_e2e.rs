@@ -325,6 +325,86 @@ async fn a_graph_beyond_the_node_limit_is_a_400_before_validation() {
     assert_eq!(error_code(&body), "schema.limit_exceeded", "body: {body}");
 }
 
+/// The default pipeline as a client would submit it: the graph serializes
+/// into exactly the document `/v1/graph/run` decodes.
+fn pipeline_document() -> Value {
+    serde_json::to_value(DecisionGraph::default_pipeline().unwrap()).unwrap()
+}
+
+#[tokio::test]
+async fn graph_run_decides_through_the_client_graph() {
+    let server = spawn_server().await;
+    let body = json!({
+        "graph": pipeline_document(),
+        "request": choice_payload(&DecisionPolicy::default()).parse::<Value>().unwrap(),
+    });
+    let response = post_json(&server.base_url, "/v1/graph/run", &body.to_string())
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+
+    let answer = &response["response"]["answers"][0];
+    assert_eq!(answer["type"], "choice", "graph_run: {response}");
+    // The identity is the run's own: content-addressed, never the builtin
+    // literal the client could have asserted (D19).
+    let identity = &response["identity"];
+    assert_ne!(identity["graph_version"], 1, "identity: {identity}");
+    assert!(identity["model_id"].as_str().is_some());
+}
+
+#[tokio::test]
+async fn graph_run_relays_the_engine_code_for_a_cyclic_graph() {
+    let server = spawn_server().await;
+    let mut document = pipeline_document();
+    // Introduce a cycle through two existing nodes.
+    let nodes = document["nodes"].as_array_mut().unwrap();
+    nodes[0]["depends_on"] = json!(["output"]);
+    let body = json!({
+        "graph": document,
+        "request": choice_payload(&DecisionPolicy::default()).parse::<Value>().unwrap(),
+    });
+    let response = post_json(&server.base_url, "/v1/graph/run", &body.to_string())
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(response["error"]["code"], "graph.cycle", "graph_run: {response}");
+}
+
+#[tokio::test]
+async fn graph_run_refuses_an_oversized_graph_before_validation() {
+    let server = spawn_server().await;
+    let nodes: Vec<Value> =
+        (0..200).map(|index| json!({ "id": format!("n{index}"), "kind": "rule" })).collect();
+    let body = json!({
+        "graph": { "version": 1, "nodes": nodes },
+        "request": choice_payload(&DecisionPolicy::default()).parse::<Value>().unwrap(),
+    });
+    let response = post_json(&server.base_url, "/v1/graph/run", &body.to_string())
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(error_code(&response), "schema.limit_exceeded", "graph_run: {response}");
+}
+
+#[tokio::test]
+async fn graph_run_reports_a_malformed_request_as_a_schema_error() {
+    let server = spawn_server().await;
+    let body = json!({
+        "graph": pipeline_document(),
+        "request": { "state": { "text": true } },
+    });
+    let response = post_json(&server.base_url, "/v1/graph/run", &body.to_string())
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let code = error_code(&response);
+    assert!(code.starts_with("schema."), "graph_run: {response}");
+}
+
 /// GETs a path, as a metadata probe would.
 async fn get_json(base_url: &str, path: &str) -> reqwest::Response {
     client().get(format!("{base_url}{path}")).send().await.unwrap()
