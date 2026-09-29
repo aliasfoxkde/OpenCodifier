@@ -1,0 +1,33 @@
+{
+  "state": {
+    "text": "decide whether this production deployment needs a human decision",
+    "facts": {}
+  },
+  "questions": [
+    {
+      "type": "boolean",
+      "id": "escalate",
+      "text": "Should this escalate to a human?"
+    }
+  ],
+  "policy": {
+    "min_confidence": 0.95,
+    "verify_below": 0.9,
+    "abstain_below": 0.85,
+    "risk": "high"
+  },
+  "metadata": {
+    "request_id": "recipe-escalation-0001",
+    "limits": {
+      "max_input_bytes": 1048576,
+      "max_questions": 32,
+      "max_candidates": 256,
+      "max_graph_nodes": 128,
+      "max_execution_time": {
+        "secs": 10,
+        "nanos": 0
+      },
+      "max_retrieval_results": 64
+    }
+  }
+}

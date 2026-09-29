@@ -1,5 +1,5 @@
-//! The clap command surface: `decide`, `graph validate`, `serve`, and
-//! `models verify`.
+//! The clap command surface: `decide`, `graph validate`, `serve`,
+//! `models verify`, and `recipe list`/`install`.
 //!
 //! Parsing is the only thing this module does; every subcommand hands off
 //! to a module of its own, and every module drives the runtime through
@@ -71,6 +71,8 @@ pub enum Command {
     Mcp(McpArgs),
     /// Model artifact operations.
     Models(ModelsCommand),
+    /// Built-in recipe fleet operations.
+    Recipe(RecipeCommand),
 }
 
 impl Command {
@@ -87,6 +89,7 @@ impl Command {
             Self::Serve(args) => crate::serve::run(&args),
             Self::Mcp(args) => crate::mcp::run(&args),
             Self::Models(models) => crate::models::run(&models.command),
+            Self::Recipe(recipe) => crate::recipes::run(&recipe.command),
         }
     }
 }
@@ -224,6 +227,37 @@ pub enum ModelsSubcommand {
         /// `decision.onnx`.
         #[arg(long, value_name = "PATH")]
         artifact: Option<PathBuf>,
+    },
+}
+
+/// `opencodifier recipe …`
+#[derive(Debug, Args)]
+pub struct RecipeCommand {
+    /// The recipe operation to run.
+    #[command(subcommand)]
+    pub command: RecipeSubcommand,
+}
+
+/// Recipe operations over the built-in fleet (PLANNING.md §34).
+#[derive(Debug, Subcommand)]
+pub enum RecipeSubcommand {
+    /// List the recipes this binary ships.
+    List,
+    /// Write a built-in recipe's graph, request, and captured expected
+    /// response into a directory of its own, ready for `serve --graph`.
+    Install {
+        /// Name of the recipe to install (`recipe list` prints the names).
+        #[arg(value_name = "NAME")]
+        name: String,
+
+        /// Directory to install into. Defaults to `./recipes` —
+        /// project-local, next to the working tree.
+        #[arg(long, value_name = "DIR")]
+        dest: Option<PathBuf>,
+
+        /// Overwrite an existing installation of this recipe.
+        #[arg(long)]
+        force: bool,
     },
 }
 

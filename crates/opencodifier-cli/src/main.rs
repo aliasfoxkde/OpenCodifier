@@ -29,6 +29,7 @@ mod input;
 mod mcp;
 mod models;
 mod output;
+mod recipes;
 mod runtime;
 mod serve;
 

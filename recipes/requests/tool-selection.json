@@ -1,0 +1,47 @@
+{
+  "state": {
+    "text": "pick exactly one tool for the current step of the task",
+    "facts": {}
+  },
+  "questions": [
+    {
+      "type": "choice",
+      "id": "tool",
+      "text": "Which tool should this step call?",
+      "candidates": [
+        {
+          "id": "web-search",
+          "description": "Search the web for evidence"
+        },
+        {
+          "id": "file-read",
+          "description": "Read a local file"
+        },
+        {
+          "id": "shell-exec",
+          "description": "Run a local command"
+        }
+      ]
+    }
+  ],
+  "policy": {
+    "min_confidence": 0.75,
+    "verify_below": 0.6,
+    "abstain_below": 0.5,
+    "risk": "medium"
+  },
+  "metadata": {
+    "request_id": "recipe-tool-selection-0001",
+    "limits": {
+      "max_input_bytes": 1048576,
+      "max_questions": 32,
+      "max_candidates": 256,
+      "max_graph_nodes": 128,
+      "max_execution_time": {
+        "secs": 10,
+        "nanos": 0
+      },
+      "max_retrieval_results": 64
+    }
+  }
+}

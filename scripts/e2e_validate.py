@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import pathlib
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -131,6 +133,7 @@ def main() -> int:
         run_surface_checks(base)
         if not args.skip_mcp:
             run_mcp_checks(args.binary)
+        run_recipe_checks(args.binary, args.port + 1)
     finally:
         server.terminate()
         try:
@@ -331,6 +334,98 @@ def _exit() -> int:
     print(f"\n{len(CHECKS) - len(failed)}/{len(CHECKS)} e2e checks passed",
           flush=True)
     return 1 if failed else 0
+
+
+FLEET = ["model-routing", "task-classification", "tool-selection", "tool-gating",
+         "context-pruning", "cache-eligibility", "skill-selection", "memory-selection",
+         "escalation", "verification", "document-relevance", "code-review-risk"]
+
+
+def run_recipe_checks(binary: str, port: int) -> None:
+    """§34 recipe fleet: list, install, overwrite guard, decide-through-install."""
+    repo = pathlib.Path(__file__).resolve().parent.parent
+    proc = subprocess.run([binary, "recipe", "list"], capture_output=True, text=True,
+                          timeout=60)
+    stdout = proc.stdout
+    check("recipe list: all twelve fleet areas named",
+          proc.returncode == 0 and all(name in stdout for name in FLEET),
+          f"rc={proc.returncode} lines={len(stdout.splitlines())}")
+
+    with tempfile.TemporaryDirectory(prefix="oc-e2e-recipes-") as tmp:
+        dest = pathlib.Path(tmp) / "fleet"
+        proc = subprocess.run([binary, "recipe", "install", "model-routing",
+                               "--dest", str(dest)], capture_output=True, text=True,
+                              timeout=60)
+        target = dest / "model-routing"
+        files_ok = all((target / f).is_file()
+                       for f in ("graph.json", "request.json", "expected-response.json"))
+        check("recipe install: three fleet files written", proc.returncode == 0 and files_ok,
+              f"rc={proc.returncode} {proc.stderr[:80]}")
+
+        committed = (repo / "recipes" / "model-routing.json").read_bytes()
+        installed = (target / "graph.json").read_bytes() if files_ok else b""
+        check("recipe install: bytes identical to the committed fleet graph",
+              installed == committed, f"{len(installed)} vs {len(committed)} bytes")
+
+        proc = subprocess.run([binary, "graph", "validate", str(target / "graph.json")],
+                              capture_output=True, text=True, timeout=60)
+        check("recipe install: installed graph validates",
+              proc.returncode == 0 and "ok: graph" in proc.stdout, proc.stdout[:80])
+
+        proc = subprocess.run([binary, "recipe", "install", "model-routing",
+                               "--dest", str(dest)], capture_output=True, text=True,
+                              timeout=60)
+        check("recipe install: overwrite refused without --force",
+              proc.returncode != 0 and "cli.recipe_exists" in proc.stderr,
+              f"rc={proc.returncode} {proc.stderr[:80]}")
+        proc = subprocess.run([binary, "recipe", "install", "model-routing", "--force",
+                               "--dest", str(dest)], capture_output=True, text=True,
+                              timeout=60)
+        check("recipe install: --force overwrites",
+              proc.returncode == 0, proc.stderr[:80])
+
+    proc = subprocess.run([binary, "recipe", "install", "does-not-exist",
+                           "--dest", tempfile.mkdtemp(prefix="oc-e2e-recipe-bad-")],
+                          capture_output=True, text=True, timeout=60)
+    check("recipe install: unknown name is an input error",
+          proc.returncode != 0 and "cli.unknown_recipe" in proc.stderr,
+          f"rc={proc.returncode} {proc.stderr[:80]}")
+
+    # Decide through an installed recipe on a fresh server: the install is
+    # runnable, and the outcome matches the captured expected response.
+    base = f"http://127.0.0.1:{port}"
+    with socket.socket() as probe:
+        if probe.connect_ex(("127.0.0.1", port)) == 0:
+            check("recipe serve: port free for fresh server", False,
+                  f"port {port} in use")
+            return
+    with tempfile.TemporaryDirectory(prefix="oc-e2e-recipe-serve-") as tmp:
+        dest = pathlib.Path(tmp) / "recipes"
+        subprocess.run([binary, "recipe", "install", "model-routing", "--dest", str(dest)],
+                       capture_output=True, timeout=60)
+        graph = dest / "model-routing" / "graph.json"
+        request = dest / "model-routing" / "request.json"
+        expected = json.loads((dest / "model-routing" / "expected-response.json").read_text())
+        server = subprocess.Popen(
+            [binary, "serve", "--bind", f"127.0.0.1:{port}", "--graph", str(graph)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            if not wait_health(base):
+                check("recipe serve: installed graph serves", False, "never healthy")
+                return
+            check("recipe serve: installed graph serves", True)
+            st, response = post(base, "/v1/decide", json.loads(request.read_text()))
+            check("recipe serve: decide matches the captured outcome",
+                  st == 200 and response.get("outcome") == expected.get("outcome")
+                  and response.get("answers") == expected.get("answers"),
+                  f"st={st} outcome={response.get('outcome')} "
+                  f"expected={expected.get('outcome')}")
+        finally:
+            server.terminate()
+            try:
+                server.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                server.kill()
 
 
 def run_surface_checks(base: str) -> None:

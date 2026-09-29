@@ -1,0 +1,47 @@
+{
+  "state": {
+    "text": "score the risk of merging the change under review",
+    "facts": {}
+  },
+  "questions": [
+    {
+      "type": "score",
+      "id": "review_risk",
+      "text": "How risky is this change under review?",
+      "levels": [
+        {
+          "label": "low"
+        },
+        {
+          "label": "medium"
+        },
+        {
+          "label": "high"
+        },
+        {
+          "label": "critical"
+        }
+      ]
+    }
+  ],
+  "policy": {
+    "min_confidence": 0.85,
+    "verify_below": 0.7,
+    "abstain_below": 0.5,
+    "risk": "high"
+  },
+  "metadata": {
+    "request_id": "recipe-code-review-risk-0001",
+    "limits": {
+      "max_input_bytes": 1048576,
+      "max_questions": 32,
+      "max_candidates": 256,
+      "max_graph_nodes": 128,
+      "max_execution_time": {
+        "secs": 10,
+        "nanos": 0
+      },
+      "max_retrieval_results": 64
+    }
+  }
+}

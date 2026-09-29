@@ -1,0 +1,44 @@
+{
+  "state": {
+    "text": "score how relevant this retrieved document is to the query",
+    "facts": {}
+  },
+  "questions": [
+    {
+      "type": "score",
+      "id": "relevance",
+      "text": "How relevant is this document to the query?",
+      "levels": [
+        {
+          "label": "irrelevant"
+        },
+        {
+          "label": "related"
+        },
+        {
+          "label": "essential"
+        }
+      ]
+    }
+  ],
+  "policy": {
+    "min_confidence": 0.75,
+    "verify_below": 0.6,
+    "abstain_below": 0.5,
+    "risk": "low"
+  },
+  "metadata": {
+    "request_id": "recipe-document-relevance-0001",
+    "limits": {
+      "max_input_bytes": 1048576,
+      "max_questions": 32,
+      "max_candidates": 256,
+      "max_graph_nodes": 128,
+      "max_execution_time": {
+        "secs": 10,
+        "nanos": 0
+      },
+      "max_retrieval_results": 64
+    }
+  }
+}

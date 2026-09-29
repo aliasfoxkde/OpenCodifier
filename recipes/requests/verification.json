@@ -1,0 +1,33 @@
+{
+  "state": {
+    "text": "decide whether this produced answer needs independent verification",
+    "facts": {}
+  },
+  "questions": [
+    {
+      "type": "boolean",
+      "id": "needs_verification",
+      "text": "Does this answer need independent verification?"
+    }
+  ],
+  "policy": {
+    "min_confidence": 0.85,
+    "verify_below": 0.75,
+    "abstain_below": 0.6,
+    "risk": "medium"
+  },
+  "metadata": {
+    "request_id": "recipe-verification-0001",
+    "limits": {
+      "max_input_bytes": 1048576,
+      "max_questions": 32,
+      "max_candidates": 256,
+      "max_graph_nodes": 128,
+      "max_execution_time": {
+        "secs": 10,
+        "nanos": 0
+      },
+      "max_retrieval_results": 64
+    }
+  }
+}
