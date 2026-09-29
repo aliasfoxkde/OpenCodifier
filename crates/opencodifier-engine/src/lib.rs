@@ -136,7 +136,7 @@ pub use focus::{
     DEFAULT_BUDGET_TOKENS, FocusPolicy, FocusSummary, FocusView, estimate_tokens, focus,
 };
 pub use graph::{DecisionGraph, GraphDocument, NodeKind, NodeSpec};
-pub use handle::{EngineHandle, EngineHealth};
+pub use handle::{EngineHandle, EngineHealth, MAX_BATCH};
 pub use lexical::{Bm25Index, negation_polarity, softmax, tokenize};
 pub use narrowing::{LexicalScores, NarrowingOutcome};
 pub use relational::RelationalSolver;

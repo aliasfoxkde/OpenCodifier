@@ -19,6 +19,16 @@ use crate::engine::{DecisionEngine, EngineConfig};
 use crate::error::EngineResult;
 use crate::executor::RunReport;
 
+/// Maximum number of requests one batch call accepts (§36 `POST
+/// /v1/batch`, MCP `codify_batch`).
+///
+/// The batch exists so a client can amortize transport round trips, not
+/// so it can enqueue work: each item is still decided and limited
+/// independently, and a runaway batch is refused up front. One constant
+/// here — the engine owns the policy — so HTTP and MCP cannot drift on
+/// what a batch is.
+pub const MAX_BATCH: usize = 16;
+
 /// A ready-to-serve decision runtime.
 #[derive(Debug)]
 pub struct EngineHandle {
