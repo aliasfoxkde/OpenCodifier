@@ -37,6 +37,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from resources import ResourceMonitor
+
 LBRANCH = "thecodacus/llama.cpp parallel-decision ad129b0"
 
 
@@ -318,6 +320,8 @@ def main() -> int:
     print("spawn:", " ".join(cmd), flush=True)
     with open(args.out.with_suffix(".server.log"), "wb") as log:
         proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
+    monitor = ResourceMonitor()
+    monitor.start()
     try:
         wait_health(args.port, proc)
 
@@ -353,6 +357,8 @@ def main() -> int:
                 },
                 "chat": chat,
             }
+            monitor.stop()
+            result["resources"] = monitor.report()
             args.out.write_text(json.dumps(result, sort_keys=True, indent=1) + "\n")
             cm = chat["metrics"]
             print(
@@ -446,6 +452,7 @@ def main() -> int:
             "determinism": determinism,
             "batched": batched,
             "chat": chat,
+            "resources": monitor.report(),
             "metrics": metrics(single),
         }
     finally:
@@ -454,6 +461,7 @@ def main() -> int:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+        monitor.stop()
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, sort_keys=True, indent=1) + "\n")

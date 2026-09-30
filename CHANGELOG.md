@@ -56,6 +56,23 @@ releases may break, and every breaking change is recorded in this file
   mean), the JevBench authors' board, and the
   `SargeDev/jev-distill-corpus(-v3)` training-corpus landscape.
   Written website-liftable.
+- Fusion study (`runner/fusion_study.py` + `results/fusion-*.md`): the
+  confidence-gated ladder simulated post-hoc over measured per-item arm
+  rows — suite blend engine → gte-ONNX → Qwen3.5-2B scores **0.867 @
+  753 ms** vs 0.725 best single (F23), while the same gate on JevBench
+  falls below the bridge alone (0.632 vs 0.6494) because the engine's
+  out-of-domain ECE is 0.798: gates inherit their rung's calibration
+  (F24).
+- Resource accounting in every runner (`runner/resources.py`): `/proc`-
+  based monitor recording peak RSS (`VmHWM`), CPU-seconds, IO bytes and
+  wall time per arm into run JSONs (`resources`) and summary.md's new
+  peak-RSS column; prior runs show `—`.
+- `docs/TRAINING.md`: adapter-training research record — the JEV-27B
+  recipe class (frozen base + small trained decision block), LoRA
+  provenance and serving economics, what a 0.8 B decision-head/LoRA run
+  costs on this GPU-less host (1–2 CPU-days first run), the community
+  checkpoint it must beat (Jev-Style-0.8B 0.6494), and a costed E0–E3
+  experiment ladder.
 
 ### Changed
 

@@ -61,6 +61,8 @@ import sys
 import time
 from pathlib import Path
 
+from resources import ResourceMonitor
+
 RUNNER_DIR = Path(__file__).parent
 sys.path.insert(0, str(RUNNER_DIR))
 
@@ -543,6 +545,10 @@ def main() -> int:
         adapter = JevNativeBridgeAdapter(args.model_dir, args.threads, args.timeout)
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
+    # Rooted here so every adapter shape is covered: engine/fork adapters
+    # spawn a server child; vtx/jev_native load weights in-process.
+    monitor = ResourceMonitor()
+    monitor.start()
     raw_dir = (args.out_dir / "raw").resolve()
     ledger = Ledger(str(args.out_dir / "ledger.jsonl"), cap_usd=0.0)
     # Every arm is local compute with zero tariff: nothing is billable, so
@@ -582,6 +588,7 @@ def main() -> int:
         (args.out_dir / "results-replay.jsonl").write_text(
             "".join(json.dumps(r, allow_nan=False) + "\n" for r in replay))
 
+    monitor.stop()
     model_files = {}
     if args.arm == "jev_native":
         gguf = args.model_dir / "Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf"
@@ -614,6 +621,7 @@ def main() -> int:
         "determinism": determinism,
         "adapter_warnings": getattr(adapter, "warnings", []),
         "charged_usd": ledger.charged,
+        "resources": monitor.report(),
     }
     (args.out_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n"

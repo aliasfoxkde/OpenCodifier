@@ -37,6 +37,7 @@ from pathlib import Path
 # shared with the Laya encoder arm; reuse instead of duplicating it.
 sys.path.insert(0, str(Path(__file__).parent))
 from run_laya import ece, metrics, sha256_file  # noqa: E402
+from resources import ResourceMonitor  # noqa: E402
 
 
 def run_once(client, items: list[dict]) -> list[dict]:
@@ -101,6 +102,9 @@ def main() -> int:
     sys.path.insert(0, str(args.model_dir))
     from inference import JevClient
 
+    monitor = ResourceMonitor()
+    monitor.start()
+
     weights_file = "model_lf2.safetensors" if args.weights == "lf2" else "model.safetensors"
     client = JevClient.from_pretrained(str(args.model_dir), prefer_lf2=args.weights == "lf2")
     used_lf2 = bool(client.is_lf2)
@@ -152,6 +156,9 @@ def main() -> int:
     vendor = sorted(r["vendor_ms"] for r in single)
     result["metrics"]["vendor_p50_ms"] = vendor[len(vendor) // 2]
     result["metrics"]["vendor_mean_ms"] = sum(vendor) / len(vendor)
+
+    monitor.stop()
+    result["resources"] = monitor.report()
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, sort_keys=True, indent=1) + "\n")

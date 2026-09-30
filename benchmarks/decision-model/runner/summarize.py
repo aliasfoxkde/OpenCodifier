@@ -66,14 +66,16 @@ def main() -> int:
         "Suite: `suite/suite.json` (120 items; metadata_match / lexical_semantic /",
         "relational_compositional, 40 each). Accuracy is top-1 candidate id.",
         "Columns: accuracy (meta/lex/rel), overall accuracy, ECE of the winner",
-        "probability, single-decision latency, determinism.",
+        "probability, single-decision latency, peak process-tree RSS, determinism.",
+        "Runs recorded before the resource monitor landed show `—` there; their",
+        "underlying numbers were measured but not retained.",
         "",
         "Rows marked `(chat screen)` are token-by-token chat baselines from forks",
         "without a decision arm: sampled decode, JSON-writing, no calibrated",
         "distribution — context for the decision rows, never comparable to them.",
         "",
-        "| run | acc (meta/lex/rel) | acc | ECE | p50 | determinism |",
-        "|---|---|---|---|---|---|",
+        "| run | acc (meta/lex/rel) | acc | ECE | p50 | peak RSS | determinism |",
+        "|---|---|---|---|---|---|---|",
     ]
     for name, d in results:
         m = d["metrics"]
@@ -92,12 +94,18 @@ def main() -> int:
             det_s = f"NO (Δ{det.get('max_prob_delta', 0):.2g})"
         ece_s = f"{ece:.3f}" if ece is not None else "—"
         p50_s = f"{p50:.1f}ms" if p50 is not None else "—"
+        res = d.get("resources") or {}
+        rss_s = (
+            f"{res['peak_rss_mib']:.0f} MiB"
+            if "peak_rss_mib" in res and "error" not in res
+            else "—"
+        )
         label = f"{name} (chat screen)" if d.get("chat_only_screen") else name
         if d.get("caveat"):
             label += " (caveat)"
         lines.append(
             f"| {label} | {fmt_class_table(m['accuracy_by_class'])} | {acc:.3f} "
-            f"| {ece_s} | {p50_s} | {det_s} |"
+            f"| {ece_s} | {p50_s} | {rss_s} | {det_s} |"
         )
         model = d.get("model", {})
         if "sha256" in model:
@@ -126,6 +134,14 @@ def main() -> int:
             ]
             if parts:
                 lines.append(f"- `{name}` bulk per-decision (batched contexts): {'; '.join(parts)}.")
+        if (res := d.get("resources")) and "error" not in res:
+            lines.append(
+                f"- `{name}` resources: peak RSS {res['peak_rss_mib']:.0f} MiB, "
+                f"CPU {res['cpu_seconds']:.1f}s over {res['wall_s']:.1f}s wall, "
+                f"IO {res['io_read_mib']:.0f}/+{res['io_write_mib']:.0f} MiB "
+                f"({res['sampling']['pids_seen']} process"
+                f"{'es' if res['sampling']['pids_seen'] != 1 else ''} sampled)."
+            )
         if d.get("arm", "").startswith("engine__") or d.get("arm") == "engine_builtin_lexical":
             lines.append(
                 f"- `{name}` outcomes: {d['metrics'].get('outcomes')} — abstention/verify "

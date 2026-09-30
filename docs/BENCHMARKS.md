@@ -207,6 +207,19 @@ What the board established (full findings catalog in REPORT.md):
 - **Raw winner probabilities are overconfident everywhere** (ECE
   0.048–0.626) — calibration artifacts are fitted per tier (D15) before
   any confidence is exposed.
+- **The ladder beats its best rung at home, and loses abroad.** Gated
+  fusion over measured rows (engine → embedding → 2B decision arm)
+  scores **0.867 on the suite at 753 ms** — +14.2 pp over the best
+  single arm at 43 % of its latency (F23) — but the same gate on
+  JevBench *lowers* the bridge's 0.6494 to 0.632, because the engine's
+  out-of-domain calibration (ECE 0.798) poisons the routing decision
+  (F24). Gates inherit their rung's calibration; validate them per
+  domain before trusting them to route. Study: `fusion_study.py`,
+  outputs `results/fusion-*.md` in the decision-model README.
+- **Adapter training is the measured road's next rung** — the target
+  bar itself was built with a frozen base + small trained decision
+  block. Feasibility on this (GPU-less) host, the recipe class, and a
+  costed experiment ladder: `docs/TRAINING.md`.
 
 ## The target bar
 
