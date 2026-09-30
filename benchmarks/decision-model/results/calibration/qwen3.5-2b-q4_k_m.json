@@ -3,14 +3,14 @@
   "scheme": "temperature",
   "model_id": "qwen3.5-2b-q4_k_m",
   "calibration_version": 1,
-  "default_temperature": 0.842569,
+  "default_temperature": 0.9317,
   "temperatures": {
-    "choice": 0.842569
+    "choice": 0.9317
   },
   "fit": {
     "items": 120,
     "ece_before": 0.06211,
-    "ece_after": 0.054168,
-    "source": "benchmarks/decision-model suite (seed 20260926, 120 items, single-run arm llama__Qwen3.5-2B.json, model Qwen3.5-2B-Q4_K_M.gguf); winner-vs-rest margin fit, in-sample"
+    "ece_after": 0.058847,
+    "source": "benchmarks/decision-model suite (seed 20260926, 120 items, single-run arm llama__Qwen3.5-2B.json, model Qwen3.5-2B-Q4_K_M.gguf); exact full-distribution reverse-softmax fit (d15), in-sample"
   }
 }

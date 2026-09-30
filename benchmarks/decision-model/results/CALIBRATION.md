@@ -15,7 +15,7 @@ until it is calibrated.
 | relational-v1 (engine default) | 0.658 | 0.094 | 0.097 | **not shipped** |
 | gte-modernbert-onnx-fp32 | ∞ (degenerate) | 0.330 | — | not shipped |
 | qwen3.5-0.8b-q4_0 | 0.629 | 0.074 | 0.054 | shipped |
-| qwen3.5-2b-q4_k_m | 0.843 | 0.062 | 0.054 | shipped |
+| qwen3.5-2b-q4_k_m | 0.932 (exact, d15 refit) | 0.062 | 0.059 | shipped |
 | qwen3.5-4b-q3_k_s | 1.672 | 0.069 | 0.039 | shipped |
 | qwen3.5-4b-ud-q4_k_xl | 1.400 | 0.074 | 0.058 | shipped |
 | mimo-v2.6-9b-q3_k_s | 1.372 | 0.048 | 0.026 | shipped |
@@ -104,7 +104,7 @@ record the provenance as `parallel-decision ad129b0+distribution`
 server does not send what the fit needs. Until then the margin
 temperature stands.
 
-**Exact fit implemented (2026-09-30, pending the d15 refit).** When a
+**Exact fit implemented (2026-09-30; refit landed, see above).** When a
 run records full per-item `probs`, `fit_calibration.py` now fits the
 real thing instead of the margin proxy: reverse-softmax temperature
 scaling, `q_i(T) = p_i^(1/T) / Σ_j p_j^(1/T)`, minimizing categorical
@@ -126,6 +126,23 @@ boards reported at one temperature, labels drawn at another):
   both < 9B sharpening) is the part to trust, not the absolute values.
   The d15 refit replaces the 2B arm's artifact with an exact-fit one
   when the CPU leg lands.
+
+**d15 refit landed (2026-09-30).** The parallel-decision CPU leg
+(Qwen3.5-2B) recorded full per-candidate distributions for all 120
+items, and the refit replaced that arm's artifact with the exact fit:
+**T 0.8426 → 0.9317**, ECE 0.0621 → 0.0588 (still improves, so it
+ships; the gate is "does not worsen ECE"). The exact T sits closer to
+identity than the margin proxy's 0.843 — the proxy over-sharpened on
+multi-way boards, exactly as the synthetic grid predicted. Its ECE
+(0.059) reads worse than the proxy's in-sample 0.054; that is the
+proxy overfitting the winner-vs-rest margin, not the exact fit being
+inferior — ECE here is a consistency check, and the fit objective is
+categorical NLL over the full board. The other four decoder arms keep
+margin-fit artifacts until their arms re-run with distribution
+emission (their refits reproduced the margin numbers identically).
+A schema gate now pins this in CI: `crates/opencodifier-engine/tests/
+artifact_schema_check.rs` deserializes every artifact of record into
+`CalibrationArtifact` (`deny_unknown_fields`).
 
 Fits are **in-sample**: fitted and evaluated on the same 120 items.
 ECE-after values are consistency checks, not generalization claims —

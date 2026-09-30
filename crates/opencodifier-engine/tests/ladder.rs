@@ -166,11 +166,9 @@ fn a_non_empty_ladder_without_identity_is_refused_at_assembly() {
         ..LadderPolicy::default()
     };
     let classifier = Arc::new(MockClassifier::new("mock/any"));
-    let error = engine_with(
-        EngineConfig::with_default_pipeline().unwrap().with_ladder(ladder),
-        classifier,
-    )
-    .unwrap_err();
+    let error =
+        engine_with(EngineConfig::with_default_pipeline().unwrap().with_ladder(ladder), classifier)
+            .unwrap_err();
     assert!(matches!(error, EngineError::InvalidConfig { .. }), "{error:?}");
 }
 
