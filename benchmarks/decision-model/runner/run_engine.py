@@ -29,6 +29,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from resources import ResourceMonitor
+
 
 def post(url: str, payload: dict, timeout: float = 120.0) -> dict:
     req = urllib.request.Request(
@@ -147,6 +149,8 @@ def main() -> int:
         cmd += ["--focus-budget", str(args.focus_budget)]
     with open(args.out.with_suffix(".server.log"), "wb") as log:
         proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
+    monitor = ResourceMonitor()
+    monitor.start()
     try:
         health = wait_health(args.port, proc)
         model_id = health["identity"]["model_id"]
@@ -158,6 +162,8 @@ def main() -> int:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+        monitor.stop()
+        resources = monitor.report()
 
     determinism = {
         "predictions_match": all(a["pred"] == b["pred"] for a, b in zip(rows, rows2)),
@@ -187,6 +193,7 @@ def main() -> int:
         "suite_sha256": hashlib.sha256(args.suite.read_bytes()).hexdigest(),
         "single": rows,
         "determinism": determinism,
+        "resources": resources,
         "metrics": {
             "accuracy": acc,
             "accuracy_by_class": by_class,

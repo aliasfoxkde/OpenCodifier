@@ -41,6 +41,8 @@ from pathlib import Path
 import numpy as np
 from tokenizers import Tokenizer
 
+from resources import ResourceMonitor
+
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -308,6 +310,12 @@ def main() -> int:
     )
     args = ap.parse_args()
 
+    # Rooted at this process: in-process backends (onnx/torch) are measured
+    # directly; the llamacpp backend's llama-server is a child, so the tree
+    # walk covers it too.
+    monitor = ResourceMonitor()
+    monitor.start()
+
     suite = json.loads(args.suite.read_text())
     enc = make_encoder(
         args.backend,
@@ -360,6 +368,9 @@ def main() -> int:
             "ms_per_item": t1 * 1000.0 / len(rows),
         },
     }
+    monitor.stop()
+    result["resources"] = monitor.report()
+
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, sort_keys=True, indent=1) + "\n")
     print(

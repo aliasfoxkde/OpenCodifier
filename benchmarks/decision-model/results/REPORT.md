@@ -480,6 +480,38 @@ same 231 items take ~60 s with the run directory on tmpfs. Runs v1–v3
 are quarantined partials; the of-record run is `runs/jevbench/engine-v4`
 (out-of-tree), rerun fresh, never patched up.
 
+## Fusion study: what a confidence-gated ladder would score (post-hoc)
+
+`runner/fusion_study.py` simulates the deterministic-first ladder offline,
+joining **measured** per-item arm rows (probabilities, predictions,
+latencies — all harness measurements, nothing re-inferred) and walking a
+threshold-gated escalation per item: accept a rung when its winner
+probability clears the gate, else fall through; cost = rungs incurred.
+Outputs of record: `results/fusion-suite.md`, `results/fusion-jevbench.md`,
+`results/fusion-jevbench-bridge.md`.
+
+**Suite (engine relational-v1 → gte-ONNX-fp32 → Qwen3.5-2B decision arm):**
+the ladder reaches **0.867 blended** (engine t=0.55, fallback t=0.30;
+routing 54 % engine / 1 % embed / 45 % LLM) at **753 ms mean** — vs 0.725
+for the best single arm (the 2B itself) at 1735 ms. Under a 497 ms budget
+it still scores **0.800** (71 % engine / 29 % LLM, 410 ms). Per class at
+the best point: metadata 1.00, lexical 0.72, **relational 0.88** (the
+engine's proofs keep confident relational items at 1.3 ms; the hedged ones
+escalate to the LLM). Oracle bound on the joined set: 0.975 — headroom
+remains for a better-calibrated gate. The mixed-rung ECE (0.127) is the
+next work item: D15 per-rung temperature before trusting the blended
+confidence.
+
+**JevBench-231 (engine → vtx, engine → bridge):** engine+vtx reaches
+**0.455** (vs 0.411 best single, +4.4 pp at 6.3 ms mean; oracle 0.584).
+But engine+bridge **fails to beat the bridge alone**: best gated fusion
+0.632 vs 0.6494 bridge-only, because the engine's JevBench calibration is
+broken (ECE 0.798) — its overconfident wrong answers survive any useful
+gate. That is the measured §19 lesson: **an escalation gate is only as
+good as its rung's calibration on the distribution it is gating**, so
+gates must be domain-validated (or fitted per-domain) before they are
+trusted to route.
+
 ## Findings
 
 - **F1 — Tier scheme (D16 ×3).** Four measured tiers: MiMo-9B Q3_K_S
@@ -621,6 +653,20 @@ are quarantined partials; the of-record run is `runs/jevbench/engine-v4`
   0.650 @ 613 ms) — D16 amended; (c) a global temperature cannot
   calibrate a proof/delegate stack (CALIBRATION.md finding 2), so the
   engine keeps identity calibration until per-mode calibration exists.
+- **F23 — The ladder beats its best rung on home ground: 0.867 suite at
+  753 ms.** Post-hoc fusion over measured rows (`fusion_study.py`): gate
+  the engine at t=0.55, escalate hedged items to the Qwen3.5-2B decision
+  arm, and the blend scores +14.2 pp over the best single arm at 43 % of
+  its latency; under a 497 ms budget it still holds 0.800. Relational
+  compositional rises to 0.88 — proofs keep the confident items, the LLM
+  answers the hedges. Oracle 0.975 says better gates have room. The
+  blended ECE (0.127) needs per-rung D15 calibration before exposure.
+- **F24 — The same ladder loses out-of-domain: gates inherit their
+  rung's calibration.** On JevBench the engine's ECE is 0.798; gating
+  on it *lowers* the bridge's 0.6494 to 0.632 (engine+vtx does add
+  +4.4 pp over vtx-only, 0.455). A confidence gate is not free
+  architecture — it must be validated or fitted on the distribution it
+  routes, which is precisely the §19 uncertainty-gate contract.
 
 ## Threats to validity
 
@@ -786,3 +832,15 @@ hash is a changed artifact and invalidates the row (D14).
   benchmarks (JevBench 88.70 family-macro) — the number to reach while
   staying faster, smaller, and easier to adopt. No tier changes (D16
   unchanged).
+- **2026-09-29 (ladder fusion + resource accounting)** — same 53 runs,
+  two new measured analyses and a harness upgrade. `fusion_study.py`
+  (post-hoc, measured rows only): suite ladder engine→gte→Qwen3.5-2B
+  hits **0.867 @ 753 ms** vs 0.725 best single (F23; oracle 0.975),
+  while the same gate on JevBench *underperforms* the bridge alone
+  (0.632 vs 0.6494) because the engine's out-of-domain ECE is 0.798 —
+  gates inherit their rung's calibration (F24). Runners now carry a
+  `/proc`-based resource monitor (`runner/resources.py`): peak RSS,
+  CPU-seconds, IO bytes, wall time land in every future run JSON under
+  `resources` and in summary.md's new peak-RSS column (prior runs show
+  `—`). Training research recorded in `docs/TRAINING.md` (LoRA /
+  decision-head adapter feasibility on this host). No tier changes.

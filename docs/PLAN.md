@@ -785,6 +785,19 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   anchor — a data point the field lacked, not a new tier (D16
   unchanged). Suite counterpart rows `run_vtx.py`: LF2 0.242, FP32
   0.317 (quantization costs 7.5 pp); archived `runs/jevbench/vtx-v1`.
+  (7) ✅ fusion study (post-hoc ladder over measured rows,
+  `runner/fusion_study.py` + `results/fusion-*.md`): suite
+  engine→gte→Qwen3.5-2B blend **0.867 @ 753 ms** vs 0.725 best single
+  (F23; relational 0.88, oracle 0.975, blended ECE 0.127 → per-rung D15
+  calibration is the follow-up); JevBench engine+vtx 0.455 (+4.4 pp over
+  vtx-only) but engine+bridge **0.632 < 0.6494 bridge-only** — the
+  engine's out-of-domain ECE 0.798 poisons the gate (F24). Live-ladder
+  wiring into the §19 policy gates is the follow-on step once per-rung
+  calibration exists. (8) ✅ resource accounting: `runner/resources.py`
+  `/proc` monitor in every runner (peak RSS / CPU-s / IO / wall per arm
+  into run JSONs + summary.md peak-RSS column). (9) ✅ adapter-training
+  research record `docs/TRAINING.md` (E0–E3 experiment ladder; first
+  0.8 B decision-head/LoRA run ≈ 1–2 CPU-days on this host).
 - **Accept (partial):** engine arm: zero synthesized probabilities ✅,
   replay determinism ✅, all 231 in one run ✅. Bridge reproduction ✅
   (+0.9 pp), bridge schema discipline ✅, bridge determinism ✅,

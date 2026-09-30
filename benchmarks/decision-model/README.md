@@ -22,6 +22,17 @@ latency, and run-twice determinism:
 | `llama_decision` chat baseline | `run_llama.py --skip-chat` opt-out | the same questions written as JSON by ordinary token-by-token chat completion at temperature 0 — what the decision arm replaces |
 | `llama_chat_baseline_only` | `run_llama.py` | chat-only screen for forks with no `/v1/decision` (K2-Horizon): sampled decode, labeled `(chat screen)` in the summary, never comparable to decision rows |
 
+Two harness utilities ride alongside the arms:
+
+- `runner/fusion_study.py` — post-hoc confidence-gated ladder simulation
+  over measured per-item arm rows (engine → embedding → LLM, or engine →
+  vtx/bridge on JevBench). Thresholds are swept; outputs of record live in
+  `results/fusion-*.md` and the findings are F23/F24 in REPORT.md.
+- `runner/resources.py` — a `/proc`-based monitor folded into every runner:
+  peak RSS (kernel `VmHWM`), CPU-seconds, IO bytes and wall time land in
+  each run JSON under `resources` and as a peak-RSS column in summary.md.
+  Runs recorded before the monitor landed show `—` there.
+
 The decision-arm design and the latency targets follow the operator-supplied
 reference (`docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt`)
 and the branch it documents
