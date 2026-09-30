@@ -76,3 +76,33 @@ without re-opening the IR:
    the same suite accuracy, so a ladder deployment without the llama.cpp
    server is config, not code.
 
+## Wiring seam, verified in code (2026-09-30)
+
+- Policy enters the executor **per request**:
+  `Executor::resolve_threshold` (`crates/opencodifier-engine/src/
+  executor.rs:924`) reads `self.request.policy()` and applies
+  `ConfidenceReport::outcome_for` once per decided question;
+  `escalation_warranted` (line 914) takes the same single policy.
+- The deciding node's identity is **not carried** on
+  `QuestionDecision` (executor.rs:117) — the one structural gap. Fix:
+  add `decided_by: NodeId` (plus the `NodeKind`), stamped in
+  `Executor::merge` (`NodeOutput::Decided` arm, line 1203) where
+  `spec: &NodeSpec` is already in scope. `pub(crate)` type — no wire or
+  IR change.
+- Gate resolution becomes:
+  `ladder.policy_for(kind).unwrap_or_else(|| request.policy())` at both
+  `resolve_threshold` and `escalation_warranted`; the trace entry gains
+  the policy source (which rung's gate fired) so an execution trace
+  explains the gate, per the no-hidden-thresholds rule.
+- **Cache interaction is safe by construction** (verify with a test
+  anyway): the cache stores pre-gate decisions; `resolve_threshold`
+  re-applies gates after a cache hit, so a changed ladder takes effect
+  without invalidating cached decisions — but the engine-config identity
+  already rides every cache key, so a *shipped* ladder still shifts keys
+  exactly when it should.
+- Tests to add: per-kind override selects the rung policy; empty ladder
+  byte-identical to current behavior (wire fixtures stay locked);
+  embedding rung with `min_confidence: 1.0` + `min_margin` set never
+  accepts on probability; trace records the rung source; cache-hit path
+  re-applies the ladder gates.
+
