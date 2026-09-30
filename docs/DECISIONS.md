@@ -806,3 +806,42 @@ is proven, and nothing ships a claim its evidence cannot carry:
 Rule the matrix enforces: a target either has named verification
 evidence or is named as pending — the release page never says
 "supported" where the truth is "compiles".
+
+## D25 — The escalation ladder is engine-internal per-node policy, never IR (2026-09-30)
+
+The fusion study (F23: engine→gte→2B blend 0.867 vs 0.725 best single)
+bounds what a confidence-gated ladder can score, and the rungs'
+confidences are not commensurable — a relational proof is p = 1.0 by
+construction, the embedding rung's scores are ordering-only (D15
+finding 3: the probability fit is degenerate; the measured gate is
+`min_margin ≈ 0.018`, `results/embed-margin-study.md`), and the model
+rung carries a fitted temperature. One request-level policy cannot gate
+all of them. The wiring decision:
+
+- **`LadderPolicy` composes the existing gate type; the IR does not
+  move.** Engine config gains optional per-node / per-kind
+  `DecisionPolicy` overrides (`opencodifier-engine/src/ladder.rs`),
+  resolved at the existing confidence gate: `per_node[id]` →
+  `per_kind[kind]` → request policy. No wire change, no schema change —
+  `pub(crate)`-level plumbing only (`QuestionDecision::decided_by`
+  records which node decided, so the threshold node re-resolves the
+  same rung).
+- **The cache stores completed (gated) responses**, so the stale-gate
+  hazard is real; the protection is identity: a configured ladder
+  decorates the engine's model id as `|ladder-v1@<id>` (same rule as
+  focused extraction, D6) and rides every cache key. A changed ladder
+  re-keys; it never re-gates old responses. Assembly refuses a
+  non-empty ladder whose `id` is empty or `"none"` — an anonymous
+  ladder is a correctness bug, not a style choice.
+- **Empty ladder is byte-identical to no ladder** — no decoration, no
+  `policy_source` trace facts, locked wire fixtures. The ladder ships
+  opt-in (F24: gates inherit their rung's calibration; per-domain
+  calibration precedes a default-on ladder).
+- **Traces explain the gate**: when an override fires, the decide and
+  threshold entries record `policy_source` (`node:<id>` /
+  `kind:<name>`) — the no-hidden-thresholds rule applies to the ladder
+  like every other gate.
+- **`NodeSpec::threshold` remains unwired** (validated and
+  fingerprinted since introduction, never consumed by the executor).
+  The ladder composes alongside it; wiring the graph scalar to the
+  gate is a separate, deliberate change with its own record.

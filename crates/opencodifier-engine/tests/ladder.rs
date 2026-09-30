@@ -1,0 +1,222 @@
+//! Escalation-ladder wiring (PLANNING.md §24; the fusion study,
+//! `benchmarks/decision-model/results/fusion-suite.md`).
+//!
+//! Per-node / per-kind confidence-gate overrides are consulted at the
+//! threshold node instead of the request policy. The default ladder is
+//! empty and must be byte-identical to no ladder at all — traces, cache
+//! keys, and wire fixtures do not move. Overrides change the gate AND
+//! the cache identity: the cache stores completed (gated) responses, so
+//! the ladder id decorating the model id is what keeps a changed ladder
+//! from serving a decision gated by the old one.
+
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
+
+mod common;
+
+use std::collections::BTreeMap;
+use std::sync::Arc;
+
+use common::{boolean_question, choice_question, config, engine_with, request_with_policy};
+use opencodifier_core::{DecisionOutcome, DecisionPolicy, RequestMetadata, RiskLevel, State};
+use opencodifier_engine::{
+    CacheKeyBuilder, EngineConfig, EngineError, LadderPolicy, MockClassifier, NodeKind,
+};
+
+/// A request policy looser than the rung overrides below: accept at
+/// 0.80, so a 0.90 scripted answer accepts unless a rung tightens it.
+fn loose_request(
+    questions: Vec<opencodifier_core::DecisionQuestion>,
+) -> opencodifier_core::DecisionRequest {
+    request_with_policy(
+        State::from_text("Summarize research across many sources and compare findings"),
+        questions,
+        DecisionPolicy::default(),
+        RequestMetadata::default(),
+    )
+}
+
+/// A rung policy accepting only at `min_confidence`, verify band just
+/// below it.
+fn rung(min_confidence: f64) -> DecisionPolicy {
+    DecisionPolicy::new(min_confidence, min_confidence - 0.05, min_confidence / 2.0, RiskLevel::Low)
+        .unwrap()
+}
+
+/// A boolean-only ladder: one rung policy for every boolean node.
+fn boolean_kind_ladder(id: &str, min_confidence: f64) -> LadderPolicy {
+    LadderPolicy {
+        id: id.to_owned(),
+        per_kind: BTreeMap::from([(NodeKind::Boolean, rung(min_confidence))]),
+        ..LadderPolicy::default()
+    }
+}
+
+/// The first `policy_source` fact in the trace, if any rung recorded one.
+fn policy_source(response: &opencodifier_core::DecisionResponse) -> Option<String> {
+    response.trace().entries().iter().find_map(|entry| match entry.detail.get("policy_source") {
+        Some(opencodifier_core::FactValue::Text(source)) => Some(source.clone()),
+        _ => None,
+    })
+}
+
+#[test]
+fn an_empty_ladder_is_byte_identical_to_no_ladder() {
+    let classifier = Arc::new(
+        MockClassifier::new("mock/plain")
+            .with_script("tools", vec![("true", 0.9), ("false", 0.1)])
+            .unwrap(),
+    );
+    let request = loose_request(vec![boolean_question("tools", "Does this request need tools?")]);
+
+    let plain = engine_with(config(1), classifier.clone()).unwrap();
+    let laddered =
+        engine_with(config(1).with_ladder(LadderPolicy::new("none")), classifier).unwrap();
+
+    let (a, _) = plain.decide_with_report(&request).unwrap();
+    let (b, _) = laddered.decide_with_report(&request).unwrap();
+    assert_eq!(a, b, "an empty ladder must not move any byte of the response");
+    assert_eq!(a.outcome(), DecisionOutcome::Accept);
+    assert_eq!(policy_source(&a), None);
+    // And the cache identity is undecorated.
+    assert_eq!(laddered.config().identity.model_id, "mock/plain");
+}
+
+#[test]
+fn a_per_kind_rung_tightens_that_kinds_gate() {
+    let classifier = Arc::new(
+        MockClassifier::new("mock/bools")
+            .with_script("tools", vec![("true", 0.9), ("false", 0.1)])
+            .unwrap(),
+    );
+    let request = loose_request(vec![boolean_question("tools", "Does this request need tools?")]);
+
+    // Control: the request policy accepts 0.9.
+    let control = engine_with(config(1), classifier.clone()).unwrap().decide(&request).unwrap();
+    assert_eq!(control.outcome(), DecisionOutcome::Accept);
+    assert_eq!(policy_source(&control), None);
+
+    // The boolean rung demands 0.95, so the same distribution verifies —
+    // and the trace names the rung whose gate fired.
+    let laddered = engine_with(
+        config(1).with_ladder(boolean_kind_ladder("bools-strict-v1", 0.95)),
+        classifier,
+    )
+    .unwrap();
+    let (response, report) = laddered.decide_with_report(&request).unwrap();
+    assert_eq!(response.outcome(), DecisionOutcome::Verify);
+    assert_eq!(report.outcomes()[0].1, DecisionOutcome::Verify);
+    assert_eq!(policy_source(&response).as_deref(), Some("kind:boolean"));
+    let threshold = common::trace_fact(&response, "threshold", "threshold");
+    assert_eq!(threshold, Some(&opencodifier_core::FactValue::Float(0.95)));
+    // The decorated identity rides the cache key.
+    assert_eq!(laddered.config().identity.model_id, "mock/bools|ladder-v1@bools-strict-v1");
+}
+
+#[test]
+fn a_per_node_rung_beats_the_per_kind_rung() {
+    let classifier = Arc::new(
+        MockClassifier::new("mock/rungs")
+            .with_script("tools", vec![("true", 0.75), ("false", 0.25)])
+            .unwrap(),
+    );
+    let request = loose_request(vec![boolean_question("tools", "Does this request need tools?")]);
+
+    // per_kind[Boolean] would accept 0.75; the per-node entry (0.95) wins,
+    // so the run verifies — and records the node source, not the kind.
+    let ladder = LadderPolicy {
+        id: "nodes-first-v1".to_owned(),
+        per_node: BTreeMap::from([("boolean".to_owned(), rung(0.95))]),
+        per_kind: BTreeMap::from([(NodeKind::Boolean, rung(0.70))]),
+    };
+    let engine = engine_with(config(1).with_ladder(ladder), classifier).unwrap();
+    let (response, _) = engine.decide_with_report(&request).unwrap();
+    assert_eq!(response.outcome(), DecisionOutcome::Verify);
+    assert_eq!(policy_source(&response).as_deref(), Some("node:boolean"));
+}
+
+#[test]
+fn an_accept_never_rung_never_accepts_on_probability() {
+    // The embedding-rung profile from the fusion study: min_confidence
+    // 1.0 means no probability clears the gate, whatever the model says.
+    let classifier = Arc::new(
+        MockClassifier::new("mock/choice")
+            .with_script("model", vec![("local-small", 0.99), ("cloud-large", 0.01)])
+            .unwrap(),
+    );
+    let request = loose_request(vec![choice_question(
+        "model",
+        &[("local-small", "small local model"), ("cloud-large", "cloud model")],
+    )]);
+    let ladder = LadderPolicy {
+        id: "accept-never-v1".to_owned(),
+        per_kind: BTreeMap::from([(NodeKind::Choice, rung(1.0))]),
+        ..LadderPolicy::default()
+    };
+    let engine = engine_with(config(1).with_ladder(ladder), classifier).unwrap();
+    let (response, _) = engine.decide_with_report(&request).unwrap();
+    assert_eq!(response.outcome(), DecisionOutcome::Verify);
+    assert_eq!(policy_source(&response).as_deref(), Some("kind:choice"));
+}
+
+#[test]
+fn a_non_empty_ladder_without_identity_is_refused_at_assembly() {
+    let ladder = LadderPolicy {
+        id: "none".to_owned(),
+        per_kind: BTreeMap::from([(NodeKind::Boolean, rung(0.95))]),
+        ..LadderPolicy::default()
+    };
+    let classifier = Arc::new(MockClassifier::new("mock/any"));
+    let error = engine_with(
+        EngineConfig::with_default_pipeline().unwrap().with_ladder(ladder),
+        classifier,
+    )
+    .unwrap_err();
+    assert!(matches!(error, EngineError::InvalidConfig { .. }), "{error:?}");
+}
+
+#[test]
+fn a_changed_ladder_id_changes_the_cache_key() {
+    let request = loose_request(vec![boolean_question("tools", "Does this request need tools?")]);
+    let key_for = |id: &str| {
+        let identity = EngineConfig::with_default_pipeline()
+            .unwrap()
+            .with_ladder(boolean_kind_ladder(id, 0.95));
+        // The engine decorates model_id at construction; the same
+        // decoration is what CacheKeyBuilder folds in.
+        let engine = engine_with(identity, Arc::new(MockClassifier::new("mock/keys"))).unwrap();
+        CacheKeyBuilder::build(&request, &engine.config().identity).unwrap()
+    };
+    assert_ne!(key_for("rungs-a-v1"), key_for("rungs-b-v1"));
+}
+
+#[test]
+fn a_cache_hit_serves_the_same_gated_outcome() {
+    // The cache stores completed (gated) responses; the ladder id in the
+    // identity is what guarantees a changed ladder re-keys instead of
+    // replaying an old gate. Within one engine the hit must therefore
+    // carry the rung's outcome, not the request policy's.
+    let classifier = Arc::new(
+        MockClassifier::new("mock/cached")
+            .with_script("tools", vec![("true", 0.9), ("false", 0.1)])
+            .unwrap(),
+    );
+    let request = loose_request(vec![boolean_question("tools", "Does this request need tools?")]);
+    let engine =
+        engine_with(config(1).with_ladder(boolean_kind_ladder("rungs-v1", 0.95)), classifier)
+            .unwrap();
+    let (first, first_report) = engine.decide_with_report(&request).unwrap();
+    let (second, second_report) = engine.decide_with_report(&request).unwrap();
+    assert!(!first_report.cache_hit());
+    assert!(second_report.cache_hit());
+    // The hit replays the rung's gate (recorded in the cached response),
+    // not the request policy's — and names the rung that decided it.
+    // (Responses are not byte-equal by design: a hit prepends its own
+    // `hit=true` trace entry.)
+    assert_eq!(second.answers(), first.answers());
+    assert_eq!(
+        second.outcome(),
+        DecisionOutcome::Verify,
+        "the rung gate rides the cached response"
+    );
+    assert_eq!(policy_source(&second).as_deref(), Some("kind:boolean"));
+}

@@ -122,6 +122,7 @@ pub mod facts;
 pub mod focus;
 pub mod graph;
 pub mod handle;
+pub mod ladder;
 pub mod lexical;
 pub mod narrowing;
 pub mod optimize;
@@ -143,6 +144,7 @@ pub use focus::{
 };
 pub use graph::{DecisionGraph, GraphDocument, NodeKind, NodeSpec};
 pub use handle::{EngineHandle, EngineHealth, MAX_BATCH};
+pub use ladder::LadderPolicy;
 pub use lexical::{Bm25Index, negation_polarity, softmax, tokenize};
 pub use narrowing::{LexicalScores, NarrowingOutcome};
 pub use optimize::optimize;

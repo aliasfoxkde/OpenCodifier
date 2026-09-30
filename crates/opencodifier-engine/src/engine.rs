@@ -89,6 +89,12 @@ pub struct EngineConfig {
     /// `None` (the default) keeps the engine zero-ML; graphs that need
     /// the backend are refused at assembly (D21), never degraded.
     pub embedding: Option<Arc<dyn opencodifier_runtime::EmbeddingBackend>>,
+    /// Optional per-node / per-kind confidence-gate overrides — the
+    /// escalation ladder (PLANNING.md §24). Empty (the default) gates
+    /// every question with the request policy; a configured ladder
+    /// decorates the model id as `|ladder-v1@<id>` so cached decisions
+    /// re-key.
+    pub ladder: crate::ladder::LadderPolicy,
 }
 
 impl EngineConfig {
@@ -108,6 +114,7 @@ impl EngineConfig {
             max_execution_time: opencodifier_core::Limits::default().max_execution_time,
             focus: None,
             embedding: None,
+            ladder: crate::ladder::LadderPolicy::default(),
         }
     }
 
@@ -200,6 +207,16 @@ impl EngineConfig {
         embedding: Option<Arc<dyn opencodifier_runtime::EmbeddingBackend>>,
     ) -> Self {
         self.embedding = embedding;
+        self
+    }
+
+    /// Sets the escalation ladder: per-node / per-kind confidence-gate
+    /// overrides consulted at the threshold node (PLANNING.md §24). An
+    /// empty [`LadderPolicy`](crate::ladder::LadderPolicy) — the default
+    /// — is a no-op.
+    #[must_use]
+    pub fn with_ladder(mut self, ladder: crate::ladder::LadderPolicy) -> Self {
+        self.ladder = ladder;
         self
     }
 }
@@ -296,12 +313,21 @@ impl DecisionEngine {
         // part of what a cached decision decided on, so
         // `|focused-v1@<budget>` rides on the model id and any policy
         // change invalidates the affected keys.
-        let model_id = match config.focus {
+        let mut model_id = match config.focus {
             Some(policy) => {
                 format!("{}|focused-v1@{}", classifier.model_id(), policy.budget_tokens)
             }
             None => classifier.model_id().to_owned(),
         };
+        // The ladder rides the same identity rule: a configured ladder is
+        // part of what a cached decision was gated by, so its id decorates
+        // the model id and any ladder change re-keys (an empty ladder is
+        // byte-identical to no ladder). Validation is unconditional so a
+        // misconfigured ladder is refused at assembly, not at first gate.
+        config.ladder.validate().map_err(|reason| EngineError::InvalidConfig { reason })?;
+        if !config.ladder.is_empty() {
+            model_id = format!("{}|ladder-v1@{}", model_id, config.ladder.id);
+        }
         let config = EngineConfig {
             identity: EngineIdentity {
                 model_id,

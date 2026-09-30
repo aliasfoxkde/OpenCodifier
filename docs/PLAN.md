@@ -792,8 +792,14 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   calibration is the follow-up); JevBench engine+vtx 0.455 (+4.4 pp over
   vtx-only) but engine+bridge **0.632 < 0.6494 bridge-only** — the
   engine's out-of-domain ECE 0.798 poisons the gate (F24). Live-ladder
-  wiring into the §19 policy gates is the follow-on step once per-rung
-  calibration exists. (8) ✅ resource accounting: `runner/resources.py`
+  **wiring landed (2026-09-30, D25)**: `LadderPolicy` per-node/per-kind
+  gate overrides resolved at the existing confidence gate
+  (`opencodifier-engine/src/ladder.rs`), identity-decorated cache keys,
+  byte-identical when empty; thresholds become config once per-domain
+  calibration exists (opt-in ship posture). The embedding rung's margin
+  gate is measured (`results/embed-margin-study.md`: margin ≥ 0.0183 →
+  coverage 0.208 at acc 0.880, monotone to 1.000 at 0.0283), closing
+  CALIBRATION finding 3. (8) ✅ resource accounting: `runner/resources.py`
   `/proc` monitor in every runner (peak RSS / CPU-s / IO / wall per arm
   into run JSONs + summary.md peak-RSS column). (9) ✅ adapter-training
   research record `docs/TRAINING.md` (E0–E3 experiment ladder; first
