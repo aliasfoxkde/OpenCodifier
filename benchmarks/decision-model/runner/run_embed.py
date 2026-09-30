@@ -315,6 +315,13 @@ def main() -> int:
         default="parallel-decision ad129b0",
         help="fork/branch provenance recorded for the llamacpp backend",
     )
+    ap.add_argument(
+        "--caveat",
+        default=None,
+        help="recording condition worth flagging in summaries (e.g. host "
+        "contention during scoring); stored verbatim in the result and "
+        "surfaced by summarize.py",
+    )
     args = ap.parse_args()
 
     # Rooted at this process: in-process backends (onnx/torch) are measured
@@ -367,6 +374,7 @@ def main() -> int:
         },
         "single": rows,
         "determinism": determinism,
+        **({"caveat": args.caveat} if args.caveat else {}),
         "metrics": {
             "accuracy": acc,
             "accuracy_by_class": by_class,

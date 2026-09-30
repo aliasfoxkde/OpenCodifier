@@ -11,6 +11,15 @@
 # docker-sourced traffic; only crates.io-style egress works). Build/rebuild
 # the image and bump the tag per the cache contract in
 # infrastructure/docker/ci-rust.Dockerfile (`just ci-image`).
+#
+# Job graph is a fan-out (lint -> {test, doc, supply-chain} -> e2e) unlike
+# peers' linear chains: that is safe ONLY because the deployed runner
+# executes a run's jobs one at a time (observed: lane finishes are strictly
+# serialized in the jobs table; two containers of one run never coexist).
+# If the runner ever grows true intra-run parallelism, jobs of one run will
+# share the same workspace directory and concurrent cargo invocations will
+# corrupt each other's build locks — collapse this to a linear chain the
+# same day (the layout GitForge's own pipeline documents).
 name: opencodifier-ci
 version: "1.0"
 trigger_on:

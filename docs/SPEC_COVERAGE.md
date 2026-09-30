@@ -41,7 +41,7 @@ shipped while the browser demo rides §58).
 | 19 | Two-Model Verification | done | confidence-gated verifier cascade; never two classifiers per request |
 | 20 | Risk-Aware Decisions | done | `DecisionPolicy` gates (min_confidence/entropy ceiling/margin/OOD ceiling) |
 | 21 | Abstention | done | successful outcome, never an error; D13 exit codes |
-| 22 | Batch Inference | partial | multi-question requests + benchmark batched mode; the `/v1/batch` HTTP endpoint is not implemented (§36) |
+| 22 | Batch Inference | done | multi-question requests end to end: benchmark batched mode, MCP `codify_batch`, and the `/v1/batch` HTTP endpoint (engine-owned `MAX_BATCH=16`, per-item error envelopes, 18e) |
 | 23 | Cache Architecture | done | exact-decision cache, normative `CacheKeyBuilder`, version-folded keys (D6/§64) |
 | 24 | Embeddings | done | `EmbeddingBackend` trait + `EmbeddingClassifier` + benchmark bake-off (F20: ORT fp32 rung); the `embedding` graph node annotates through it, assembly refuses graphs that need a missing backend (D21, 18h) |
 | 25 | No Mandatory Vector Search | done | lexical path complete with zero ML |
@@ -60,7 +60,7 @@ shipped while the browser demo rides §58).
 | 33 | Skills | done | `skills/` — README protocol + all eight §33 areas (routing, model-selection, tool-selection, tool-gating, context-pruning, escalation, verification, memory-selection) |
 | 34 | Built-in Recipes | done | the twelve §34 areas as runnable graphs + paired requests + captured responses under `recipes/`; `opencodifier recipe list` / `recipe install [--dest] [--force]` ship the fleet inside the binary (`include_str!`), installed bytes byte-identical to the committed copies (18g) |
 | 35 | CLI | done | `decide`/`graph validate`/`serve`/`models verify`/`mcp serve`/`recipe list`/`recipe install`, D13 exit codes, `--focus-budget` |
-| 36 | HTTP API | done | all six §36 endpoints: `/v1/decide`, `/v1/batch`, `/v1/graph/validate`, `/v1/graph/run` (D19), `/v1/validate`, `/v1/systemone`, plus `/v1/models`, `/v1/capabilities`, `/v1/healthz`; 20 contract tests + 30-check e2e suite (18e) |
+| 36 | HTTP API | done | eight `/v1` routes: `/v1/decide`, `/v1/batch`, `/v1/graph/validate`, `/v1/graph/run` (D19), `/v1/validate`, `/v1/models`, `/v1/capabilities`, `/v1/healthz`. There is no `/v1/systemone` HTTP route — the Jev wire shape is an `opencodifier-schema` library adapter, not an endpoint (an earlier version of this row claimed it as a sixth endpoint; corrected 2026-09-30 against `routes.rs`); 20 contract tests + 30-check e2e suite (18e) |
 | 37 | Local Server | done | loopback default, explicit `--host` flag, gate-tested |
 | 38 | Privacy | done | no telemetry/cloud/accounts; explicit downloads; SHA-256 manifests (D14) |
 | 39 | Project Layout | done | `docs/PROJECT_STRUCTURE.md` matches the tree |
@@ -119,9 +119,17 @@ shipped while the browser demo rides §58).
    bridge arm in replay, fork_4b pending.
 
 **Needs the host quiet (cargo builds/tests):**
-5. **§36 HTTP surface completion** — `/v1/batch`, `/v1/graph/run`, `/v1/validate`, `/v1/systemone`, `/v1/models`, `/v1/capabilities`.
-6. **§34 recipe fleet + `recipe install`** — the twelve recipe areas.
-7. **§63 Decision Registry** — artifact format + loader.
+5. ~~**§36 HTTP surface completion**~~ **done (18e)** — `/v1/batch`,
+   `/v1/graph/run`, `/v1/validate`, `/v1/models`, `/v1/capabilities`
+   shipped with 20 contract tests + 8 new e2e checks. `/v1/systemone`
+   was on this list in error: the Jev shape is a library adapter, not
+   a route (§36 row corrected 2026-09-30).
+6. ~~**§34 recipe fleet + `recipe install`**~~ **done (18g)** — the
+   twelve areas runnable under `recipes/`, fleet shipped inside the
+   binary, installed bytes byte-identical.
+7. ~~**§63 Decision Registry**~~ **done (D20, 18f)** —
+   `DecisionDefinition`/`Registry` with content-hashed identity;
+   format doc `docs/REGISTRY.md`.
 8. ~~**§51 graph optimizer**, **§53 retrieval node**, **§26/§54 rerank node** (with §24's `embedding` node)~~ **done** — D21/D22 records, `optimize()` with fleet equivalence, semantic nodes over the `EmbeddingBackend` seam.
 
 **Larger efforts (own phases):**
