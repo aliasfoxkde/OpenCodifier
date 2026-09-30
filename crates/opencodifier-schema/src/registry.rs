@@ -610,4 +610,83 @@ mod tests {
         let committed: Value = serde_json::from_str(&committed).unwrap();
         assert_eq!(wire, committed, "recipe request drifted from instantiate()");
     }
+
+    /// Every documented decode rule refuses at decode time, naming its
+    /// field — a malformed definition never reaches instantiation.
+    #[test]
+    fn malformed_definitions_are_refused_at_decode() {
+        let boolean = || json!({ "type": "boolean", "text": "Does this need a human?" });
+        let refusals: Vec<(Value, &str)> = vec![
+            (json!({ "id": "", "version": 1, "question": boolean() }), "must be non-empty"),
+            (
+                json!({ "id": "triage.needs_human", "version": 0, "question": boolean() }),
+                "must be at least 1",
+            ),
+            (
+                json!({
+                    "id": "triage.pick",
+                    "version": 1,
+                    "question": { "type": "choice", "text": "Which runbook?" },
+                    "candidates": {},
+                }),
+                "declare `dynamic: true` or a non-empty `static` list",
+            ),
+            (
+                json!({
+                    "id": "triage.pick",
+                    "version": 1,
+                    "question": { "type": "choice", "text": "Which runbook?" },
+                    "candidates": { "static": [] },
+                }),
+                "`static` candidate lists may not be empty",
+            ),
+            (
+                json!({
+                    "id": "triage.severity",
+                    "version": 1,
+                    "question": { "type": "score", "text": "How severe?", "levels": ["low", "high"] },
+                    "candidates": { "dynamic": true },
+                }),
+                "score definitions take no candidates",
+            ),
+            (
+                json!({
+                    "id": "triage.severity",
+                    "version": 1,
+                    "question": { "type": "score", "text": "How severe?", "levels": ["low"] },
+                }),
+                "at least two levels",
+            ),
+        ];
+        for (document, reason) in refusals {
+            let error = DecisionDefinition::decode(&document).unwrap_err();
+            assert_eq!(error.code(), "schema.invalid_value", "{document}");
+            assert!(error.to_string().contains(reason), "{reason}: {error}");
+        }
+    }
+
+    /// A score definition decodes, instantiates, and answers over its
+    /// declared levels — the third decision kind, end to end.
+    #[test]
+    fn a_score_definition_instantiates_over_its_levels() {
+        let document = json!({
+            "id": "incident.priority",
+            "version": 2,
+            "question": {
+                "type": "score",
+                "text": "How severe is this incident?",
+                "levels": ["low", "medium", "high"],
+            },
+        });
+        let definition = DecisionDefinition::decode(&document).unwrap();
+        assert_eq!(definition.version(), 2);
+        let request = definition.instantiate("the database is on fire", &[]).unwrap();
+        let DecisionQuestion::Score(question) = &request.questions()[0] else {
+            panic!("expected a score question");
+        };
+        assert_eq!(question.id().as_str(), "incident.priority");
+        let labels: Vec<String> =
+            question.levels().iter().map(|level| level.label().to_owned()).collect();
+        assert_eq!(labels, ["low", "medium", "high"]);
+    }
 }

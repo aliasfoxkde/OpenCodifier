@@ -28,6 +28,15 @@ releases may break, and every breaking change is recorded in this file
   native (D23).
 - `just check-wasm`: host tests, the wasm32 compile, a
   `wasm-pack --target nodejs` build, and the Node smoke test.
+- Coverage close-out tests (PLAN 18): twelve tests across six crates
+  closing every reachable coverage gap — wasm public-boundary success
+  paths, registry decode refusals and score instantiation, graph
+  knob/kind validation, embedding-backend failure and miscount
+  surfacing through node and reranker seams, filtered-survivor
+  semantic scoring, HTTP malformed batch/graph-run bodies, recipe
+  install failure arms. Lines 98.97 % on the lcov `DA` basis; the 125
+  remaining unexecuted lines are each classified with an enforcing
+  fact in `docs/COVERAGE.md`.
 
 ### Changed
 

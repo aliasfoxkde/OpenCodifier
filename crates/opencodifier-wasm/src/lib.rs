@@ -255,12 +255,17 @@ mod tests {
         WasmEngine::new().unwrap()
     }
 
-    /// The round trip the browser makes: native payload in, native
-    /// response out, one answer.
+    /// Host tests drive the public methods only where no `JsValue` is
+    /// built: every error path lifts the failure through [`wasm_error`],
+    /// whose `JsValue::from_str` calls an import that exists only under
+    /// a JS runtime — on the host it aborts. The boundary's error JSON
+    /// is therefore proven by the Node smoke test over the real `pkg/`
+    /// artifact; here the shared `*_impl` functions carry the failure
+    /// taxonomy.
     #[test]
     fn decide_round_trips_the_native_schema() {
         let response: serde_json::Value =
-            serde_json::from_str(&decide_impl(&engine().handle, &request_json()).unwrap()).unwrap();
+            serde_json::from_str(&engine().decide(&request_json()).unwrap()).unwrap();
         assert!(response.get("answers").is_some(), "{response}");
     }
 
@@ -279,7 +284,8 @@ mod tests {
         }
     }
 
-    /// A well-formed graph validates; a cycle is refused with its code.
+    /// A well-formed graph validates to a JSON summary; a cycle is
+    /// refused with its code.
     #[test]
     fn graph_validation_refuses_cycles() {
         let good = serde_json::to_string(&serde_json::json!({
@@ -290,7 +296,10 @@ mod tests {
             ],
         }))
         .unwrap();
-        assert_eq!(validate_graph_impl(&good).unwrap(), (1, 2));
+        let summary: serde_json::Value =
+            serde_json::from_str(&engine().validate_graph(&good).unwrap()).unwrap();
+        assert_eq!(summary.get("version").and_then(serde_json::Value::as_u64), Some(1));
+        assert_eq!(summary.get("nodes").and_then(serde_json::Value::as_u64), Some(2));
 
         let cyclic = serde_json::to_string(&serde_json::json!({
             "version": 1,
@@ -300,8 +309,7 @@ mod tests {
             ],
         }))
         .unwrap();
-        let failure = validate_graph_impl(&cyclic).unwrap_err();
-        assert_eq!(failure.code(), "graph.cycle");
+        assert_eq!(validate_graph_impl(&cyclic).unwrap_err().code(), "graph.cycle");
     }
 
     /// A client-supplied graph decides through the ephemeral path, and a
@@ -321,7 +329,7 @@ mod tests {
         }))
         .unwrap();
         let response: serde_json::Value =
-            serde_json::from_str(&run_graph_impl(&graph, &request_json()).unwrap()).unwrap();
+            serde_json::from_str(&engine().run_graph(&graph, &request_json()).unwrap()).unwrap();
         assert!(response.get("answers").is_some(), "{response}");
 
         let retrieval = serde_json::to_string(&serde_json::json!({
@@ -335,6 +343,17 @@ mod tests {
         .unwrap();
         let failure = run_graph_impl(&retrieval, &request_json()).unwrap_err();
         assert_eq!(failure.code(), "engine.missing_backend");
+    }
+
+    /// The version a page displays is this crate's, and it reads as a
+    /// semver triple.
+    #[test]
+    fn the_reported_version_is_the_crate_semver() {
+        let version = opencodifier_version();
+        assert_eq!(version, env!("CARGO_PKG_VERSION"));
+        let parts: Vec<&str> = version.split('.').collect();
+        assert_eq!(parts.len(), 3, "major.minor.patch, got {version}");
+        assert!(parts.iter().all(|part| part.parse::<u64>().is_ok()), "{version}");
     }
 
     /// The identity is well-formed JSON with all five cache-identity
@@ -375,8 +394,8 @@ mod tests {
     /// the constructor is not a footgun and decisions do not drift.
     #[test]
     fn two_engines_decide_identically() {
-        let first = decide_impl(&engine().handle, &request_json()).unwrap();
-        let second = decide_impl(&engine().handle, &request_json()).unwrap();
+        let first = engine().decide(&request_json()).unwrap();
+        let second = engine().decide(&request_json()).unwrap();
         assert_eq!(first, second);
     }
 }

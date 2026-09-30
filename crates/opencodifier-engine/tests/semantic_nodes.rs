@@ -26,6 +26,51 @@ fn backend() -> Arc<MockEmbeddingBackend> {
     Arc::new(MockEmbeddingBackend::new("mock-embed-test-v1", 16).unwrap())
 }
 
+/// A backend that always errors: the runtime must surface the failure,
+/// never paper over it with an empty annotation.
+struct Failing;
+
+impl std::fmt::Debug for Failing {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("Failing")
+    }
+}
+
+impl opencodifier_runtime::EmbeddingBackend for Failing {
+    fn model_id(&self) -> &'static str {
+        "failing-embed-v1"
+    }
+    fn dims(&self) -> usize {
+        4
+    }
+    fn embed(&self, _texts: &[&str]) -> Result<Vec<Vec<f32>>, opencodifier_runtime::RuntimeError> {
+        Err(opencodifier_runtime::RuntimeError::InvalidTensor {
+            reason: "backend exploded".to_owned(),
+        })
+    }
+}
+
+/// A backend that violates the one-vector-per-text batch contract.
+struct Miscounting(usize);
+
+impl std::fmt::Debug for Miscounting {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("Miscounting")
+    }
+}
+
+impl opencodifier_runtime::EmbeddingBackend for Miscounting {
+    fn model_id(&self) -> &'static str {
+        "miscounting-embed-v1"
+    }
+    fn dims(&self) -> usize {
+        16
+    }
+    fn embed(&self, _texts: &[&str]) -> Result<Vec<Vec<f32>>, opencodifier_runtime::RuntimeError> {
+        Ok(vec![vec![0.0; self.dims()]; self.0])
+    }
+}
+
 /// The §53 shape: normalize → embedding → retrieve → choice → threshold
 /// → output.
 fn retrieval_graph(top_n: usize, floor: f64) -> DecisionGraph {
@@ -271,28 +316,6 @@ fn the_embedding_backend_rides_the_identity() {
 /// fails mid-run, not as a silent empty annotation.
 #[test]
 fn a_failing_backend_fails_the_node_loudly() {
-    struct Failing;
-    impl std::fmt::Debug for Failing {
-        fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            formatter.write_str("Failing")
-        }
-    }
-    impl opencodifier_runtime::EmbeddingBackend for Failing {
-        fn model_id(&self) -> &'static str {
-            "failing-embed-v1"
-        }
-        fn dims(&self) -> usize {
-            4
-        }
-        fn embed(
-            &self,
-            _texts: &[&str],
-        ) -> Result<Vec<Vec<f32>>, opencodifier_runtime::RuntimeError> {
-            Err(opencodifier_runtime::RuntimeError::InvalidTensor {
-                reason: "backend exploded".to_owned(),
-            })
-        }
-    }
     // Assembly succeeds (a backend exists); the failure comes at run.
     let handle = EngineHandle::with_embedding(
         EngineConfig::new(retrieval_graph(1, 0.0)).with_safe_mode(false),
@@ -303,6 +326,90 @@ fn a_failing_backend_fails_the_node_loudly() {
     .unwrap();
     let error: EngineError = handle.decide(&request()).unwrap_err();
     assert_eq!(error.code(), "engine.backend_failed");
+    assert!(error.to_string().contains("backend exploded"), "{error}");
+}
+
+/// The batch contract is one vector per text, order preserved. A backend
+/// that miscounts is a `backend_failed` naming both counts — a silent
+/// misalignment would score the wrong candidate against the query.
+#[test]
+fn a_miscounting_backend_fails_the_semantic_node() {
+    // One question with three candidates: the backend owes four vectors
+    // (query included) and returns two.
+    let handle = EngineHandle::with_embedding(
+        EngineConfig::new(retrieval_graph(1, 0.0)).with_safe_mode(false),
+        Arc::new(opencodifier_engine::LexicalClassifier::new()),
+        None,
+        Some(Arc::new(Miscounting(2))),
+    )
+    .unwrap();
+    let error = handle.decide(&request()).unwrap_err();
+    assert_eq!(error.code(), "engine.backend_failed");
+    assert!(error.to_string().contains("vectors for"), "{error}");
+}
+
+/// The reranker seam passes backend failures through unchanged: ordering
+/// evidence may be wrong or absent, never invented.
+#[test]
+fn an_embedding_reranker_surfaces_backend_failures() {
+    let candidates = [
+        Candidate::new("prose", "draft release notes prose").unwrap(),
+        Candidate::new("code", "write Rust code with tests").unwrap(),
+    ];
+
+    let error =
+        EmbeddingReranker::new(Arc::new(Failing)).rerank("write code", &candidates).unwrap_err();
+    assert_eq!(error.code(), "engine.backend_failed");
+    assert!(error.to_string().contains("backend exploded"), "{error}");
+
+    // Two candidates plus the query: one vector back is a miscount.
+    let error = EmbeddingReranker::new(Arc::new(Miscounting(1)))
+        .rerank("write code", &candidates)
+        .unwrap_err();
+    assert_eq!(error.code(), "engine.backend_failed");
+    assert!(error.to_string().contains("1 vectors for 3"), "{error}");
+}
+
+/// Semantic scoring sees what deterministic narrowing left alive: a
+/// `filter` node upstream of the semantic path feeds the surviving set
+/// into embedding and retrieval, not the declared set.
+#[test]
+fn semantic_scoring_runs_over_filtered_survivors() {
+    let depends = |names: &[&str]| -> Vec<NodeId> {
+        names.iter().map(|name| NodeId::new(*name).unwrap()).collect()
+    };
+    let graph = DecisionGraph::new(
+        1,
+        vec![
+            NodeSpec::build("normalize", NodeKind::Normalize).unwrap(),
+            NodeSpec::build("filter", NodeKind::Filter)
+                .unwrap()
+                .with_dependencies(depends(&["normalize"])),
+            NodeSpec::build("embedding", NodeKind::Embedding)
+                .unwrap()
+                .with_dependencies(depends(&["filter"])),
+            NodeSpec::build("retrieve", NodeKind::Retrieve)
+                .unwrap()
+                .with_dependencies(depends(&["embedding"]))
+                .with_top_n(2)
+                .with_floor(0.0),
+            NodeSpec::build("choice", NodeKind::Choice)
+                .unwrap()
+                .with_dependencies(depends(&["normalize", "retrieve"])),
+            NodeSpec::build("threshold", NodeKind::Threshold)
+                .unwrap()
+                .with_dependencies(depends(&["choice"]))
+                .with_threshold(0.5),
+            NodeSpec::build("output", NodeKind::Output)
+                .unwrap()
+                .with_dependencies(depends(&["threshold"])),
+        ],
+    )
+    .unwrap();
+    let handle = handle_for(graph, Some(backend()));
+    let (response, _) = handle.decide_with_report(&request()).unwrap();
+    assert_eq!(response.answers().len(), 1);
+    assert_ne!(response.outcome(), DecisionOutcome::NoValidCandidate);
 }
 
 /// A `retrieve` node with no upstream `embedding` node is a run error,
