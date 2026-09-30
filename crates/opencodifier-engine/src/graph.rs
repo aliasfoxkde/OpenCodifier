@@ -910,10 +910,88 @@ mod tests {
             (NodeKind::Score, "score"),
             (NodeKind::Threshold, "threshold"),
             (NodeKind::Branch, "branch"),
+            (NodeKind::Embedding, "embedding"),
+            (NodeKind::Retrieve, "retrieve"),
+            (NodeKind::Rerank, "rerank"),
             (NodeKind::Output, "output"),
         ] {
             assert_eq!(kind.as_str(), name);
             assert_eq!(kind.to_string(), name);
+        }
+    }
+
+    /// Narrowing knobs are kind-specific (D21): a knob on the wrong kind
+    /// is a graph the author did not mean, and validation says so before
+    /// anything runs.
+    #[test]
+    fn knobs_on_the_wrong_kind_are_refused() {
+        let misfiled = [
+            ("filter with top_n", NodeSpec::build("f", NodeKind::Filter).unwrap().with_top_n(2)),
+            (
+                "rerank with top_n",
+                NodeSpec::build("r", NodeKind::Rerank)
+                    .unwrap()
+                    .with_reranker("lexical")
+                    .with_top_n(2),
+            ),
+            ("choice with floor", NodeSpec::build("c", NodeKind::Choice).unwrap().with_floor(0.5)),
+        ];
+        for (name, spec) in misfiled {
+            let error = spec.validate().unwrap_err();
+            assert_eq!(error.code(), "graph.invalid_node", "{name}");
+            assert!(
+                error.to_string().contains("only `retrieve` takes top_n/floor"),
+                "{name}: {error}"
+            );
+        }
+    }
+
+    /// A `retrieve` node must name a positive `top_n` and a floor in
+    /// [0, 1] — the narrowing budget is explicit, never implicit.
+    #[test]
+    fn retrieve_knobs_are_bounded() {
+        for (name, spec) in [
+            ("missing top_n", NodeSpec::build("r", NodeKind::Retrieve).unwrap()),
+            ("zero top_n", NodeSpec::build("r", NodeKind::Retrieve).unwrap().with_top_n(0)),
+            (
+                "floor above one",
+                NodeSpec::build("r", NodeKind::Retrieve).unwrap().with_top_n(1).with_floor(1.5),
+            ),
+            (
+                "floor below zero",
+                NodeSpec::build("r", NodeKind::Retrieve).unwrap().with_top_n(1).with_floor(-0.1),
+            ),
+            (
+                "floor not finite",
+                NodeSpec::build("r", NodeKind::Retrieve)
+                    .unwrap()
+                    .with_top_n(1)
+                    .with_floor(f64::NAN),
+            ),
+        ] {
+            let error = spec.validate().unwrap_err();
+            assert_eq!(error.code(), "graph.invalid_node", "{name}");
+        }
+
+        let valid =
+            NodeSpec::build("r", NodeKind::Retrieve).unwrap().with_top_n(1).with_floor(0.25);
+        assert!(valid.validate().is_ok());
+    }
+
+    /// A `rerank` node must name a known reranking signal.
+    #[test]
+    fn rerank_nodes_name_a_known_signal() {
+        let error = NodeSpec::build("r", NodeKind::Rerank)
+            .unwrap()
+            .with_reranker("bm25")
+            .validate()
+            .unwrap_err();
+        assert_eq!(error.code(), "graph.invalid_node");
+        assert!(error.to_string().contains("\"lexical\" or \"embedding\""), "{error}");
+
+        for signal in ["lexical", "embedding"] {
+            let spec = NodeSpec::build("r", NodeKind::Rerank).unwrap().with_reranker(signal);
+            assert!(spec.validate().is_ok(), "{signal}");
         }
     }
 }

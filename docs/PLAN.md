@@ -931,6 +931,24 @@ in between. Ordered so each step's output feeds the next.
   no-run/no-signing caveat in release notes. Registry publication
   (crates.io/Homebrew/winget) is an outward action awaiting explicit
   user go — never automatic.
+- **Coverage close-out — DONE (2026-09-29).** The 18b gap table driven
+  to its floor: 203 → 125 `DA`-missed lines by twelve tests across six
+  crates (wasm public-boundary success paths, registry decode-refusal
+  matrix + score round trip, D21 graph knob validation, miscounting/
+  failing embedding backends through node and reranker seams, filter→
+  embedding→retrieve composition, HTTP malformed batch/graph-run
+  bodies, recipe install failure arms). Headline: 98.97 % lines on the
+  lcov `DA` basis (12 007/12 132), 98.34 % text-basis lines, 95.61 %
+  functions, 97.68 % regions. Every one of the 125 survivors is
+  classified with its enforcing fact in `docs/COVERAGE.md` — no
+  reachable line remains untested; the rest are `#[non_exhaustive]`
+  future-variant arms, construction-implied guards, server-fault
+  encodes, the wasm error boundary (Node-smoke-owned), and
+  test-support panics. Discovery recorded: a host test cannot build
+  any `JsValue` (`__wbindgen_string_new` has no host shim → SIGABRT),
+  so wasm error paths are provable only in Node over `pkg/`. All seven
+  `just ci` gates green; aegis baseline regenerated (fmt column shifts
+  + this ledger's own prose → 3 027 findings, 0 new).
 
 **Sequencing.** 18a/18b/18c are the coverage spine and gate everything
 else (no new surface lands untested after 18b). 18d precedes 18e–18g (the

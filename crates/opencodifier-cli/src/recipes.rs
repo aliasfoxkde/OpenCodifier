@@ -332,4 +332,33 @@ mod tests {
         assert_eq!(error.code(), CODE_UNKNOWN_RECIPE, "{error}");
         assert!(error.to_string().contains("recipe list"), "{error}");
     }
+
+    /// A file sitting where the recipe directory belongs stops the
+    /// install: the destination is named, and the refusal is an input
+    /// error, not a panic and not a partial write.
+    #[test]
+    fn a_file_in_the_way_refuses_the_install() {
+        let scratch = Scratch::new();
+        let target = scratch.0.join("model-routing");
+        std::fs::write(&target, b"not a directory").unwrap();
+        let error = scratch.install("model-routing", true).unwrap_err();
+        assert_eq!(error.code(), CODE_UNWRITABLE_DESTINATION, "{error}");
+        assert!(error.to_string().contains("model-routing"), "{error}");
+        assert_eq!(std::fs::read(&target).unwrap(), b"not a directory", "the file is untouched");
+    }
+
+    /// An unwritable file slot stops the install after the directory is
+    /// made: the first blocked write is the refusal, naming that file.
+    #[test]
+    fn an_unwritable_file_slot_refuses_the_install() {
+        let scratch = Scratch::new();
+        // A directory cannot be overwritten by `fs::write`: the first
+        // recipe file's slot is blocked without touching permissions,
+        // which root (CI containers) would bypass.
+        let slot = scratch.0.join("model-routing").join("graph.json");
+        std::fs::create_dir_all(&slot).unwrap();
+        let error = scratch.install("model-routing", true).unwrap_err();
+        assert_eq!(error.code(), CODE_UNWRITABLE_DESTINATION, "{error}");
+        assert!(error.to_string().contains("graph.json"), "{error}");
+    }
 }

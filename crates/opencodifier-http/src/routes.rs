@@ -455,4 +455,38 @@ mod tests {
         assert_eq!(mapped.code(), "schema.invalid_value");
         assert_eq!(mapped.status(), axum::http::StatusCode::BAD_REQUEST);
     }
+
+    fn zero_ml_engine() -> Arc<EngineHandle> {
+        Arc::new(
+            EngineHandle::lexical(
+                opencodifier_engine::EngineConfig::with_default_pipeline().unwrap(),
+            )
+            .unwrap(),
+        )
+    }
+
+    /// A batch envelope that is not `{"requests": [...]}` is a client
+    /// error named at the boundary — the handler never guesses.
+    #[tokio::test]
+    async fn a_malformed_batch_body_is_a_schema_refusal() {
+        let handle = zero_ml_engine();
+        for payload in ["{}", r#"{"requests": "all at once"}"#] {
+            let error = batch(State(Arc::clone(&handle)), Bytes::from(payload.to_owned()))
+                .await
+                .unwrap_err();
+            assert_eq!(error.code(), "schema.invalid_value", "{payload}");
+            assert_eq!(error.status(), axum::http::StatusCode::BAD_REQUEST);
+        }
+    }
+
+    /// The same posture for `POST /v1/graph/run`: a body without a
+    /// well-typed graph and request is refused before any graph runs.
+    #[tokio::test]
+    async fn a_malformed_graph_run_body_is_a_schema_refusal() {
+        for payload in ["{}", r#"{"graph": "not a graph", "request": {}}"#] {
+            let error = graph_run(Bytes::from(payload.to_owned())).await.unwrap_err();
+            assert_eq!(error.code(), "schema.invalid_value", "{payload}");
+            assert_eq!(error.status(), axum::http::StatusCode::BAD_REQUEST);
+        }
+    }
 }
