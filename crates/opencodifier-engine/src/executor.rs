@@ -127,6 +127,10 @@ pub(crate) struct QuestionDecision {
     pub(crate) outcome: DecisionOutcome,
     /// Whether the verifier ran for this question.
     pub(crate) verification_triggered: bool,
+    /// The node that decided this question (id and kind), so the
+    /// threshold node can re-apply the same rung's policy — ladder
+    /// resolution must not depend on which graph path is re-traced.
+    pub(crate) decided_by: (String, NodeKind),
 }
 
 /// Diagnostics about one execution, for callers that want more than the
@@ -846,6 +850,15 @@ impl<'a> Executor<'a> {
         let mut decided = Vec::new();
         let mut entries = Vec::new();
         let mut focus = crate::focus::FocusSummary::default();
+        // Ladder resolution (PLANNING.md §24): the deciding node's own
+        // gate wins over the request policy, so an escalation ladder can
+        // hold exact rungs to p ≥ 1.0 while the model rung uses its
+        // calibrated thresholds. `None` when no override applies —
+        // byte-identical to the single-policy engine.
+        let (policy, ladder_source) = self.config.ladder.resolve(id, kind).map_or_else(
+            || (self.request.policy(), None),
+            |(policy, source)| (policy, Some(source)),
+        );
         for question in self.request.questions() {
             if !Self::wants(kind, question) {
                 continue;
@@ -866,7 +879,7 @@ impl<'a> Executor<'a> {
             let distribution = self.classifier.decide(decide_state, &narrowed)?;
             let (mut distribution, mut clipped) = Self::clip(&distribution, &narrowed)?;
             let mut escalated = false;
-            if extracted && Self::escalation_warranted(self.request.policy(), &distribution) {
+            if extracted && Self::escalation_warranted(policy, &distribution) {
                 let full = self.classifier.decide(&self.state, &narrowed)?;
                 let (full, full_clipped) = Self::clip(&full, &narrowed)?;
                 distribution = full;
@@ -876,8 +889,10 @@ impl<'a> Executor<'a> {
             let decision = Self::decide_question(
                 &narrowed,
                 distribution,
-                self.request.policy(),
+                policy,
                 self.config.calibration.as_ref(),
+                id,
+                kind,
             )?;
             let mut detail = vec![
                 ("question", FactValue::Text(question.id().to_string())),
@@ -888,6 +903,9 @@ impl<'a> Executor<'a> {
                 ("model", FactValue::Text(self.classifier.model_id().to_owned())),
                 ("clipped", FactValue::Integer(int(clipped))),
             ];
+            if let Some(source) = &ladder_source {
+                detail.push(("policy_source", FactValue::Text(source.clone())));
+            }
             if let Some(view) = &view {
                 detail.push(("focus_engaged", FactValue::Boolean(view.extracted)));
                 detail.push(("focus_kept", FactValue::Integer(int(view.kept_sentences))));
@@ -922,10 +940,22 @@ impl<'a> Executor<'a> {
     /// Applies the confidence gate and the verifier cascade to every
     /// decided question.
     fn resolve_threshold(&self, id: &str) -> EngineResult<(Resolutions, Vec<TraceEntry>)> {
-        let policy = self.request.policy();
         let mut resolved = Vec::new();
         let mut entries = Vec::new();
         for (question_id, decision) in &self.decisions {
+            // The gate re-applies the deciding rung's policy: the cached
+            // response was gated by whatever policy its deciding node
+            // resolved, so the live gate must read the same rung to stay
+            // consistent with it (PLANNING.md §24; a changed ladder
+            // re-keys via the identity decoration, it does not re-gate
+            // cached responses). No ladder override for this node → the
+            // request policy, and the trace gains no `policy_source`
+            // fact — byte-identical to the single-policy engine.
+            let (node_id, kind) = &decision.decided_by;
+            let (policy, ladder_source) = self.config.ladder.resolve(node_id, *kind).map_or_else(
+                || (self.request.policy(), None),
+                |(policy, source)| (policy, Some(source)),
+            );
             let outcome = decision.report.outcome_for(policy);
             let (final_outcome, agreement, verifier) = if outcome == DecisionOutcome::Verify {
                 match self.verifier {
@@ -945,21 +975,24 @@ impl<'a> Executor<'a> {
             } else {
                 (outcome, None, "none")
             };
-            entries.push(TraceEntry::new(
-                id,
-                [
-                    ("question", FactValue::Text(question_id.to_string())),
-                    ("threshold", FactValue::Float(policy.min_confidence())),
-                    (
-                        "passed",
-                        FactValue::Boolean(
-                            decision.report.calibrated_confidence >= policy.min_confidence(),
-                        ),
+            let mut detail = vec![
+                ("question", FactValue::Text(question_id.to_string())),
+                ("threshold", FactValue::Float(policy.min_confidence())),
+                (
+                    "passed",
+                    FactValue::Boolean(
+                        decision.report.calibrated_confidence >= policy.min_confidence(),
                     ),
-                    ("outcome", FactValue::Text(outcome_name(final_outcome))),
-                    ("verifier", FactValue::Text(verifier.to_owned())),
-                ],
-            ));
+                ),
+                ("outcome", FactValue::Text(outcome_name(final_outcome))),
+                ("verifier", FactValue::Text(verifier.to_owned())),
+            ];
+            // Which rung's gate fired — only when a ladder override
+            // decided it, so default traces stay byte-identical.
+            if let Some(source) = ladder_source {
+                detail.push(("policy_source", FactValue::Text(source)));
+            }
+            entries.push(TraceEntry::new(id, detail));
             resolved.push((question_id.clone(), final_outcome, agreement));
         }
         Ok((resolved, entries))
@@ -1096,6 +1129,8 @@ impl<'a> Executor<'a> {
         distribution: Distribution,
         policy: &DecisionPolicy,
         calibration: &dyn crate::calibration::Calibration,
+        decided_by: &str,
+        decided_kind: NodeKind,
     ) -> EngineResult<QuestionDecision> {
         let top = distribution.top().clone();
         let ood = distributional_ood(&distribution);
@@ -1142,6 +1177,7 @@ impl<'a> Executor<'a> {
             report,
             outcome,
             verification_triggered: false,
+            decided_by: (decided_by.to_owned(), decided_kind),
         })
     }
 

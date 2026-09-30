@@ -63,6 +63,17 @@ suite is all-Choice, so the global fit and the class fit coincide).
    only; until the embedding rung gets a real confidence channel (e.g.
    a fitted density ratio, per D2's planned OOD work), its scores must
    gate by rank/margin, never by raw probability.
+   **Margin gate measured (2026-09-30).** The margins re-measurement
+   arm (`embed__gte-modernbert-onnx-fp32__margins`) recorded per-item
+   top1−top2 margins and the sweep (`embed-margin-study.md`,
+   `runner/margin_gate_study.py`) confirms margin selection works
+   where probability cannot: accepted-set accuracy rises monotonically
+   0.575 → 0.880 (coverage 0.208, margin ≥ 0.0183) → 1.000 (coverage
+   0.100, margin ≥ 0.0283), P(correct margin wider) = 0.718. The
+   embedding rung's live profile is therefore `min_confidence: 1.0`
+   (probability can never accept) + `min_margin ≈ 0.018` — a cheap
+   pre-filter that accepts ~1 in 5 items at 88%+ and escalates the
+   rest; not a replacement for the model rung.
 4. **Per-suite-class temperatures differ sharply** (printed by the
    fitter; e.g. Qwen3.5-4B-Q3_K_S: lexical_semantic 0.52 vs
    relational_compositional 13.2). One global T is a compromise. The IR

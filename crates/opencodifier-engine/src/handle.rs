@@ -74,6 +74,28 @@ impl EngineHandle {
         })
     }
 
+    /// Assembles the engine with an escalation ladder: per-node /
+    /// per-kind confidence-gate overrides applied at the threshold node
+    /// (PLANNING.md §24). An empty ladder — the default — is
+    /// [`EngineHandle::new`] with no ladder set.
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`DecisionEngine::new`] — including
+    /// [`crate::error::EngineError::InvalidConfig`] when a non-empty
+    /// ladder carries no distinct `id`.
+    pub fn with_ladder(
+        config: EngineConfig,
+        classifier: Arc<dyn Classifier>,
+        verifier: Option<Arc<dyn Classifier>>,
+        ladder: crate::ladder::LadderPolicy,
+    ) -> EngineResult<Self> {
+        let config = config.with_ladder(ladder);
+        Ok(Self {
+            engine: DecisionEngine::new(config, Arc::new(SystemClock), classifier, verifier)?,
+        })
+    }
+
     /// The fully deterministic, zero-ML engine: the relational solver
     /// (exact proofs over extracted facts) over the built-in lexical
     /// classifier. This is the base binary's default posture — useful
