@@ -31,7 +31,7 @@ Best under 497 ms mean: 0.800 at engine t=0.35, fallback t=0.30 (engine 71%, llm
 
 Best operating point by class: lexical_semantic 0.72, metadata_match 1.00, relational_compositional 0.88.
 
-## Live-wiring design (task #59 step 2 — drafted 2026-09-30; wiring LANDED same day, see "Wired" below; margin study DONE 2026-09-30, d15 refit pending)
+## Live-wiring design (task #59 step 2 — drafted 2026-09-30; wiring LANDED same day, see "Wired" below; margin study DONE 2026-09-30, d15 refit LANDED same day — exact-fit 2B artifact in-tree, `CALIBRATION.md`)
 
 The thresholds above are **post-hoc sweeps over raw winner probabilities**.
 Wiring them into the engine must go through the seams that already exist,
