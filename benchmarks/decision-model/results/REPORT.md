@@ -8,9 +8,9 @@ per artifact, D14). The charts in [`charts/`](charts/) are rendered by
 [`../runner/plot.py`](../runner/plot.py) directly from those run JSONs —
 they are a view of the record, never a source.
 
-**Status: 48 runs (2026-09-25 → 2026-09-28).** Binding tier picks are in
-`docs/DECISIONS.md` D16 (amended ×3, extended ×1); this report is the
-evidence behind them.
+**Status: 53 board runs (2026-09-25 → 2026-09-29).** Binding tier picks
+are in `docs/DECISIONS.md` D16 (amended ×3, extended ×1); this report is
+the evidence behind them.
 
 ## Executive summary
 
@@ -44,6 +44,14 @@ tiers are overconfident (T 0.84–1.67, frontier ECE 0.048 → 0.026), the
 embedding rung's fit is degenerate (ordering-only, no artifact), and the
 engine's proof/delegate stack rejects a global temperature too (its
 proofs are already certain; no artifact).
+
+The external field also has a new floor data point: **VTX-JEV-3** (see
+the Phase 17 section) — a 20 MB static-embedding decision engine —
+scores **0.242 (LF2) / 0.317 (FP32)** on this suite and **0.411**
+(family-macro 0.432) on the JevBench public split through its own vendor
+client. It confirms the sub-millisecond static-embedding latency claim
+and loses to the zero-ML engine everywhere except raw wall clock, which
+is the ladder's whole argument in one row.
 
 ## Methodology
 
@@ -393,11 +401,41 @@ scoring drift against every published row is zero by construction.
 |---|---:|---:|---:|---:|---:|---:|---|
 | **engine** (`relational-v1` via `/v1/decide`) | 231 | **0.3766** | 0.4011 | 0.402 | 0.890 | **2.0 ms** | done, det 231/231 |
 | **jev_native bridge** (Jev-Style-0.8B-v3 Q4_K_M verdict slot) | 231 | **0.6494** | 0.6378 | 0.080 | 0.425 | 6.72 s | done, det 231/231 |
+| **vtx** (VTX-JEV-3 LF2 via vendor `JevClient`) | 231 | **0.4113** | 0.4318 | 0.126 | 0.684 | **7.9 ms** | done, det 231/231 |
 | fork_4b (tree mode, D16 config) | 231 | — | — | — | — | — | pending quiet host |
 
 Published anchors for the same split: hosted Jev 86.6 %, llm-qwen3.5-4b
 80.5 % / 651 ms, Jev-Style-2B 73.6 %, decider-2b 71.0 %, open-jev-2b
-64.5 %, Jev-Style-0.8B 64.1 % (our bridge row), Laya 58.4 %.
+64.5 %, Jev-Style-0.8B 64.1 % (our bridge row), Laya 58.4 %. A second,
+newer anchor set (autotrust's runs of the same public 231, scored
+family-macro, published 2026-09-27): autotrust/JEV-27B **88.70**,
+TypeSafe Jev 1.13 hosted **87.18**, Open-Jev-9B 77.13,
+NeoHorse-Jev-4B 75.73, Kev-4B 73.71, Laya English 55.82 — our rows on
+that scale: bridge 63.78, vtx 43.18, engine 40.11. The full six-benchmark
+external comparison lives in `docs/BENCHMARKS.md`.
+
+**Reading the vtx row.** VTX-JEV-3 is a Model2Vec-class static embedding
+table (255,753 × 256, 2-bit LF2 quantized, 20.5 MB on disk; FP32 variant
+262 MB) with a position-gated attention pooler, distilled on
+`SargeDev/jev-distill-corpus-v3`. It answers every kind as a
+candidate-conditioned choice (cosine softmax, scale 15), run through the
+vendor client because the pooler is not reproducible from the FP32 table
+by mean pooling. The vendor's latency claim reproduces exactly — 0.79 ms
+vendor-side p50 per suite decision, 7.9 ms client-wall on JevBench items
+(up to 16 options, each an encode). Its accuracy does not: **0.4113 /
+macro 0.4318** is 3.5 pp above the zero-ML engine and ~23 pp below the
+0.8B bridge — static similarity routes intent-shaped families (fact
+0.750, policy 0.750, ambiguous 0.571 — it guesses where the engine
+abstains) and collapses exactly where composition is required
+(long_policy 0.105, multi_hop 0.167, routing 0.250). Calibration
+0.126 ECE sits between the engine (0.402) and the native 0.8B stack
+(0.080). On our own suite it is *below* every embedding-rung row
+(0.242 LF2 / 0.317 FP32 vs gte 0.575; metadata class 0.175–0.200 —
+constraint checking is the opposite of what a static table can do), and
+the 2-bit LF2 table costs a further 7.5 pp against its own FP32 weights.
+Net: the sub-millisecond tier is real, the decision quality is not there
+— the row is the ladder's cheapest rung measured, not a new tier (D16
+unchanged).
 
 **Reading the bridge row.** 0.6494 (150/231) vs the published 64.1 %
 (148/231) is a +0.9 pp reproduction delta on the authors' own harness —
@@ -733,3 +771,18 @@ hash is a changed artifact and invalidates the row (D14).
   (tool_selection/fact 1.000), weak exactly where the engine abstains
   honestly (long_policy 0.105, ambiguous 0.143). fork_4b pending quiet
   host. Archived `runs/jevbench/bridge-v1`.
+- **2026-09-29 (static-embedding survey arm)** — 51 board runs (+2 vtx
+  suite rows) and the third JevBench arm: **VTX-JEV-3** (VTXAI), a
+  255,753×256 Model2Vec-class static table (20.5 MB 2-bit LF2; 262 MB
+  FP32) with a position-gated attention pooler, distilled on
+  `SargeDev/jev-distill-corpus-v3`, driven through its vendor
+  `JevClient` (`run_vtx.py` new; JevBench `vtx` arm new). Suite: 0.242
+  LF2 / 0.317 FP32 at 1.09 / 0.80 ms p50 — below every embedding rung,
+  quantization costs 7.5 pp. JevBench public 231: 0.4113 (macro 0.4318,
+  ECE 0.126, p50 7.9 ms, det 231/231) — engine+3.5 pp, bridge−23 pp.
+  Vendor sub-millisecond latency claim confirmed; decision quality not
+  at the Jev-class field's. External target bar recorded
+  (`docs/BENCHMARKS.md`): autotrust/JEV-27B mean 84.07 over six public
+  benchmarks (JevBench 88.70 family-macro) — the number to reach while
+  staying faster, smaller, and easier to adopt. No tier changes (D16
+  unchanged).

@@ -731,7 +731,7 @@ focused decision is weak.
   CI-exact 1.90)/test/doc/deny green; generator + suite + REPORT
   recorded in the benchmark.
 
-## Phase 17 — external anchor: JevBench public split (engine + bridge done)
+## Phase 17 — external anchor: JevBench public split (engine + bridge + vtx done)
 
 Every REPORT.md number so far is internal (our suite, our seeds). Phase 17
 measures OpenCodifier on a third-party suite with published rows for
@@ -754,8 +754,9 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
 - **Arms.** engine (default deterministic stack over `/v1/decide`;
   abstain → incorrect, winner-only → label-only — never an invented
   tail), fork_4b (tree mode, label-only per D15), jev_native (native
-  probs). `runner/run_jevbench.py`, wire facts smoke-verified and
-  recorded in JEVBENCH.md.
+  probs), vtx (VTX-JEV-3 through its vendor `JevClient` with the
+  jev_native rendering). `runner/run_jevbench.py`, wire facts
+  smoke-verified and recorded in JEVBENCH.md.
 - **Sub-steps.** (1) ✅ engine arm complete run — 231/231 in one
   `run_all`, accuracy **0.3766** (macro 0.4011, chance 0.3176), ECE
   0.402, Brier 0.890, client-wall p50 **2.0 ms**; replay determinism
@@ -775,10 +776,21 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   results table. (5) optional: the fork-side full-distribution patch
   (D15) upgrades the fork arm from label-only to native Brier/ECE
   (patch written both sides, inert until fork rebuild).
+  (6) ✅ static-embedding survey arm (vtx) — VTX-JEV-3 (Model2Vec-class
+  255,753×256 table, 20.5 MB 2-bit LF2, position-gated pooler in the
+  vendor `inference.py` client) on the public 231: accuracy **0.4113**
+  (macro 0.4318), ECE 0.126, Brier 0.684, p50 **7.9 ms**, replay
+  determinism 231/231, native probabilities only; 3.5 pp above the
+  engine, ~23 pp below the 0.8B bridge, ~45 pp below the JEV-27B
+  anchor — a data point the field lacked, not a new tier (D16
+  unchanged). Suite counterpart rows `run_vtx.py`: LF2 0.242, FP32
+  0.317 (quantization costs 7.5 pp); archived `runs/jevbench/vtx-v1`.
 - **Accept (partial):** engine arm: zero synthesized probabilities ✅,
   replay determinism ✅, all 231 in one run ✅. Bridge reproduction ✅
   (+0.9 pp), bridge schema discipline ✅, bridge determinism ✅,
-  REPORT/JEVBENCH sections ✅. fork_4b arm pending quiet host.
+  REPORT/JEVBENCH sections ✅, vtx survey arm ✅ (native probs,
+  deterministic, documented in `docs/BENCHMARKS.md`). fork_4b arm
+  pending quiet host.
 
 ## Phase 18 — hardening pass (coverage, lints, e2e, remaining §-items)
 
