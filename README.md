@@ -17,9 +17,12 @@ Jev), deterministic engine (graphs, rules, caches, BM25 narrowing),
 backend traits, and both primary interfaces are implemented and tested:
 
 - `opencodifier` CLI — `decide`, `graph validate`, `serve`,
-  `mcp serve`, `models verify` (see `--help` for the exit-code contract).
-- `POST /v1/decide`, `POST /v1/graph/validate`, `GET /v1/healthz` —
-  axum server, loopback-only unless explicitly told otherwise.
+  `mcp serve`, `models verify`, `recipe list`, `recipe install`
+  (see `--help` for the exit-code contract).
+- `POST /v1/decide`, `POST /v1/batch`, `POST /v1/graph/validate`,
+  `POST /v1/graph/run`, `POST /v1/validate`, `GET /v1/models`,
+  `GET /v1/capabilities`, `GET /v1/healthz` — axum server,
+  loopback-only unless explicitly told otherwise.
 - MCP — `opencodifier mcp serve` exposes `codify_decide`,
   `codify_batch`, `codify_graph`, `codify_validate`, `codify_verify`,
   and `codify_explain` as tools over stdio: point any MCP host at the

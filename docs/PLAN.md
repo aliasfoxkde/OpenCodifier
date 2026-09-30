@@ -990,16 +990,20 @@ fills quiet windows throughout. 18j last. WGCA/web-standards: no web
 frontend exists — the clause maps to 18d's HTTP contract suite and the
 API reference; noted here so it is not silently dropped.
 
-## Spec coverage map (audit, 2026-09-28)
+## Spec coverage map (audit, 2026-09-28; refreshed 2026-09-30)
 
 All 17 tracked phases are done; the §-by-§ check that every PLANNING
-section has a landing place lives in `docs/SPEC_COVERAGE.md`. Headline
-gaps it surfaces: the §36 HTTP surface is 3/9 endpoints, the §34
-recipe fleet partial (§33 skills shipped 2026-09-28 — `skills/` with all
-eight areas), §63 decision registry,
-§26/§53/§54 ML graph nodes (rerank/retrieve), §57 WASM, §58 distribution
-matrix, and the §15/§16 training path. The doc orders what remains by
-what needs the host quiet (cargo) vs what does not.
+section has a landing place lives in `docs/SPEC_COVERAGE.md`. The gaps
+the 2026-09-28 audit surfaced have since closed: §36 HTTP surface (18e),
+§34 recipe fleet + `recipe install` (18g), §63 decision registry (D20,
+18f), and the §26/§53/§54 ML graph nodes (18h) are done; §57 WASM shipped
+runtime-first (D23, 18j). What remains: **§58 distribution matrix**
+(aarch64/darwin builds quiet-window; registry publication awaits explicit
+user go), the **§15/§16 training path**, and **§60 Amortyx integration**
+(designs exist; implementation is its own promotion-gated effort).
+SPEC_COVERAGE's table was also corrected 2026-09-30 against `routes.rs`:
+no `/v1/systemone` HTTP route exists (the Jev shape is a library
+adapter), and §22 batch inference is done end to end.
 
 ## Integration design notes (designs, not phases)
 
