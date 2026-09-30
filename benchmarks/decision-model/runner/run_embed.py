@@ -262,6 +262,11 @@ def run_once(enc: Encoder, suite: dict) -> tuple[list[dict], float]:
         z = sum(exps)
         probs = [e / z for e in exps]
         best = max(range(len(probs)), key=lambda i: probs[i])
+        # Winner margin (top minus runner-up softmax mass) backs the
+        # rank/margin gate form CALIBRATION.md finding 3 requires for the
+        # embedding rung; the per-candidate dict feeds post-hoc fusion
+        # studies. Additive fields — older consumers read `prob` only.
+        ordered = sorted(probs, reverse=True)
         rows.append(
             {
                 "id": it["id"],
@@ -269,6 +274,8 @@ def run_once(enc: Encoder, suite: dict) -> tuple[list[dict], float]:
                 "answer": it["answer"],
                 "pred": it["candidates"][best]["id"],
                 "prob": probs[best],
+                "margin": ordered[0] - ordered[1] if len(ordered) > 1 else ordered[0],
+                "probs": {c["id"]: p for c, p in zip(it["candidates"], probs)},
             }
         )
     return rows, t_embed

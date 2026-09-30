@@ -797,7 +797,15 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   `/proc` monitor in every runner (peak RSS / CPU-s / IO / wall per arm
   into run JSONs + summary.md peak-RSS column). (9) ✅ adapter-training
   research record `docs/TRAINING.md` (E0–E3 experiment ladder; first
-  0.8 B decision-head/LoRA run ≈ 1–2 CPU-days on this host).
+  0.8 B decision-head/LoRA run ≈ 1–2 CPU-days on this host). (10) ✅
+  ONNX runtime arm (`runner/run_onnx.py`): the optimum q4 export of
+  Qwen3.5-2B driven by onnxruntime with the fork's tree scoring ported
+  exactly (greedy parity validated at the probe stage) — acc **0.658** /
+  ECE 0.064 vs 0.725 for llama.cpp on the *same weights*, prefill-bound
+  ≥9× slower, 2.6× the peak RSS (F25; the run carries a host-contention
+  caveat that cannot move the verdict — accuracy and determinism are
+  load-independent). Ladder unchanged; ONNX stays the portability
+  story.
 - **Accept (partial):** engine arm: zero synthesized probabilities ✅,
   replay determinism ✅, all 231 in one run ✅. Bridge reproduction ✅
   (+0.9 pp), bridge schema discipline ✅, bridge determinism ✅,

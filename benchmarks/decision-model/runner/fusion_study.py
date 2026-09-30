@@ -48,6 +48,9 @@ def load_suite_arm(path: Path) -> dict[str, dict]:
             "answer": r["answer"],
             "correct": r["pred"] == r["answer"],
             "prob": float(r["prob"]),
+            # Margin (top minus runner-up) when the arm recorded it —
+            # run_embed.py emits it since the margin-gate study.
+            "margin": float(r["margin"]) if r.get("margin") is not None else None,
             "class": r["class"],
             "ms": r.get("wall_ms") or r.get("server_ms"),
         }
@@ -97,23 +100,33 @@ def arm_cost(items: list[dict], rows: dict[str, dict], fallback_ms: float) -> fl
 
 def cascade(
     items: list[dict],
-    ladder: list[tuple[str, dict[str, dict], float, float]],
+    ladder: list[tuple[str, dict[str, dict], float, float, str]],
 ) -> dict:
-    """Walk the ladder per item: accept the first rung whose prob >= t.
+    """Walk the ladder per item: accept the first rung whose gate clears t.
 
-    `ladder` entries are (name, rows, threshold, mean_ms). The final rung
-    always answers (threshold 0.0). Latency accumulates over every rung the
-    item actually passed through, gate evaluation itself is free.
+    `ladder` entries are (name, rows, threshold, mean_ms, gate) where gate
+    is "prob" (winner probability) or "margin" (top minus runner-up — the
+    rank/margin form CALIBRATION.md finding 3 requires for rungs without a
+    calibrated probability channel). The final rung always answers
+    (threshold 0.0). Latency accumulates over every rung the item actually
+    passed through, gate evaluation itself is free.
     """
+
+    def gate_value(r: dict, gate: str) -> float | None:
+        if gate == "margin":
+            return r["margin"] if r.get("margin") is not None else r["prob"]
+        return r["prob"]
+
     rows_out = []
     for it in items:
         spent = 0.0
         used = None
-        for name, arm_rows, t, mean_ms in ladder:
+        for name, arm_rows, t, mean_ms, gate in ladder:
             r = arm_rows[it["id"]]
             spent += r["ms"] or mean_ms
             used = name
-            if r["prob"] is not None and r["prob"] >= t:
+            v = gate_value(r, gate)
+            if v is not None and v >= t:
                 rows_out.append(
                     {"id": it["id"], "class": it["class"], "rung": name,
                      "prob": r["prob"], "correct": r["correct"],
@@ -158,6 +171,11 @@ def main() -> int:
                     help="engine-dir/fallback-dir are JevBench run dirs")
     ap.add_argument("--engine-dir", type=Path, default=None)
     ap.add_argument("--fallback-dir", type=Path, default=None)
+    ap.add_argument("--embed-gate", choices=("prob", "margin", "both"), default="prob",
+                    help="gate form for the embedding rung: winner probability "
+                    "or top-minus-runner-up margin (rank/margin form per "
+                    "CALIBRATION.md finding 3); 'both' sweeps each and "
+                    "compares in one report")
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
 
@@ -223,60 +241,73 @@ def main() -> int:
 
     results = []
     t_final = 0.0
-    for t_e in grid:
-        base_ladder = [("engine", engine, t_e, engine_mean)]
-        if args.jevbench:
-            ladder = base_ladder + [(fallback_name, fallback_rows, t_final, fb_mean)]
-            results.append((t_e, None, cascade(items, ladder)))
-        elif "embed" in arms:
-            for t_m in grid:
-                ladder = base_ladder + [("embed", arms["embed"], t_m, embed_mean)]
-                if fallback_name == "llm":
-                    ladder.append(("llm", arms["llm"], t_final, fb_mean))
-                results.append((t_e, t_m, cascade(items, ladder)))
-        else:
-            ladder = base_ladder + [("llm", arms["llm"], t_final, fb_mean)]
-            results.append((t_e, None, cascade(items, ladder)))
+    embed_gates = (
+        ["prob", "margin"]
+        if args.embed_gate == "both" and "embed" in arms
+        else [args.embed_gate if "embed" in arms else "prob"]
+    )
+    for embed_gate in embed_gates:
+        for t_e in grid:
+            base_ladder = [("engine", engine, t_e, engine_mean, "prob")]
+            if args.jevbench:
+                ladder = base_ladder + [
+                    (fallback_name, fallback_rows, t_final, fb_mean, "prob")
+                ]
+                results.append((t_e, None, embed_gate, cascade(items, ladder)))
+            elif "embed" in arms:
+                for t_m in grid:
+                    ladder = base_ladder + [
+                        ("embed", arms["embed"], t_m, embed_mean, embed_gate)
+                    ]
+                    if fallback_name == "llm":
+                        ladder.append(("llm", arms["llm"], t_final, fb_mean, "prob"))
+                    results.append((t_e, t_m, embed_gate, cascade(items, ladder)))
+            else:
+                ladder = base_ladder + [("llm", arms["llm"], t_final, fb_mean, "prob")]
+                results.append((t_e, None, embed_gate, cascade(items, ladder)))
 
-    def render(res, t_e, t_m):
+    def render(res, t_e, t_m, gate):
         acc = res["accuracy"]
         return (f"| {t_e:.2f} | {('%.2f' % t_m) if t_m is not None else '—'} "
-                f"| {acc:.3f} | {res['ece']:.3f} | {res['mean_ms']:.1f} "
+                f"| {gate} | {acc:.3f} | {res['ece']:.3f} | {res['mean_ms']:.1f} "
                 f"| {fmt_routing(res['routing'])} |")
 
-    best = max(results, key=lambda r: r[2]["accuracy"])
+    best = max(results, key=lambda r: r[3]["accuracy"])
     budget = max(50.0, 0.25 * fb_mean)  # ladder mean ms must stay ≤ this
     cheap = max(
-        (r for r in results if r[2]["mean_ms"] <= budget),
-        key=lambda r: r[2]["accuracy"], default=None,
+        (r for r in results if r[3]["mean_ms"] <= budget),
+        key=lambda r: r[3]["accuracy"], default=None,
     )
     lines += [
         "## Cascade results (thresholds swept)", "",
-        "Accept a rung when its winner probability clears the threshold;",
-        "final rung always answers. Cost = rungs actually incurred.", "",
-        "| engine t | fallback t | acc | ECE | mean ms | routing |",
-        "|---|---|---|---|---|---|",
+        "Accept a rung when its gate clears the threshold (`prob` = winner",
+        "probability, `margin` = top minus runner-up); final rung always",
+        "answers. Cost = rungs actually incurred.", "",
+        "| engine t | fallback t | gate | acc | ECE | mean ms | routing |",
+        "|---|---|---|---|---|---|---|",
     ]
-    shown = {id(r[2]) for r in (best, cheap) if r}
-    for t_e, t_m, res in results:
+    shown = {id(r[3]) for r in (best, cheap) if r}
+    for t_e, t_m, gate, res in results:
         if id(res) in shown or (t_e, t_m) in {(0.50, 0.50), (0.60, 0.50)}:
-            lines.append(render(res, t_e, t_m))
+            lines.append(render(res, t_e, t_m, gate))
     lines += [
         "",
-        f"Best accuracy: {best[2]['accuracy']:.3f} at engine t={best[0]:.2f}"
+        f"Best accuracy: {best[3]['accuracy']:.3f} at engine t={best[0]:.2f}"
         + (f", fallback t={best[1]:.2f}" if best[1] is not None else "")
-        + f" ({fmt_routing(best[2]['routing'])}; mean {best[2]['mean_ms']:.1f} ms).",
+        + f", gate {best[2]}"
+        + f" ({fmt_routing(best[3]['routing'])}; mean {best[3]['mean_ms']:.1f} ms).",
     ]
     if cheap:
         lines.append(
-            f"Best under {budget:.0f} ms mean: {cheap[2]['accuracy']:.3f} at "
+            f"Best under {budget:.0f} ms mean: {cheap[3]['accuracy']:.3f} at "
             f"engine t={cheap[0]:.2f}"
             + (f", fallback t={cheap[1]:.2f}" if cheap[1] is not None else "")
-            + f" ({fmt_routing(cheap[2]['routing'])}; mean {cheap[2]['mean_ms']:.1f} ms)."
+            + f", gate {cheap[2]}"
+            + f" ({fmt_routing(cheap[3]['routing'])}; mean {cheap[3]['mean_ms']:.1f} ms)."
         )
 
     # Per-class view of the best operating point.
-    bc = by_class_acc(best[2]["rows"])
+    bc = by_class_acc(best[3]["rows"])
     lines += ["", "Best operating point by class: "
               + ", ".join(f"{k} {v:.2f}" for k, v in bc.items()) + ".", ""]
     args.out.write_text("\n".join(lines) + "\n")
