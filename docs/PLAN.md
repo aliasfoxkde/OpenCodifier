@@ -937,12 +937,16 @@ in between. Ordered so each step's output feeds the next.
   (all 15 committed graphs decide identically optimized vs not); HTTP
   identity JSONs carry `embedding_model` additively.
 - **18i — Measurement-queue completion (storm-gated; runs in quiet
-  windows).** #32 params A/B (attempt 3 driver waiting), #25 our-suite
-  native verdict-slot run, fork rebuild on `d15-full-distribution` + D15
-  refit, fork_4b JevBench arm (upgraded to native Brier/ECE by the fork
-  patch), #35 Vulkan APU arm, #42 vision probe. Accept: each lands in
-  REPORT.md with its honesty rules; the queue is ordered by information
-  value (bridge > params > native > fork > vision > Vulkan).
+  windows).** Landing in order of information value: bridge ✓
+  (0.6494), **native verdict-slot ✓ (0.8083, F26 — #25 closed)**,
+  **margin gate study ✓ (CALIBRATION 3 closed)**, **d15 exact refit ✓
+  (T 0.8426 → 0.9317 exact-fit artifact shipped)**, **Vulkan APU ✓
+  (0.725 @ 2.23× the CPU leg's speed, 1/43rd the host CPU-seconds —
+  REPORT Device A/B)**. Still measuring in the quiet chain: #32 params
+  A/B (ctx16k/ctx4k/diet200/diet100), #39 fork rebuild + fork_4b
+  JevBench re-run (driver pid preserved; killed pre-d15 raw archived as
+  `fork4b-kill-salvage.md`, context only), #62 cross-builds, #42 vision
+  probe. Accept: each lands in REPORT.md with its honesty rules.
 - **18j — Distribution + WASM (§57, §58, §68).** Own phases after the
   core is hard: cross-platform release matrix, Homebrew/winget/crates.io;
   `opencodifier-wasm` with the §68 security posture. Accept: per §58/§57

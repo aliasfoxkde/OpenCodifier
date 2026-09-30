@@ -10,6 +10,18 @@ releases may break, and every breaking change is recorded in this file
 
 ### Added
 
+- Escalation-ladder wiring (PLANNING.md §24, D25):
+  `opencodifier_engine::LadderPolicy` — optional per-node then
+  per-kind `DecisionPolicy` overrides resolved at the confidence gate
+  the deciding node already uses, on `EngineConfig::with_ladder` /
+  `EngineHandle::with_ladder`. An empty ladder is byte-identical to no
+  ladder (no decoration, no trace facts, unchanged fixtures); a
+  configured ladder decorates the model id (`|ladder-v1@<id>`) so every
+  cache key re-keys — the cache stores completed gated responses, so
+  identity decoration is what keeps a changed ladder from replaying an
+  old gate — and a non-empty ladder without an id is refused at
+  assembly (`EngineError::InvalidConfig`). Traces name the rung whose
+  gate fired (`policy_source`).
 - Semantic graph nodes and the D22 optimizer (PLAN 18h, D21/D22):
   `embedding` (annotate-only), `retrieve` (`top_n`/`floor`,
   floor-never-starves, every drop trace-named), and `rerank` (permutes,
@@ -81,6 +93,32 @@ releases may break, and every breaking change is recorded in this file
   Same weights as the GGUF arm: acc **0.658** / ECE 0.064 vs 0.725,
   prefill-bound ≥9× slower, 2.6× the peak RSS (F25) — llama.cpp keeps
   the decision rung; ONNX stays the product's portability format.
+- Native verdict-slot readout arm (`runner/run_jevbench.py --arm
+  jev_native` + suite driver): Jev-Style-0.8B-Decision-v3 through its
+  own `macjev` render/readout scores **0.8083** on the locked suite
+  (F26) — the same weights that scored 0.217 tree / 0.000 chat; the
+  F10 interface-mismatch row now has its native control, and the
+  comparability bridge has a suite-side anchor (0.8083 home vs 0.6494
+  JevBench, both with the authors' shipped temperatures).
+- Rank/margin gate study (`runner/margin_gate_study.py` +
+  `results/embed-margin-study.md`): the embedding rung's probability is
+  uncalibratable (degenerate fit), but its top1−top2 margin gates
+  cleanly — margin ≥ 0.0183 accepts 20.8 % of suite items at 0.880
+  accuracy, monotone to 1.000 at 0.0283 (CALIBRATION finding 3 closed;
+  live profile `min_confidence: 1.0` + `min_margin ≈ 0.018`).
+- Exact d15 calibration refit: the parallel-decision fork now emits
+  full per-candidate distributions, and the Qwen3.5-2B artifact of
+  record refits from the full board (reverse-softmax temperature,
+  T 0.8426 → 0.9317, ECE 0.0621 → 0.0588) — the margin proxy
+  over-sharpened on multi-way boards, as its own synthetic validation
+  predicted. `crates/opencodifier-engine/tests/artifact_schema_check.rs`
+  pins every artifact of record to the engine's `CalibrationArtifact`
+  schema.
+- Vulkan device A/B (suite, Qwen3.5-2B Q4_K_M): the Vega 8 iGPU leg
+  matches the CPU leg's accuracy (0.725 / ECE 0.063) at 2.23× the speed
+  (p50 1.35 s vs 2.93 s) for 1/43rd the host CPU-seconds and 26 % less
+  peak RSS — the model rung no longer assumes a CPU-only host
+  (REPORT.md "Device A/B").
 
 ### Changed
 

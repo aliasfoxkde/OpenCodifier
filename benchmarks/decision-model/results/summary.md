@@ -16,6 +16,7 @@ distribution — context for the decision rows, never comparable to them.
 | embed__embeddinggemma-300M-Q8_0.json | 0.62 / 0.62 / 0.25 | 0.500 | 0.256 | 634.9ms | — | yes |
 | embed__gte-modernbert-base.json | 0.45 / 0.78 / 0.50 | 0.575 | 0.330 | 3374.8ms | — | yes |
 | embed__gte-modernbert-onnx-fp32.json | 0.45 / 0.78 / 0.50 | 0.575 | 0.330 | 811.4ms | — | yes |
+| embed__gte-modernbert-onnx-fp32__margins.json (caveat) | 0.45 / 0.78 / 0.50 | 0.575 | 0.330 | 873.0ms | 890 MiB | yes |
 | embed__gte-modernbert-onnx-int8.json | 0.28 / 0.78 / 0.28 | 0.442 | 0.233 | 674.1ms | — | yes |
 | embed__gte-modernbert-onnx-q4-b32.json | 0.47 / 0.75 / 0.50 | 0.575 | 0.330 | 815.7ms | — | yes |
 | embed__minilm-l6-v2.json | 0.30 / 0.62 / 0.35 | 0.425 | 0.172 | 107.0ms | — | yes |
@@ -23,6 +24,7 @@ distribution — context for the decision rows, never comparable to them.
 | engine__lexical__long__focused.json | 0.88 / 0.23 / 0.95 | 0.683 | 0.094 | 9.2ms | — | yes |
 | engine__lexical__long__full.json | 0.88 / 0.23 / 0.95 | 0.683 | 0.094 | 6.7ms | — | yes |
 | engine__relational-v1.json | 0.88 / 0.23 / 0.95 | 0.683 | 0.094 | 1.3ms | — | yes |
+| jev_native__suite.json (caveat) | 1.00 / 0.82 / 0.60 | 0.808 | 0.157 | 1304.8ms | — | yes |
 | k2chat__K2-Horizon-1B-Q4_K_M.json (chat screen) | 0.88 / 0.80 / 0.50 | 0.725 | — | 1499.1ms | — | n/a (sampled) |
 | k2chat__K2-Horizon-4B-Q4_K_M.json (chat screen) | 1.00 / 0.93 / 0.17 | 0.700 | — | 4878.9ms | — | n/a (sampled) |
 | k2chat__K2-Horizon-7B-Q4_K_M.json (chat screen) | 1.00 / 0.95 / 0.45 | 0.800 | — | 9052.1ms | — | n/a (sampled) |
@@ -66,15 +68,20 @@ distribution — context for the decision rows, never comparable to them.
 | llama__qwen3b.json | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2575.2ms | — | yes |
 | onnx__qwen35-2b-q4.json (caveat) | 0.88 / 0.60 / 0.50 | 0.658 | 0.064 | 15244.7ms | 3158 MiB | yes |
 | params__t08.json | 1.00 / 0.95 / 0.45 | 0.800 | 0.074 | 7629.9ms | 5296 MiB | yes |
+| vkab__cpu__qwen35-2b-q4km.json | 0.95 / 0.72 / 0.50 | 0.725 | 0.062 | 2932.1ms | 7098 MiB | yes |
+| vkab__vk__qwen35-2b-q4km.json | 0.95 / 0.75 / 0.47 | 0.725 | 0.063 | 1348.9ms | 5272 MiB | yes |
 | vtx__VTX-JEV-3-fp32.json | 0.20 / 0.33 / 0.42 | 0.317 | 0.099 | 0.8ms | — | yes |
 | vtx__VTX-JEV-3-lf2.json | 0.17 / 0.25 / 0.30 | 0.242 | 0.136 | 1.1ms | — | yes |
 
 ## Notes
 
+- `embed__gte-modernbert-onnx-fp32__margins.json` caveat: margins re-measurement for the rank/margin gate study (CALIBRATION.md finding 3); latency column taken under non-quiet conditions and not of record — the fp32 latency row of record is embed__gte-modernbert-onnx-fp32.json
+- `embed__gte-modernbert-onnx-fp32__margins.json` resources: peak RSS 890 MiB, CPU 830.3s over 224.6s wall, IO 706/+0 MiB (1 process sampled).
 - `engine__builtin-lexical.json` outcomes: {'abstain': 76, 'accept': 16, 'verify': 28} — abstention/verify routing is part of the engine contract, not a failure.
 - `engine__lexical__long__focused.json` outcomes: {'abstain': 51, 'accept': 42, 'verify': 27} — abstention/verify routing is part of the engine contract, not a failure.
 - `engine__lexical__long__full.json` outcomes: {'abstain': 51, 'accept': 42, 'verify': 27} — abstention/verify routing is part of the engine contract, not a failure.
 - `engine__relational-v1.json` outcomes: {'abstain': 51, 'accept': 42, 'verify': 27} — abstention/verify routing is part of the engine contract, not a failure.
+- `jev_native__suite.json` caveat: Native-interface arm: no instruction/system channel exists in the Jev-Style protocol, so the suite's instructions field is unused here (it is part of the prompt in every other arm). Calibration is the authors' shipped global temperature, not our D15 fit.
 - `k2chat__K2-Horizon-1B-Q4_K_M.json` chat (JSON-writing) baseline: acc 0.725, p50 1499ms — the token-by-token alternative the decision arm replaces.
 - `k2chat__K2-Horizon-4B-Q4_K_M.json` chat (JSON-writing) baseline: acc 0.700, p50 4879ms — the token-by-token alternative the decision arm replaces.
 - `k2chat__K2-Horizon-7B-Q4_K_M.json` chat (JSON-writing) baseline: acc 0.800, p50 9052ms — the token-by-token alternative the decision arm replaces.
@@ -135,3 +142,9 @@ distribution — context for the decision rows, never comparable to them.
 - `onnx__qwen35-2b-q4.json` resources: peak RSS 3158 MiB, CPU 28218.5s over 6922.5s wall, IO 17307/+1 MiB (1 process sampled).
 - `params__t08.json` bulk per-decision (batched contexts): lexical_semantic: 2042ms; metadata_match: 19193ms; relational_compositional: 2394ms.
 - `params__t08.json` resources: peak RSS 5296 MiB, CPU 24338.5s over 6226.6s wall, IO 30486/+0 MiB (2 processes sampled).
+- `vkab__cpu__qwen35-2b-q4km.json` chat (JSON-writing) baseline: acc 0.725, p50 2086ms — the token-by-token alternative the decision arm replaces.
+- `vkab__cpu__qwen35-2b-q4km.json` bulk per-decision (batched contexts): lexical_semantic: 808ms; metadata_match: 6535ms; relational_compositional: 993ms.
+- `vkab__cpu__qwen35-2b-q4km.json` resources: peak RSS 7098 MiB, CPU 16685.3s over 1741.2s wall, IO 1626/+0 MiB (2 processes sampled).
+- `vkab__vk__qwen35-2b-q4km.json` chat (JSON-writing) baseline: acc 0.700, p50 1734ms — the token-by-token alternative the decision arm replaces.
+- `vkab__vk__qwen35-2b-q4km.json` bulk per-decision (batched contexts): lexical_semantic: 333ms; metadata_match: 2125ms; relational_compositional: 403ms.
+- `vkab__vk__qwen35-2b-q4km.json` resources: peak RSS 5272 MiB, CPU 387.9s over 804.1s wall, IO 1285/+0 MiB (2 processes sampled).

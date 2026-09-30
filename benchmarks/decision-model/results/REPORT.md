@@ -289,7 +289,11 @@ Qwen3.8-4B: 0.767 vs 0.742; Jev-0.8B: 0.217 vs 0.000). Chat won only
 within the ±2–3-item noise band (gemma-3-4b 0.775 vs 0.750; qwen0.5b
 0.433 vs 0.392). Writing distills degrade hardest when forced to commit
 through token paths (Qwen3.8 series chat > decision is the exception that
-proves the rule: those tunes were trained *for* JSON-writing).
+proves the rule: those tunes were trained *for* JSON-writing). The
+Jev-0.8B row now has a third readout that closes the story: its
+**native verdict-slot interface scores 0.8083** on the same weights and
+the same suite (F26) — the 0.217 tree / 0.000 chat rows were never about
+the model.
 
 ### Bulk throughput (batched contexts, per-decision ms)
 
@@ -442,6 +446,41 @@ the format the product's own model rung consumes. It does not enter the
 fusion ladder (dominated on both axes by the GGUF rung it would
 replace).
 
+### Device A/B: Vulkan iGPU vs CPU (Qwen3.5-2B decision arm, 2026-09-30)
+
+Same weights (Q4_K_M), same fork tree (`thecodacus parallel-decision`,
+tree ad129b0 both legs — the JSON `llamacpp_branch` field is null for
+the vkab arms, a chain-driver gap; same-source is established from the
+build provenance: both `build-pd` and `build-vk` configured from tree
+38de7eb/ad129b0 within minutes of each other, 12:10–12:18), same suite,
+serial `--parallel 1 --decision-seqs 24`, quiet-host load gate. CPU leg:
+`-ngl 0 -t 12`. Vulkan leg: `build-vk` (Vulkan backend, RADV/LLVMpipe
+class APU — Vega 8 iGPU), `-ngl 99 -t 6`.
+
+| leg | acc | ECE | mean | p50 | p95 | wall | CPU-s | peak RSS |
+|---|---|---|---|---|---|---|---|---|
+| CPU (-ngl 0, -t 12) | 0.725 | 0.062 | 3.29 s | 2.93 s | 6.82 s | 1741 s | 16 685 | 7098 MiB |
+| **Vulkan (-ngl 99, -t 6)** | **0.725** | 0.063 | **1.47 s** | **1.35 s** | **2.63 s** | **804 s** | **388** | 5272 MiB |
+
+**2.23× faster at identical accuracy** (per-class flips offset: lexical
+0.725→0.750, relational 0.500→0.475 — item-level GPU/CPU numerics
+differ, the aggregate does not). ECE is flat (0.062→0.063). Within-run
+determinism is perfect on both legs (`max_prob_delta` 0.0,
+`predictions_match` true). The resource column is the sleeper result:
+**CPU-seconds drop 43×** (16 685 → 388) — the iGPU absorbs the math and
+frees the host, which matters exactly when the runtime shares a machine
+with the deterministic engine that is supposed to outrank it. Peak RSS
+falls 26% (KV cache + logits off the host heap).
+
+Verdict: on this class of APU the Vulkan backend is a pure win for the
+model rung — same decisions, less than half the latency, a rounding
+error of host CPU. It does not change D16 (the balanced pick is a
+latency/memory trade already measured), but it moves the deployment
+posture: a `0.725 @ 1.35 s p50` ladder tier no longer needs a
+CPU-only host assumption. Threat to validity: single device, single
+quant, single suite; Vulkan numerics are device-specific, so the
+row-of-record remains the CPU leg.
+
 Recording conditions: the ONNX run's host carried concurrent load
 (peaks 40–117) during parts of both passes; its result JSON carries the
 full caveat and the resource trace (28,218 CPU-s over 6,923 s wall).
@@ -562,7 +601,11 @@ engine's proofs keep confident relational items at 1.3 ms; the hedged ones
 escalate to the LLM). Oracle bound on the joined set: 0.975 — headroom
 remains for a better-calibrated gate. The mixed-rung ECE (0.127) is the
 next work item: D15 per-rung temperature before trusting the blended
-confidence.
+confidence. The embedding rung's gate is since measured: probability
+never calibrates there (degenerate fit, CALIBRATION finding 3), but the
+rank/margin gate does — margin ≥ 0.0183 accepts 20.8 % of items at 0.880
+accuracy, monotone to 1.000 at margin ≥ 0.0283 (`embed-margin-study.md`,
+`runner/margin_gate_study.py`).
 
 **JevBench-231 (engine → vtx, engine → bridge):** engine+vtx reaches
 **0.455** (vs 0.411 best single, +4.4 pp at 6.3 ms mean; oracle 0.584).
@@ -616,7 +659,7 @@ trusted to route.
   token paths and JSON chat are both outside its trained interface, so
   the row measures the harness-to-model distance, and zero transfer was
   observed. A native verdict-slot readout arm is future harness work
-  (backlog #25).
+  (backlog #25) — **landed 2026-09-30, see F26.**
 - **F11 — Chat is the wrong interface for decisions.** Same weights,
   same questions: chat loses or ties everywhere, adds sampling
   nondeterminism, and loses calibration entirely. K2's 7B chat screen
@@ -741,6 +784,23 @@ trusted to route.
   portability (§73) and the WASM seam, but the benchmark decision arm
   stays on llama.cpp, and the fusion ladder is unchanged (the ONNX arm
   is dominated by the GGUF rung it would replace).
+- **F26 — Interface is the model: the native verdict-slot readout lifts
+  Jev-Style-0.8B from 0.217 to 0.8083 on identical weights.** The
+  F10 mismatch arm now has its native control (`jev_native_verdict_slot`,
+  macjev-render-v1 render + macjev-readout-v1 fused decode over the
+  authors' shipped `readout_config.json` temperatures): 0.8083 blended
+  (lexical 0.825, metadata 1.000, relational 0.600), ECE 0.157 on their
+  global T = 0.880, p50 1.30 s / p95 3.99 s, deterministic
+  (`max_prob_delta` 0.0). A +59 pp swing from readout alone — larger
+  than any model swap on the board — confirming F10: candidate-id token
+  paths and JSON chat were measuring the harness, not the tune. Two
+  honest caveats keep the row from entering the tier board: the native
+  protocol has no instruction/system channel, so the suite's
+  instructions field goes unused here (it is part of the prompt in every
+  other arm), and its calibration is the authors' shipped temperature,
+  not a D15 fit. It is the comparability bridge's suite-side anchor:
+  the same interface that scores 0.6494 on JevBench scores 0.8083 at
+  home.
 
 ## Threats to validity
 
@@ -928,3 +988,30 @@ hash is a changed artifact and invalidates the row (D14).
   tied at 0.50; int8 decodes ~20× slower still). ONNX stays the product's
   model-rung format for portability; the benchmark arm and the fusion
   ladder stay on llama.cpp. No tier changes (D16 unchanged).
+- **2026-09-30 (quiet-batch close-out, part 1)** — five quiet-window
+  results, no tier changes (D16 unchanged). **Native verdict-slot suite
+  arm** (`jev_native_verdict_slot`): Jev-Style-0.8B-v3 through its own
+  readout scores **0.8083 / ECE 0.157 / p50 1.30 s** on the same weights
+  that scored 0.217 tree / 0.000 chat — interface is the model (F26;
+  backlog #25 closed). **Margin gate study** (`runner/margin_gate_study.py`
+  → `embed-margin-study.md`): the embedding rung cannot be gated on
+  probability (degenerate fit) but margin ≥ 0.0183 accepts 20.8 % of
+  items at 0.880 accuracy, monotone to 1.000 at 0.0283 — CALIBRATION
+  finding 3 closed, the rung's live profile is `min_confidence: 1.0` +
+  `min_margin ≈ 0.018`. **d15 exact refit landed**: the parallel-decision
+  CPU leg recorded full per-candidate distributions (120/120) and the
+  Qwen3.5-2B artifact refits exactly, T 0.8426 → 0.9317 (ECE 0.0621 →
+  0.0588; the margin proxy over-sharpened as the synthetic grid
+  predicted); a new engine test pins every artifact of record to the
+  `CalibrationArtifact` schema. **Vulkan device A/B**: the Vega 8 iGPU
+  leg matches the CPU leg's accuracy (0.725 / ECE 0.063) at 2.23× the
+  speed (p50 1.35 s vs 2.93 s) using 1/43rd the host CPU-seconds — the
+  deployment posture for the model rung moves (Device A/B section);
+  row-of-record stays CPU. **Ladder wiring landed in the engine**
+  (`LadderPolicy` per-node/per-kind gate overrides, D25; empty =
+  byte-identical; identity-decorated cache keys; traces name the rung
+  that gated). fork_4b's watchdog-killed pre-d15 run was preserved as
+  salvage (`fork4b-kill-salvage.md`, context only) and is re-running on
+  the rebuilt ad129b0 binary; the params A/B (ctx, threads, diet) and
+  cross-builds are still measuring in the quiet chain — integration
+  part 2 follows them.
