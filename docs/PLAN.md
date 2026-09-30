@@ -942,11 +942,13 @@ in between. Ordered so each step's output feeds the next.
   **margin gate study ✓ (CALIBRATION 3 closed)**, **d15 exact refit ✓
   (T 0.8426 → 0.9317 exact-fit artifact shipped)**, **Vulkan APU ✓
   (0.725 @ 2.23× the CPU leg's speed, 1/43rd the host CPU-seconds —
-  REPORT Device A/B)**. Still measuring in the quiet chain: #32 params
-  A/B (ctx16k/ctx4k/diet200/diet100), #39 fork rebuild + fork_4b
+  REPORT Device A/B)**, **vision probe ✓ (#42: LFM2.5-VL-450M answers
+  a rendered decision context identically to text, 0.33 s vs 1.42 s —
+  capability gate passed)**. Still measuring in the quiet chain: #32
+  params A/B (ctx16k/ctx4k/diet200/diet100), #39 fork rebuild + fork_4b
   JevBench re-run (driver pid preserved; killed pre-d15 raw archived as
-  `fork4b-kill-salvage.md`, context only), #62 cross-builds, #42 vision
-  probe. Accept: each lands in REPORT.md with its honesty rules.
+  `fork4b-kill-salvage.md`, context only), #62 cross-builds. Accept:
+  each lands in REPORT.md with its honesty rules.
 - **18j — Distribution + WASM (§57, §58, §68).** Own phases after the
   core is hard: cross-platform release matrix, Homebrew/winget/crates.io;
   `opencodifier-wasm` with the §68 security posture. Accept: per §58/§57

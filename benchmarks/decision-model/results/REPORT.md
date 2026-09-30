@@ -1007,7 +1007,13 @@ hash is a changed artifact and invalidates the row (D14).
   leg matches the CPU leg's accuracy (0.725 / ECE 0.063) at 2.23× the
   speed (p50 1.35 s vs 2.93 s) using 1/43rd the host CPU-seconds — the
   deployment posture for the model rung moves (Device A/B section);
-  row-of-record stays CPU. **Ladder wiring landed in the engine**
+  row-of-record stays CPU. **Vision probe PASS (#42)**:
+  LFM2.5-VL-450M Q4_K_M (229 MB) + mmproj Q8_0 (103 MB) load and decide
+  on CPU — probe A (text state) answers `restart_cache` in 0.33 s and
+  probe B (the same state rendered into an image) answers identically
+  in 1.42 s (`runs/vision__lfm25vl-450m.json`): the "state as image"
+  seam is real on a 450M VL model — a capability gate passed, not an
+  accuracy row. **Ladder wiring landed in the engine**
   (`LadderPolicy` per-node/per-kind gate overrides, D25; empty =
   byte-identical; identity-decorated cache keys; traces name the rung
   that gated). fork_4b's watchdog-killed pre-d15 run was preserved as
