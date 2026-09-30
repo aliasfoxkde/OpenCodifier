@@ -42,6 +42,20 @@ from resources import ResourceMonitor
 LBRANCH = "thecodacus/llama.cpp parallel-decision ad129b0"
 
 
+def load_now() -> float:
+    """1-minute load average — the host-regime provenance of each run.
+
+    This host is shared by several concurrent agent sessions; accuracy is
+    load-invariant (tree mode is deterministic) but every latency column is
+    only comparable between runs recorded under a similar regime, so the
+    regime travels with the result.
+    """
+    try:
+        return float(Path("/proc/loadavg").read_text().split()[0])
+    except (OSError, ValueError, IndexError):
+        return -1.0
+
+
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -314,6 +328,7 @@ def main() -> int:
         "whose tail-latency requests can exceed the default",
     )
     args = ap.parse_args()
+    load_start = load_now()
 
     suite = json.loads(args.suite.read_text())
     items = suite["items"]
@@ -375,6 +390,7 @@ def main() -> int:
                     "context_diet": args.context_diet,
                     "device": "vulkan-igpu" if args.ngl > 0 else "cpu",
                     "decision_arm": False,
+                    "load_avg": {"start": load_start, "end": load_now()},
                 },
                 "chat": chat,
             }
@@ -469,6 +485,7 @@ def main() -> int:
                 "context_diet": args.context_diet,
                 "mode": "tree",
                 "device": "vulkan-igpu" if args.ngl > 0 else "cpu",
+                "load_avg": {"start": load_start, "end": load_now()},
             },
             "single": single,
             "determinism": determinism,
