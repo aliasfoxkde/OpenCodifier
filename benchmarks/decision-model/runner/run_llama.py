@@ -274,6 +274,13 @@ def main() -> int:
     ap.add_argument("--port", type=int, default=8391)
     ap.add_argument("--threads", type=int, default=12)
     ap.add_argument("--ctx", type=int, default=8192)
+    ap.add_argument(
+        "--ngl",
+        type=int,
+        default=0,
+        help="layers offloaded to the GPU; 0 keeps the run CPU-only "
+        "(the Vulkan A/B arm passes 99 to park every layer on the iGPU)",
+    )
     ap.add_argument("--decision-seqs", type=int, default=24)
     ap.add_argument("--build-dir", default="build-pd", help="build subdir under --llama-dir holding bin/llama-server")
     ap.add_argument("--llamacpp-branch", default=LBRANCH, help="fork/branch provenance recorded in the result")
@@ -316,7 +323,7 @@ def main() -> int:
     ]
     if not args.skip_decision:
         cmd += ["--decision-seqs", str(args.decision_seqs)]
-    cmd += ["-ngl", "0"]
+    cmd += ["-ngl", str(args.ngl)]
     print("spawn:", " ".join(cmd), flush=True)
     with open(args.out.with_suffix(".server.log"), "wb") as log:
         proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
@@ -351,8 +358,8 @@ def main() -> int:
                 "config": {
                     "threads": args.threads,
                     "ctx": args.ctx,
-                    "ngl": 0,
-                    "device": "cpu",
+                    "ngl": args.ngl,
+                    "device": "vulkan-igpu" if args.ngl > 0 else "cpu",
                     "decision_arm": False,
                 },
                 "chat": chat,
@@ -444,9 +451,9 @@ def main() -> int:
                 "threads": args.threads,
                 "ctx": args.ctx,
                 "decision_seqs": args.decision_seqs,
-                "ngl": 0,
+                "ngl": args.ngl,
                 "mode": "tree",
-                "device": "cpu",
+                "device": "vulkan-igpu" if args.ngl > 0 else "cpu",
             },
             "single": single,
             "determinism": determinism,
