@@ -5,7 +5,8 @@
 #
 # All jobs run on the runner-local `opencodifier-ci-rust` image, which bakes
 # the toolchain, rustfmt/clippy, cargo-deny, cargo-audit, aegis (pinned
-# rev), and a warm crate registry. Tools are NOT installed at job runtime:
+# rev), cargo-llvm-cov + llvm-tools (coverage lane), and a warm crate
+# registry. Tools are NOT installed at job runtime:
 # the runner's preflight (F25) contract is baked-in-tools, and containers
 # here cannot reach host services at all (the host firewall default-DROPs
 # docker-sourced traffic; only crates.io-style egress works). Build/rebuild
@@ -30,7 +31,7 @@ environment:
   RUSTFLAGS: "-D warnings"
 jobs:
   - name: lint
-    image: opencodifier-ci-rust:1
+    image: opencodifier-ci-rust:2
     timeout: 20m
     steps:
       - name: Format check
@@ -39,7 +40,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
   - name: test
-    image: opencodifier-ci-rust:1
+    image: opencodifier-ci-rust:2
     needs: [lint]
     timeout: 20m
     steps:
@@ -49,7 +50,7 @@ jobs:
         run: cargo test --doc
 
   - name: doc
-    image: opencodifier-ci-rust:1
+    image: opencodifier-ci-rust:2
     needs: [lint]
     timeout: 15m
     steps:
@@ -59,7 +60,7 @@ jobs:
           cargo doc --workspace --no-deps
 
   - name: e2e
-    image: opencodifier-ci-rust:1
+    image: opencodifier-ci-rust:2
     needs: [test]
     timeout: 30m
     steps:
@@ -69,7 +70,7 @@ jobs:
         run: python3 scripts/e2e_validate.py --binary target/release/opencodifier --port 8188
 
   - name: supply-chain
-    image: opencodifier-ci-rust:1
+    image: opencodifier-ci-rust:2
     needs: [lint]
     timeout: 30m
     steps:
@@ -79,3 +80,20 @@ jobs:
         run: cargo audit
       - name: Security pattern scan (0 new findings)
         run: aegis --format json scan --file . --baseline .aegis/baseline.json
+
+  # Coverage floor on the lcov DA basis (the basis docs/COVERAGE.md reports
+  # its headline in — 98.97% at the Phase 18 close-out; the 125 waived
+  # residual lines carry their reasons there). The floor is a regression
+  # guard, deliberately under the 99% aspiration. Queue-cost note: this
+  # instrumented rebuild roughly doubles this run's wall time; it stays in
+  # the default graph because coverage regressions are exactly the kind of
+  # failure that is silent everywhere else.
+  - name: coverage
+    image: opencodifier-ci-rust:2
+    needs: [lint]
+    timeout: 45m
+    steps:
+      - name: Line coverage (lcov DA basis)
+        run: cargo llvm-cov --workspace --lcov --output-path /tmp/lcov.info
+      - name: Floor assertion (98.5% regression guard)
+        run: python3 scripts/coverage_floor.py /tmp/lcov.info --floor 98.5

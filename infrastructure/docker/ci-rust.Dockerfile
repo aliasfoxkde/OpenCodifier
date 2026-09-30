@@ -77,8 +77,14 @@ RUN cargo fetch --locked
 # clippy are absent (verified: `cargo fmt` fails with "'cargo-fmt' is not
 # installed"). Placed after the expensive layers so a change here rebuilds
 # only this step.
-RUN rustup component add rustfmt clippy
+RUN rustup component add rustfmt clippy llvm-tools
+
+# Coverage lane (2026-09-30): cargo-llvm-cov pinned to the version the host
+# gates run (0.9.0); llvm-tools above is its data source. The lane asserts
+# the documented lcov-DA line-coverage floor (docs/COVERAGE.md headline).
+ARG CARGO_LLVM_COV_VERSION=0.9.0
+RUN cargo install --locked "cargo-llvm-cov@${CARGO_LLVM_COV_VERSION}"
 
 # Fail the build, not a job, if any tool is broken or mispinned.
 RUN cargo deny --version && cargo audit --version && aegis --version \
-    && cargo fmt --version && cargo clippy --version
+    && cargo fmt --version && cargo clippy --version && cargo llvm-cov --version

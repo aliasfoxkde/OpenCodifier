@@ -65,7 +65,7 @@ check-wasm:
 # the two in sync. Override via env when re-pinning.
 aegis_src := env_var_or_default('AEGIS_SRC', '/nas/Temp/repos/aegis')
 aegis_rev := env_var_or_default('AEGIS_REV', '445cf4c807c2e76b62382da60cb5def3a02be855')
-ci_image := 'opencodifier-ci-rust:1'
+ci_image := 'opencodifier-ci-rust:2'
 
 # Build the runner-local CI image used by .gitforge.yml.
 #
@@ -90,7 +90,8 @@ ci-image:
         --build-arg AEGIS_REV="{{aegis_rev}}" \
         -t "{{ci_image}}" "$ctx"
     docker run --rm "{{ci_image}}" sh -c \
-        'cargo deny --version && cargo audit --version && aegis --version'
+        'cargo deny --version && cargo audit --version && aegis --version \
+         && cargo llvm-cov --version'
 
 # Line coverage report (HTML in coverage/).
 coverage:

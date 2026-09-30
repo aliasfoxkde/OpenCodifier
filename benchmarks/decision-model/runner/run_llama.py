@@ -281,6 +281,15 @@ def main() -> int:
         help="layers offloaded to the GPU; 0 keeps the run CPU-only "
         "(the Vulkan A/B arm passes 99 to park every layer on the iGPU)",
     )
+    ap.add_argument(
+        "--context-diet",
+        type=int,
+        default=None,
+        help="hard-truncate every item's context to this many characters "
+        "(the #32 prompt-diet A/B: latency win of trimming the "
+        "metadata class's long contexts, paid for in accuracy); "
+        "default keeps full contexts",
+    )
     ap.add_argument("--decision-seqs", type=int, default=24)
     ap.add_argument("--build-dir", default="build-pd", help="build subdir under --llama-dir holding bin/llama-server")
     ap.add_argument("--llamacpp-branch", default=LBRANCH, help="fork/branch provenance recorded in the result")
@@ -308,6 +317,10 @@ def main() -> int:
 
     suite = json.loads(args.suite.read_text())
     items = suite["items"]
+    if args.context_diet is not None:
+        items = [
+            {**it, "context": it["context"][: args.context_diet]} for it in items
+        ]
     model_path = args.models_dir / args.model
     args.out.parent.mkdir(parents=True, exist_ok=True)
 
@@ -359,6 +372,7 @@ def main() -> int:
                     "threads": args.threads,
                     "ctx": args.ctx,
                     "ngl": args.ngl,
+                    "context_diet": args.context_diet,
                     "device": "vulkan-igpu" if args.ngl > 0 else "cpu",
                     "decision_arm": False,
                 },
@@ -452,6 +466,7 @@ def main() -> int:
                 "ctx": args.ctx,
                 "decision_seqs": args.decision_seqs,
                 "ngl": args.ngl,
+                "context_diet": args.context_diet,
                 "mode": "tree",
                 "device": "vulkan-igpu" if args.ngl > 0 else "cpu",
             },
