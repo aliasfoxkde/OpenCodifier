@@ -21,6 +21,22 @@ single competitor, which is the reading a policy gate uses (it reads
 the top probability only). T is found by golden-section search on the
 NLL, which is convex in log T; no third-party dependencies.
 
+Exact fit path (d15 fork builds). Runs whose items carry `probs` —
+the fork's full per-choice softmax — drop the approximation: with the
+true label's index known, the categorical observation is the whole
+vector, and reverse-softmax temperature scaling
+
+    q_i(T) = p_i^(1/T) / sum_j p_j^(1/T)
+
+is EXACT temperature scaling (p came from softmax, so p^(1/T)
+renormalized is softmax(z/T) up to a constant that cancels). T is fit
+by golden-section search over beta = 1/T, where the categorical NLL
+-sum ln q_label is convex; the ECE gate keeps reading the winner
+probability through the same winner-vs-rest formula as before, because
+that is what a policy gate actually consumes. An arm uses the exact
+path only when EVERY item carries `probs`; a partial board falls back
+to the margin fit for that arm rather than mixing objectives.
+
 When the NLL falls monotonically all the way to its T->inf limit, the
 best calibrated predictor is the constant 0.5 and no finite temperature
 helps: the fit is reported as DEGENERATE and no artifact is emitted -
@@ -72,6 +88,79 @@ def observations(run: dict) -> list[tuple[float, int, str]]:
         (float(item["prob"]), int(item["pred"] == item["answer"]), str(item["class"]))
         for item in run["single"]
     ]
+
+
+def full_observations(run: dict) -> list[tuple[list[float], int]] | None:
+    """Exact-fit observations: (prob vector, true-label index) per item.
+
+    Returns None unless EVERY single-run item carries the d15 fork's
+    `probs` (full per-choice softmax keyed by candidate id) and a known
+    `answer` id inside it — a partially covered arm falls back to the
+    winner-vs-rest margin fit rather than mixing objectives.
+    """
+    out: list[tuple[list[float], int]] = []
+    for item in run["single"]:
+        probs = item.get("probs")
+        answer = item.get("answer")
+        if not isinstance(probs, dict) or not probs or answer not in probs:
+            return None
+        vec = [max(float(probs[key]), 1e-12) for key in probs]
+        total = sum(vec)
+        out.append(([v / total for v in vec], list(probs).index(answer)))
+    return out
+
+
+def categorical_nll(
+    dist_observations: list[tuple[list[float], int]], beta: float
+) -> float:
+    """Mean -ln q_true over the board at inverse temperature beta."""
+    total = 0.0
+    for vec, label in dist_observations:
+        scaled = [v**beta for v in vec]
+        z = sum(scaled)
+        q = min(max(scaled[label] / z, 1e-12), 1.0 - 1e-12)
+        total -= math.log(q)
+    return total / len(dist_observations)
+
+
+def fit_temperature_full(
+    dist_observations: list[tuple[list[float], int]],
+) -> tuple[float, bool]:
+    """Golden-section search over beta = 1/T; the categorical NLL is
+    convex in beta (log-sum-exp of linear functions), hence unimodal.
+
+    Returns (T, degenerate). Degenerate is the beta -> 0 ceiling: the NLL
+    falls monotonically toward the uniform limit (every finite temperature
+    loses to the uninformative uniform distribution), so no finite
+    temperature calibrates these scores.
+    """
+    lo, hi = 1.0 / 200.0, 20.0
+    floor = lo
+    if abs(
+        categorical_nll(dist_observations, hi) - categorical_nll(dist_observations, lo)
+    ) < 1e-9:
+        # NLL flat across the whole bracket: the board carries no
+        # temperature-sensitive signal (perfectly uniform scores are the
+        # extreme case) — the same honest verdict as the margin fit's
+        # T->inf ceiling. Without this, golden-section's tie-breaking
+        # silently walks to the bracket edge and ships a fake T.
+        return 1.0, True
+    gratio = (math.sqrt(5.0) - 1.0) / 2.0
+    left = hi - gratio * (hi - lo)
+    right = lo + gratio * (hi - lo)
+    f_left = categorical_nll(dist_observations, left)
+    f_right = categorical_nll(dist_observations, right)
+    for _ in range(200):
+        if f_left < f_right:
+            hi, right, f_right = right, left, f_left
+            left = hi - gratio * (hi - lo)
+            f_left = categorical_nll(dist_observations, left)
+        else:
+            lo, left, f_left = left, right, f_right
+            right = lo + gratio * (hi - lo)
+            f_right = categorical_nll(dist_observations, right)
+    beta = (lo + hi) / 2.0
+    return 1.0 / beta, beta <= floor * 1.01
 
 
 def winner_calibrated(probability: float, temperature: float) -> float:
@@ -152,7 +241,13 @@ def build_artifact(name: str, run: dict, run_path: Path) -> dict:
     """Assemble a `CalibrationArtifact`-shaped dict for one arm."""
     items = observations(run)
     pairs = [(probability, correct) for probability, correct, _ in items]
-    temperature, degenerate = fit_temperature(pairs)
+    dists = full_observations(run)
+    if dists is not None:
+        temperature, degenerate = fit_temperature_full(dists)
+        method = "exact full-distribution reverse-softmax fit (d15), in-sample"
+    else:
+        temperature, degenerate = fit_temperature(pairs)
+        method = "winner-vs-rest margin fit, in-sample"
     classes = sorted({item_class for _, _, item_class in items})
     per_class = {
         item_class: fit_temperature(
@@ -178,8 +273,7 @@ def build_artifact(name: str, run: dict, run_path: Path) -> dict:
                 "ece_after": round(ece_after, 6),
                 "source": (
                     "benchmarks/decision-model suite (seed 20260926, 120 items, "
-                    f"single-run arm {run_path.name}, model {source}); "
-                    "winner-vs-rest margin fit, in-sample"
+                    f"single-run arm {run_path.name}, model {source}); {method}"
                 ),
             },
         },
