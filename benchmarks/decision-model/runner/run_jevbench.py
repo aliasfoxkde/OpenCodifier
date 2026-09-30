@@ -32,6 +32,11 @@ Arms (--arm):
               noul renders as a two-option choice (no/yes with the item's
               criteria); score renders levels as options; both mappings are
               recorded in the result.
+  vtx         VTX-JEV-3 (VTXAI) through its vendor JevClient: the same
+              rendering as jev_native (noul as no/yes, score levels as
+              options), scored by the model's own cosine softmax. The
+              position-gated attention pooler lives in the vendor client —
+              plain Model2Vec mean pooling does not reproduce this head.
 
 Every arm replays the whole suite (--replay, default on) and records a
 determinism block in the manifest.
@@ -413,6 +418,75 @@ class JevNativeBridgeAdapter:
             self.engine.close()
 
 
+class VtxAdapter:
+    """VTX-JEV-3 static-embedding decision engine through its vendor client.
+
+    All three JevBench kinds render as candidate-conditioned choices over
+    the option descriptions — exactly the jev_native bridge's rendering, so
+    the two rows are comparable. The model returns a full distribution over
+    the option set (cosine softmax, scale 15), so Brier/ECE are comparable
+    with the published rows too."""
+
+    name = "vtx-jev-3"
+    price_input_per_m = 0.0
+    price_output_per_m = 0.0
+
+    def __init__(self, model_dir: Path, timeout_s: float):
+        self.model_dir = model_dir
+        self.timeout_s = timeout_s
+        self.client = None
+
+    def load(self):
+        sys.path.insert(0, str(self.model_dir))
+        from inference import JevClient  # noqa: PLC0415 (vendor client)
+
+        self.client = JevClient.from_pretrained(str(self.model_dir))
+
+    def reserve_estimate(self, _t):
+        return None
+
+    def run(self, t) -> "DecisionResult":
+        from inference import Choice  # noqa: PLC0415 (vendor client)
+        from jevbench.adapters.base import DecisionResult  # noqa: PLC0415
+
+        qtype = t.question["type"]
+        criteria = t.question.get("criteria")
+        if qtype == "noul":
+            c = criteria if isinstance(criteria, dict) else {}
+            options = {"no": c.get("false", "not held"), "yes": c.get("true", "held")}
+        elif qtype == "score":
+            descs = criteria if isinstance(criteria, list) else [lab for lab in t.labels]
+            options = {
+                lab: (descs[i] if isinstance(descs, list) and i < len(descs) else lab)
+                for i, lab in enumerate(t.labels)
+            }
+        else:
+            options = {c["id"]: c["description"] for c in choice_candidates(t)}
+        started = time.perf_counter()
+        try:
+            response = self.client.system_one(
+                state=t.state if isinstance(t.state, str) else json.dumps(t.state),
+                questions={"decision": Choice(t.question["instructions"], options)},
+            )
+        except Exception as e:  # noqa: BLE001 — their Runner classifies failures
+            return DecisionResult(self.name, False, error=type(e).__name__)
+        latency = time.perf_counter() - started
+        result = response.choices.get("decision")
+        if result is None:
+            return DecisionResult(self.name, False, error="no_decision",
+                                  latency_s=latency, raw={"qtype": qtype})
+        raw = {"options": options, "distribution": result.distribution}
+        probs = probs_from_distribution(dict(result.distribution), t.labels)
+        if probs is None or result.choice not in t.labels:
+            return DecisionResult(self.name, False, error="invalid_distribution",
+                                  latency_s=latency, raw=raw)
+        return DecisionResult(self.name, True, probs=probs, probs_source="native",
+                              label=result.choice, latency_s=latency, raw=raw)
+
+    def close(self):
+        self.client = None
+
+
 def replay_records(adapter, tasks, ref_dir: Path, out_dir: Path, runner_cls, ledger_cls):
     """Second full pass for the determinism block (fresh ledger + raw dir)."""
     replay_dir = out_dir / "replay"
@@ -424,7 +498,7 @@ def replay_records(adapter, tasks, ref_dir: Path, out_dir: Path, runner_cls, led
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--arm", required=True, choices=["engine", "fork_4b", "jev_native"])
+    ap.add_argument("--arm", required=True, choices=["engine", "fork_4b", "jev_native", "vtx"])
     ap.add_argument("--ref", type=Path, default=Path("/nas/Temp/work/oc-model-eval/jevbench-ref"))
     ap.add_argument("--tasks", type=str, required=True, help="comma-separated jsonl files")
     ap.add_argument("--out-dir", type=Path, required=True)
@@ -435,6 +509,12 @@ def main() -> int:
     ap.add_argument("--instructions", type=str, default="Select the correct option.")
     ap.add_argument(
         "--model-dir", type=Path, default=Path("/nas/Temp/work/oc-model-eval/jev-v3-native")
+    )
+    ap.add_argument(
+        "--vtx-dir",
+        type=Path,
+        default=Path("/nas/Temp/work/oc-model-eval/models/vtx-jev-3"),
+        help="local VTXAI/VTX-JEV-3 checkout (vtx arm)",
     )
     ap.add_argument("--threads", type=int, default=12)
     ap.add_argument("--timeout", type=float, default=600.0)
@@ -457,6 +537,8 @@ def main() -> int:
         )
     elif args.arm == "fork_4b":
         adapter = ForkAdapter(args.port, args.instructions, args.timeout)
+    elif args.arm == "vtx":
+        adapter = VtxAdapter(args.vtx_dir, args.timeout)
     else:
         adapter = JevNativeBridgeAdapter(args.model_dir, args.threads, args.timeout)
 
@@ -505,6 +587,12 @@ def main() -> int:
         gguf = args.model_dir / "Jev-Style-0.8B-Decision-v3-Q4_K_M.gguf"
         if gguf.is_file():
             model_files[gguf.name] = hashlib.sha256(gguf.read_bytes()).hexdigest()
+    if args.arm == "vtx":
+        for fname in ("model_lf2.safetensors", "model.safetensors", "gate_params.npz",
+                      "tokenizer.json", "inference.py"):
+            f = args.vtx_dir / fname
+            if f.is_file():
+                model_files[f"vtx/{fname}"] = hashlib.sha256(f.read_bytes()).hexdigest()
 
     manifest = {
         "arm": args.arm,
@@ -520,6 +608,8 @@ def main() -> int:
                       "abstain -> ok=False (incorrect); winner-only -> label-only",
             "fork_4b": "tree mode, label-only (fork drops non-winner mass, D15)",
             "jev_native": "noul as two-option choice; score levels as options; softmax native",
+            "vtx": "noul as two-option choice; score levels as options; vendor cosine "
+                   "softmax (scale 15) through JevClient's position-gated pooler",
         }[args.arm],
         "determinism": determinism,
         "adapter_warnings": getattr(adapter, "warnings", []),

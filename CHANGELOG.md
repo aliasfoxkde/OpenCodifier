@@ -37,6 +37,25 @@ releases may break, and every breaking change is recorded in this file
   install failure arms. Lines 98.97 % on the lcov `DA` basis; the 125
   remaining unexecuted lines are each classified with an enforcing
   fact in `docs/COVERAGE.md`.
+- Static-embedding survey arm: VTX-JEV-3 (`VTXAI/VTX-JEV-3`,
+  Model2Vec-class 255,753×256 2-bit table with a position-gated
+  attention pooler, Apache-2.0) on both boards — `runner/run_vtx.py`
+  (suite: LF2 0.242 / FP32 0.317, the 7.5 pp quantization cost
+  measured) and `runner/run_jevbench.py --arm vtx` (public 231:
+  0.4113 accuracy, 0.4318 family-macro, ECE 0.126, 7.9 ms p50,
+  deterministic, native probabilities only) through the vendor
+  `inference.py` `JevClient`, whose pooler plain Model2Vec loading
+  does not reproduce. The vendor sub-millisecond latency claim
+  reproduces; the accuracy sits at the zero-ML engine's level, not the
+  Jev-class field's — not a new tier (D16 unchanged).
+- `docs/BENCHMARKS.md`: the complete measured comparison in one page —
+  both boards (JevBench public 231 and the locked 120-item suite), the
+  full 53-run model board, the D16 tiers, and every external row with
+  provenance: the official TypeSafe Jev 1.13 hosted-API numbers, the
+  autotrust/JEV-27B six-benchmark table (their runs, target bar 84.07
+  mean), the JevBench authors' board, and the
+  `SargeDev/jev-distill-corpus(-v3)` training-corpus landscape.
+  Written website-liftable.
 
 ### Changed
 

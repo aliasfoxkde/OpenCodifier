@@ -17,6 +17,7 @@ latency, and run-twice determinism:
 | `engine_builtin_lexical` | `run_engine.py` | OpenCodifier's own engine (`opencodifier serve`, builtin lexical pipeline) — the zero-ML baseline every model must beat to earn its latency |
 | `embedding_zero_shot` | `run_embed.py` | Cosine + softmax over an encoder — the "embedding similarity" layer of the ladder; backends: `onnx` (MiniLM / gte-ONNX in fp32, int8, and blockwise-int4 variants), `torch` (gte HF), `llamacpp` (GGUF embedding models via llama-server) |
 | `laya_decision` | `run_laya.py` | Laya-421M, a small purpose-trained decision model, same suite |
+| `static_embedding_decision` | `run_vtx.py` | VTX-JEV-3 through its vendor `JevClient`: a Model2Vec-class static table (255,753×256, 2-bit LF2 or FP32) with a position-gated attention pooler; each candidate encodes as `"<question> <description>"` and the model's own cosine softmax (scale 15) is the distribution. The pooler lives in the vendor client — plain Model2Vec loading does not reproduce this head |
 | `llama_decision` | `run_llama.py` | llama.cpp `parallel-decision` branch (`POST /v1/decision`): every candidate id scored as a token path forked from one cached prefix; tree mode returns the exact constrained distribution, nothing is sampled |
 | `llama_decision` chat baseline | `run_llama.py --skip-chat` opt-out | the same questions written as JSON by ordinary token-by-token chat completion at temperature 0 — what the decision arm replaces |
 | `llama_chat_baseline_only` | `run_llama.py` | chat-only screen for forks with no `/v1/decision` (K2-Horizon): sampled decode, labeled `(chat screen)` in the summary, never comparable to decision rows |
@@ -77,6 +78,11 @@ python3 runner/run_embed.py --backend llamacpp --threads 4 \
     --model-dir /path/to/embeddinggemma-300M-Q8_0.gguf \
     --llama-dir /path/to/llama.cpp \
     --out "$RUNS/embed__embeddinggemma-300M-Q8_0.json"
+
+# 2b. VTX-JEV-3 static decision engine (vendor client; --weights fp32 for
+#     the FP32-table A/B)
+python3 runner/run_vtx.py --model-dir /path/to/vtx-jev-3 \
+    --out "$RUNS/vtx__VTX-JEV-3-lf2.json"
 
 # 3. decision arm per GGUF model (downloads are operator-supplied; the
 #    runner records each file's SHA-256 into the results; --timeout

@@ -18,6 +18,8 @@ distribution — context for the decision rows, never comparable to them.
 | embed__gte-modernbert-onnx-q4-b32.json | 0.47 / 0.75 / 0.50 | 0.575 | 0.330 | 815.7ms | yes |
 | embed__minilm-l6-v2.json | 0.30 / 0.62 / 0.35 | 0.425 | 0.172 | 107.0ms | yes |
 | engine__builtin-lexical.json | 0.88 / 0.23 / 0.35 | 0.483 | 0.115 | 5.3ms | yes |
+| engine__lexical__long__focused.json | 0.88 / 0.23 / 0.95 | 0.683 | 0.094 | 9.2ms | yes |
+| engine__lexical__long__full.json | 0.88 / 0.23 / 0.95 | 0.683 | 0.094 | 6.7ms | yes |
 | engine__relational-v1.json | 0.88 / 0.23 / 0.95 | 0.683 | 0.094 | 1.3ms | yes |
 | k2chat__K2-Horizon-1B-Q4_K_M.json (chat screen) | 0.88 / 0.80 / 0.50 | 0.725 | — | 1499.1ms | n/a (sampled) |
 | k2chat__K2-Horizon-4B-Q4_K_M.json (chat screen) | 1.00 / 0.93 / 0.17 | 0.700 | — | 4878.9ms | n/a (sampled) |
@@ -60,10 +62,14 @@ distribution — context for the decision rows, never comparable to them.
 | llama__qwen0.5b.json | 0.60 / 0.33 / 0.25 | 0.392 | 0.218 | 694.8ms | yes |
 | llama__qwen1.5b.json | 0.90 / 0.45 / 0.40 | 0.583 | 0.191 | 1247.8ms | yes |
 | llama__qwen3b.json | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2575.2ms | yes |
+| vtx__VTX-JEV-3-fp32.json | 0.20 / 0.33 / 0.42 | 0.317 | 0.099 | 0.8ms | yes |
+| vtx__VTX-JEV-3-lf2.json | 0.17 / 0.25 / 0.30 | 0.242 | 0.136 | 1.1ms | yes |
 
 ## Notes
 
 - `engine__builtin-lexical.json` outcomes: {'abstain': 76, 'accept': 16, 'verify': 28} — abstention/verify routing is part of the engine contract, not a failure.
+- `engine__lexical__long__focused.json` outcomes: {'abstain': 51, 'accept': 42, 'verify': 27} — abstention/verify routing is part of the engine contract, not a failure.
+- `engine__lexical__long__full.json` outcomes: {'abstain': 51, 'accept': 42, 'verify': 27} — abstention/verify routing is part of the engine contract, not a failure.
 - `engine__relational-v1.json` outcomes: {'abstain': 51, 'accept': 42, 'verify': 27} — abstention/verify routing is part of the engine contract, not a failure.
 - `k2chat__K2-Horizon-1B-Q4_K_M.json` chat (JSON-writing) baseline: acc 0.725, p50 1499ms — the token-by-token alternative the decision arm replaces.
 - `k2chat__K2-Horizon-4B-Q4_K_M.json` chat (JSON-writing) baseline: acc 0.700, p50 4879ms — the token-by-token alternative the decision arm replaces.

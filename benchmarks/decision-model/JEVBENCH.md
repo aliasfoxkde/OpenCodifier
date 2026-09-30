@@ -116,6 +116,14 @@ channel, and the raw evidence records the exact rendered request.
    the fork's tree mode (same config as the D16 run: T 1.400 shipped
    calibration). Direct competitor row: jev.page claims **80.5 % / 651 ms**
    for an llm-qwen3.5-4b decision server on the same 231 items.
+4. **VTX-JEV-3 (VTXAI) — the static-embedding survey arm.** A
+   Model2Vec-class 255,753×256 table (20.5 MB 2-bit LF2) with a
+   position-gated attention pooler, distilled on
+   `SargeDev/jev-distill-corpus-v3`, through the vendor `JevClient`
+   (`run_jevbench.py --arm vtx`): the jev_native rendering (noul as
+   no/yes, score levels as options) with the model's own cosine softmax,
+   so Brier/ECE stay comparable. Adds a data point the field lacked: what
+   a 20 MB static-embedding decision engine actually scores on this suite.
 
 Anchor rows published for the public split (sources: jev-style repo README;
 JevBench RESULTS; jev.page):
@@ -173,6 +181,18 @@ milliseconds. Acceptance criteria:
 |---|---:|---:|---:|---:|---|---|---|
 | engine (relational-v1) | 0.3766 | 0.4011 | 0.402 | 0.890 | 2.0 ms | 231/231 | native |
 | **jev_native bridge (0.8B-v3 Q4_K_M)** | **0.6494** | 0.6378 | **0.080** | 0.425 | 6.72 s / 103.8 s | 231/231 (labels + probs) | native |
+| vtx (VTX-JEV-3 LF2, vendor client) | 0.4113 | 0.4318 | 0.126 | 0.684 | 7.9 ms | 231/231 | native |
+
+The vtx row (added 2026-09-29): VTX-JEV-3 through its vendor `JevClient`
+with the jev_native rendering — a 20.5 MB 2-bit static table scoring
+3.5 pp above the engine and ~23 pp below the 0.8B bridge, fully
+deterministic. Its sub-millisecond vendor latency claim reproduces
+(0.79 ms vendor-side p50 per suite decision); its accuracy sits at the
+engine's level, not the Jev-class field's. Family profile: strongest on
+fact 0.750, policy 0.750, ambiguous 0.571, routing_hard 0.600,
+temporal_numeric 0.467; weakest on long_policy 0.105, multi_hop 0.167,
+routing 0.250, ordinal 0.333 — static similarity guesses where the
+engine abstains and cannot compose. Archived `runs/jevbench/vtx-v1/`.
 
 Bridge vs acceptance: (1) reproduction — 150/231 = 64.9 % vs the
 published 64.1 % (148/231), +0.9 pp, PASS; (2) schema discipline —
