@@ -123,7 +123,7 @@ routing is part of its contract, not error.
 | fast | Qwen3.5-0.8B (q4_0) | 0.650 | 0.074 | 0.35 | 613 ms | 537 MiB |
 | zero-ML floor (engine default) | relational-v1 over lexical | 0.683 | 0.094 | **0.950** | **1.3 ms** | 0 MiB |
 
-### Complete board (53 runs, 2026-09-25 → 2026-09-29)
+### Complete board (55 runs, 2026-09-25 → 2026-09-30)
 
 Columns: accuracy (metadata / lexical / relational), overall accuracy,
 ECE, single-decision p50, run-twice determinism. `(chat screen)` rows
@@ -220,6 +220,13 @@ What the board established (full findings catalog in REPORT.md):
   bar itself was built with a frozen base + small trained decision
   block. Feasibility on this (GPU-less) host, the recipe class, and a
   costed experiment ladder: `docs/TRAINING.md`.
+- **Same weights, different runtime is not a free swap.** The ONNX
+  export of Qwen3.5-2B driven by onnxruntime — with the decision-tree
+  math ported exactly and greedy-parity-validated — scores 0.658 where
+  llama.cpp scores 0.725 on the same weights, at ≥9× the latency
+  (prefill-bound) and 2.6× the memory (F25). ONNX stays the product's
+  model-rung format for portability; the decision arm stays on
+  llama.cpp.
 
 ## The target bar
 

@@ -73,6 +73,14 @@ releases may break, and every breaking change is recorded in this file
   costs on this GPU-less host (1–2 CPU-days first run), the community
   checkpoint it must beat (Jev-Style-0.8B 0.6494), and a costed E0–E3
   experiment ladder.
+- ONNX runtime decision arm (`runner/run_onnx.py`): the optimum
+  `onnx-community/Qwen3.5-2B-ONNX` q4 export driven by onnxruntime with
+  the fork's exact tree scoring ported to Python (greedy-parity
+  validated at the probe stage; hybrid qwen3_5 state threaded manually,
+  including the asymmetric `present.`→`past_key_values.` output naming).
+  Same weights as the GGUF arm: acc **0.658** / ECE 0.064 vs 0.725,
+  prefill-bound ≥9× slower, 2.6× the peak RSS (F25) — llama.cpp keeps
+  the decision rung; ONNX stays the product's portability format.
 
 ### Changed
 

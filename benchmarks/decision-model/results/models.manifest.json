@@ -46,5 +46,9 @@
  "minilm": "759c3cd2b7fe7e93933ad23c4c9181b7396442a2ed746ec7c1d46192c469c46e",
  "qwen2.5-0.5b-instruct-q4_k_m.gguf": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
  "qwen2.5-1.5b-instruct-q4_k_m.gguf": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
- "qwen2.5-3b-instruct-q4_k_m.gguf": "626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d"
+ "qwen2.5-3b-instruct-q4_k_m.gguf": "626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d",
+ "qwen3.5-2b-onnx/onnx/decoder_model_merged_q4.onnx": "33f9c1311878df2140e7286f76d9e3acb29d77d91f724210674b0b63d8330df5",
+ "qwen3.5-2b-onnx/onnx/decoder_model_merged_q4.onnx_data": "c6f4807e1287961a354b0bc6f8d4c68c658f707a9541e771a297dfefaf4a1e14",
+ "qwen3.5-2b-onnx/onnx/embed_tokens_q4.onnx": "0255dd844858758f452d9678f1e2c91db178f21b7da254d29b12e7fe3d23e305",
+ "qwen3.5-2b-onnx/onnx/embed_tokens_q4.onnx_data": "9a6404d9b1c79ffc038d5c28deec04d419efb4594125453c991be38b4522ecb6"
 }

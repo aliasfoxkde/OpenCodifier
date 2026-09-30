@@ -114,6 +114,11 @@ def main() -> int:
             manifest[model["name"]] = model["sha256_model_onnx"]
         elif "sha256_model_safetensors" in model:
             manifest[model["name"]] = model["sha256_model_safetensors"]
+        elif "files" in model and "manifest_prefix" in model:
+            # Multi-file arms (e.g. the ONNX decoder+embed pair) record every
+            # shard under a <prefix>/<file> key so updates invalidate by hash.
+            for fname, sha in model["files"].items():
+                manifest[f"{model['manifest_prefix']}/{fname}"] = sha
 
     lines += ["", "## Notes", ""]
     for name, d in results:

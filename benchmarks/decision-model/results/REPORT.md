@@ -101,6 +101,12 @@ batched tails exceeded the old fixed limit.
 5. **chat-only screens** (`llama_chat_baseline_only`) — forks with no
    `/v1/decision` endpoint (K2-Horizon). Sampled decode, JSON-writing:
    context rows, never comparable to decision rows; excluded from charts.
+6. **ONNX runtime arm** (`run_onnx.py`) — the optimum-exported
+   `onnx-community/Qwen3.5-2B-ONNX` graphs driven directly by
+   onnxruntime, re-implementing the fork's exact tree math (log-softmax
+   per divergence node summed along candidate paths). Tests the product's
+   own model-rung format (`ort`, §73) against llama.cpp on identical
+   weights.
 
 ### Metrics
 
@@ -192,6 +198,7 @@ on-disk MiB at sweep time.
 | Qwen3.5-2B UD-Q6_K_XL | 1779 | 0.97 / 0.80 / 0.50 | 0.758 | 0.079 | 2.17 s | yes |
 | Qwen3.5-2B UD-Q8_K_XL | 2704 | 1.00 / 0.80 / 0.50 | 0.767 | 0.111 | 2.18 s | yes |
 | **Qwen3.5-2B Q4_K_M (balanced)** | 1222 | 0.95 / 0.72 / 0.50 | 0.725 | **0.062** | 1.73 s | yes |
+| Qwen3.5-2B ONNX q4 (onnx-community, caveat) | 1540 | 0.88 / 0.60 / 0.50 | 0.658 | 0.064 | ≥15.2 s† | yes |
 | Qwen3.5-4B Q3_K_M | 2188 | 1.00 / 0.93 / 0.40 | 0.775 | 0.093 | 5.66 s | yes |
 | **Qwen3.5-4B Q3_K_S (reference)** | 2009 | 1.00 / 0.95 / 0.45 | **0.800** | 0.069 | 6.78 s | yes |
 | Qwen3.5-4B UD-IQ2_XXS | 1450 | 0.97 / 0.50 / 0.38 | 0.617 | 0.079 | 3.70 s | yes |
@@ -211,6 +218,11 @@ on-disk MiB at sweep time.
 | qwen2.5-3b-instruct | 2008 | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2.58 s | yes |
 
 \* embedding rows report mean ms/item (`ms_per_item`), not a p50 block.
+
+† ONNX row: the recorded run's host was under concurrent load for parts
+of both passes (see its `caveat` field); the true quiet-host p50 is
+lower, but the conclusion below does not depend on where exactly between
+"≥15 s" and "a few seconds" it lands. Size is the q4 file set on disk.
 
 ### Long-context A/B: focused extraction (engine arm, §45)
 
@@ -387,7 +399,57 @@ rung's runtime; the 226 MB q4-b32 build is a free memory fallback**
 (identical quality, 2.6× smaller) if a deployment is RAM-bound, never a
 speed play. Finding F21, threat #12 (quantizer op coverage).
 
+## Runtime A/B: ONNX vs llama.cpp on the same weights (Phase 17)
+
+The product's model rung reads ONNX (`InferenceBackend` behind the `ort`
+feature, §73), while every decision-arm row above was produced by
+llama.cpp. This A/B closes that gap: the optimum-exported
+`onnx-community/Qwen3.5-2B-ONNX` graphs driven directly by onnxruntime
+(`runner/run_onnx.py`), re-implementing the fork's tree math exactly —
+per-divergence-node log-softmax over allowed tokens, summed along each
+candidate path, softmax over candidates (`decision-engine.cpp
+finish_tree`), byte-identical prompt construction (`compile_schema` /
+`render_prompt`), suffix tokenized separately from the prompt like the
+server does. The qwen3_5 hybrid state (18 conv+linear-recurrent layers,
+6 GQA KV layers, 3-channel position ids) is threaded manually; the
+graph's `present`→`past` naming is asymmetric and `logits` is not the
+first output, so outputs are indexed by name. Cross-validation: greedy
+free decoding matches the llama.cpp qwen3_5 implementation on 3/3 probe
+prompts, including a 13-token generation that stresses recurrent state.
+
+| run | acc | ECE | p50 | peak RSS |
+|---|---|---|---|---|
+| Qwen3.5-2B GGUF Q4_K_M (llama.cpp decision arm) | **0.725** | **0.062** | **1.73 s** | **1222 MiB** |
+| Qwen3.5-2B ONNX q4 (MatMulNBits, onnxruntime CPU) | 0.658 | 0.064 | ≥15.2 s (caveat) | 3158 MiB |
+
+Per class the gap is metadata 0.95 → 0.875 and lexical 0.72 → 0.60, with
+relational tied at 0.50 — 22 disagreements, of which the ONNX arm wins
+7. ECE parity (0.064 vs 0.062) and the prompt-parity probes say the
+scorer is faithful; the accuracy gap is quantization quality (int4
+MatMulNBits vs Q4_K_M), concentrated in the classes that need
+fine-grained token probabilities. Latency is prefill-bound (~10.8 s of
+the 15.2 s p50 at ~140 prompt tokens, ≈70 ms/token) — ORT's MatMulNBits
+CPU path is far behind llama.cpp's prefill kernels here. The int8
+`quantized` variant was probed and produces correct output but decodes
+~20× slower than q4 on this CPU (43.7 s vs 1.9 s for identical greedy
+work); q4f16/fp16 are untestable (fp16 CPU EP unavailable, no GPU).
+
+Verdict: **llama.cpp dominates the ONNX runtime on every axis for this
+decision arm on a CPU host** — accuracy (quant), latency (9×+), memory
+(2.6×). The ONNX arm earns its keep as the runtime-portability
+reference: it proves the tree scoring is runtime-independent, and it is
+the format the product's own model rung consumes. It does not enter the
+fusion ladder (dominated on both axes by the GGUF rung it would
+replace).
+
+Recording conditions: the ONNX run's host carried concurrent load
+(peaks 40–117) during parts of both passes; its result JSON carries the
+full caveat and the resource trace (28,218 CPU-s over 6,923 s wall).
+Accuracy and determinism are load-independent (deterministic tree math;
+replay delta 0.0).
+
 ## External anchor: JevBench public split (Phase 17)
+
 
 Every number above this section is internal (our suite, our seeds). The
 JevBench public split (231 items; choice 139 / noul 74 / score 18; mean
@@ -667,6 +729,18 @@ trusted to route.
   +4.4 pp over vtx-only, 0.455). A confidence gate is not free
   architecture — it must be validated or fitted on the distribution it
   routes, which is precisely the §19 uncertainty-gate contract.
+- **F25 — Same weights, different runtime: llama.cpp beats ONNX on every
+  axis for this decision arm on CPU.** The optimum ONNX export of
+  Qwen3.5-2B driven by onnxruntime — with the fork's tree math
+  re-implemented exactly and greedy-parity-validated — scores 0.658 /
+  ECE 0.064 where the GGUF Q4_K_M build scores 0.725 / 0.062, at ≥9×
+  the latency (prefill-bound, ~70 ms/token through MatMulNBits) and
+  2.6× the memory. The accuracy gap is quantization quality, not
+  runtime or scorer error (relational tied at 0.50; int8 decodes ~20×
+  slower still). ONNX remains the product's model-rung format for
+  portability (§73) and the WASM seam, but the benchmark decision arm
+  stays on llama.cpp, and the fusion ladder is unchanged (the ONNX arm
+  is dominated by the GGUF rung it would replace).
 
 ## Threats to validity
 
@@ -844,3 +918,13 @@ hash is a changed artifact and invalidates the row (D14).
   `resources` and in summary.md's new peak-RSS column (prior runs show
   `—`). Training research recorded in `docs/TRAINING.md` (LoRA /
   decision-head adapter feasibility on this host). No tier changes.
+- **2026-09-30 (ONNX runtime arm)** — 55 runs on the board, first
+  non-llama.cpp decision arm: the optimum ONNX export of Qwen3.5-2B driven by
+  onnxruntime with the fork's tree math re-implemented exactly
+  (`runner/run_onnx.py`; greedy parity vs llama.cpp 3/3 probes).
+  **0.658 / ECE 0.064 / ≥15.2 s p50 (contention caveat) / 3158 MiB**
+  vs GGUF Q4_K_M 0.725 / 0.062 / 1.73 s / 1222 MiB on the same weights —
+  llama.cpp wins every axis (F25; gap is quantization quality, relational
+  tied at 0.50; int8 decodes ~20× slower still). ONNX stays the product's
+  model-rung format for portability; the benchmark arm and the fusion
+  ladder stay on llama.cpp. No tier changes (D16 unchanged).
