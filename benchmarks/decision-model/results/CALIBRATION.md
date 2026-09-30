@@ -93,6 +93,29 @@ record the provenance as `parallel-decision ad129b0+distribution`
 server does not send what the fit needs. Until then the margin
 temperature stands.
 
+**Exact fit implemented (2026-09-30, pending the d15 refit).** When a
+run records full per-item `probs`, `fit_calibration.py` now fits the
+real thing instead of the margin proxy: reverse-softmax temperature
+scaling, `q_i(T) = p_i^(1/T) / Σ_j p_j^(1/T)`, minimizing categorical
+NLL over all candidates. Categorical NLL is convex in β = 1/T
+(log-sum-exp of linear), so the golden-section search runs on
+β ∈ [1/200, 20] — no local-minimum caveat — with degenerate boards
+(uniform distributions, flat NLL) returning T = 1 rather than a
+bracket-edge artifact. Synthetic ground-truth validation (softmax
+boards reported at one temperature, labels drawn at another):
+
+- the exact fit recovers `T_true/T_report` within 0.05 across the grid;
+  reported==truth fits identity (T ≈ 1), as MLE requires when labels are
+  drawn from the reported distribution;
+- the **margin fit does not**: on a 5-way board with true T = 2.0 it
+  returns T = 3.0. Winner-vs-rest discards how the losing mass is
+  spread, and on multi-way boards that bias is material. The shipped
+  margin-fit artifacts above are therefore *approximations conditioned
+  on winner-gate semantics* — the ranking of T across arms (2B < 4B,
+  both < 9B sharpening) is the part to trust, not the absolute values.
+  The d15 refit replaces the 2B arm's artifact with an exact-fit one
+  when the CPU leg lands.
+
 Fits are **in-sample**: fitted and evaluated on the same 120 items.
 ECE-after values are consistency checks, not generalization claims —
 the same n=120/single-seed limitation recorded in `REPORT.md` applies.
