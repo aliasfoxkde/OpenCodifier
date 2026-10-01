@@ -944,11 +944,16 @@ in between. Ordered so each step's output feeds the next.
   (0.725 @ 2.23× the CPU leg's speed, 1/43rd the host CPU-seconds —
   REPORT Device A/B)**, **vision probe ✓ (#42: LFM2.5-VL-450M answers
   a rendered decision context identically to text, 0.33 s vs 1.42 s —
-  capability gate passed)**. Still measuring in the quiet chain: #32
-  params A/B (ctx16k/ctx4k/diet200/diet100), #39 fork rebuild + fork_4b
-  JevBench re-run (driver pid preserved; killed pre-d15 raw archived as
-  `fork4b-kill-salvage.md`, context only), #62 cross-builds. Accept:
-  each lands in REPORT.md with its honesty rules.
+  capability gate passed)**, **#62 cross-builds ✓ (4/4 linked
+  2026-10-01, D24 status)**. Storm-recovery chain (2026-10-01, REPORT):
+  the storm-killed #32 arms are re-driven under gate policy v2 —
+  **t16 ✓**
+  (every metric float-identical to the surviving t08 arm; its latency
+  row is load-confounded and not of record), fork_4b's recovery arm
+  rc=1 on a driver dataset path (re-queued via follower with corrected
+  paths), diet100–ctx16k still in flight (days at storm pace — the
+  driver's own header). Accept: each lands in REPORT.md with its
+  honesty rules.
 - **18j — Distribution + WASM (§57, §58, §68).** Own phases after the
   core is hard: cross-platform release matrix, Homebrew/winget/crates.io;
   `opencodifier-wasm` with the §68 security posture. Accept: per §58/§57
@@ -969,10 +974,14 @@ in between. Ordered so each step's output feeds the next.
   missing-backend refusal; NOT part of `just ci`), 7 host tests incl.
   a manifest scan asserting no tokio/axum/reqwest/ort/libloading/dlopen,
   §68 posture structural. Browser demo rides §58.
-- **18j (§58 remainder) — matrix recorded (D24), builds storm-gated.**
-  windows-x86_64-gnu: the full workspace compiles clean (measured 2026-
-  09-29); linux-aarch64 (cargo-zigbuild) and darwin x86_64/aarch64
-  staged pending quiet-window link+smoke; macOS artifacts state the
+- **18j (§58 remainder) — builds recorded (D24 status 2026-10-01).**
+  All five targets verified at their named level: linux-x86_64
+  run-tested + e2e (platform of record), windows-x86_64-gnu workspace
+  compiles clean (2026-09-29; link+smoke still quiet-window work), and
+  the overnight cross-build linked the remaining four —
+  aarch64-linux-gnu, aarch64-linux-musl (static), aarch64-darwin,
+  x86_64-darwin — at link + `file`-magic level (no foreign-arch
+  execution claimed; no qemu, no macOS host). macOS artifacts state the
   no-run/no-signing caveat in release notes. Registry publication
   (crates.io/Homebrew/winget) is an outward action awaiting explicit
   user go — never automatic.
@@ -1009,10 +1018,13 @@ section has a landing place lives in `docs/SPEC_COVERAGE.md`. The gaps
 the 2026-09-28 audit surfaced have since closed: §36 HTTP surface (18e),
 §34 recipe fleet + `recipe install` (18g), §63 decision registry (D20,
 18f), and the §26/§53/§54 ML graph nodes (18h) are done; §57 WASM shipped
-runtime-first (D23, 18j). What remains: **§58 distribution matrix**
-(aarch64/darwin builds quiet-window; registry publication awaits explicit
-user go), the **§15/§16 training path**, and **§60 Amortyx integration**
-(designs exist; implementation is its own promotion-gated effort).
+runtime-first (D23, 18j). The §58 build matrix is now recorded at its
+named verification levels (D24 status 2026-10-01: all five targets
+linked or run-tested; no foreign-arch execution claimed). What remains:
+**§58 publication** (windows link+smoke quiet-window; crates.io/Homebrew/
+winget await explicit user go), the **§15/§16 training path**, and
+**§60 Amortyx integration** (designs exist; implementation is its own
+promotion-gated effort).
 SPEC_COVERAGE's table was also corrected 2026-09-30 against `routes.rs`:
 no `/v1/systemone` HTTP route exists (the Jev shape is a library
 adapter), and §22 batch inference is done end to end.

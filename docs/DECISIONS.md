@@ -807,6 +807,21 @@ Rule the matrix enforces: a target either has named verification
 evidence or is named as pending — the release page never says
 "supported" where the truth is "compiles".
 
+**Status 2026-10-01 — the staged cells now carry their named
+evidence.** The overnight cross-build run (recorded matrix:
+`runs/crossbuild__matrix.md`, rustc 1.98.1 / zig 0.16.0, from the repo
+root) links all four remaining targets: `aarch64-unknown-linux-gnu`
+(dynamically linked ELF aarch64, 4.4 MB),
+`aarch64-unknown-linux-musl` (statically linked ELF aarch64),
+`aarch64-apple-darwin` and `x86_64-apple-darwin` (Mach-O arm64 /
+x86_64). Per this record, that is link + `file`-magic verification
+only — no foreign-arch execution is claimed (no qemu on the host; no
+macOS host exists here). `windows-x86_64-gnu` keeps its 2026-09-29
+"workspace compiles clean" row; its link+smoke run remains quiet-window
+work. What remains open in the matrix is unchanged: registry
+publication is an explicit user go, and native smoke exists only for
+linux-x86_64.
+
 ## D25 — The escalation ladder is engine-internal per-node policy, never IR (2026-09-30)
 
 The fusion study (F23: engine→gte→2B blend 0.867 vs 0.725 best single)
