@@ -1021,3 +1021,35 @@ hash is a changed artifact and invalidates the row (D14).
   the rebuilt ad129b0 binary; the params A/B (ctx, threads, diet) and
   cross-builds are still measuring in the quiet chain — integration
   part 2 follows them.
+- **2026-10-01 (storm recovery + cross-build matrix)** — the co-tenant
+  load storm held 1-min load above 40 all night (the recovery driver's
+  arm gates recorded 42–78; the previous afternoon's spike hit 151 and
+  cost fork_4b its first run), so the quiet chain
+  was re-driven by a gate-checked recovery driver
+  (`runs/storm_recovery_20261001.log`: an arm starts only on a clean
+  gate and records `load_avg` start/end inside its result). **§58
+  cross-build matrix closed 4/4** at its named verification level
+  (rustc 1.98.1 + zig 0.16.0, from the repo root after the first pass
+  tripped on cwd): aarch64-linux-gnu (dynamic), aarch64-linux-musl
+  (static), aarch64-darwin, x86_64-darwin — link + `file`-magic only,
+  no foreign-arch execution claimed (D24 status block). **t16 landed
+  (rc=0)**: 0.800 / ECE 0.0736, every metric float-identical to the
+  t08 arm — aggregate and all three per-class accuracies, and ECE at
+  full float precision (0.07363460237781208 in both run JSONs), which
+  is consistent only with identical per-item predictions and
+  probabilities across thread counts; each run's own double-replay was
+  also clean (predictions match, max-prob delta 0.0). But its latency
+  row (p50 19.2 s, load 48→78 start-to-end) is load-confounded against
+  t08's 7.6 s and is not of record for speed; the threads row of
+  record stays with t08 until a quiet re-arm. **fork_4b recovery arm rc=1, honest root cause**: the
+  storm driver's own script pointed the JevBench dataset at
+  `$REPO/datasets/public` (FileNotFoundError on `easy.jsonl`) instead
+  of `jevbench-ref/datasets/public` — a driver path bug, not an engine
+  or model failure; a running script is never edited in place, so a
+  follower script with the corrected `JREF` path re-queues the arm and
+  will file `runs/jevbench/fork_4b-v1/`. **diet100 launched 07:53**
+  (in flight at this entry). The D9 criterion-baseline driver parks
+  until Class L (load < 30): the new engine/http benches were
+  smoke-verified under load 70–90 and those numbers are marked DIRTY —
+  context for B3's build-once case, never citable as D9 results. No
+  tier changes (D16 unchanged).
