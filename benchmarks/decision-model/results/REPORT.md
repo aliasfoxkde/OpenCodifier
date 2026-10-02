@@ -500,10 +500,14 @@ scoring drift against every published row is zero by construction.
 
 | arm | n | accuracy | macro | ECE | Brier | p50 | status |
 |---|---:|---:|---:|---:|---:|---:|---|
-| **engine** (`relational-v1` via `/v1/decide`) | 231 | **0.3766** | 0.4011 | 0.402 | 0.890 | **2.0 ms** | done, det 231/231 |
-| **jev_native bridge** (Jev-Style-0.8B-v3 Q4_K_M verdict slot) | 231 | **0.6494** | 0.6378 | 0.080 | 0.425 | 6.72 s | done, det 231/231 |
-| **vtx** (VTX-JEV-3 LF2 via vendor `JevClient`) | 231 | **0.4113** | 0.4318 | 0.126 | 0.684 | **7.9 ms** | done, det 231/231 |
-| fork_4b (tree mode, D16 config) | 231 | — | — | — | — | — | pending quiet host |
+| **engine** (`relational-v1` via `/v1/decide`) | 231 | 0.3766 | 0.4011 | 0.402 | 0.890 | **2.0 ms** | done, det 231/231 |
+| **jev_native bridge** (Jev-Style-0.8B-v3 Q4_K_M verdict slot) | 231 | 0.6494 | 0.6378 | **0.080** | **0.425** | 6.72 s | done, det 231/231 |
+| **vtx** (VTX-JEV-3 LF2 via vendor `JevClient`) | 231 | 0.4113 | 0.4318 | 0.126 | 0.684 | **7.9 ms** | done, det 231/231 |
+| **fork_4b** (tree mode, D16 config, T 1.400) | 231 | **0.6667** | **0.6541** | — ¹ | — ¹ | 15.5 s ² | done, det 231/231 (labels) |
+
+¹ Label-only mapping (the tree ships the winner's mass, D15) — no
+calibration row is computable. ² Co-tenant storm across the 3.9 h wall
+(load 25→20): latency is context, not a speed row.
 
 Published anchors for the same split: hosted Jev 86.6 %, llm-qwen3.5-4b
 80.5 % / 651 ms, Jev-Style-2B 73.6 %, decider-2b 71.0 %, open-jev-2b
@@ -512,7 +516,7 @@ newer anchor set (autotrust's runs of the same public 231, scored
 family-macro, published 2026-09-27): autotrust/JEV-27B **88.70**,
 TypeSafe Jev 1.13 hosted **87.18**, Open-Jev-9B 77.13,
 NeoHorse-Jev-4B 75.73, Kev-4B 73.71, Laya English 55.82 — our rows on
-that scale: bridge 63.78, vtx 43.18, engine 40.11. The full six-benchmark
+that scale: fork_4b 65.41, bridge 63.78, vtx 43.18, engine 40.11. The full six-benchmark
 external comparison lives in `docs/BENCHMARKS.md`.
 
 **Reading the vtx row.** VTX-JEV-3 is a Model2Vec-class static embedding
@@ -611,7 +615,7 @@ accuracy, monotone to 1.000 at margin ≥ 0.0283 (`embed-margin-study.md`,
 **0.455** (vs 0.411 best single, +4.4 pp at 6.3 ms mean; oracle 0.584).
 But engine+bridge **fails to beat the bridge alone**: best gated fusion
 0.632 vs 0.6494 bridge-only, because the engine's JevBench calibration is
-broken (ECE 0.798) — its overconfident wrong answers survive any useful
+broken (ECE 0.402) — its overconfident wrong answers survive any useful
 gate. That is the measured §19 lesson: **an escalation gate is only as
 good as its rung's calibration on the distribution it is gating**, so
 gates must be domain-validated (or fitted per-domain) before they are
@@ -767,7 +771,7 @@ trusted to route.
   answers the hedges. Oracle 0.975 says better gates have room. The
   blended ECE (0.127) needs per-rung D15 calibration before exposure.
 - **F24 — The same ladder loses out-of-domain: gates inherit their
-  rung's calibration.** On JevBench the engine's ECE is 0.798; gating
+  rung's calibration.** On JevBench the engine's ECE is 0.402; gating
   on it *lowers* the bridge's 0.6494 to 0.632 (engine+vtx does add
   +4.4 pp over vtx-only, 0.455). A confidence gate is not free
   architecture — it must be validated or fitted on the distribution it
@@ -971,7 +975,7 @@ hash is a changed artifact and invalidates the row (D14).
   (post-hoc, measured rows only): suite ladder engine→gte→Qwen3.5-2B
   hits **0.867 @ 753 ms** vs 0.725 best single (F23; oracle 0.975),
   while the same gate on JevBench *underperforms* the bridge alone
-  (0.632 vs 0.6494) because the engine's out-of-domain ECE is 0.798 —
+  (0.632 vs 0.6494) because the engine's out-of-domain ECE is 0.402 —
   gates inherit their rung's calibration (F24). Runners now carry a
   `/proc`-based resource monitor (`runner/resources.py`): peak RSS,
   CPU-seconds, IO bytes, wall time land in every future run JSON under
@@ -1083,3 +1087,50 @@ hash is a changed artifact and invalidates the row (D14).
   the metadata evidence the suite's metadata class runs on. Negative
   on both axes; the rung's context budget stays full-context, 4k
   floor verified. No tier changes (D16 unchanged).
+- **2026-10-02 (fork_4b JevBench arm + diet curve closed)** — the
+  re-queued fork arm landed (`runs/jevbench/fork_4b-v1/`, chain
+  `fork4b_diet100_chain_20261001.log`, gate-checked 25.4→19.7):
+  **0.6667 (154/231), family-macro 0.6541**, replay-deterministic
+  231/231, paraphrase agreement 0.861 (36 pairs), zero route fee, wall
+  3.9 h, label-only mapping (D15) so no ECE/Brier row. Board A's best
+  accuracy row, and the measured answer to arm 3's competitor claim:
+  jev.page's decision-tuned 4B publishes 80.5 % / 651 ms; the same
+  backbone quant through the fork's constrained tree readout, untrained,
+  lands 66.7 % — the 13.8-point gap is the training recipe, not the
+  harness (the bridge reproduced the authors' own row at +0.9 pp). p50
+  15.5 s is storm-contaminated context (D16 internal p50 for the same
+  weights: 4.9 s on the 120-item suite), never a speed row. Retrain
+  noise on fork-class comparisons stays σ ≈ 3.2/231 (RESEARCH.md §6.5).
+  **diet100 re-arm landed** (`params__diet100.json`, clean gate
+  18.5→17.1, double-replay clean, max-prob delta 0.0): **0.508 /
+  ECE 0.1487**, per-class lexical 0.95 / metadata 0.275 / relational
+  0.30, p50 7.5 s — completing the prompt-diet curve started by
+  diet200's 0.633: the collapse is monotone in diet depth
+  (full → 0.800, 200 → 0.633, 100 → 0.508) and hits
+  `metadata_match` first and hardest (1.0 → 0.525 → 0.275) while
+  lexical holds 0.95 throughout — the suite's metadata class runs on
+  evidence the diet deletes. Conclusion unchanged and strengthened:
+  the rung ships full-context (4k floor verified); no diet tier. The
+  params A/B's `long` arm (~3.7k-token contexts) is the last
+  measurement in flight; Board B rows are unchanged until it lands
+  (no tier changes, D16 unchanged). **Board-A fusion closed
+  (`fusion-jevbench-fork.md`)**: the full ladder — engine → vtx → 4B
+  fork — joined over all three arms' per-item rows (231/231; the
+  label-only fork's winner mass recovered from its raw payloads,
+  abstained engine rows gate as never-accept per D27). Oracle **0.823**
+  (engine+vtx was 0.584 — the fork adds the headroom); best gated point
+  **0.636 at engine t=0.95 / vtx t=0.75, mean 14.2 s — under the fork
+  alone (0.667)**, because the cheap rungs' accepted mass stays wrong
+  even at strict gates. F24's rule twice-confirmed: on Board A the
+  ladder is a cost policy (engine t=0.50 answers 81 % of items at
+  2 ms for 0.524), not an accuracy policy; the accuracy-competitive
+  points route ~⅔ of items to the fork. `fusion_study.py` gained the
+  third rung, raw-payload probability recovery, and position-based
+  final-rung semantics (the last rung answers even with no probability
+  channel — the t=0.0 convention broke on label-only rows). The rewrite
+  also fixed the study's single-arms JevBench ECE line, which had
+  derived correctness as `pred == answer` — always false on rows that
+  carry `correct`, not labels — so every JevBench single-arm ECE was
+  inflated (engine 0.798 → the harness's 0.402; the regenerated
+  fusion-jevbench*.md cascade tables are bit-identical, confirming no
+  cascade behavior moved).

@@ -116,6 +116,14 @@ channel, and the raw evidence records the exact rendered request.
    the fork's tree mode (same config as the D16 run: T 1.400 shipped
    calibration). Direct competitor row: jev.page claims **80.5 % / 651 ms**
    for an llm-qwen3.5-4b decision server on the same 231 items.
+   **Done (2026-10-02, `runs/jevbench/fork_4b-v1/`)**: 0.6667 (154/231),
+   family-macro 0.6541, replay-deterministic 231/231, paraphrase
+   agreement 0.861 (36 pairs), label-only mapping (the tree ships the
+   winner's mass, D15) so no ECE/Brier; p50 15.5 s under a co-tenant
+   storm (latency is context, not a speed row). The 13.8-point gap to
+   jev.page's row is the price of a base model with no decision tune on
+   a readout the model was never trained for — the bridge arm already
+   proved the harness transfers at +0.9 pp.
 4. **VTX-JEV-3 (VTXAI) — the static-embedding survey arm.** A
    Model2Vec-class 255,753×256 table (20.5 MB 2-bit LF2) with a
    position-gated attention pooler, distilled on

@@ -54,7 +54,15 @@ zero synthesized probabilities, full replay determinism.
 |---|---:|---:|---:|---:|---:|---:|---|
 | OpenCodifier engine (relational solver over lexical, `/v1/decide`) | 231 | 0.3766 | 0.4011 | 0.402 | 0.890 | **2.0 ms** | 231/231 |
 | **vtx: VTX-JEV-3** (20.5 MB 2-bit static table, vendor client) | 231 | 0.4113 | 0.4318 | 0.126 | 0.684 | **7.9 ms** | 231/231 |
-| Jev-Style-0.8B-Decision-v3 Q4_K_M (native verdict-slot readout — comparability bridge) | 231 | **0.6494** | **0.6378** | **0.080** | **0.425** | 6.72 s | 231/231 (labels + probabilities) |
+| Jev-Style-0.8B-Decision-v3 Q4_K_M (native verdict-slot readout — comparability bridge) | 231 | 0.6494 | 0.6378 | **0.080** | **0.425** | 6.72 s | 231/231 (labels + probabilities) |
+| **fork: Qwen3.5-4B UD-Q4_K_XL tree mode** (D16 tier, T 1.400 — base model, no decision tune) | 231 | **0.6667** | **0.6541** | — ¹ | — ¹ | 15.53 s ² | 231/231 (labels only ¹) |
+
+¹ The fork's tree mode ships the winner's mass only (label-only mapping,
+D15), so no ECE/Brier is computable — the bridge row is the calibrated
+reference. ² Latency is load-contaminated context, not a speed row: the
+arm ran through a co-tenant storm (1-min load 25→20 across the 3.9 h
+wall); the D16 internal p50 for the same weights is 4.9 s on the
+120-item suite.
 
 The bridge row is the validity anchor: its authors self-ran exactly
 these weights on exactly these items with the official harness and
@@ -77,6 +85,7 @@ the macro column above.
 | NeoHorse-Jev-4B | 75.73 |
 | Kev-4B | 73.71 |
 | Laya English | 55.82 |
+| *fork: Qwen3.5-4B tree mode (our run)* | *65.41* |
 | *Jev-Style-0.8B bridge (our run)* | *63.78* |
 | *VTX-JEV-3 (our run)* | *43.18* |
 | *OpenCodifier engine (our run)* | *40.11* |
@@ -94,6 +103,7 @@ Source: jev-style repo README, JevBench RESULTS, jev.page (recorded in
 | strands-decider-2B-hobson-v19 | 72.3 % (167/231), Brier 0.342, ECE 0.050 | official, preregistered run record |
 | open-jev-zefan-2b | 64.5 % | board |
 | **Jev-Style-0.8B v3** | **64.1 % (148/231)** | self-run, official harness — reproduced by our bridge |
+| *fork: Qwen3.5-4B tree mode (our run, base model)* | *66.7 % (154/231)* | our run, authors' harness — no decision tune, so the gap to jev.page's 4B (80.5 %) is a training-recipe delta, not harness drift |
 | decider-2b | 71.0 % | board |
 | Laya | 58.4 % | official |
 
@@ -219,9 +229,20 @@ What the board established (full findings catalog in REPORT.md):
   scores **0.867 on the suite at 753 ms** — +14.2 pp over the best
   single arm at 43 % of its latency (F23) — but the same gate on
   JevBench *lowers* the bridge's 0.6494 to 0.632, because the engine's
-  out-of-domain calibration (ECE 0.798) poisons the routing decision
+  out-of-domain calibration (ECE 0.402) poisons the routing decision
   (F24). Gates inherit their rung's calibration; validate them per
-  domain before trusting them to route. Study: `fusion_study.py`,
+  domain before trusting them to route. With the 4B fork arm landed the
+  full Board-A ladder is measurable end to end (engine → vtx → 4B
+  fork, `results/fusion-jevbench-fork.md`): the oracle is **0.823**,
+  but the best gated point is **0.636 — under the fork alone at
+  0.667** — because the cheap rungs' accepted mass stays wrong even at
+  strict gates (their raw probabilities are uncalibrated here). On
+  Board A the ladder is a cost policy, not an accuracy policy: engine
+  t=0.50 answers 81 % of items at 2 ms for 0.524, and every
+  accuracy-competitive point routes ~⅔ of items to the 4 s-plus rung.
+  The 0.867-at-home result stands — on Board B the gates separate
+  because the rungs are calibrated there (F24's rule, twice confirmed).
+  Study: `fusion_study.py`,
   outputs `results/fusion-*.md` in the decision-model README.
 - **Adapter training is the measured road's next rung** — the target
   bar itself was built with a frozen base + small trained decision
@@ -261,10 +282,15 @@ detachable, calibrated, and the backbone is untouched — exactly the
 `opencodifier-model` + `Calibration` seam design.
 
 **The honest gap.** On the shared axis (JevBench public 231,
-family-macro): JEV-27B 88.70 — our best row is the 0.8B bridge at
-63.78, our engine at 40.11, the 20 MB VTX static table at 43.18. Nothing
-on our board today is within 25 points of the bar. The measured road
-there, in order of expected leverage: (1) a real candidate-conditioned
+family-macro): JEV-27B 88.70 — our best row is now the 4B fork arm at
+65.41 (a base Qwen3.5-4B through the constrained tree readout, no
+decision tune), then the 0.8B bridge at 63.78, the 20 MB VTX static
+table at 43.18, our engine at 40.11. Nothing on our board today is
+within 20 points of the bar, and the fork arm's own margin — 66.7 %
+plain against jev.page's decision-tuned 4B at 80.5 % — is the measured
+price of skipping the training recipe, not a harness difference (the
+bridge reproduced the authors' own row at +0.9 pp). The road there, in
+order of expected leverage: (1) a real candidate-conditioned
 decision rung trained on typed-distribution distillation (the
 `opencodifier-model` crate exists for exactly this; the corpus below is
 Apache-2.0); (2) per-kind calibration fitted and versioned into the
