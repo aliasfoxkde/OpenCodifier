@@ -791,7 +791,8 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   (F23; relational 0.88, oracle 0.975, blended ECE 0.127 → per-rung D15
   calibration is the follow-up); JevBench engine+vtx 0.455 (+4.4 pp over
   vtx-only) but engine+bridge **0.632 < 0.6494 bridge-only** — the
-  engine's out-of-domain ECE 0.798 poisons the gate (F24). Live-ladder
+  engine's out-of-domain ECE 0.402 poisons the gate (F24; the study's
+  single-arm ECE line was recomputed 2026-10-02). Live-ladder
   **wiring landed (2026-09-30, D25)**: `LadderPolicy` per-node/per-kind
   gate overrides resolved at the existing confidence gate
   (`opencodifier-engine/src/ladder.rs`), identity-decorated cache keys,

@@ -25,11 +25,18 @@ Usage (JevBench):
   python3 runner/fusion_study.py --jevbench \
       --engine-dir <jevbench/engine-v4> --fallback-dir <jevbench/vtx-v1> \
       --out fusion-jevbench.md
+
+A JevBench ladder may carry a third rung (`--llm-dir`, e.g. the 4B fork
+arm behind the vtx rung). Label-only arms (the fork's tree ships the
+winner's mass, D15) have no `probs` in results.jsonl; their winner
+probability is recovered from the arm's verbatim raw payloads
+(`raw/`, indexed by the rows' `raw_sha256` content hash).
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -57,8 +64,43 @@ def load_suite_arm(path: Path) -> dict[str, dict]:
     return rows
 
 
+def raw_index(dir_path: Path) -> dict[str, Path]:
+    """The arm's raw payloads keyed by `raw_sha256` = sha256(content)."""
+    return {
+        hashlib.sha256(f.read_bytes()).hexdigest(): f
+        for f in (dir_path / "raw").glob("*.json")
+    }
+
+
+def raw_winner_prob(payload: dict, pred: str | None) -> float | None:
+    """Winner probability from a label-only arm's raw response payload.
+
+    The JevBench harness stores each response verbatim; three shapes exist
+    across our arms and the winner's own mass is the whole
+    calibrated-probability channel this study gates on, so each lookup is
+    anchored to the row's `predicted` — an abstained row (no winner) and
+    an unmatchable payload both gate as "never accept", which is what a
+    live ladder does with an abstention (D27).
+    """
+    if pred is None:
+        return None
+    resp = payload.get("response") or {}
+    answer = resp.get("answer") or {}
+    for entry in (answer.get("distribution") or {}).get("entries") or []:
+        if entry.get("key") == pred and entry.get("probability") is not None:
+            return float(entry["probability"])
+    field = resp.get("field") or {}
+    if field.get("value") == pred and field.get("probability") is not None:
+        return float(field["probability"])
+    dist = resp.get("distribution")
+    if isinstance(dist, dict) and dist.get(pred) is not None:
+        return float(dist[pred])
+    return None
+
+
 def load_jevbench(dir_path: Path) -> dict[str, dict]:
     rows = {}
+    raw = raw_index(dir_path)
     results = dir_path / "results.jsonl"
     for line in results.read_text().splitlines():
         if not line.strip():
@@ -66,12 +108,16 @@ def load_jevbench(dir_path: Path) -> dict[str, dict]:
         r = json.loads(line)
         probs = r.get("probs") or {}
         pred = r.get("predicted")
+        prob = float(probs[pred]) if pred in probs else None
+        if prob is None and r.get("raw_sha256") in raw:
+            payload = json.loads(raw[r["raw_sha256"]].read_text())
+            prob = raw_winner_prob(payload, pred)
         rows[r["task_id"]] = {
             "id": r["task_id"],
             "pred": pred,
             "answer": None,  # JevBench rows carry `correct`, not the label
             "correct": bool(r.get("correct")),
-            "prob": float(probs[pred]) if pred in probs else None,
+            "prob": prob,
             "class": r.get("family"),
             "ms": (r.get("latency_s") or 0) * 1000.0,
         }
@@ -107,9 +153,11 @@ def cascade(
     `ladder` entries are (name, rows, threshold, mean_ms, gate) where gate
     is "prob" (winner probability) or "margin" (top minus runner-up — the
     rank/margin form CALIBRATION.md finding 3 requires for rungs without a
-    calibrated probability channel). The final rung always answers
-    (threshold 0.0). Latency accumulates over every rung the item actually
-    passed through, gate evaluation itself is free.
+    calibrated probability channel). The final rung always answers — by
+    position, not by a 0.0 threshold, so a label-only final rung (winner
+    mass only, D15) needs no probability to ship its answer. Latency
+    accumulates over every rung the item actually passed through, gate
+    evaluation itself is free.
     """
 
     def gate_value(r: dict, gate: str) -> float | None:
@@ -118,23 +166,20 @@ def cascade(
         return r["prob"]
 
     rows_out = []
+    last = len(ladder) - 1
     for it in items:
         spent = 0.0
-        used = None
-        for name, arm_rows, t, mean_ms, gate in ladder:
+        for i, (name, arm_rows, t, mean_ms, gate) in enumerate(ladder):
             r = arm_rows[it["id"]]
             spent += r["ms"] or mean_ms
-            used = name
             v = gate_value(r, gate)
-            if v is not None and v >= t:
+            if i == last or (v is not None and v >= t):
                 rows_out.append(
                     {"id": it["id"], "class": it["class"], "rung": name,
                      "prob": r["prob"], "correct": r["correct"],
                      "ms": spent}
                 )
                 break
-        else:  # pragma: no cover - final rung has t=0.0
-            raise RuntimeError("ladder fell through")
     n = len(rows_out)
     by_rung: dict[str, int] = {}
     for r in rows_out:
@@ -171,6 +216,9 @@ def main() -> int:
                     help="engine-dir/fallback-dir are JevBench run dirs")
     ap.add_argument("--engine-dir", type=Path, default=None)
     ap.add_argument("--fallback-dir", type=Path, default=None)
+    ap.add_argument("--llm-dir", type=Path, default=None,
+                    help="JevBench third rung (answers last), e.g. the "
+                         "fork arm behind the vtx rung")
     ap.add_argument("--embed-gate", choices=("prob", "margin", "both"), default="prob",
                     help="gate form for the embedding rung: winner probability "
                     "or top-minus-runner-up margin (rank/margin form per "
@@ -193,12 +241,15 @@ def main() -> int:
 
     if args.jevbench:
         engine = load_jevbench(args.engine_dir)
-        fallback = load_jevbench(args.fallback_dir)
-        arms = {"engine": engine, "fallback": fallback}
+        arms = {"engine": engine, "fallback": load_jevbench(args.fallback_dir)}
+        if args.llm_dir:
+            arms["llm"] = load_jevbench(args.llm_dir)
         items = join(arms)
         lines.append(f"Joined {len(items)} JevBench items across "
-                     f"{args.engine_dir.name} + {args.fallback_dir.name}.")
-        llm = None
+                     + " + ".join(d.name for d in (args.engine_dir,
+                                                   args.fallback_dir,
+                                                   args.llm_dir) if d)
+                     + ".")
     else:
         engine = load_suite_arm(args.runs_dir / args.engine)
         arms = {"engine": engine}
@@ -216,7 +267,9 @@ def main() -> int:
         sub = [r for r in rows.values() if r["id"] in {i["id"] for i in items}]
         n = len(sub)
         acc = sum(1 for r in sub if r["correct"]) / n
-        probs = [(r["prob"], r["pred"] == r["answer"]) for r in sub
+        # Both loaders carry harness-judged correctness; JevBench rows have
+        # no label to re-derive it from.
+        probs = [(r["prob"], r["correct"]) for r in sub
                  if r["prob"] is not None]
         e = ece(probs) if probs else float("nan")
         lines.append(f"- **{name}**: acc {acc:.3f}, ECE {e:.3f}")
@@ -238,33 +291,42 @@ def main() -> int:
         fallback_name, fallback_rows = "embed", arms["embed"]
     fb_mean = arm_cost(items, fallback_rows, 0.0)
     embed_mean = arm_cost(items, arms["embed"], 0.0) if "embed" in arms else 0.0
+    llm_mean = arm_cost(items, arms["llm"], 0.0) if "llm" in arms else 0.0
+
+    # The middle rung whose gate gets swept: the embedding arm on suite
+    # runs, the fallback arm on a three-rung JevBench ladder (vtx behind
+    # the model rung). With no middle rung the ladder is engine → final.
+    mid = None
+    if "embed" in arms:
+        mid = ("embed", arms["embed"], embed_mean)
+    elif args.jevbench and "llm" in arms:
+        mid = ("fallback", arms["fallback"], fb_mean)
 
     results = []
     t_final = 0.0
     embed_gates = (
         ["prob", "margin"]
-        if args.embed_gate == "both" and "embed" in arms
-        else [args.embed_gate if "embed" in arms else "prob"]
+        if args.embed_gate == "both" and mid
+        else [args.embed_gate if mid else "prob"]
     )
     for embed_gate in embed_gates:
         for t_e in grid:
             base_ladder = [("engine", engine, t_e, engine_mean, "prob")]
-            if args.jevbench:
+            if mid is None:
+                final_name = "llm" if "llm" in arms else fallback_name
+                final_rows = arms.get("llm", fallback_rows)
                 ladder = base_ladder + [
-                    (fallback_name, fallback_rows, t_final, fb_mean, "prob")
+                    (final_name, final_rows, t_final, fb_mean, "prob")
                 ]
                 results.append((t_e, None, embed_gate, cascade(items, ladder)))
-            elif "embed" in arms:
-                for t_m in grid:
-                    ladder = base_ladder + [
-                        ("embed", arms["embed"], t_m, embed_mean, embed_gate)
-                    ]
-                    if fallback_name == "llm":
-                        ladder.append(("llm", arms["llm"], t_final, fb_mean, "prob"))
-                    results.append((t_e, t_m, embed_gate, cascade(items, ladder)))
-            else:
-                ladder = base_ladder + [("llm", arms["llm"], t_final, fb_mean, "prob")]
-                results.append((t_e, None, embed_gate, cascade(items, ladder)))
+                continue
+            for t_m in grid:
+                ladder = base_ladder + [(mid[0], mid[1], t_m, mid[2], embed_gate)]
+                if "llm" in arms:
+                    ladder.append(("llm", arms["llm"], t_final, llm_mean, "prob"))
+                elif fallback_name == "llm":
+                    ladder.append(("llm", arms["llm"], t_final, fb_mean, "prob"))
+                results.append((t_e, t_m, embed_gate, cascade(items, ladder)))
 
     def render(res, t_e, t_m, gate):
         acc = res["accuracy"]
