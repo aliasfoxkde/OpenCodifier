@@ -13,6 +13,13 @@ categories = ["science", "text-processing"]
 [lints]
 workspace = true
 
+[features]
+# The llama.cpp decision rung's HTTP client (D26). The classifier itself
+# is transport-agnostic and compiles without the feature — only
+# `UreqTransport` pulls the dependency. Plain HTTP on purpose: the
+# endpoint is loopback by contract and no TLS stack is wanted here.
+llamacpp = ["dep:ureq"]
+
 [dependencies]
 opencodifier-core = { path = "../opencodifier-core", version = "0.4.0" }
 opencodifier-engine = { path = "../opencodifier-engine", version = "0.4.0" }
@@ -21,3 +28,4 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
+ureq = { version = "2", default-features = false, features = ["json"], optional = true }

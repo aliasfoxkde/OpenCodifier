@@ -10,6 +10,7 @@
 //! ```text
 //!   engine::Classifier  ◄── EmbeddingClassifier (any EmbeddingBackend)
 //!                       ◄── CandidateConditionedModel (any InferenceBackend)
+//!                       ◄── LlamaDecisionClassifier (llama.cpp fork, D26)
 //!   model::ModelManifest ── pins artifact bytes (SHA-256, D14)
 //!   runtime::InferenceBackend / EmbeddingBackend
 //! ```
@@ -24,6 +25,13 @@
 //!   decision model: shape-checked logits, Rust-side softmax (D7). **No
 //!   weights ship in V1**; without a trained artifact this is exercised
 //!   by tests and stays out of every default pipeline.
+//! * [`LlamaDecisionClassifier`] — the model rung of the escalation
+//!   ladder (D26): the measured tree-mode contract of the
+//!   `parallel-decision` llama.cpp fork as a
+//!   [`Classifier`](opencodifier_engine::Classifier), full distribution
+//!   required, math renormalized in Rust. The HTTP client lives behind
+//!   the `llamacpp` feature (see the [`llamacpp`] module); the
+//!   classifier itself is transport-agnostic and always compiled.
 //!
 //! # Example
 //!
@@ -58,9 +66,16 @@
 pub mod decision;
 pub mod embedding;
 pub mod error;
+pub mod llamacpp;
 pub mod manifest;
 
 pub use decision::{CANDIDATES_INPUT, CONTEXT_INPUT, CandidateConditionedModel, LOGITS_OUTPUT};
 pub use embedding::EmbeddingClassifier;
 pub use error::ModelError;
+#[cfg(feature = "llamacpp")]
+pub use llamacpp::UreqTransport;
+pub use llamacpp::{
+    DEFAULT_INSTRUCTIONS, DEFAULT_TIMEOUT, LlamaConfig, LlamaDecisionClassifier, LlamaError,
+    Transport,
+};
 pub use manifest::ModelManifest;

@@ -901,3 +901,62 @@ ship:
   near-ties). `proofs-only-v1` — only proofs accept outright.
   Ladders remain opt-in (F24: per-domain calibration precedes any
   default-on ladder).
+
+## D26 — The model rung is a prompt-shaped Classifier over llama.cpp, not a tensor backend (2026-10-02)
+
+The escalation ladder (D25) has one missing rung: the decision model
+the measured board says is worth escalating to (F23: the simulated
+engine→gte→2B blend scores 0.867 @ 753 ms vs 0.725 best single). The
+serving reality on this host is the llama.cpp `parallel-decision`
+fork — its native verdict-slot readout is the only interface that ever
+scored the Jev-Style weights honestly (F26: 0.8083 native vs 0.217
+tree-mode mismatch, F10), and ONNX Runtime is not the path (F25: ≥9×
+prefill-bound latency; no Vulkan EP exists to fix it). The wiring
+decision:
+
+- **The rung implements `Classifier`, not `InferenceBackend`.**
+  `InferenceBackend` is the tensor-in/tensor-out contract of the ONNX
+  serving path (D7: named `DenseTensor`s). The fork's readout is
+  prompt-shaped — a rendered candidate-conditioned prompt in,
+  verdict-slot logprobs out. Forcing one shape onto the other would
+  fabricate tensors and re-create the F10 interface mismatch this
+  board spent a phase correcting. `LlamaDecisionClassifier`
+  implements `opencodifier_engine::Classifier` (decide →
+  `Distribution`) and assembles through `EngineHandle::new` /
+  `with_ladder` as decider or verifier — zero engine changes, the
+  same seam every other rung uses.
+- **Rust owns the decision math.** The server returns logprobs; the
+  softmax over the verdict slot and any calibration happen in Rust
+  f64 (D7), and confidence is calibrated through the existing D15
+  seam before any gate reads it. Server-reported probabilities are
+  never exposed raw.
+- **One crate, one feature, one new dependency.** The client lives in
+  `opencodifier-model` behind a `llamacpp` feature; the HTTP client
+  is `ureq` (sync, `default-features = false`, `json` only) — blocking
+  matches the engine's sync core (D5), and a leaf crate gains no async
+  runtime. Plain HTTP, deliberately: the endpoint is loopback by the
+  bind rule, and every Rust TLS backend (`ring`, `aws-lc-rs`) drags in
+  either an OpenSSL-derived license outside `deny.toml`'s allowlist or
+  a C toolchain build for a hop TLS cannot help. Without the feature
+  the default build is dependency-identical; with it, cargo-deny
+  licenses and advisories gate the addition like any other.
+- **No live server in the test suite.** A minimal `Transport` trait
+  (JSON in, JSON out) is the injection seam: unit tests script
+  verdict-slot responses, timeouts, malformed payloads, and non-200s
+  through a mock. Real-server integration is opt-in against a
+  loopback endpoint (the bind rule — a default must never point at a
+  remote host) and skips when absent.
+- **Determinism is a contract, not a hope.** Sampling is pinned
+  greedy server-side; `model_id()` composes build + GGUF + readout
+  config and feeds cache keys like any classifier's (D6); timeouts
+  ride the engine's `Deadline` seam; retries are bounded and
+  explicit, never ambient. Double-replay of a suite arm must be
+  bit-identical before any number is of record.
+- **Weights never ship (D14).** The backend addresses a
+  user-provided llama-server; no GGUF in the repository, no
+  download-at-runtime, no vendored model artifacts.
+
+Acceptance is the F23 target the ladder has been simulating: blended
+accuracy ≥ 0.80 at ≤ 1 s mean on the locked suite, measured
+in-process through the real engine, not through the benchmark
+harness's post-hoc blend.

@@ -8,12 +8,22 @@ releases may break, and every breaking change is recorded in this file
 
 ## [Unreleased]
 
-- Track B5 (next): the model rung the ladder escalates to — a
-  `Classifier`-implementing llama.cpp client behind a `llamacpp`
-  feature (verdict-slot logprobs, Rust-side f64 softmax); B6
-  cross-rung escalation; the prompt/template A/B study; quiet-window
-  criterion deltas for the B2/B3 changes; integration of the
-  fork4b-v2 and diet100 measurement arms when they land.
+- B5 — the model rung of the escalation ladder (`LlamaDecisionClassifier`,
+  D26): the measured `POST /v1/decision` tree-mode contract of the
+  llama.cpp `parallel-decision` fork as an `opencodifier_engine::Classifier`
+  in `opencodifier-model`. The classifier itself is transport-agnostic and
+  always compiled; the loopback HTTP transport (`UreqTransport`, ureq,
+  plain HTTP — the endpoint is loopback by the bind rule) sits behind the
+  `llamacpp` feature. Honesty rules enforced in type: the fork's full
+  `distribution` object is **required** (a winner-only response is a typed
+  refusal, never a synthesized probability), entries are read in the
+  question's declared answer order, refused unless they cover exactly the
+  declared answer set, and renormalized in Rust f64 before
+  `Distribution::from_pairs`. Errors carry the HTTP status in the message
+  (the engine keeps only the reason string). 15 tests including an
+  end-to-end escalation: default policy accepts a confident distribution,
+  a 0.95 per-kind `LadderPolicy` sends it to `Verify` with the
+  `policy_source` trace fact naming the model rung.
 
 ## [0.4.0] — 2026-10-02
 

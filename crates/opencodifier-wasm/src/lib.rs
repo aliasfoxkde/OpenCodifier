@@ -398,4 +398,21 @@ mod tests {
         let second = engine().decide(&request_json()).unwrap();
         assert_eq!(first, second);
     }
+
+    /// The Display half of the error boundary is plain Rust: none of the
+    /// three arms constructs a `JsValue`, so a host test can prove they
+    /// all format (the JSON half stays with the Node smoke test).
+    #[test]
+    fn the_error_boundary_formats_every_failure_class() {
+        let malformed = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
+        let failures = [
+            EngineFailure::MalformedJson(malformed),
+            EngineFailure::Schema(opencodifier_schema::SchemaError::unsupported("question type")),
+            EngineFailure::Engine(opencodifier_engine::EngineError::Cancelled),
+        ];
+        for failure in failures {
+            let shown = failure.to_string();
+            assert!(!shown.is_empty(), "{failure:?} must format");
+        }
+    }
 }
