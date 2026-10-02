@@ -73,6 +73,52 @@ impl Calibration for IdentityCalibration {
     }
 }
 
+/// Per-mode wrapper for proof/delegate stacks (CALIBRATION finding 2).
+///
+/// The relational solver's exact proofs arrive as single-entry
+/// distributions — p = 1.0 by construction, and measurably right every
+/// time — while the delegated tail hedges across the whole range. Any
+/// temperature fitted over that mixed population sharpens the wrong
+/// half (measured: NLL improves 0.388 → 0.374 while ECE worsens
+/// 0.094 → 0.097, so no artifact shipped). This wrapper restores the
+/// bimodal structure without an IR class tag: a single-entry
+/// distribution passes through at its raw value, and everything else
+/// delegates to the inner calibration.
+///
+/// Cache identity: the wrapper reports the inner calibration's
+/// `version()` unchanged. That is safe because the wrapper changes
+/// semantics only inside a configured [`LadderPolicy`](crate::ladder::LadderPolicy),
+/// whose non-empty id already decorates the model id as `|ladder-v1@<id>`
+/// — bump the ladder id when the wrapper's behavior changes, exactly
+/// like any artifact swap.
+#[derive(Debug, Clone)]
+pub struct ProofAwareCalibration {
+    inner: std::sync::Arc<dyn Calibration>,
+}
+
+impl ProofAwareCalibration {
+    /// Wraps an inner calibration for the delegated (multi-entry) tail.
+    #[must_use]
+    pub fn new(inner: std::sync::Arc<dyn Calibration>) -> Self {
+        Self { inner }
+    }
+}
+
+impl Calibration for ProofAwareCalibration {
+    fn calibrate(&self, class: &str, distribution: &Distribution) -> f64 {
+        // A single-entry distribution is a proof: its probability is
+        // exact by construction, and no temperature may move it.
+        if distribution.entries().len() == 1 {
+            return distribution.top().probability;
+        }
+        self.inner.calibrate(class, distribution)
+    }
+
+    fn version(&self) -> u64 {
+        self.inner.version()
+    }
+}
+
 /// The question class a calibration artifact keys on: the question kind's
 /// canonical name. Unknown kinds (the IR enum is `#[non_exhaustive]`) map
 /// to `"unknown"` and fall back to the artifact default.
@@ -268,6 +314,8 @@ mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
 
     use super::*;
+    use std::sync::Arc;
+
     use crate::error::EngineError;
 
     fn artifact(temperatures: BTreeMap<String, f64>, default: f64) -> CalibrationArtifact {
@@ -370,6 +418,42 @@ mod tests {
         let mut a = artifact(BTreeMap::new(), 2.0);
         a.calibration_version = 7;
         assert_eq!(TemperatureCalibration::from_artifact(a).expect("valid").version(), 7);
+    }
+
+    #[test]
+    fn proof_aware_passes_a_single_entry_through_raw() {
+        let inner = Arc::new(
+            TemperatureCalibration::from_artifact(artifact(BTreeMap::new(), 3.0)).expect("valid"),
+        );
+        let wrapped = ProofAwareCalibration::new(inner.clone());
+        let proof = dist(&[("proved", 1.0)]);
+        // A T = 3 fit would flatten this to nothing; the wrapper must
+        // not touch an exact proof.
+        assert_eq!(wrapped.calibrate("choice", &proof), 1.0);
+        assert_eq!(proof.top().probability, 1.0);
+    }
+
+    #[test]
+    fn proof_aware_delegates_the_hedging_tail_unchanged() {
+        let inner = Arc::new(
+            TemperatureCalibration::from_artifact(artifact(BTreeMap::new(), 3.0)).expect("valid"),
+        );
+        let wrapped = ProofAwareCalibration::new(inner.clone());
+        let d = dist(&[("a", 0.70), ("b", 0.20), ("c", 0.10)]);
+        assert_eq!(wrapped.calibrate("choice", &d), inner.calibrate("choice", &d));
+        // The inner calibration is a real flattening fit: the delegated
+        // tail lands below raw, which is exactly what the wrapper
+        // preserves for delegates while sparing proofs.
+        assert!(wrapped.calibrate("choice", &d) < d.top().probability);
+    }
+
+    #[test]
+    fn proof_aware_version_is_the_inner_version() {
+        let mut a = artifact(BTreeMap::new(), 2.0);
+        a.calibration_version = 7;
+        let inner = Arc::new(TemperatureCalibration::from_artifact(a).expect("valid"));
+        let wrapped = ProofAwareCalibration::new(inner);
+        assert_eq!(wrapped.version(), 7);
     }
 
     #[test]

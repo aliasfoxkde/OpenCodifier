@@ -58,7 +58,8 @@ fn assemble(args: &ServeArgs) -> Result<(SocketAddr, ServerConfig, EngineHandle)
         ));
     }
 
-    let config = runtime::engine_config(args.graph.as_deref(), args.focus_budget)?;
+    let config =
+        runtime::engine_config(args.graph.as_deref(), args.focus_budget, args.ladder.as_deref())?;
 
     if let Some(path) = &args.policy {
         report_policy_limitation(path)?;
@@ -109,7 +110,14 @@ mod tests {
     }
 
     fn args(bind: &str, allow_remote: bool, policy: Option<PathBuf>) -> ServeArgs {
-        ServeArgs { bind: bind.to_string(), allow_remote, graph: None, focus_budget: None, policy }
+        ServeArgs {
+            bind: bind.to_string(),
+            allow_remote,
+            graph: None,
+            focus_budget: None,
+            ladder: None,
+            policy,
+        }
     }
 
     #[test]

@@ -167,6 +167,26 @@ pub fn trace_fact<'a>(
         .and_then(|entry| entry.detail.get(key))
 }
 
+/// A valid temperature-scaling artifact with the given default
+/// temperature and no per-class overrides — the shape a real offline fit
+/// ships (D15).
+pub fn calibration_artifact(default_temperature: f64) -> opencodifier_engine::CalibrationArtifact {
+    opencodifier_engine::CalibrationArtifact {
+        format_version: 1,
+        scheme: "temperature".to_owned(),
+        model_id: "test-model".to_owned(),
+        calibration_version: 1,
+        default_temperature,
+        temperatures: std::collections::BTreeMap::new(),
+        fit: opencodifier_engine::CalibrationFit {
+            items: 120,
+            ece_before: 0.5,
+            ece_after: 0.1,
+            source: "test".to_owned(),
+        },
+    }
+}
+
 /// A boolean question, for requests that mix question kinds.
 pub fn boolean_question(id: &str, text: &str) -> DecisionQuestion {
     DecisionQuestion::Boolean(BooleanQuestion::new(id, text).unwrap())

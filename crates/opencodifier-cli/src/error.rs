@@ -59,6 +59,10 @@ pub const CODE_INVALID_POLICY: &str = "schema.invalid_value";
 /// shape (`version` plus a `nodes` array of node specs).
 pub const CODE_INVALID_GRAPH_JSON: &str = "cli.invalid_graph_json";
 
+/// Stable code reported when a `--ladder` profile document is unreadable,
+/// not the ladder wire shape, or rejected by the engine's validation.
+pub const CODE_INVALID_LADDER: &str = "cli.invalid_ladder";
+
 /// Stable code reported when `--bind` is not a valid socket address.
 pub const CODE_INVALID_BIND: &str = "cli.invalid_bind";
 

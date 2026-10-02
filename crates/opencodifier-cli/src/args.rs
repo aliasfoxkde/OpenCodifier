@@ -122,6 +122,14 @@ pub struct DecideArgs {
     #[arg(long, value_name = "TOKENS")]
     pub focus_budget: Option<usize>,
 
+    /// Ladder profile JSON (`ladders/README.md` in the repository):
+    /// per-node-kind confidence gates and per-rung calibration artifacts
+    /// the engine consults at its confidence gate instead of the
+    /// request's own policy. An empty default ladder runs
+    /// byte-identically to no ladder.
+    #[arg(long, value_name = "PATH")]
+    pub ladder: Option<PathBuf>,
+
     /// Exit 0 when the outcome is not decisive, instead of 2.
     #[arg(long)]
     pub abstain_is_success: bool,
@@ -170,6 +178,14 @@ pub struct ServeArgs {
     #[arg(long, value_name = "TOKENS")]
     pub focus_budget: Option<usize>,
 
+    /// Ladder profile JSON (`ladders/README.md` in the repository):
+    /// per-node-kind confidence gates and per-rung calibration artifacts
+    /// the engine consults at its confidence gate instead of each
+    /// request's own policy. A non-empty profile decorates the cache
+    /// identity with `|ladder-v1@<id>`.
+    #[arg(long, value_name = "PATH")]
+    pub ladder: Option<PathBuf>,
+
     /// JSON `DecisionPolicy`. Accepted and validated for symmetry with
     /// `decide`, but policy is per-request in the canonical IR, so no
     /// engine-level override exists: this flag does not change how serving
@@ -202,6 +218,13 @@ pub enum McpSubcommand {
         /// the full state is always decided on.
         #[arg(long, value_name = "TOKENS")]
         focus_budget: Option<usize>,
+
+        /// Ladder profile JSON (`ladders/README.md` in the repository):
+        /// per-node-kind confidence gates and per-rung calibration
+        /// artifacts the engine consults at its confidence gate instead
+        /// of the request's own policy.
+        #[arg(long, value_name = "PATH")]
+        ladder: Option<PathBuf>,
     },
 }
 
