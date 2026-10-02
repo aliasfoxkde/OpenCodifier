@@ -89,6 +89,13 @@ them.
 Groups, with the source fact that makes each group unreachable from a
 normal test. File paths under `crates/`.
 
+> Line drift (2026-10-02, in force): the line references below are as
+> of the 2026-09-29 census. The B2–B4 refactors shifted lines in
+> `executor.rs`, `calibration.rs`, and `model/embedding.rs` without
+> changing any group's membership — each group's *reason* column, not
+> its line range, is the durable claim, and the B5 census below
+> restates current numbers for the one new file.
+
 | lines | group | why no test can reach it |
 |---|---:|---|
 | engine/classifier.rs 72, 123–126, 201–203, 227–229, 248–250, 267–270; engine/calibration.rs 85; engine/executor.rs 1052, 1132–1135, 1387–1388, 1390; schema/jev.rs 310, 512, 546, 613, 703; schema/openai.rs 210, 521, 690, 713; schema/native.rs 179; model/embedding.rs 115–117, 136–138, 164–166, 179–182 (43) | `#[non_exhaustive]` future-variant arms, and `Distribution::from_pairs` error arms fed by in-crate data | the matched enums are `#[non_exhaustive]` in `opencodifier-core` with all current variants covered explicitly — no code outside core can construct a further variant; the `from_pairs` arms are precluded by construction (constructors validate uniqueness and ≥ 2 levels, softmax degrades to uniform on non-finite input, `cosine` never returns NaN) |
@@ -96,10 +103,13 @@ normal test. File paths under `crates/`.
 | engine/executor.rs 779, 1008 (2) | starvation guards the pipeline cannot trigger | `retrieve` keeps top-1 and the lexical prune knob retains ≥ 1, so `candidates_in_play` cannot be empty when a rerank or decision stage runs |
 | engine/executor.rs 1075–1079; engine/handle.rs 108–110; mcp/lib.rs 294–296; engine/engine.rs 469; engine/cache.rs 210 (11) | serde infallibility / documented degrade arms | `serde_json` over already-validated IR types cannot fail (non-finite floats serialize as `null`); the cached-response rebuild and cache re-sort degrade arms are documented at the site as unreachable for validated inputs |
 | http/routes.rs 87–90, 142–145, 289–292 (12) | server-fault encode arms | encoding an **engine-produced** response cannot fail; the arm exists so a future bug surfaces as `engine.serialization`, not a bad-request |
-| wasm/lib.rs 206–210, 212, 216–220 (11) | platform-excluded: the error boundary | `wasm_error` builds a `JsValue` via an import that exists only under a JS runtime — host tests SIGABRT the moment one is constructed. The arm is exercised for real by the Node smoke test (`tests/node/smoke.cjs`) over the wasm-pack artifact, asserting `JSON.parse(thrown).code` for `schema.invalid_json`, `graph.cycle`, and `engine.missing_backend`; llvm-cov cannot see JS execution |
+| wasm/lib.rs 216–220 (6, after B5) | platform-excluded: the error boundary | `wasm_error` builds a `JsValue` via an import that exists only under a JS runtime — host tests SIGABRT the moment one is constructed. The arm is exercised for real by the Node smoke test (`tests/node/smoke.cjs`) over the wasm-pack artifact, asserting `JSON.parse(thrown).code` for `schema.invalid_json`, `graph.cycle`, and `engine.missing_backend`; llvm-cov cannot see JS execution. (B5 split the row: `Display`'s three arms construct no `JsValue` and are now host-tested, 11 → 6 lines) |
 | schema/registry.rs 606–608 (3) | first-capture write path | the recipe request it writes is committed and pinned byte-for-byte by the drift test itself; deleting the capture to re-run the branch would be self-inflicted |
 | schema/registry.rs 426, 481, 576, 688; engine/optimize.rs 360 (5) | test-support panics | `panic!` in a test's `let-else`/failure message formatting — firing one means the harness itself broke, which is the desired state |
 | engine/rules.rs 387 (1) | error-mapping fall-through | rule application surfaces exactly one error constructor (`InvalidRule`); the `other => other` arm keeps the mapping total if that ever changes |
+| model/llamacpp.rs 250–255, 381, 391 (9, B5) | `#[non_exhaustive]` future-variant arms | same class as row 1: `DecisionQuestion` gains variants only in `opencodifier-core`, so no code outside core can reach the wildcard arms; the `else`-return and `_ => ""` are the one typed refusal path for a kind that does not exist yet |
+| model/llamacpp.rs 358–360 (3, B5) | `Distribution::from_pairs` error arm fed by in-crate data | same class as row 1: the pairs are normalized in the preceding statement (sum guard), so unit mass and key uniqueness hold by construction |
+| model/llamacpp.rs 676 (1, B5) | test-support panic | same class as the registry row: the `let-else` catch-all in the engine-escalation test only fires if the engine returns a non-choice answer for a choice question, which is the harness breaking |
 
 Cascading effect on the other columns: the wildcard arms above sit
 inside entered functions, and the functions column adds
@@ -121,6 +131,20 @@ coarser granularity, not separate gaps.
   CLI `serve` and the HTTP shutdown signal. 121 → 78 `DA`-missed.
 - **Post-18j push** (2026-09-29): the twelve tests above; 203 → 125
   `DA`-missed, every survivor classified in the table.
+- **B5** (2026-10-02): the llama.cpp model rung added
+  `model/llamacpp.rs` with 15 tests covering every transport-shaped
+  behavior; the residual 13 dark lines are classified in the table
+  above (future-variant arms, one `from_pairs` arm, one test panic).
+  `wasm`'s boundary row split: `Display` proved host-side, the
+  `JsValue` half stays with the Node smoke test. Toolchain note for
+  whoever chases the floor next: the pinned CI image
+  (`opencodifier-ci-rust:2`, rustc 1.90.0) and a local rustc 1.98.1
+  emit *different ghost-line sets* on the same tree — confirmed twice,
+  on 02ca24b (12 013/12 168 = 98.73 % in-image vs 12 011/12 188 =
+  98.55 % local) and on this commit (12 393/12 554 = 98.72 % in-image,
+  floor PASS, run inside the actual image via docker). Local runs
+  understate the percentage by ~0.2 points; CI's lane is the number
+  of record.
 
 ## Measurement integrity
 
