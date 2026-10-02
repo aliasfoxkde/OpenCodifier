@@ -514,3 +514,141 @@ calibration fit (the d15 re-run provides the first JevBench-native
 probability channel to fit); (4) when a PrefixLM/encoder rung lands,
 encode the no-KV-reuse and one-batch-prefill constraints as flags +
 manifest statements (§7.2).
+
+## §9 — Known-knowns audit + external sweep (2026-10-02)
+
+Three parallel sweeps (arXiv cascade/abstention/calibration; HF/GitHub
+watch-list; implementation-focused GitHub) against our measured pain
+points. Headline convergence: **our four failure modes are one defect
+seen from four angles** — the readout has no null mass, no per-slice
+certificate, no cardinality invariance, no rotation invariance.
+
+### §9.1 Internal known-knowns (verified in code/data this pass)
+
+- **The OOD confidence channel is entropy-only.**
+  `distributional_ood` (executor.rs) returns normalized entropy of the
+  answer distribution — self-referential; it carries zero
+  input-likeness evidence. The policy seam (`Policy::with_ood_ceiling`,
+  core/policy.rs) is wired and waiting. The JevBench cascade preview
+  proves the cost: a 3-rung engine→vtx→fork_4b fusion tops out at
+  **0.636 — below fork-alone 0.667** (oracle 0.823) because the engine
+  rung admits 81% of adversarial items at t=0.50 with a 0.377-accuracy
+  rung and ECE 0.402; its confidence cannot rank its own answers
+  off-distribution. **Routing, not rungs, is the unlock on adversarial
+  prose.** Candidate deterministic input-likeness features: BM25
+  best-match score mass vs the calibration corpus band; candidate- vs
+  category-level marginal disagreement (TV > τ, label-free, §9.2-3);
+  conformal prediction-set size (§9.2-7).
+- **BM25 is built 4× per question on the default path**
+  (narrowing.rs once; classifier.rs three more times: query scoring,
+  support scoring, label scoring). B3's build-once handoff never
+  reached the classifier path. Fedora re-baseline (in flight) gives
+  the fair per-stage numbers; build-once is the follow-up.
+- **Never-abstain-at-bottom is unclaimed value**: 19% of JevBench
+  engine abstentions scored incorrect while a 0.667-accuracy rung sat
+  below. Escalation should be exhausted before abstention (B6 config
+  values, not code).
+- **Fusion of record stops at 2B** (suite ladder 0.867 @ 753 ms);
+  adding the 4B fork rung and per-family coverage columns
+  (§6.6-3) is a zero-inference re-run once today's arms land.
+
+### §9.2 External findings (each: claim → verdict for us)
+
+1. **Mainline llama.cpp merged decision-model support — PR #29818
+   `/v1/systemone`, merged 2026-10-02** (`server_decision_context`,
+   `{arch}.decision.type` GGUF metadata; choice/noul/score types;
+   parallel shared prompt prefix; noul = P(yes); score = level
+   probabilities + expected score). Ten ggml-org GGUFs landed Oct 1–2
+   (Laya, Kev-0.8B/4B/9B, OpenJev, Clef, lev, Julia-1,
+   Bespoke-Nimble-9B-v3). Also: native `/completion` with
+   `temperature < 0` (greedy) + `logit_bias` on choice tokens +
+   `n_probs = K` + `min_keep = K` yields a **full choice distribution
+   in one decode step on stock llama.cpp** — no tree, no fork.
+   ACTIONABLE: (a) build stock master, run Kev-4B / OpenJev /
+   Laya-GGUF through the 231 harness via `/v1/systemone`; (b) diff
+   biased-greedy single-step distributions against the fork on 231 —
+   parity would drop the fork from our build entirely (encoder-class
+   immediately; causal readouts after the diff).
+2. **New local-arm candidates above our best (0.667)**:
+   strands-decider-2B-hobson-v19 — **0.723 on the same 231 split**,
+   Brier 0.348, **ECE 0.050**, with an onnx-community export shipping
+   a conversion/parity harness (drops into `opencodifier-runtime`
+   behind `onnx`); jebadiah-4b-v2 (LoRA on Qwen3.5-4B-chat, same
+   base + same verdict-slot readout as our fork — cleanest
+   apples-to-apples against our recipe; per-type temperatures
+   published: choice 1.12 / noul 1.33 / score 0.83) and
+   jebadiah-27b (0.866 on our split, maintainer-reported — ties
+   hosted Jev); Winnow-E4B (claims **80.52% on the 231 public
+   subset**, 2.2× throughput of its 12B sibling). CLM-35B still
+   unreleased (org holds CLM-8B only; re-check ~Oct 6–10); CLM-8B
+   itself is weak on decision accuracy (30.0 Cap) but the staged
+   hard-negative contrastive-head recipe (hard-neg top-1 52.1→69.2
+   only when staged; replay holds teacher 68.5 vs 56.2) is the best
+   leverage on our 41% vtx rung. ACTIONABLE: four benchmark arms
+   queued behind tonight's measurement queue; ONNX parity fixtures
+   from the strands export double as IR/adapter conformance tests.
+3. **Sys1Cal (arXiv:2609.35342) — suppressed null mass is the
+   overconfidence mechanism**: Choice-style readouts force
+   P(A)+P(¬A)=1 with nowhere for P(U); recovering the null lifts
+   soft accuracy 0.771 → 0.978. ACTIONABLE: k+1 candidate
+   construction (explicit abstain candidate) whose mass feeds the
+   confidence gate as a calibrated OOD feature — touches IR
+   candidate construction, not the ladder.
+4. **Conformal cascade (arXiv:2607.25018) + UCCI (arXiv:2605.18796)
+   — the gate upgrade**: accept iff the calibrated prediction set
+   collapses to one (distribution-free coverage ≥ 1−Kα per tier);
+   UCCI adds isotonic margin→error-probability with
+   cost-constrained thresholds (−31% cost at F1 0.91, ECE
+   0.12 → 0.03, production-scale). Both map 1:1 onto `LadderPolicy`
+   per-(kind, cardinality) overrides. Caveat (arXiv:2506.18162):
+   conformal miscoverage under covariate shift — calibrate the
+   nonconformity score on a held-out adversarial slice, never the
+   pooled suite. Pairs with arXiv:2608.05064: **8/22 model-task
+   pairs hit the temperature-scaling infeasibility floor** — our
+   T=0.15 @ k5 margin fit is that signature, and the fix is
+   per-(arm × cardinality) Platt/isotonic, not a better T.
+5. **Rotation ensembling (arXiv:2609.30454)**: averaging choice
+   probabilities over k cyclic option rotations gains +3.8 pp
+   (37.4% of one MC set flips answer under rotation!), and applying
+   it only to low-margin items recovers most of the gain at a
+   fraction of the cost. Our `--decision-seqs 24` batch absorbs the
+   rotations — test-time compute *within* a rung, no rung jump,
+   doubles as the position-bias fix. Slot into `LadderPolicy` as a
+   per-node override. Boundary condition from arXiv:2607.20864:
+   position bias is measurable only in the 60–95% base-accuracy
+   band — measure the +15.1 pp vtx effect inside that band.
+6. **model2vec-rs + self-distillation (MinishLab)**: official Rust
+   crate (int8, from_bytes, 8k samples/s/thread); distill() runs
+   ~30 s on CPU over our own vocabulary; potion-base-32M *beats its
+   own teacher* on classification (71.70 vs 69.25). Repairs the
+   vtx supply-chain gap (vendor position-gated pooler is
+   irreproducible from the shipped table) with an artifact we own,
+   version into cache keys. MRL-truncated scoring
+   (static-retrieval-mrl-en-v1) = score at 64–128 dims, escalate on
+   thin margins.
+7. **Coherence TV (arXiv:2609.33971)**: candidate-level vs
+   category-level total-variation disagreement is a label-free OOD
+   trigger; and their decoupling result (Laya +9.2 acc while ECE
+   0.046 → 0.124) is a standing warning — never transfer a
+   calibration fit across arms (already D15 doctrine).
+8. **Bongard (arXiv:2609.39111)** — the training-time fix for
+   adversarial-prose robustness: joint-embedding post-training
+   lifts rephrasing robustness 75.7 → 85.9. Adopt as a fine-tune
+   stage (KL between option distributions under paraphrase, head
+   frozen) for whichever decision model wins item 2's bake-off.
+
+### §9.3 Priority queue (replaces the §6.6 deltas' ordering)
+
+1. Benchmark arms: Winnow-E4B, Kev-4B, strands-2B ONNX,
+   jebadiah-4b-v2 on the 231 harness (Fedora queue, after tonight).
+2. Stock-llama.cpp parity diff (biased-greedy single-step vs fork)
+   — potential fork retirement.
+3. Gate upgrade: conformal set-size acceptance per
+   (kind, cardinality) + k+1 null candidate + isotonic margin
+   table; calibrate on a held-out adversarial slice.
+4. Rotation ensembling behind a low-margin per-node override.
+5. Self-distilled model2vec rung (model2vec-rs, int8) replacing
+   vtx; own pooler spec; version into cache keys.
+6. Engine internals: wire a real input-likeness OOD feature
+   (lexical-band / TV / set-size) through `ood_ceiling`; BM25
+   build-once completion.
