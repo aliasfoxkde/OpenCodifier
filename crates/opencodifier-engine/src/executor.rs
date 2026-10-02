@@ -23,7 +23,7 @@
 //! synchronous executor cannot safely abandon work mid-flight, which is
 //! why every node's work is bounded by construction (PLANNING.md §67).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 use opencodifier_core::{
@@ -813,32 +813,46 @@ impl<'a> Executor<'a> {
     /// candidate list otherwise, always minus lexical and `retrieve`
     /// prunes.
     fn candidates_in_play(&self, choice: &ChoiceQuestion) -> Vec<Candidate> {
+        let (pruned_lexically, pruned_semantically) = self.pruned_sets(choice.id());
         let base: Vec<Candidate> = match self.narrowing.get(choice.id()) {
             Some(outcome) => outcome.surviving().to_vec(),
             // No narrowing ran: every declared candidate is in play.
             None => choice.candidates().to_vec(),
         };
         base.into_iter()
-            .filter(|candidate| self.is_surviving(choice.id(), candidate.id()))
+            .filter(|candidate| {
+                !pruned_lexically.contains(candidate.id())
+                    && !pruned_semantically.contains(candidate.id())
+            })
             .collect()
     }
 
     /// The candidate ids of one question still in play (see
-    /// [`Executor::candidates_in_play`]).
+    /// [`Executor::candidates_in_play`]). Ids only: the full-candidate
+    /// clone in [`Executor::candidates_in_play`] is wasted work here, and
+    /// the id list is the same length.
     fn surviving_ids(&self, choice: &ChoiceQuestion) -> BTreeSet<CandidateId> {
-        self.candidates_in_play(choice)
-            .into_iter()
-            .map(|candidate| candidate.id().clone())
+        let (pruned_lexically, pruned_semantically) = self.pruned_sets(choice.id());
+        let base: &[Candidate] = match self.narrowing.get(choice.id()) {
+            Some(outcome) => outcome.surviving(),
+            None => choice.candidates(),
+        };
+        base.iter()
+            .map(Candidate::id)
+            .filter(|id| !pruned_lexically.contains(*id) && !pruned_semantically.contains(*id))
+            .cloned()
             .collect()
     }
 
-    /// Whether one candidate survived every pruning stage so far.
-    fn is_surviving(&self, question: &QuestionId, candidate: &CandidateId) -> bool {
-        !self.pruned_lexically.get(question).is_some_and(|pruned| pruned.contains(candidate))
-            && !self
-                .pruned_semantically
-                .get(question)
-                .is_some_and(|pruned| pruned.contains(candidate))
+    /// The per-question pruned-id sets, built once for the survive-filter
+    /// loops instead of probing the backing `Vec`s once per candidate
+    /// (B2). Membership semantics are exactly the former `is_surviving`:
+    /// a candidate survives when it appears in neither prune list.
+    fn pruned_sets(&self, question: &QuestionId) -> (HashSet<&CandidateId>, HashSet<&CandidateId>) {
+        (
+            self.pruned_lexically.get(question).map_or(&[][..], Vec::as_slice).iter().collect(),
+            self.pruned_semantically.get(question).map_or(&[][..], Vec::as_slice).iter().collect(),
+        )
     }
 
     /// Asks the classifier about every question of this node's kind.
@@ -1028,10 +1042,14 @@ impl<'a> Executor<'a> {
             }
             None => choice.clone(),
         };
+        let (pruned_lexically, pruned_semantically) = self.pruned_sets(choice.id());
         let mut surviving: Vec<Candidate> = narrowed
             .candidates()
             .iter()
-            .filter(|candidate| self.is_surviving(choice.id(), candidate.id()))
+            .filter(|candidate| {
+                !pruned_lexically.contains(candidate.id())
+                    && !pruned_semantically.contains(candidate.id())
+            })
             .cloned()
             .collect();
         if surviving.is_empty() {
@@ -1041,9 +1059,15 @@ impl<'a> Executor<'a> {
             return None;
         }
         if let Some(order) = self.reranked.get(choice.id()) {
-            surviving.sort_by_key(|candidate| {
-                order.iter().position(|kept| kept == candidate.id()).unwrap_or(usize::MAX)
-            });
+            // Rank map instead of `position()` inside the sort comparator;
+            // `or_insert` keeps the first occurrence, matching the former
+            // linear scan exactly (B2).
+            let mut rank: HashMap<&CandidateId, usize> = HashMap::with_capacity(order.len());
+            for (position, kept) in order.iter().enumerate() {
+                rank.entry(kept).or_insert(position);
+            }
+            surviving
+                .sort_by_key(|candidate| rank.get(candidate.id()).copied().unwrap_or(usize::MAX));
         }
         let rebuilt = ChoiceQuestion::new(choice.id().as_str(), narrowed.text(), surviving).ok()?;
         Some(DecisionQuestion::Choice(rebuilt))

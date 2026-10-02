@@ -59,6 +59,28 @@ impl EmbeddingClassifier {
         if norm_a == 0.0 || norm_b == 0.0 { 0.0 } else { f64::from(dot / (norm_a * norm_b)) }
     }
 
+    /// Cosine against a precomputed `query_norm`, for the per-candidate
+    /// scoring loops: the query side's norm is a loop invariant, and
+    /// recomputing it once per candidate dominated the score pass at
+    /// large candidate counts (B2). Bit-identical to [`Self::cosine`]:
+    /// `query_norm` is the same f32 expression `cosine` computes, and
+    /// the dot product, candidate norm, division, and zero-vector
+    /// convention are unchanged.
+    fn cosine_with_norm(query_norm: f32, a: &[f32], b: &[f32]) -> f64 {
+        let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
+        let norm_b: f32 = b.iter().map(|y| y * y).sum::<f32>().sqrt();
+        if query_norm == 0.0 || norm_b == 0.0 {
+            0.0
+        } else {
+            f64::from(dot / (query_norm * norm_b))
+        }
+    }
+
+    /// The f32 norm `cosine` computes for its first argument.
+    fn norm(vector: &[f32]) -> f32 {
+        vector.iter().map(|x| x * x).sum::<f32>().sqrt()
+    }
+
     /// The typed failure for a backend that returned fewer embeddings
     /// than texts: never indexed blindly, never guessed around.
     fn no_embeddings_failure(&self) -> EngineError {
@@ -96,9 +118,12 @@ impl EmbeddingClassifier {
             return Err(self.no_embeddings_failure());
         };
 
+        let query_norm = Self::norm(query_vector);
         let scores: Vec<f64> = candidate_vectors
             .iter()
-            .map(|vector| Self::cosine(query_vector, vector) / self.temperature)
+            .map(|vector| {
+                Self::cosine_with_norm(query_norm, query_vector, vector) / self.temperature
+            })
             .collect();
         let probabilities = softmax(&scores);
         let pairs: Vec<(String, f64)> = question
@@ -148,9 +173,12 @@ impl EmbeddingClassifier {
             return Err(self.no_embeddings_failure());
         };
 
+        let state_norm = Self::norm(state_vector);
         let scores: Vec<f64> = level_vectors
             .iter()
-            .map(|vector| Self::cosine(state_vector, vector) / self.temperature)
+            .map(|vector| {
+                Self::cosine_with_norm(state_norm, state_vector, vector) / self.temperature
+            })
             .collect();
         let probabilities = softmax(&scores);
         let pairs: Vec<(String, f64)> = question
