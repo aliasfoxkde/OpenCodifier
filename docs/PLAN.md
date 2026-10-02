@@ -954,7 +954,19 @@ in between. Ordered so each step's output feeds the next.
   rc=1 on a driver dataset path (re-queued via follower with corrected
   paths), diet100–ctx16k still in flight (days at storm pace — the
   driver's own header). Accept: each lands in REPORT.md with its
-  honesty rules.
+  honesty rules. **Relocated (2026-10-02, operator decision): the
+  remaining queue no longer runs on this box** — it is
+  infrastructure-only from here on (services/CI/storage; its load
+  floor ~17–31 makes quiet windows unreachable). The in-flight params
+  long arm (~9 h banked) was killed and the whole measurement payload
+  moved to the Fedora compute node (i5-13600K, idle by role;
+  `fedora:~/oc-model-eval`, driver script `fedora_queue.sh`): builds
+  (pre-d15 `ad129b0` + d15 `38de7eb`), a 3-item toolchain smoke
+  (passed, python 3.14), then fork_4b-fedora baseline re-run
+  (same-host anchor + cross-host determinism vs fork_4b-v1), the
+  instruction A/B (#76), the d15 arm (#61), and the long-arm re-run
+  (#32) whose result becomes the clean latency of record. Local
+  partials: `fork_4b-instr-decide-v1-local-aborted` (55/231).
 - **18j — Distribution + WASM (§57, §58, §68).** Own phases after the
   core is hard: cross-platform release matrix, Homebrew/winget/crates.io;
   `opencodifier-wasm` with the §68 security posture. Accept: per §58/§57
