@@ -46,6 +46,23 @@ pub trait Classifier: std::fmt::Debug + Send + Sync {
         question: &DecisionQuestion,
     ) -> Result<Distribution, EngineError>;
 
+    /// [`Classifier::decide`] plus the rung's optional lexical support
+    /// signal: the coverage (0–1) of the best-scoring document over the
+    /// query's informative tokens, `None` when the rung exposes no
+    /// lexical evidence (D28). The `index` is the build-once handoff —
+    /// an index the caller already built over the *identical* document
+    /// set; implementations may ignore it and build their own (same
+    /// documents, same scores, either way).
+    fn decide_extended(
+        &self,
+        state: &State,
+        question: &DecisionQuestion,
+        index: Option<&Bm25Index>,
+    ) -> Result<(Distribution, Option<f64>), EngineError> {
+        let _ = index;
+        Ok((self.decide(state, question)?, None))
+    }
+
     /// The model identity folded into cache keys (PLANNING.md §64).
     ///
     /// Required, not defaulted: a classifier swap that keeps the same
@@ -182,14 +199,33 @@ impl LexicalClassifier {
     }
 
     /// Choice: BM25 over candidate descriptions, softmaxed into a
-    /// distribution over candidate ids, in candidate order.
-    fn decide_choice(
+    /// distribution over candidate ids, in candidate order. Also returns
+    /// the best document's lexical coverage (D28).
+    fn decide_choice_with_support(
         query: &str,
         question: &opencodifier_core::ChoiceQuestion,
-    ) -> EngineResult<Distribution> {
+        index: Option<&Bm25Index>,
+    ) -> EngineResult<(Distribution, f64)> {
         let documents: Vec<&str> =
             question.candidates().iter().map(opencodifier_core::Candidate::description).collect();
-        let scores = Bm25Index::new(documents).score_all(query);
+        // Build-once handoff (D28/#80): a caller-provided index over the
+        // identical candidate set replaces the local build; anything else
+        // is ignored in favor of the correct local one.
+        let local;
+        let index = match index {
+            Some(prebuilt) if prebuilt.len() == documents.len() => prebuilt,
+            _ => {
+                local = Bm25Index::new(documents);
+                &local
+            }
+        };
+        let scores = index.score_all(query);
+        let best = scores
+            .iter()
+            .enumerate()
+            .max_by(|(_, left), (_, right)| left.total_cmp(right))
+            .map_or(0, |(position, _)| position);
+        let coverage = index.coverage(best, query);
         let probabilities = softmax(&scores);
         let pairs: Vec<(String, f64)> = question
             .candidates()
@@ -197,10 +233,21 @@ impl LexicalClassifier {
             .zip(probabilities)
             .map(|(candidate, probability)| (candidate.id().as_str().to_owned(), probability))
             .collect();
-        Distribution::from_pairs(pairs).map_err(|error| EngineError::InvalidDistribution {
-            question: question.id().to_string(),
-            reason: error.to_string(),
-        })
+        let distribution =
+            Distribution::from_pairs(pairs).map_err(|error| EngineError::InvalidDistribution {
+                question: question.id().to_string(),
+                reason: error.to_string(),
+            })?;
+        Ok((distribution, coverage))
+    }
+
+    /// Choice: BM25 over candidate descriptions, softmaxed into a
+    /// distribution over candidate ids, in candidate order.
+    fn decide_choice(
+        query: &str,
+        question: &opencodifier_core::ChoiceQuestion,
+    ) -> EngineResult<Distribution> {
+        Ok(Self::decide_choice_with_support(query, question, None)?.0)
     }
 
     /// Boolean: the affirmative hypothesis is "the state text supports the
@@ -215,28 +262,56 @@ impl LexicalClassifier {
     /// documented as such: this is a lexical baseline that will frequently
     /// abstain by returning a near-uniform distribution.
     fn decide_boolean(state_text: &str, question: &BooleanQuestion) -> EngineResult<Distribution> {
-        let support = Bm25Index::new([question.text()]).score_all(state_text);
+        Ok(Self::decide_boolean_with_support(state_text, question)?.0)
+    }
+
+    /// [`Self::decide_boolean`] plus the question document's coverage of
+    /// the state text's informative tokens (D28). The polarity flip does
+    /// not affect coverage: it measures grounding, not direction.
+    fn decide_boolean_with_support(
+        state_text: &str,
+        question: &BooleanQuestion,
+    ) -> EngineResult<(Distribution, f64)> {
+        let index = Bm25Index::new([question.text()]);
+        let support = index.score_all(state_text);
+        let coverage = index.coverage(0, state_text);
         let evidence = support.first().copied().unwrap_or(0.0);
         let mut scores = vec![evidence, 0.0];
         if negation_polarity(question.text()) < 0.0 {
             scores.reverse();
         }
         let probabilities = softmax(&scores);
-        Distribution::from_pairs([("true", probabilities[0]), ("false", probabilities[1])]).map_err(
-            |error| EngineError::InvalidDistribution {
-                question: question.id().to_string(),
-                reason: error.to_string(),
-            },
-        )
+        let distribution =
+            Distribution::from_pairs([("true", probabilities[0]), ("false", probabilities[1])])
+                .map_err(|error| EngineError::InvalidDistribution {
+                    question: question.id().to_string(),
+                    reason: error.to_string(),
+                })?;
+        Ok((distribution, coverage))
     }
 
     /// Score: BM25 over level labels, softmaxed into a distribution over
     /// labels. A state that mentions "expert" work leans towards the
     /// `expert` level and nothing else.
     fn decide_score(query: &str, question: &ScoreQuestion) -> EngineResult<Distribution> {
+        Ok(Self::decide_score_with_support(query, question)?.0)
+    }
+
+    /// [`Self::decide_score`] plus the best label's coverage (D28).
+    fn decide_score_with_support(
+        query: &str,
+        question: &ScoreQuestion,
+    ) -> EngineResult<(Distribution, f64)> {
         let labels: Vec<&str> =
             question.levels().iter().map(opencodifier_core::ScoreLevel::label).collect();
-        let scores = Bm25Index::new(labels).score_all(query);
+        let index = Bm25Index::new(labels);
+        let scores = index.score_all(query);
+        let best = scores
+            .iter()
+            .enumerate()
+            .max_by(|(_, left), (_, right)| left.total_cmp(right))
+            .map_or(0, |(position, _)| position);
+        let coverage = index.coverage(best, query);
         let probabilities = softmax(&scores);
         let pairs: Vec<(String, f64)> = question
             .levels()
@@ -244,10 +319,12 @@ impl LexicalClassifier {
             .zip(probabilities)
             .map(|(level, probability)| (level.label().to_owned(), probability))
             .collect();
-        Distribution::from_pairs(pairs).map_err(|error| EngineError::InvalidDistribution {
-            question: question.id().to_string(),
-            reason: error.to_string(),
-        })
+        let distribution =
+            Distribution::from_pairs(pairs).map_err(|error| EngineError::InvalidDistribution {
+                question: question.id().to_string(),
+                reason: error.to_string(),
+            })?;
+        Ok((distribution, coverage))
     }
 }
 
@@ -269,6 +346,31 @@ impl Classifier for LexicalClassifier {
                 reason: "unsupported question kind".to_owned(),
             }),
         }
+    }
+
+    fn decide_extended(
+        &self,
+        state: &State,
+        question: &DecisionQuestion,
+        index: Option<&Bm25Index>,
+    ) -> Result<(Distribution, Option<f64>), EngineError> {
+        let query = Self::query_for(state, question);
+        let (distribution, coverage) = match question {
+            DecisionQuestion::Choice(choice) => {
+                Self::decide_choice_with_support(&query, choice, index)?
+            }
+            DecisionQuestion::Boolean(boolean) => {
+                Self::decide_boolean_with_support(state.text(), boolean)?
+            }
+            DecisionQuestion::Score(score) => Self::decide_score_with_support(&query, score)?,
+            // `#[non_exhaustive]`: an unknown question kind is declined
+            // rather than guessed at.
+            _ => Err(EngineError::InvalidDistribution {
+                question: question.id().to_string(),
+                reason: "unsupported question kind".to_owned(),
+            })?,
+        };
+        Ok((distribution, Some(coverage)))
     }
 
     fn model_id(&self) -> &str {
@@ -464,5 +566,74 @@ mod tests {
             "model",
             "question ids stay stable"
         );
+    }
+
+    #[test]
+    fn lexical_decide_extended_reports_coverage() {
+        let classifier = LexicalClassifier::new();
+        let state = State::from_text("summarize this research paper across many sources");
+        let (distribution, support) =
+            classifier.decide_extended(&state, &choice_question(), None).unwrap();
+        let coverage = support.expect("lexical rung always exposes coverage");
+        assert!((0.0..=1.0).contains(&coverage));
+        // The distribution side must equal plain `decide` bit for bit.
+        assert_eq!(distribution, classifier.decide(&state, &choice_question()).unwrap());
+    }
+
+    #[test]
+    fn lexical_decide_extended_uses_the_prebuilt_index() {
+        // The same documents the question carries, built by a caller
+        // (#80's build-once handoff): scores and coverage must be
+        // identical to the locally-built index.
+        let classifier = LexicalClassifier::new();
+        let state = State::from_text("summarize research");
+        let question = choice_question();
+        let DecisionQuestion::Choice(choice) = &question else {
+            panic!("choice question");
+        };
+        let documents: Vec<&str> = choice.candidates().iter().map(Candidate::description).collect();
+        let prebuilt = Bm25Index::new(documents);
+        let (with_index, index_support) =
+            classifier.decide_extended(&state, &question, Some(&prebuilt)).unwrap();
+        let (without, local_support) = classifier.decide_extended(&state, &question, None).unwrap();
+        assert_eq!(with_index, without);
+        assert_eq!(index_support, local_support);
+        // A mismatched prebuilt index (wrong document count) is ignored in
+        // favor of the correct local build.
+        let wrong = Bm25Index::new(["unrelated"]);
+        let (mismatched, _) = classifier.decide_extended(&state, &question, Some(&wrong)).unwrap();
+        assert_eq!(mismatched, without);
+    }
+
+    #[test]
+    fn mock_decide_extended_defaults_to_no_support() {
+        let mock = MockClassifier::new("mock/test");
+        let (_, support) =
+            mock.decide_extended(&State::from_text("x"), &choice_question(), None).unwrap();
+        assert_eq!(support, None, "rungs without lexical evidence expose none");
+    }
+
+    #[test]
+    fn lexical_boolean_and_score_extended_report_coverage() {
+        let classifier = LexicalClassifier::new();
+        let boolean = DecisionQuestion::Boolean(
+            BooleanQuestion::new("research", "research sources summarization?").unwrap(),
+        );
+        let (_, boolean_support) = classifier
+            .decide_extended(&State::from_text("summarize research sources"), &boolean, None)
+            .unwrap();
+        assert!(boolean_support.is_some_and(|coverage| coverage > 0.0));
+
+        let score = DecisionQuestion::Score(
+            ScoreQuestion::new(
+                "difficulty",
+                "How hard is this?",
+                vec![ScoreLevel::new("easy").unwrap(), ScoreLevel::new("expert").unwrap()],
+            )
+            .unwrap(),
+        );
+        let (_, score_support) =
+            classifier.decide_extended(&State::from_text("expert work"), &score, None).unwrap();
+        assert!(score_support.is_some());
     }
 }

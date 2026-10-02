@@ -104,7 +104,7 @@ async fn the_handshake_announces_the_runtime() {
     let (client, server_task) = session().await;
     let info = client.peer_info().expect("the server completed the handshake");
     assert_eq!(info.server_info.name, "opencodifier");
-    assert!(!info.instructions.clone().unwrap_or_default().is_empty());
+    assert_ne!(info.instructions.clone().unwrap_or_default(), "");
     assert!(info.capabilities.tools.is_some(), "tools capability must be declared");
     client.cancel().await;
     server_task.await.unwrap();
@@ -146,7 +146,7 @@ async fn codify_decide_returns_the_canonical_response() {
     assert_eq!(response["answers"][0]["question_id"], "model");
     assert_eq!(response["answers"][0]["type"], "choice");
     assert!(response["confidence"]["calibrated_confidence"].is_number());
-    assert!(!response["trace"]["entries"].as_array().unwrap().is_empty());
+    assert_ne!(response["trace"]["entries"].as_array().unwrap(), &Vec::<serde_json::Value>::new());
     // The trace names the deciding model — the same identity healthz and
     // codify_graph report, never a free-text excuse.
     let choice_entry = response["trace"]["entries"]
@@ -294,7 +294,10 @@ async fn codify_explain_is_the_deterministic_trace_never_generated_reasoning() {
     let explanation = structured(&result);
     let keys: Vec<&str> = explanation.as_object().unwrap().keys().map(String::as_str).collect();
     assert_eq!(keys, vec!["execution", "response"]);
-    assert!(!explanation["response"]["trace"]["entries"].as_array().unwrap().is_empty());
+    assert_ne!(
+        explanation["response"]["trace"]["entries"].as_array().unwrap(),
+        &Vec::<serde_json::Value>::new()
+    );
     let waves = explanation["execution"]["waves"].as_array().unwrap();
     assert!(!waves.is_empty(), "the executor ran in waves");
     // The explanation is the pipeline's own record. There is no

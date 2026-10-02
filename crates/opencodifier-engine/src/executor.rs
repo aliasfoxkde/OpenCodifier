@@ -29,7 +29,7 @@ use std::sync::Arc;
 use opencodifier_core::{
     Candidate, CandidateId, ChoiceQuestion, ConfidenceReport, DecisionAnswer, DecisionMetrics,
     DecisionOutcome, DecisionPolicy, DecisionQuestion, DecisionRequest, DecisionTrace,
-    Distribution, FactValue, NodeId, QuestionId, State, TraceEntry,
+    Distribution, FactValue, NodeId, OodMode, QuestionId, State, TraceEntry,
 };
 
 use crate::cache::CacheKey;
@@ -903,22 +903,32 @@ impl<'a> Executor<'a> {
                 Some(view) => (&view.state, view.extracted),
                 None => (&self.state, false),
             };
-            let distribution = self.classifier.decide(decide_state, &narrowed)?;
-            let (mut distribution, mut clipped) = Self::clip(&distribution, &narrowed)?;
+            let (raw, mut lexical_support) =
+                self.classifier.decide_extended(decide_state, &narrowed, None)?;
+            let (mut distribution, mut clipped) = Self::clip(&raw, &narrowed)?;
             let mut escalated = false;
             if extracted && Self::escalation_warranted(policy, &distribution) {
-                let full = self.classifier.decide(&self.state, &narrowed)?;
-                let (full, full_clipped) = Self::clip(&full, &narrowed)?;
+                let (full_raw, full_support) =
+                    self.classifier.decide_extended(&self.state, &narrowed, None)?;
+                let (full, full_clipped) = Self::clip(&full_raw, &narrowed)?;
                 distribution = full;
                 clipped = full_clipped;
+                lexical_support = full_support;
                 escalated = true;
             }
             let (calibration, calibration_source) = ladder_calibration.as_ref().map_or_else(
                 || (self.config.calibration.as_ref(), None),
                 |(calibration, source)| (*calibration, Some(source.clone())),
             );
-            let decision =
-                Self::decide_question(&narrowed, distribution, policy, calibration, id, kind)?;
+            let decision = Self::decide_question(
+                &narrowed,
+                distribution,
+                policy,
+                calibration,
+                id,
+                kind,
+                lexical_support,
+            )?;
             let mut detail = vec![
                 ("question", FactValue::Text(question.id().to_string())),
                 ("top", FactValue::Text(decision.distribution.top().key.clone())),
@@ -1004,7 +1014,8 @@ impl<'a> Executor<'a> {
                 }
                 // A rung walk may not outrun the request's budget.
                 self.guard()?;
-                let raw = rung.classifier.decide(&self.state, &live.question)?;
+                let (raw, lexical_support) =
+                    rung.classifier.decide_extended(&self.state, &live.question, None)?;
                 let (distribution, _) = Self::clip(&raw, &live.question)?;
                 let calibration =
                     rung.calibration.as_deref().unwrap_or(self.config.calibration.as_ref());
@@ -1016,6 +1027,7 @@ impl<'a> Executor<'a> {
                     calibration,
                     node_id,
                     *kind,
+                    lexical_support,
                 )?;
                 chain.push(format!(
                     "{}(top={}, {})",
@@ -1226,11 +1238,13 @@ impl<'a> Executor<'a> {
     /// The confidence path is explicit (PLANNING.md §18, §73): the
     /// configured [`Calibration`](crate::calibration::Calibration) maps the
     /// raw top probability to calibrated confidence, and the OOD channel
-    /// carries the deterministic distributional signal (normalized entropy
-    /// — the only input-unlikeness evidence available before a trained
-    /// density model exists; see [`distributional_ood`]). Policy reads the
-    /// dimensions separately in `ConfidenceReport::outcome_for`; nothing
-    /// is fused silently.
+    /// carries a deterministic input-unlikeness signal selected by policy
+    /// (D28): normalized answer entropy by default, or the inverse of the
+    /// deciding rung's lexical coverage when the policy opts into
+    /// [`OodMode::LexicalBand`] (falling back to entropy where the rung
+    /// exposes no lexical evidence; see [`distributional_ood`]). Policy
+    /// reads the dimensions separately in `ConfidenceReport::outcome_for`;
+    /// nothing is fused silently.
     fn decide_question(
         question: &DecisionQuestion,
         distribution: Distribution,
@@ -1238,9 +1252,21 @@ impl<'a> Executor<'a> {
         calibration: &dyn crate::calibration::Calibration,
         decided_by: &str,
         decided_kind: NodeKind,
+        lexical_support: Option<f64>,
     ) -> EngineResult<QuestionDecision> {
         let top = distribution.top().clone();
-        let ood = distributional_ood(&distribution);
+        // D28: the policy selects what the OOD channel measures. The
+        // default mode is answer entropy (the historical signal,
+        // byte-identical); lexical-band mode consumes the rung's
+        // input-likeness evidence and falls back to entropy where the
+        // rung exposes none. The two are never fused.
+        let ood = match policy.ood_mode() {
+            OodMode::LexicalBand => lexical_support
+                .map_or_else(|| distributional_ood(&distribution), |coverage| 1.0 - coverage),
+            // `#[non_exhaustive]`: future modes degrade to the entropy
+            // signal until classified here.
+            _ => distributional_ood(&distribution),
+        };
         let calibrated =
             calibration.calibrate(crate::calibration::question_class(question), &distribution);
         let report = ConfidenceReport::from_distribution(&distribution, calibrated, ood, None)?;

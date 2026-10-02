@@ -64,6 +64,10 @@ pub struct DecisionPolicy {
     /// OOD score above which a decision may not be accepted outright.
     /// `f64::INFINITY` disables the gate.
     ood_ceiling: f64,
+    /// Which deterministic signal feeds the OOD channel (D28). The
+    /// default measures answer entropy; `LexicalBand` opts into
+    /// input-likeness evidence.
+    ood_mode: OodMode,
 }
 
 /// Deserialization mirror for [`DecisionPolicy`]; conversion validates.
@@ -84,6 +88,35 @@ struct RawDecisionPolicy {
     min_margin: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ood_ceiling: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ood_mode: Option<OodMode>,
+}
+
+/// Which deterministic signal feeds the OOD channel (D28).
+///
+/// The OOD gate (`ood_ceiling`) demotes decisions whose OOD score runs
+/// hot; the two modes choose *what is measured*, and are never fused:
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OodMode {
+    /// Normalized answer entropy — the shape of the distribution only
+    /// (the historical behavior, and the default).
+    #[default]
+    AnswerEntropy,
+    /// Input-likeness: `1 − lexical_coverage` of the best-scoring
+    /// document over the query's non-stop tokens. Rungs without lexical
+    /// evidence fall back to answer entropy (D28).
+    LexicalBand,
+}
+
+impl OodMode {
+    /// `true` for [`OodMode::AnswerEntropy`] — drives the absent-on-default
+    /// serialization that keeps canonical policy forms byte-stable.
+    #[must_use]
+    pub fn is_answer_entropy(self) -> bool {
+        self == Self::AnswerEntropy
+    }
 }
 
 impl From<DecisionPolicy> for RawDecisionPolicy {
@@ -100,6 +133,7 @@ impl From<DecisionPolicy> for RawDecisionPolicy {
                 .then_some(policy.entropy_ceiling),
             min_margin: (policy.min_margin != 0.0).then_some(policy.min_margin),
             ood_ceiling: (policy.ood_ceiling != f64::INFINITY).then_some(policy.ood_ceiling),
+            ood_mode: (!policy.ood_mode.is_answer_entropy()).then_some(policy.ood_mode),
         }
     }
 }
@@ -117,10 +151,11 @@ impl TryFrom<RawDecisionPolicy> for DecisionPolicy {
             Some(margin) => policy.with_min_margin(margin)?,
             None => policy,
         };
-        match raw.ood_ceiling {
-            Some(ceiling) => policy.with_ood_ceiling(ceiling),
-            None => Ok(policy),
-        }
+        let policy = match raw.ood_ceiling {
+            Some(ceiling) => policy.with_ood_ceiling(ceiling)?,
+            None => policy,
+        };
+        Ok(policy.with_ood_mode(raw.ood_mode.unwrap_or_default()))
     }
 }
 
@@ -136,6 +171,7 @@ impl DecisionPolicy {
         entropy_ceiling: f64::INFINITY,
         min_margin: 0.0,
         ood_ceiling: f64::INFINITY,
+        ood_mode: OodMode::AnswerEntropy,
     };
 
     /// Validates and constructs a policy.
@@ -172,7 +208,19 @@ impl DecisionPolicy {
             entropy_ceiling: f64::INFINITY,
             min_margin: 0.0,
             ood_ceiling: f64::INFINITY,
+            ood_mode: OodMode::AnswerEntropy,
         })
+    }
+
+    /// Selects which deterministic signal feeds the OOD channel (D28).
+    /// The default [`OodMode::AnswerEntropy`] is the historical behavior;
+    /// [`OodMode::LexicalBand`] opts into input-likeness evidence. Both
+    /// are deterministic, and the mode is orthogonal to the gate
+    /// relationship validated by [`Self::new`].
+    #[must_use]
+    pub fn with_ood_mode(mut self, mode: OodMode) -> Self {
+        self.ood_mode = mode;
+        self
     }
 
     /// Sets the entropy ceiling (PLANNING.md §19): a decision whose
@@ -271,6 +319,12 @@ impl DecisionPolicy {
         self.ood_ceiling
     }
 
+    /// The mode selecting what the OOD channel measures (D28).
+    #[must_use]
+    pub fn ood_mode(&self) -> OodMode {
+        self.ood_mode
+    }
+
     /// Whether the §19 uncertainty gates would demote this report to
     /// verification: flat distribution (entropy), near-tie (margin), or
     /// out-of-distribution input.
@@ -364,6 +418,27 @@ mod tests {
         let json = serde_json::to_string(&policy).expect("serialize");
         let back: DecisionPolicy = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(back, policy);
+    }
+
+    #[test]
+    fn ood_mode_serializes_as_absent_on_the_default() {
+        // D28: the canonical form of a policy in the default mode is
+        // byte-identical to the pre-D28 form, so cache keys do not shift
+        // for engines that never opt in.
+        let default_json = serde_json::to_string(&DecisionPolicy::default()).expect("serialize");
+        assert!(
+            !default_json.contains("ood_mode"),
+            "the default mode must serialize as absent, got {default_json}"
+        );
+        let opted = DecisionPolicy::default().with_ood_mode(OodMode::LexicalBand);
+        let opted_json = serde_json::to_string(&opted).expect("serialize");
+        assert!(opted_json.contains("\"ood_mode\":\"lexical_band\""), "{opted_json}");
+        let restored: DecisionPolicy = serde_json::from_str(&opted_json).expect("deserialize");
+        assert_eq!(restored, opted);
+        // The default round-trips into the default mode.
+        let restored_default: DecisionPolicy =
+            serde_json::from_str(&default_json).expect("deserialize");
+        assert_eq!(restored_default.ood_mode(), OodMode::AnswerEntropy);
     }
 
     #[test]
