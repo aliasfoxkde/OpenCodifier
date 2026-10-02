@@ -6,6 +6,11 @@ default := "ci"
 # Full CI gate: format, lint, test, doc, deny, audit, pattern scan.
 ci: fmt-check lint test doc deny scan
 
+# Criterion benches for the D9 per-stage budgets (DECISIONS.md D9).
+bench:
+    cargo bench -p opencodifier-engine --bench engine
+    cargo bench -p opencodifier-http --bench http
+
 # Format all code.
 fmt:
     cargo fmt --all

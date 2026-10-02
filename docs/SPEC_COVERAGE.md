@@ -78,7 +78,7 @@ shipped while the browser demo rides §58).
 | 56 | Phase 16 — Recipes and Skills | done | `recipes/` (3 tutorial graphs + the twelve §34 fleet recipes with `recipe list`/`recipe install`, 18g) + `skills/` (§33, 2026-09-28) |
 | 57 | Phase 17 — WASM | done-runtime | `wasm-pack --target nodejs` artifact + Node smoke test (`just check-wasm`); browser demo rides §58 (D23, 18j) |
 | 58 | Phase 18 — CLI / Distribution | partial | CLI done; D24 matrix recorded 2026-10-01 at named verification levels: linux-x86_64 run-tested+e2e (GitForge releases), windows-x86_64-gnu compiles clean (link+smoke quiet-window), aarch64-linux gnu+musl and darwin x86_64+arm64 linked + `file`-verified (no foreign-arch execution claimed); registry publication is outward opt-in |
-| 59 | Phase 19 — Benchmarking | done | criterion baselines per release + the Phase 13 decision-model benchmark (D16) |
+| 59 | Phase 19 — Benchmarking | done | criterion baselines per release (first committed: D9, 2026-10-01 — 2 BM25 rows over budget, B3's justification) + the Phase 13 decision-model benchmark (D16) |
 
 ## Integration, governance, examples (§§60–80)
 
@@ -92,7 +92,7 @@ shipped while the browser demo rides §58).
 | 67 | Resource Limits | done | `RequestMetadata.limits` enforced (input bytes/questions/candidates/graph nodes/time/retrieval) |
 | 68 | WASM Security | done-runtime | structural posture: no fs/net/telemetry/dynamic-native/storage in the dependency tree (enforced by a manifest test); hostile input → typed codes; platform seams declared (D23, 18j) |
 | 69 | V1 Acceptance Criteria | done | per-phase acceptance in `docs/PLAN.md`; v0.2.0 cut |
-| 70 | V1 Performance Goals | done | D9 per-stage budgets, criterion-measured |
+| 70 | V1 Performance Goals | done | D9 per-stage budgets, criterion-measured (D9 baseline committed 2026-10-01: bm25_index_build_256 3332 µs and bm25_score_all_256 1164 µs over their 1 ms budgets; all other measured rows in budget) |
 | 71 | V1.1 | planned | semantic cache, reranker, hybrid retrieval, multilingual, graph optimizer |
 | 72 | V2 | planned | adaptive graphs, online calibration, distributed cache, GPU batching |
 | 73 | Critical Implementation Rules | done | enforced in code + CI (see CLAUDE.md list) |
