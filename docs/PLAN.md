@@ -1046,16 +1046,15 @@ privileged stack.
   WASM zero-ML runtime (D23), CI decision-gate patterns (GitForge
   pipeline of record), and first-party integrations as examples
   (Amortyx → `docs/INTEGRATION_AMORTYX.md`).
-- **19a — wire-format selection over HTTP (gap, code).** Today every
-  HTTP route decodes via the `Native` adapter only
-  (`opencodifier-http/src/routes.rs`:73,137,164,275); the
-  `OpenAI`/`Anthropic`/`Jev` adapters are reachable through the CLI
-  `--format` flag and as library types, not over HTTP. Adopters with
-  existing OpenAI/Anthropic/Jev-shaped tooling currently must shell
-  out to the CLI. Land an explicit, versioned format selector on the
-  HTTP surface (envelope field or content negotiation — decide in a
-  DECISIONS record before coding), keeping `Native` the default and
-  documenting fidelity limits per adapter (schema adapter contract).
+- **19a — wire-format selection over HTTP (gap, code). — DONE
+  (2026-10-02, D30).** The `x-opencodifier-format` request header
+  (`native` default | `openai` | `anthropic` | `jev`) on
+  `/v1/decide`, `/v1/batch`, `/v1/validate`; decode and response
+  projection symmetric per request, native error envelope everywhere,
+  unknown names refused `schema.invalid_value`, absent header
+  byte-identical to pre-D30 behavior, cache identity unchanged
+  (keyed post-decode). Recorded as D30; route-level round-trip,
+  unknown-format, batch, and validate tests in `routes.rs`.
 - **19b — Jev-ecosystem callers.** The `/v1/systemone` convention
   (Jev/System-One clients; now also Fastino's GLiDE demo) is NOT an
   OpenCodifier route and must not be claimed as one. Decide whether a
