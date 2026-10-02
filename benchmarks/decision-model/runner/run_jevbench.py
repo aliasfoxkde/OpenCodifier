@@ -355,6 +355,14 @@ class ForkAdapter:
                               probs_source="label_only_no_calibrated_distribution",
                               latency_s=latency, raw=raw)
 
+    def close(self):
+        """Runs against an already-running server; owns no process or engine.
+
+        main()'s finally calls this unconditionally, so it must exist even
+        though there is nothing to release (the fork4b run of 2026-10-01
+        reached 230/231 and died here at teardown on the missing method).
+        """
+
 
 class JevNativeBridgeAdapter:
     """Jev-Style native verdict-slot readout — the comparability bridge.
