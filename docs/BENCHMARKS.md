@@ -91,6 +91,7 @@ Source: jev-style repo README, JevBench RESULTS, jev.page (recorded in
 | hosted Jev (TypeSafe) | 86.6 % | official |
 | llm-qwen3.5-4b (jev.page decision server) | 80.5 % / 651 ms p50 | self-reported |
 | Jev-Style-2B v3 | 73.6 % | self-run, GGUF F16 |
+| strands-decider-2B-hobson-v19 | 72.3 % (167/231), Brier 0.342, ECE 0.050 | official, preregistered run record |
 | open-jev-zefan-2b | 64.5 % | board |
 | **Jev-Style-0.8B v3** | **64.1 % (148/231)** | self-run, official harness — reproduced by our bridge |
 | decider-2b | 71.0 % | board |
@@ -101,6 +102,12 @@ construction (rows are context, not certification); autotrust's table is
 family-macro while the authors' board is plain accuracy — the two
 published tables are kept separate for exactly that reason; and latency
 is comparable only within our own runs (client wall on one CPU host).
+The strands row (2026-10-01, source
+`huggingface.co/StrandsAgents/strands-decider-2B-hobson-v19` +
+`github.com/strands-labs/strands-decider`) publishes its own retrain
+noise — σ ≈ 3.2 tasks of 231 across six retrains of one recipe — and
+therefore treats single-run differences under ~10 tasks as unresolved;
+our fork-arm comparisons inherit that caveat (RESEARCH.md §6.5).
 
 ## Board B — our locked suite (the full model board)
 
