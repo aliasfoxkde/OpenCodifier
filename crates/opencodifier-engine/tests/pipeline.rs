@@ -18,12 +18,13 @@ use common::{
     two_way,
 };
 use opencodifier_core::{
-    DecisionOutcome, DecisionPolicy, DecisionQuestion, Distribution, FactValue, NodeId, OodMode,
-    RequestMetadata, State,
+    DecisionAnswer, DecisionOutcome, DecisionPolicy, DecisionQuestion, Distribution, FactValue,
+    NodeId, OodMode, RequestMetadata, State,
 };
 use opencodifier_engine::{
     Action, CacheConfig, Classifier, Condition, DecisionEngine, DecisionGraph, EngineConfig,
-    EngineError, EngineIdentity, ManualClock, MockClassifier, NodeKind, Rule, SystemClock,
+    EngineError, EngineIdentity, LexicalClassifier, ManualClock, MockClassifier, NodeKind, Rule,
+    SystemClock,
 };
 
 #[test]
@@ -774,6 +775,132 @@ fn the_ood_mode_is_policy_selected_and_defaults_to_entropy() {
         "no-evidence rungs must fall back to the entropy signal"
     );
     assert_eq!(fallback.outcome(), DecisionOutcome::Verify);
+}
+
+/// Wraps a mock and counts how often the executor handed over a prebuilt
+/// BM25 index — the observable of the build-once handoff (#80).
+#[derive(Debug)]
+struct IndexProbe {
+    inner: MockClassifier,
+    handed: std::sync::atomic::AtomicUsize,
+}
+
+impl IndexProbe {
+    fn wrapped() -> Arc<Self> {
+        Arc::new(Self {
+            inner: MockClassifier::new("mock/probe"),
+            handed: std::sync::atomic::AtomicUsize::new(0),
+        })
+    }
+
+    fn handed(&self) -> usize {
+        self.handed.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+impl Classifier for IndexProbe {
+    fn decide(
+        &self,
+        state: &State,
+        question: &DecisionQuestion,
+    ) -> Result<Distribution, EngineError> {
+        self.inner.decide(state, question)
+    }
+
+    fn decide_extended(
+        &self,
+        state: &State,
+        question: &DecisionQuestion,
+        index: Option<&opencodifier_engine::Bm25Index>,
+    ) -> Result<(Distribution, Option<f64>), EngineError> {
+        if index.is_some() {
+            self.handed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+        self.inner.decide_extended(state, question, index)
+    }
+
+    fn model_id(&self) -> &'static str {
+        "probe/test"
+    }
+}
+
+#[test]
+fn the_executor_hands_the_lexical_index_to_the_deciding_classifier_once() {
+    // filter -> lexical -> choice: the lexical node builds the index, and
+    // the choice node must reuse it instead of rebuilding (#80).
+    let candidates: Vec<(&str, &str)> =
+        vec![("local-small", "small local model"), ("cloud-large", "cloud model")];
+    let graph = DecisionGraph::new(
+        1,
+        vec![
+            node("normalize", NodeKind::Normalize, &[]),
+            node("rule", NodeKind::Rule, &["normalize"]),
+            node("filter", NodeKind::Filter, &["rule"]),
+            node("lexical", NodeKind::Lexical, &["filter"]),
+            node("choice", NodeKind::Choice, &["lexical"]),
+            node("output", NodeKind::Output, &["choice"]),
+        ],
+    )
+    .unwrap();
+    let probe = IndexProbe::wrapped();
+    let engine =
+        engine_with(EngineConfig::new(graph), Arc::clone(&probe) as Arc<dyn Classifier>).unwrap();
+    let request = choice_request(&candidates);
+    let (response, _) = engine.decide_with_report(&request).unwrap();
+    assert_eq!(response.answers().len(), 1);
+    assert_eq!(probe.handed(), 1, "the choice node must receive the lexical node's index");
+
+    // Without a lexical node there is nothing to hand over: the classifier
+    // builds its own and the decision is unchanged.
+    let graph = DecisionGraph::new(
+        1,
+        vec![
+            node("normalize", NodeKind::Normalize, &[]),
+            node("rule", NodeKind::Rule, &["normalize"]),
+            node("filter", NodeKind::Filter, &["rule"]),
+            node("choice", NodeKind::Choice, &["filter"]),
+            node("output", NodeKind::Output, &["choice"]),
+        ],
+    )
+    .unwrap();
+    let bare = IndexProbe::wrapped();
+    let engine =
+        engine_with(EngineConfig::new(graph), Arc::clone(&bare) as Arc<dyn Classifier>).unwrap();
+    engine.decide_with_report(&request).unwrap();
+    assert_eq!(bare.handed(), 0, "no lexical node means no index to hand over");
+}
+
+#[test]
+fn the_index_handoff_produces_the_distribution_the_classifier_makes_alone() {
+    // The mispairing hazard of a stale index: scores paired with the wrong
+    // candidates. With filter -> lexical -> choice, the handed index and a
+    // locally built one cover identical documents in identical order, so
+    // the engine's distribution must equal the classifier's own over the
+    // same narrowed candidate list — to the bit.
+    let candidates: Vec<(&str, &str)> =
+        vec![("local-small", "summarize local research sources"), ("cloud-large", "cloud")];
+    let graph = DecisionGraph::new(
+        1,
+        vec![
+            node("normalize", NodeKind::Normalize, &[]),
+            node("rule", NodeKind::Rule, &["normalize"]),
+            node("filter", NodeKind::Filter, &["rule"]),
+            node("lexical", NodeKind::Lexical, &["filter"]),
+            node("choice", NodeKind::Choice, &["lexical"]),
+            node("output", NodeKind::Output, &["choice"]),
+        ],
+    )
+    .unwrap();
+    let engine = engine_with(EngineConfig::new(graph), Arc::new(LexicalClassifier::new())).unwrap();
+    let (response, _) = engine.decide_with_report(&choice_request(&candidates)).unwrap();
+    let DecisionAnswer::Choice { distribution, .. } = &response.answers()[0] else {
+        panic!("choice answer");
+    };
+
+    let state = State::from_text("Summarize research across many sources and compare findings");
+    let question = choice_question("model", &candidates);
+    let direct = LexicalClassifier::new().decide(&state, &question).unwrap();
+    assert_eq!(*distribution, direct, "the handoff must not shift a single bit");
 }
 
 #[test]
