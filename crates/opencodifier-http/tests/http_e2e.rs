@@ -16,6 +16,7 @@ use opencodifier_core::{
 use opencodifier_engine::{DecisionGraph, EngineConfig, EngineHandle};
 use opencodifier_schema::WireFormat;
 use opencodifier_schema::native::Native;
+use opencodifier_schema::openai::OpenAi;
 use reqwest::StatusCode;
 use reqwest::header::CONTENT_TYPE;
 use serde_json::{Value, json};
@@ -499,4 +500,103 @@ async fn models_and_capabilities_report_the_active_lane() {
     let endpoints = caps["endpoints"].as_array().unwrap();
     assert!(endpoints.iter().any(|entry| entry == "/v1/decide"));
     assert!(endpoints.iter().any(|entry| entry == "/v1/batch"));
+}
+
+/// The INTEGRATIONS.md §2.3 quickstart, byte-for-byte as the adoption
+/// guide prints it (Phase 19c): the test pastes exactly what the doc
+/// tells a newcomer to paste, so docs and wire cannot drift apart
+/// silently.
+const QUICKSTART_BODY: &str = r#"{
+  "state": {"text": "Checkout errors hit 12% eight minutes after a deploy. Rollback window closes in 20 minutes."},
+  "questions": [{
+    "type": "choice",
+    "id": "action",
+    "text": "Which action should the on-call take?",
+    "candidates": [
+      {"id": "rollback", "description": "roll back to the last healthy build"},
+      {"id": "hotfix",   "description": "patch forward on the broken build"},
+      {"id": "wait",     "description": "watch dashboards and hold"}
+    ]
+  }]
+}"#;
+
+#[tokio::test]
+async fn the_documented_quickstart_round_trips_verbatim() {
+    let server = spawn_server().await;
+    let response = post_json(&server.base_url, "/v1/decide", QUICKSTART_BODY).await;
+    assert_eq!(response.status(), StatusCode::OK, "the quickstart must work as printed");
+    let body: Value = response.json().await.unwrap();
+
+    // What the doc promises: the chosen candidate and full distribution
+    // per question; calibrated confidence, gate outcome, and trace for the
+    // request as a whole.
+    let answer = &body["answers"][0];
+    assert_eq!(answer["question_id"], "action", "body: {body}");
+    assert_eq!(answer["type"], "choice");
+    let choice = answer["choice"].as_str().unwrap_or_default();
+    assert!(["rollback", "hotfix", "wait"].contains(&choice), "choice: {choice}");
+    let entries = answer["distribution"]["entries"].as_array().unwrap();
+    assert_eq!(entries.len(), 3, "distribution: {entries:?}");
+    let mass: f64 = entries.iter().map(|entry| entry["probability"].as_f64().unwrap()).sum();
+    assert!((mass - 1.0).abs() < 1e-6);
+    assert!(body["confidence"]["calibrated_confidence"].as_f64().is_some());
+    assert!(
+        ["accept", "verified", "verify", "abstain", "escalate", "no_valid_candidate"]
+            .contains(&body["outcome"].as_str().unwrap_or_default()),
+        "outcome: {body}"
+    );
+    assert!(body["trace"].as_object().is_some_and(|trace| !trace.is_empty()));
+}
+
+#[tokio::test]
+async fn the_format_header_selects_the_adapter_over_the_wire() {
+    let server = spawn_server().await;
+    let request = DecisionRequest::new(
+        State::from_text("refactor the rust parser module without allocating"),
+        vec![DecisionQuestion::Choice(
+            ChoiceQuestion::new(
+                "model",
+                "Which model should refactor the parser?",
+                vec![
+                    Candidate::new("local-qwen", "fast local coding model for rust refactors")
+                        .unwrap(),
+                    Candidate::new("cloud-large", "long context cloud reasoning service").unwrap(),
+                ],
+            )
+            .unwrap(),
+        )],
+        DecisionPolicy::default(),
+        RequestMetadata::default(),
+    )
+    .unwrap();
+    let openai_body = OpenAi.encode_request(&request).unwrap().to_string();
+
+    // The §2.4 curl: an OpenAI-shaped body with the header is decoded and
+    // answered in the same shape — the `{"<question id>": value}`
+    // projection, not the native envelope.
+    let with_header = client()
+        .post(format!("{}/v1/decide", server.base_url))
+        .header(CONTENT_TYPE, "application/json")
+        .header("x-opencodifier-format", "openai")
+        .body(openai_body.clone())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(with_header.status(), StatusCode::OK);
+    let projected: Value = with_header.json().await.unwrap();
+    assert!(projected["model"].is_string(), "projection: {projected}");
+    assert!(projected.get("answers").is_none(), "projection: {projected}");
+
+    // An unknown format value is refused at the boundary, never guessed.
+    let unknown = client()
+        .post(format!("{}/v1/decide", server.base_url))
+        .header(CONTENT_TYPE, "application/json")
+        .header("x-opencodifier-format", "yaml")
+        .body(openai_body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
+    let error: Value = unknown.json().await.unwrap();
+    assert_eq!(error["error"]["code"], "schema.invalid_value", "error: {error}");
 }

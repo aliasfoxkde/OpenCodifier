@@ -68,9 +68,9 @@ runtime data, never baked into the model:
 
 ```bash
 curl -s http://127.0.0.1:8177/v1/decide -H 'content-type: application/json' -d '{
-  "state": "Checkout errors hit 12% eight minutes after a deploy. Rollback window closes in 20 minutes.",
+  "state": {"text": "Checkout errors hit 12% eight minutes after a deploy. Rollback window closes in 20 minutes."},
   "questions": [{
-    "kind": "choice",
+    "type": "choice",
     "id": "action",
     "text": "Which action should the on-call take?",
     "candidates": [
@@ -82,16 +82,22 @@ curl -s http://127.0.0.1:8177/v1/decide -H 'content-type: application/json' -d '
 }'
 ```
 
-The response carries, per question: the chosen candidate, the **full
-probability distribution**, calibrated confidence, and the outcome of
-the confidence gate — `accept`, `verify`, or `abstain`. Treat
-`abstain` as a first-class answer: your code should route on it (fall
-back, ask a human, escalate) exactly as it routes on `accept`.
+No `policy` or `metadata` needed: omitted wire fields take the engine's
+defaults. The response carries the decision at two levels — per
+question, the chosen candidate and the **full probability
+distribution** (`answers[].choice`, `answers[].distribution`); for the
+request as a whole, the calibrated confidence and the outcome of the
+confidence gate (`confidence.calibrated_confidence`, `outcome`) — plus
+the deterministic execution `trace`. Outcomes: `accept`, `verified`,
+`verify`, `abstain`, `escalate`, `no_valid_candidate`.
+
+Treat `abstain` as a first-class answer: your code should route on it
+(fall back, ask a human, escalate) exactly as it routes on `accept`.
 
 Error envelope, everywhere:
 
 ```json
-{ "error": { "code": "schema.unknown_field", "message": "…" } }
+{ "error": { "code": "schema.invalid_value", "message": "…" } }
 ```
 
 Stable codes are namespaced `ir.*` (payload refused by the IR), `schema.*`
@@ -133,11 +139,11 @@ curl -s http://127.0.0.1:8177/v1/decide \
   (`/v1/graph/*`) stay native-only: a graph document has no external
   analog.
 
-**`/v1/systemone` does not exist.** That path is the Jev/System-One
-ecosystem's convention (now also used by Fastino's GLiDE demo); it is
-not an OpenCodifier route and is not claimed to be. Jev-shaped callers
-use the header above; whether a dedicated Jev-shaped route earns its
-place is the open [Phase 19b](PLAN.md) question.
+**`/v1/systemone` does not exist and will not be claimed.** That path
+is the Jev/System-One ecosystem's convention (now also used by
+Fastino's GLiDE demo). [D31](DECISIONS.md) closed the question: the
+header above is the integration path; a dedicated route would be a
+pure alias with zero new capability.
 
 ---
 
@@ -319,8 +325,8 @@ all.
 | Item | Phase | State |
 |---|---|---|
 | HTTP wire-format selection (`x-opencodifier-format`) | 19a | **shipped** (D30) |
-| Jev-shaped HTTP route (the `systemone` convention) | 19b | open question, adapter rules apply |
-| Copy-paste quickstart set exercised by tests | 19c | planned |
+| Jev-shaped HTTP route (the `systemone` convention) | 19b | **decided: no route** (D31) — the header is the path |
+| Copy-paste quickstart exercised by tests | 19c | **shipped** (`tests/http_e2e.rs` pins the doc's exact JSON) |
 | crates.io / Homebrew / winget publication | 19d | user-gated (§58) |
 | Amortyx implementation (shadow → advisory → active) | §60 | designed; promotion-gated |
 

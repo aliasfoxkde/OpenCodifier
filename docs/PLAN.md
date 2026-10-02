@@ -1055,17 +1055,34 @@ privileged stack.
   byte-identical to pre-D30 behavior, cache identity unchanged
   (keyed post-decode). Recorded as D30; route-level round-trip,
   unknown-format, batch, and validate tests in `routes.rs`.
-- **19b — Jev-ecosystem callers.** The `/v1/systemone` convention
-  (Jev/System-One clients; now also Fastino's GLiDE demo) is NOT an
-  OpenCodifier route and must not be claimed as one. Decide whether a
-  Jev-shaped HTTP route earns its place under the same adapter rules
-  as 19a, or whether the documented path stays CLI/library-only.
-- **19c — quickstart + copy-paste examples.** Serve on the default
-  loopback address, one native request per decision kind (Choice /
-  Boolean / Score) as runnable `curl`s, MCP registration snippets,
-  and an abstention example showing the refused-decision envelope —
-  all exercised by a test or checked by a docs test so they cannot
-  rot silently.
+- **19b — Jev-ecosystem callers. — DECIDED (2026-10-02, D31): no
+  dedicated route.** The `/v1/systemone` convention is NOT an
+  OpenCodifier route and stays unclaimed. D30's
+  `x-opencodifier-format: jev` header carries the whole capability
+  (same adapter, same cache identity); a route would be a pure alias
+  with zero new capability, and promoting a Jev convention to a
+  top-level route would invert the identity doctrine (Jev
+  compatibility is one adapter mode, not the product's shape).
+  Revisit condition recorded in D31: a named consumer that cannot set
+  a request header.
+- **19c — quickstart + copy-paste examples. — DONE (2026-10-02).**
+  The §2.3 quickstart now works as printed (core: `state.facts`,
+  `policy`, `metadata` are optional on the wire, defaulted; a
+  hand-written minimal payload never invents housekeeping fields) and
+  is pinned by `the_documented_quickstart_round_trips_verbatim` in
+  `tests/http_e2e.rs` — the test pastes the doc's exact JSON. The §2.4
+  format-header curl is pinned over the wire too
+  (`the_format_header_selects_the_adapter_over_the_wire`: openai
+  projection + unknown-value refusal). Doc fixes found by writing the
+  test: the payload's `state` is `{"text": …}` not a bare string, the
+  question discriminator is `type` not `kind`, the error-envelope
+  example now names a real code (`schema.invalid_value` — the old
+  example's `schema.unknown_field` never existed), and the outcome
+  list names all six IR outcomes. Choice/Boolean/Score example
+  requests, MCP registration snippets, and the abstention envelope
+  were already exercised by the `http_e2e` suite (choice round-trip,
+  `policy_with_high_threshold_abstains_with_a_200`, score levels,
+  batch per-item errors).
 - **19d — publish path (blocked on user go, unchanged).** crates.io /
   Homebrew / winget / §58 publication remain explicitly
   user-gated (§58 note below); this phase only prepares the docs
