@@ -781,11 +781,15 @@ is proven, and nothing ships a claim its evidence cannot carry:
   it today.
 - **windows-x86_64-gnu** — the full workspace (all ten crates incl.
   `opencodifier-wasm`) compiles clean for
-  `x86_64-pc-windows-gnu` with the mingw linker present. Link + smoke
-  run pending a quiet window (compile under the load storm took 51
-  minutes; a link+run build is quiet-window work). Verification level
-  when built: link success + `file` PE magic + a stated
-  not-executed-here caveat, since this host cannot run Windows.
+  `x86_64-pc-windows-gnu` with the mingw linker present. **Linked
+  (2026-10-02, 2m44s at -j4 alongside the measurement chain):**
+  `opencodifier.exe` (PE32+ console, x86-64) and
+  `opencodifier_wasm.dll` (cdylib), zero warnings. Verification level
+  is link success + `file` PE magic + a stated not-executed-here
+  caveat — and that is this host's terminal level for the target: no
+  wine and no Windows machine exists here, so the smoke run is not
+  "pending a quiet window", it is structurally out of scope for this
+  host (a Windows box or CI runner with wine would be the venue).
 - **linux-aarch64** — `aarch64-unknown-linux-{gnu,musl}` targets
   installed, `cargo-zigbuild`/`zig` present for linking. Build + QEMU
   smoke pending quiet.
@@ -816,9 +820,11 @@ root) links all four remaining targets: `aarch64-unknown-linux-gnu`
 `aarch64-apple-darwin` and `x86_64-apple-darwin` (Mach-O arm64 /
 x86_64). Per this record, that is link + `file`-magic verification
 only — no foreign-arch execution is claimed (no qemu on the host; no
-macOS host exists here). `windows-x86_64-gnu` keeps its 2026-09-29
-"workspace compiles clean" row; its link+smoke run remains quiet-window
-work. What remains open in the matrix is unchanged: registry
+macOS host exists here). `windows-x86_64-gnu` **joined the linked set
+2026-10-02** (`opencodifier.exe` PE32+ + `opencodifier_wasm.dll`,
+`file`-magic verified, not executed — no wine/Windows on this host, so
+smoke stays structurally out of scope here, not merely quiet-window
+pending). What remains open in the matrix is unchanged: registry
 publication is an explicit user go, and native smoke exists only for
 linux-x86_64.
 
