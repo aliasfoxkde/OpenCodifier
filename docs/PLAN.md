@@ -975,11 +975,14 @@ in between. Ordered so each step's output feeds the next.
   missing-backend refusal; NOT part of `just ci`), 7 host tests incl.
   a manifest scan asserting no tokio/axum/reqwest/ort/libloading/dlopen,
   §68 posture structural. Browser demo rides §58.
-- **18j (§58 remainder) — builds recorded (D24 status 2026-10-01).**
+- **18j (§58 remainder) — builds recorded (D24 status 2026-10-02).**
   All five targets verified at their named level: linux-x86_64
-  run-tested + e2e (platform of record), windows-x86_64-gnu workspace
-  compiles clean (2026-09-29; link+smoke still quiet-window work), and
-  the overnight cross-build linked the remaining four —
+  run-tested + e2e (platform of record), windows-x86_64-gnu **linked
+  2026-10-02** (`opencodifier.exe` PE32+ console x86-64 +
+  `opencodifier_wasm.dll` cdylib, zero warnings, 2m44s at -j4 beside
+  the measurement chain; smoke is structurally out of scope on this
+  host — no wine, no Windows machine), and the overnight cross-build
+  linked the remaining four —
   aarch64-linux-gnu, aarch64-linux-musl (static), aarch64-darwin,
   x86_64-darwin — at link + `file`-magic level (no foreign-arch
   execution claimed; no qemu, no macOS host). macOS artifacts state the
