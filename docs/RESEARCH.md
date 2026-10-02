@@ -92,3 +92,392 @@ Each phase: (a) re-check arXiv listings for "cascade", "early exit",
 small decision models and ONNX-exported embedders; (c) GitHub sweep of
 the repos above; (d) append dated entries here with source IDs — no
 undated claims, no citation-free numbers.
+
+## 6. The System-One model board: CLM, Laya, Julia, Strands Decider (2026-10-01 sweep)
+
+Operator-directed sweep of four model families plus the Strands Decider
+system. Every source below was fetched and read in full on 2026-10-01
+(HuggingFace model cards + `/api/models` metadata, the strandsagents.com
+and AWS blog posts, the strands-labs GitHub README). Central result:
+**the typed-decision IR is converging across the industry** — all four
+families speak state + typed question (`choice` / `noul`≈boolean /
+`score`) + per-option probabilities + calibrated confidence, with no
+generation. OpenCodifier's IR is not idiosyncratic; it is the emerging
+wire shape of the class.
+
+### 6.1 Contrastive-LM CLM-v0.1-8B (and czl GGUF export)
+
+Sources: `huggingface.co/Contrastive-LM/CLM-v0.1-8B`,
+`huggingface.co/czl/CLM-v0.1-8B-GGUF` (both read 2026-10-01).
+
+- **Architecture**: frozen Qwen3-8B encoder with last-token pooling +
+  two small projection heads (state head, action head), trained with
+  bidirectional InfoNCE. Training: ~60M Nemotron QA pairs, ~30M synthetic
+  hard negatives, ~1M agentic trajectories. Apache-2.0 (weights and base).
+- **It is a System One model in OpenCodifier's exact sense**: "CLM only
+  scores the candidates you give it, and its probabilities are relative
+  to that set" — candidate-conditioned, no generation. Zero-shot claimed
+  ~Jev parity on computer-use/gaming/tool-calling at up to 9× lower
+  latency; fine-tuned verifier heads reach SOTA DeepSWE 81.6% and
+  Terminal-Bench 2.1 87.6%, 4–6× faster than Jev. API exposes `Choice`,
+  `Noul` (boolean), `Score` — our three IR primitives by name.
+- **State/action caching lever** (adopt-worthy for B3/B5): states and
+  actions are encoded separately, so action (candidate) embeddings are
+  reusable across questions — "with ~1k candidates, CLM is 13× faster
+  than Jev." Our candidate narrowing already builds per-question
+  structures; hoisting candidate representation out of the per-question
+  loop is the same shape of win.
+- **Encoder-locked heads** (their stated limitation): heads require
+  Qwen3-8B last-token-pooled embeddings — the artifact-coupling problem
+  our cache keys already model (model/calibration versions fold into the
+  key; a head swap must re-key).
+- **GGUF export** (czl, community): encoder-only quants with last-token
+  pooling baked in (`pooling_type = 3`); heads stay unquantized in
+  `.pt`. `clm_config.json` carries "the pooling / embedding / scale
+  contract, which no GGUF key expresses on its own" — a manifest
+  beside the artifact because the container cannot express the
+  contract. Same lesson as our model manifests (D14).
+
+### 6.2 Quantization acceptance gates (czl CLM-GGUF — methodology to copy)
+
+The czl card is a model of quantization honesty; its gates transfer
+directly to any model rung we quantize:
+
+- Corpus: 23,926 scored questions; every variant scored **against a
+  same-runtime bf16 reference of the same encoder**, never against the
+  publisher's vLLM numbers ("otherwise a runtime delta would be reported
+  as a quantisation result").
+- Pass line: top-1 ≥ the measured bf16-vs-bf16 noise floor of the corpus
+  in that runtime, **and** top-1 on *decisive* decisions (reference top-1
+  lead > 1 nat) ≥ 0.995, **and** end-task accuracy delta within a 3.0
+  point budget. Variants holding all decisive decisions but losing
+  end-task accuracy are "usable", not recommended.
+- Result: Q8_0 yes; Q6_K/Q5_K_M usable (−2.88/−2.05 pts); **Q4_K_M
+  rejected (−6.63 pts)** for this ranking workload.
+- **Mechanism worth internalizing**: the head computes
+  `argmax(scale · cos)` with `scale = exp(logit_scale) = 100` — cosine
+  error is amplified 100× before softmax, so a 0.001 cosine error costs
+  0.10 nats and flips "concentrate on near-ties"; mean cosine similarity
+  is close to useless as a quality signal. Our verdict-slot readout is a
+  different head, but the lesson holds: validate quantized rungs on
+  decisive-decision retention and end-task delta, not on embedding-space
+  similarity.
+- Cross-runtime numerics: llama.cpp bf16 reproduces vLLM argmax but not
+  exact margins; two independent bf16 implementations agree to cosine
+  0.9987 minimum over 4,448 texts. Bit-identical decisions across
+  runtimes is not a real standard; decisive-retention is.
+
+### 6.3 Laya / Mattepiu laya-onnx
+
+Sources: `huggingface.co/Mattepiu/laya-onnx`,
+`huggingface.co/convaiinnovations/laya` (referenced card, read
+2026-10-01).
+
+- **Architecture**: ModernBERT-large (395M, fully fine-tuned,
+  bidirectional) + a from-scratch decision head (2 transformer layers,
+  an option-marker scorer, and an **act/escalate head**) = 421M total.
+  **Option markers**: every option is scored at its own `[MASK]` marker
+  token, softmax over that question's options — the same
+  per-candidate-slot readout our decision fork uses (F26 verdict slots;
+  the #40 guard.py blueprint). Sequence layout
+  `[CLS] <qtype> question [SEP] [MASK] opt0 [MASK] opt1 [SEP] state [SEP]`,
+  512-token budget per question, all questions of a state in one forward
+  pass (~33–38 ms GPU, ~15 ms CPU claimed).
+- **Trained with RLCD** (Reinforcement Learning for Calibrated
+  Decisions): the policy outputs a distribution, exploration adds
+  zero-mean Gaussian noise to logits, reward is a strictly proper
+  scoring rule (log + spherical, ranked probability score for ordinal)
+  — maximum reward only at true calibrated probabilities. Plus TD(λ=1)
+  over dialogue prefix slices. **Fitted per-cardinality temperature
+  calibration** `[1.637, 1.251, 1.983]` with per-option-count scaling —
+  independent confirmation of our per-class (D15) and per-rung (B4)
+  calibration seams: calibration must condition on the distribution's
+  shape, not just the question kind.
+- **Numbers** (their table vs published Jev): p50 38.4 ms; in-task macro
+  accuracy 0.838, macro ECE 0.060; **zero-shot 0.651 acc / ECE 0.207** —
+  calibration and accuracy both collapse off-distribution (matches our
+  OOD gate motivation; their eval publishes reliability diagrams and
+  risk–coverage curves). Selective automation at 50% coverage with
+  confidence ≥ 0.85: 92.2% accuracy — a risk–coverage operating point we
+  should replicate in JevBench reporting.
+- **The escalate head is B6 inside the model**: the architecture itself
+  carries an act/escalate output — a model-native signal for the
+  cross-rung escalation our ladder does in configuration. When the ONNX
+  rung lands, exposing that head as an OOD/escalation feature (folded
+  into `ConfidenceReport::ood_score` or a verifier-agreement channel)
+  is a candidate design.
+- **ONNX artifact**: `laya.onnx` + `laya_int8.onnx` (421M, CPU-feasible,
+  single forward pass) — the strongest ONNX-native model-rung candidate
+  found so far for `opencodifier-runtime`'s `InferenceBackend` (the
+  qwen3.5 hybrid measured ≥9× worse under ORT, F25; a ModernBERT-class
+  bidirectional encoder is the ORT-friendly shape). Marker positions are
+  runtime inputs (`marker_pos`, `marker_mask`, `qtype`), i.e. the
+  candidate-conditioning is explicit in the graph — mappable to
+  `CandidateConditionedModel`. Note: a `run_laya.py` arm exists in
+  `benchmarks/decision-model/runner/` (in flight, sibling work).
+- Their limitation list independently restates our §73: "Arithmetic,
+  counting, date comparisons, and multi-hop index lookups should be kept
+  in deterministic code."
+
+### 6.4 SupersonicLabs Julia-1-ONNX
+
+Source: `huggingface.co/SupersonicLabs/Julia-1-ONNX` (read 2026-10-01).
+
+- Same typed surface: state + question + 2–20 options, types
+  `choice`/`score`/`noul`; "it is not a text generation model".
+  ONNX export with 551 MB external weights, **Rust WASM tokenizer**,
+  WebGPU (WGSL) browser inference; original runtime is Python CPU/CUDA.
+- **Parity methodology** (copy into our rung validation): 100 real
+  validation requests, batches of 4, 5 measured runs after warmup;
+  published median 75.47 ms/decision in-browser, **100/100 prediction
+  match vs the original runtime, max |Δlogit| 0.00225**. Our
+  double-replay bit-determinism check should add a cross-runtime
+  max-|Δlogit| metric — same spirit as the czl gates, bounded and
+  reported rather than hand-waved.
+- Accuracy is reported only for the original runtime (73.15% typed
+  decisions, 94% AG News pilot, 86% Emotion pilot) and explicitly **not
+  rerun** on the WebGPU export — they do not let a runtime change borrow
+  another runtime's accuracy claim.
+- "Strict encoding is enabled by default" — schema-strict request
+  encoding mirrors `unsupported_generation_field` posture.
+
+### 6.5 Strands Decider 2B (hobson v19) — the head-to-head reference
+
+Sources: `strandsagents.com/blog/introducing-strands-decider/`,
+`github.com/strands-labs/strands-decider`,
+`huggingface.co/StrandsAgents/strands-decider-2B-hobson-v19` (all read
+2026-10-01). The AWS blog post (`aws.amazon.com/blogs/opensource/...`)
+does not mention Decider; it covers the wider Strands labs experimental
+fleet (robots/simulation) — context only.
+
+- **Architecture (v19)**: Qwen3.5-2B-Base torso, **LM head discarded**,
+  replaced by a ~1M-parameter **pointer head**: each option is scored by
+  comparing the hidden state at an `<answer>` position against the
+  hidden state at that option's last token; one forward pass, no
+  decoding loop. Torso adapted with rank-16 LoRA; head in fp32.
+  "Because the head holds no per-option parameters, nothing can learn
+  that 'the first option is usually right', nothing caps how many
+  options a question may carry, and label sets are defined by the
+  request rather than baked into the weights" — the strongest published
+  statement of why candidate-conditioning beats fixed-label heads.
+  v1's slot head (final hidden state → fixed slots) "performed
+  significantly worse" — evidence for pointer/marker readouts over slot
+  readouts, matching F26's verdict-slot result direction.
+- **JevBench public numbers, published**: accuracy **0.723 (167/231)**
+  at the 3072 window, 168 at 4096; Brier 0.342–0.349; **ECE 0.050**;
+  their tier split easy/standard/hard **1.000 / 0.875 / 0.505**;
+  latency median 115 ms / p95 299 ms on RTX 3090, 153 ms warm median on
+  M3 Pro. Claims "3rd of 33 in the 2B class".
+  **This is the same 231-task benchmark our fork arms run** — the
+  fork4b (Qwen3.8-4B-Distill) arm lands directly against a published
+  0.723 row, and our earlier Qwen3.5-2B 0.725 ties it. Their tier
+  split vs ours (0.95/1.0/0.45 easy/original/hard) shows the same
+  hard-tier cliff; tier definitions differ, so compare per-tier
+  shapes, not labels.
+- **Measurement-noise discipline** (adopt into JevBench reporting):
+  six retrains of their v17 recipe gave σ = 3.2 tasks of 231, so they
+  treat single-run differences under ~10 tasks as unresolved. Our
+  REPORT.md should carry the same caveat on every fork comparison.
+- **Calibration posture**: "one temperature per primitive, fitted on
+  held-out short classification. The confidence bands are established
+  there only: measure on your own traffic before you trust a
+  threshold." Their headline reliability claim: at confidence ≥ 0.9,
+  answers are right ~95% of the time on held-out short classification —
+  a risk–coverage operating point, again matching the selective-
+  automation reporting style. Score/noul "transfer poorly" to rubrics
+  unlike the training mix.
+- **Distillation shape**: teacher = frozen Qwen3.5-4B output
+  distributions used as training targets, directly or through a parent
+  model trained first — same 4B→2B distillation axis as our Qwen3.5/3.8
+  arms. Reproducibility contract: `provenance.json` + `MANIFEST.sha256`
+  + `python -m strands_decider.hf_export verify <folder>`; preregistered
+  run records ("every training run states its predictions and its
+  failure conditions before training... a run that misses its bar does
+  not replace the reference model") — a governance pattern for our
+  TRAINING.md record.
+- **Integration pattern**: a `before_tool_call` intervention handler
+  gates a tool call on two cheap noul decisions (argument-grounding,
+  premature-call) with typed actions Proceed/Deny/Confirm/Guide — "a
+  decision this cheap can sit in a path where an LLM call never could."
+  This is the ladder's cheapest-first principle, implemented as
+  intervention hooks; the typed-action vocabulary (proceed/deny/
+  confirm/guide) is a candidate shape for B6 escalation outcomes.
+  Server surface: `POST /v1/systemone`, loopback bind, no auth —
+  same endpoint vocabulary the Jev bridge already targets.
+
+### 6.6 Actionable deltas for the B-series
+
+1. **B5 model rung** — the board now has two CPU-feasible ONNX-native
+   candidates with marker/pointer readouts (Laya 421M; the fork's
+   verdict-slot line) and one llama.cpp-native pointer head (Strands
+   v19). Keep B5 on the llama.cpp fork path (this host's measured
+   fastest lane) and evaluate the Laya ONNX export as the
+   `InferenceBackend` second arm; adopt the czl decisive-retention +
+   end-task-delta gates and the Julia max-|Δlogit| parity metric for
+   whichever lands first.
+2. **B3/B5 caching** — CLM's state/action split (13× at 1k candidates)
+   argues for hoisting candidate-side representation out of
+   per-question loops in the narrowing and model rungs.
+3. **B6 escalation** — three concrete shapes to mine: Laya's act/
+   escalate head (model-native), Strands' typed intervention actions
+   (proceed/deny/confirm/guide), and the risk–coverage operating points
+   (accuracy at fixed coverage/confidence floor) both competitors
+   publish. Report JevBench rows with a coverage column so operating
+   points are comparable.
+4. **Reporting discipline** — carry the σ ≈ 3.2/231 retrain-noise
+   caveat on all single-run fork comparisons; never compare accuracy
+   across runtimes; publish ECE and Brier beside accuracy (both
+   competitors do; our D15 already requires it).
+5. **Watch** — CLM-35B "early October"; Strands v20+ iterations; the
+   `contrastive-lm` head-training recipe (cheap per-task verifier
+   heads) as a candidate for OpenCodifier's own rung fine-tuning
+   story (TRAINING.md).
+
+## 7. Hierarchical Reasoning Model and its text adaptations (2026-10-01 sweep)
+
+Sources (all read 2026-10-01): `github.com/sapientinc/HRM` (paper:
+arXiv:2506.21734), `huggingface.co/sinimiini/HRM-Text-1B-GGUF`,
+`huggingface.co/vonjack/hrm-text-agent-gguf`.
+
+### 7.1 HRM itself — architecture ideas, not a rung
+
+- 27M parameters, two interdependent recurrent modules (high-level slow
+  abstract planning; low-level fast detailed computation), deep
+  effective computation in **one forward pass** with no CoT supervision,
+  trained from ~1,000 examples without pre-training: near-perfect
+  Sudoku-Extreme and maze optima, and ARC-AGI results ahead of far
+  larger CoT models. Checkpoints are task-specific (ARC-2 / Sudoku /
+  Maze) — a puzzle solver family, **not** a general decision model;
+  the transferable content is architectural.
+- **The halt head is B6 inside the model**: HRM trains an adaptive
+  halting policy (`arch.halt_max_steps=8`, Q-learning halting) — the
+  model itself decides whether to keep computing or to stop. That is
+  the abstain/escalate decision as a learned signal, the same role
+  Laya's act/escalate head plays (§6.3). Cross-rung escalation (B6)
+  should treat the halt/continue probability as a first-class
+  confidence feature, not just post-hoc thresholds.
+- Recurrent depth is the latency dial: `L_cycles` sets compute depth
+  per question — a rung whose cost is a knob between "one lexical
+  pass" and "an external model". If a small recurrent decision model
+  ever lands in `opencodifier-runtime`, its depth setting is exactly
+  the kind of per-rung cost/gate trade the ladder exists to govern.
+- Small-sample discipline: "accuracy variance of around ±2 points"
+  across small-sample runs, and a documented late-stage-overfitting
+  instability with an early-stop recommendation — the same
+  retrain-noise honesty Strands publishes (§6.5).
+
+### 7.2 HRM-Text GGUF exports — serving-contract lessons for B5
+
+`sinimiini/HRM-Text-1B-GGUF` and `vonjack/hrm-text-agent-gguf` adapt
+HRM to text as a 1B **PrefixLM** (bidirectional attention over the
+prompt via `token_type_ids`), non-chat, non-instruction-tuned. Neither
+loads in stock llama.cpp: a custom `hrm_text` GGUF architecture, a
+patch pinned to one validated upstream commit, and the recurrent latent
+tensor carried in F32.
+
+- **Serving constraints that will bind any PrefixLM decision rung**:
+  keep the complete prompt in one physical batch
+  (`--batch-size`/`--ubatch-size` ≥ prompt tokens); keep
+  `cache_prompt` disabled — no KV reuse from a shorter prompt, no
+  speculative decoding. Our fork's parallel-decision server already
+  has the right shape (single-pass verdict slots, no decode loop);
+  the lesson is that a PrefixLM/encoder-class rung must refuse KV
+  reuse by contract, which is a `--no-cache-*`-style flag pairing plus
+  a manifest statement, not a hope.
+- **The template is part of the model contract**: the agent export
+  embeds each expert's required Jinja condition in its GGUF
+  (`tokenizer.chat_template`) — the Code expert only runs in its
+  `synth,cot` condition, Agent v2 in `direct`. Running a model in a
+  prompt shape it was not conditioned on is out-of-distribution by
+  construction; the honest deployment reads the embedded template and
+  refuses a mismatch, the way czl's `clm_config.json` carries the
+  pooling contract the GGUF keys cannot express (§6.1).
+- **Expert routing, never merging**: "The code model and tool model
+  are separate experts. Route tasks between them; the author found
+  that merging their weights destroys one skill or the other."
+  Independent confirmation of the per-rung/per-domain artifact model
+  (D25 rungs, F24 per-domain calibration): capability lives in
+  separate versioned artifacts selected by a deterministic router.
+- **Validation methodology to copy for our future model exports**:
+  tensor-level comparison (259/259), prompt token-ID equality,
+  next-token top-1 and top-10 overlap per prompt, full-vocab
+  mean-absolute-logit-error per prompt, and the explicit rule that
+  "repetition by itself is not a conversion failure unless it is
+  newly introduced by the runtime" — every quant validated against
+  the BF16 conversion, and the BF16 conversion against the source
+  F32, never a quant against a different runtime's numbers (same
+  discipline as §6.2).
+- **Honesty case study**: the vonjack card dissects an older
+  community checkpoint whose "38k examples" was a one-epoch pilot of
+  a code corpus with zero tool-call markers, and labels it
+  "unevaluated Stage A code pilot with unstable quality" instead of
+  letting the number stand. Model-card claims are audited against
+  training records before becoming comparison rows — the standard our
+  own BENCHMARKS.md provenance column already applies to incoming
+  rows.
+- License note: the Jason (jasoncarreira) HRM-Text code/agent
+  checkpoints are **CC-BY-NC-4.0** — study and benchmark-compare, do
+  not ship or redistribute weights (D14's discipline, extended to
+  licensing).
+
+### 7.3 Prompt and template levers — what would actually move results
+
+Operator question (2026-10-01): can chat-template changes, better
+prompting, or similar mechanisms improve the model arms' scores?
+Grounded answer, separating what is measured from what is plausible:
+
+- **The decision prompt is already the lever with the largest measured
+  effect in-house.** The params A/B (REPORT.md, 2026-10-01) stripped
+  prompt evidence (diet200) and accuracy fell 0.800 → 0.633 with
+  metadata_match 1.0 → 0.525 — prompt *content* is first-order, worth
+  more than any threshold tuning. The general form of the lever:
+  more/better-ordered evidence in context, not different phrasing of
+  the instruction.
+- **Condition/template fidelity is an OOD guard, not a tune.** For
+  instruct/distill arms (fork4b = Qwen3.8-4B-Distill), serving through
+  the GGUF's embedded `--jinja` template versus a raw-completion
+  envelope are different prompt distributions; the model was trained
+  for one of them. A/B-ing template-on vs template-off on the current
+  chain's arm is a cheap, legitimate experiment — as is a minimal
+  system message ("decide; answer with one option") which instruct
+  models often need to stop from narrating. Base-model arms (the 2B
+  fork) have no template by construction; for them the decision
+  envelope itself is the contract (§7.2).
+- **Question phrasing is a weak channel — with a published warning.**
+  Strands' own limitation section (§6.5): "questions are read less
+  than documents; with the state and options fixed, a changed question
+  often gets the same answer." Prompt-engineering the question text is
+  therefore unlikely to buy much for pointer-head models, and tuning
+  phrasing *against JevBench* would be benchmark contamination.
+  Anything in this direction tunes on a held-out slice only (the
+  internal boardgame/musique-style sets), never on the scored set.
+- **Candidate order is the untested structural lever.** Pointer/marker
+  heads score each option at its own slot; position bias is plausible
+  and our rerank seam is explicitly "permute, never remove." A cheap
+  study: replay one arm's run JSONs with deterministic candidate-order
+  permutations and measure answer-flip rate; if flips are non-trivial,
+  adopt a deterministic canonical order (and record it in the rung's
+  manifest, since it changes the prompt contract and therefore the
+  cache key).
+- **Per-cardinality calibration is prompt-shape-aware calibration.**
+  Laya fits temperatures per option-count (§6.3) — the number of
+  candidates is a prompt-shape variable that shifts distribution
+  spread. Our artifacts key on question class; adding option-count
+  buckets to the fit script (`fit_calibration.py`) is a small,
+  measurable refinement consistent with D15's schema (class keys are
+  arbitrary strings).
+- **What prompting cannot fix here**: the fork's single-token
+  verdict-slot readout has no generation, so the CoT-prompting axis
+  and the constrained-decoding "formatting traps" failure mode
+  (§1, §2 of this file) do not exist on the fork path by construction
+  — that is the readout's whole point. If an arm ever needs
+  generation-shaped prompting to score well, that is evidence the
+  *rung is wrong* (the model is being asked to be a generator), not
+  that the prompt needs work.
+
+**Actionable deltas**: (1) template-on/off + minimal-system-message A/B
+queued for the next fork arm; (2) candidate-order permutation study on
+existing run JSONs (no new inference needed); (3) per-cardinality
+buckets in the next calibration fit; (4) when a PrefixLM/encoder rung
+lands, encode the no-KV-reuse and one-batch-prefill constraints as
+flags + manifest statements (§7.2).
