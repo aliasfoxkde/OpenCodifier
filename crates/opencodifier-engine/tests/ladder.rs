@@ -333,3 +333,38 @@ fn the_rung_calibration_source_is_recorded_in_the_trace() {
         Some(&opencodifier_core::FactValue::Text("kind:boolean".to_owned()))
     );
 }
+
+#[test]
+fn the_handle_assembles_with_a_ladder_and_propagates_refusals() {
+    // `EngineHandle::with_ladder` is the interface-crate constructor —
+    // CLI, HTTP, and MCP all assemble through it, so a real ladder must
+    // decide here and an invalid one must be refused at assembly with
+    // the ladder's own error, not at first decide.
+    use opencodifier_engine::EngineHandle;
+
+    let classifier = Arc::new(
+        MockClassifier::new("mock/handle")
+            .with_script("tools", vec![("true", 0.9), ("false", 0.1)])
+            .unwrap(),
+    );
+    let request = loose_request(vec![boolean_question("tools", "Does this request need tools?")]);
+
+    let engine = EngineHandle::with_ladder(
+        config(1),
+        classifier.clone(),
+        None,
+        boolean_kind_ladder("handle-strict-v1", 0.95),
+    )
+    .unwrap();
+    let response = engine.decide(&request).unwrap();
+    assert_eq!(response.outcome(), DecisionOutcome::Verify);
+    assert_eq!(policy_source(&response).as_deref(), Some("kind:boolean"));
+    assert_eq!(engine.identity().model_id, "mock/handle|ladder-v1@handle-strict-v1");
+
+    // A non-empty ladder without a distinct id is refused here too —
+    // the same `validate()` the engine-level constructor enforces.
+    let error =
+        EngineHandle::with_ladder(config(1), classifier, None, boolean_kind_ladder("none", 0.95))
+            .unwrap_err();
+    assert!(matches!(error, EngineError::InvalidConfig { .. }), "{error:?}");
+}

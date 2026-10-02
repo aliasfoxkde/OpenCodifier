@@ -369,9 +369,46 @@ mod tests {
             ladder.resolve_calibration("decide_other", NodeKind::Choice).unwrap();
         assert_eq!(source, "kind:choice");
         assert_eq!(kind_calibration.version(), 5, "SharpCalibration");
+        // Resolution hands back a real callable: SharpCalibration answers
+        // with the raw top probability.
+        let hedged = Distribution::from_pairs([("a", 0.7), ("b", 0.3)]).unwrap();
+        assert_eq!(kind_calibration.calibrate("choice", &hedged), 0.7);
 
         // Boolean has no rung entry: the engine-level calibration governs.
         assert!(ladder.resolve_calibration("decide", NodeKind::Boolean).is_none());
+    }
+
+    #[test]
+    fn ladder_equality_compares_shape_and_rung_keys() {
+        // Equality is the policy shape plus the rung-key set: calibration
+        // identity rides the ladder id in the cache key, never a
+        // structural comparison of fitted artifacts.
+        let base = || {
+            LadderPolicy::new("eq-v1")
+                .with_calibration("kind:choice", Arc::new(IdentityCalibration))
+        };
+        assert_eq!(base(), base());
+        // A different id is a different ladder — it re-keys the cache.
+        assert_ne!(base(), LadderPolicy { id: "eq-v2".into(), ..base() });
+        // A different gate value is a different ladder.
+        assert_ne!(
+            base(),
+            LadderPolicy {
+                per_kind: BTreeMap::from([(NodeKind::Choice, policy(0.9))]),
+                ..LadderPolicy::new("eq-v1")
+            }
+        );
+        // Same rung keys under different fits stay equal; a different key
+        // set (or no calibrations at all) does not.
+        let rescaled =
+            LadderPolicy::new("eq-v1").with_calibration("kind:choice", Arc::new(SharpCalibration));
+        assert_eq!(base(), rescaled);
+        assert_ne!(
+            base(),
+            LadderPolicy::new("eq-v1")
+                .with_calibration("kind:boolean", Arc::new(IdentityCalibration))
+        );
+        assert_ne!(base(), LadderPolicy::new("eq-v1"));
     }
 
     /// A named-version calibration distinguishing it from identity in
@@ -458,6 +495,79 @@ mod tests {
         // The wrapper: a proof passes at raw 1.0 even under T = 2.
         let proof = Distribution::from_pairs([("proved", 1.0)]).unwrap();
         assert_eq!(calibration.calibrate("boolean", &proof), 1.0);
+    }
+
+    #[test]
+    fn a_profile_artifact_that_fails_to_fit_names_the_rung() {
+        // `calibration_version 0` is reserved for "no calibration", so
+        // the artifact is refused at load — and the config error must
+        // name the offending rung instead of dropping it silently.
+        let document = r#"{
+            "id": "bad-cal-v1",
+            "per_kind": {
+                "boolean": {
+                    "min_confidence": 0.9, "verify_below": 0.7,
+                    "abstain_below": 0.4, "risk": "low"
+                }
+            },
+            "calibrations": {
+                "kind:boolean": {
+                    "artifact": {
+                        "format_version": 1, "scheme": "temperature",
+                        "model_id": "test-model", "calibration_version": 0,
+                        "default_temperature": 2.0,
+                        "fit": { "items": 10, "ece_before": 0.2,
+                                 "ece_after": 0.1, "source": "test" }
+                    },
+                    "proof_aware": true
+                }
+            }
+        }"#;
+        let profile: LadderProfile = serde_json::from_str(document).unwrap();
+        let error = profile.into_ladder().unwrap_err();
+        assert!(matches!(error, EngineError::InvalidConfig { .. }), "{error:?}");
+        assert!(error.to_string().contains("kind:boolean"), "{error}");
+    }
+
+    #[test]
+    fn a_plain_rung_calibration_applies_the_fit_without_the_proof_wrapper() {
+        // Omitting `proof_aware` ships the bare temperature: every
+        // distribution of the rung is tempered. (For a normalized
+        // single-entry proof the temperature is the identity anyway, so
+        // the wrapper buys the bimodal split without changing that case.)
+        let document = r#"{
+            "id": "plain-cal-v1",
+            "per_kind": {
+                "choice": {
+                    "min_confidence": 0.9, "verify_below": 0.7,
+                    "abstain_below": 0.4, "risk": "low"
+                }
+            },
+            "calibrations": {
+                "kind:choice": {
+                    "artifact": {
+                        "format_version": 1, "scheme": "temperature",
+                        "model_id": "test-model", "calibration_version": 4,
+                        "default_temperature": 2.0,
+                        "fit": { "items": 10, "ece_before": 0.2,
+                                 "ece_after": 0.1, "source": "test" }
+                    }
+                }
+            }
+        }"#;
+        let profile: LadderProfile = serde_json::from_str(document).unwrap();
+        let ladder = profile.into_ladder().unwrap();
+        let (calibration, source) = ladder.resolve_calibration("any", NodeKind::Choice).unwrap();
+        assert_eq!(source, "kind:choice");
+        assert_eq!(calibration.version(), 4);
+        // Plain temperature semantics on the delegated tail: T = 2
+        // flattens a raw 0.9 top to ~0.75 (p^(1/2) rescaled).
+        let hedged = Distribution::from_pairs([("a", 0.9), ("b", 0.1)]).unwrap();
+        let calibrated = calibration.calibrate("choice", &hedged);
+        assert!(
+            (0.74..=0.76).contains(&calibrated),
+            "T = 2 flattens a raw 0.9 to ~0.75, got {calibrated}"
+        );
     }
 
     #[test]
