@@ -90,9 +90,34 @@ impl EngineHandle {
         verifier: Option<Arc<dyn Classifier>>,
         ladder: crate::ladder::LadderPolicy,
     ) -> EngineResult<Self> {
+        Self::with_rungs(config, classifier, verifier, ladder, Vec::new())
+    }
+
+    /// Assembles the engine with an ordered escalation tail (D27): when
+    /// the primary rung's gate does not accept a question, the executor
+    /// walks `fallbacks` in order, firing a rung only while the previous
+    /// one did not accept — one classifier per accepted question, never
+    /// two. An empty list is [`EngineHandle::with_ladder`].
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`DecisionEngine::new`].
+    pub fn with_rungs(
+        config: EngineConfig,
+        classifier: Arc<dyn Classifier>,
+        verifier: Option<Arc<dyn Classifier>>,
+        ladder: crate::ladder::LadderPolicy,
+        fallbacks: Vec<crate::ladder::Rung>,
+    ) -> EngineResult<Self> {
         let config = config.with_ladder(ladder);
         Ok(Self {
-            engine: DecisionEngine::new(config, Arc::new(SystemClock), classifier, verifier)?,
+            engine: DecisionEngine::new_with_rungs(
+                config,
+                Arc::new(SystemClock),
+                classifier,
+                verifier,
+                fallbacks,
+            )?,
         })
     }
 

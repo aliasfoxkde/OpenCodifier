@@ -64,8 +64,11 @@ enum NodeOutput {
     /// Distributions and answers for the questions this node decides,
     /// plus the run's focused-extraction counts.
     Decided(Vec<QuestionDecision>, crate::focus::FocusSummary),
-    /// Outcomes after the confidence gate and verifier cascade.
-    Resolved(Vec<(QuestionId, DecisionOutcome, Option<bool>)>),
+    /// Outcomes after the confidence gate and verifier cascade, plus the
+    /// decisions an escalation walk replaced (D27): a question answered
+    /// by a later rung ships that rung's distribution, answer, and
+    /// confidence, so the replacement rides back to the run state.
+    Resolved(Vec<(QuestionId, DecisionOutcome, Option<bool>)>, Vec<QuestionDecision>),
     /// Whether a branch condition held.
     Branched(bool),
     /// Semantic (embedding) scores per choice question, best first —
@@ -246,6 +249,9 @@ pub(crate) struct Executor<'a> {
     clock: &'a Arc<dyn Clock>,
     classifier: &'a Arc<dyn Classifier>,
     verifier: Option<&'a Arc<dyn Classifier>>,
+    /// Ordered escalation rungs (D27) — consulted at the threshold node
+    /// only while the previous rung's gate does not accept.
+    fallbacks: &'a [crate::ladder::Rung],
     request: &'a DecisionRequest,
     key: CacheKey,
     deadline: Deadline,
@@ -293,6 +299,7 @@ impl<'a> Executor<'a> {
         clock: &'a Arc<dyn Clock>,
         classifier: &'a Arc<dyn Classifier>,
         verifier: Option<&'a Arc<dyn Classifier>>,
+        fallbacks: &'a [crate::ladder::Rung],
         request: &'a DecisionRequest,
         key: CacheKey,
         deadline: Deadline,
@@ -303,6 +310,7 @@ impl<'a> Executor<'a> {
             clock,
             classifier,
             verifier,
+            fallbacks,
             request,
             key,
             deadline,
@@ -521,8 +529,8 @@ impl<'a> Executor<'a> {
                 (NodeOutput::Decided(decided, focus), entries)
             }
             NodeKind::Threshold => {
-                let (resolved, entries) = self.resolve_threshold(id)?;
-                (NodeOutput::Resolved(resolved), entries)
+                let (resolved, replacements, entries) = self.resolve_threshold(id)?;
+                (NodeOutput::Resolved(resolved, replacements), entries)
             }
             NodeKind::Branch => {
                 // A branch with no condition always fires.
@@ -957,10 +965,16 @@ impl<'a> Executor<'a> {
             || distribution.entropy() >= policy.entropy_ceiling()
     }
 
-    /// Applies the confidence gate and the verifier cascade to every
-    /// decided question.
-    fn resolve_threshold(&self, id: &str) -> EngineResult<(Resolutions, Vec<TraceEntry>)> {
+    /// Applies the confidence gate, the escalation walk (D27), and the
+    /// verifier cascade to every decided question. Decisions a fallback
+    /// rung answered are returned as replacements: the walk's final rung
+    /// owns the question's distribution, answer, and confidence.
+    fn resolve_threshold(
+        &self,
+        id: &str,
+    ) -> EngineResult<(Resolutions, Vec<QuestionDecision>, Vec<TraceEntry>)> {
         let mut resolved = Vec::new();
+        let mut replacements = Vec::new();
         let mut entries = Vec::new();
         for (question_id, decision) in &self.decisions {
             // The gate re-applies the deciding rung's policy: the cached
@@ -976,12 +990,53 @@ impl<'a> Executor<'a> {
                 || (self.request.policy(), None),
                 |(policy, source)| (policy, Some(source)),
             );
-            let outcome = decision.report.outcome_for(policy);
+            // The escalation walk (D27): only a non-accepting gate fires
+            // the next rung, so an accepted question runs exactly one
+            // classifier. Each rung is gated by its own policy when it
+            // carries one, else the node-resolved policy; its
+            // calibration replaces the engine-level one for its own
+            // distribution.
+            let mut live = decision;
+            let mut chain: Vec<String> = Vec::new();
+            for rung in self.fallbacks {
+                if live.report.outcome_for(policy) == DecisionOutcome::Accept {
+                    break;
+                }
+                // A rung walk may not outrun the request's budget.
+                self.guard()?;
+                let raw = rung.classifier.decide(&self.state, &live.question)?;
+                let (distribution, _) = Self::clip(&raw, &live.question)?;
+                let calibration =
+                    rung.calibration.as_deref().unwrap_or(self.config.calibration.as_ref());
+                let rung_policy = rung.policy.as_ref().unwrap_or(policy);
+                let escalated = Self::decide_question(
+                    &live.question,
+                    distribution,
+                    rung_policy,
+                    calibration,
+                    node_id,
+                    *kind,
+                )?;
+                chain.push(format!(
+                    "{}(top={}, {})",
+                    rung.classifier.model_id(),
+                    escalated.distribution.top().key,
+                    outcome_name(escalated.report.outcome_for(rung_policy))
+                ));
+                replacements.push(escalated);
+                // `live` follows the freshest replacement: the walk's
+                // final answer is the last rung's, and the verifier
+                // cascade below must read that one.
+                live = &replacements[replacements.len() - 1];
+            }
+            // `live` borrows `replacements`; the outcome and verifier
+            // cascade below only read it.
+            let outcome = live.report.outcome_for(policy);
             let (final_outcome, agreement, verifier) = if outcome == DecisionOutcome::Verify {
                 match self.verifier {
                     Some(verifier) => {
-                        let alternative = verifier.decide(&self.state, &decision.question)?;
-                        let agree = alternative.top().key == decision.distribution.top().key;
+                        let alternative = verifier.decide(&self.state, &live.question)?;
+                        let agree = alternative.top().key == live.distribution.top().key;
                         if agree {
                             (DecisionOutcome::Verified, Some(true), "agree")
                         } else {
@@ -1001,7 +1056,7 @@ impl<'a> Executor<'a> {
                 (
                     "passed",
                     FactValue::Boolean(
-                        decision.report.calibrated_confidence >= policy.min_confidence(),
+                        live.report.calibrated_confidence >= policy.min_confidence(),
                     ),
                 ),
                 ("outcome", FactValue::Text(outcome_name(final_outcome))),
@@ -1012,10 +1067,32 @@ impl<'a> Executor<'a> {
             if let Some(source) = ladder_source {
                 detail.push(("policy_source", FactValue::Text(source)));
             }
+            // The escalation walk, only when it fired (D27): the chain
+            // names each rung's model, answer, and its own gate outcome,
+            // so the trace explains routing without exposing any model
+            // reasoning.
+            if !chain.is_empty() {
+                detail.push(("rungs_fired", FactValue::Integer(int(chain.len()))));
+                detail.push(("rung_chain", FactValue::Text(chain.join(" -> "))));
+            }
             entries.push(TraceEntry::new(id, detail));
             resolved.push((question_id.clone(), final_outcome, agreement));
         }
-        Ok((resolved, entries))
+        // Keep only questions the walk actually re-answered: a rung
+        // firing for one question must not displace another's primary
+        // decision. `replacements` accumulates one entry per fired rung,
+        // and the last entry per question is the walk's final answer.
+        let mut final_replacements: Vec<QuestionDecision> = Vec::new();
+        {
+            let mut last_index: BTreeMap<QuestionId, usize> = BTreeMap::new();
+            for (index, replacement) in replacements.iter().enumerate() {
+                last_index.insert(replacement.answer.question_id().clone(), index);
+            }
+            for index in last_index.into_values() {
+                final_replacements.push(replacements[index].clone());
+            }
+        }
+        Ok((resolved, final_replacements, entries))
     }
 
     /// `true` when this node decides questions of `question`'s kind.
@@ -1274,7 +1351,14 @@ impl<'a> Executor<'a> {
                 self.focus.engaged += focus.engaged;
                 self.focus.escalated += focus.escalated;
             }
-            NodeOutput::Resolved(resolved) => {
+            NodeOutput::Resolved(resolved, replacements) => {
+                // A replaced decision is inserted whole: the escalation
+                // walk's final rung owns the question's distribution,
+                // answer, and confidence (D27), and the outcome patch
+                // below must land on that decision, not the primary's.
+                for replacement in replacements {
+                    self.decisions.insert(replacement.answer.question_id().clone(), replacement);
+                }
                 for (id, outcome, agreement) in resolved {
                     if let Some(decision) = self.decisions.get_mut(&id) {
                         decision.outcome = outcome;

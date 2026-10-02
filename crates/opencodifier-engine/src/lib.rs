@@ -147,7 +147,7 @@ pub use focus::{
 };
 pub use graph::{DecisionGraph, GraphDocument, NodeKind, NodeSpec};
 pub use handle::{EngineHandle, EngineHealth, MAX_BATCH};
-pub use ladder::{LadderPolicy, LadderProfile, RungCalibration};
+pub use ladder::{LadderPolicy, LadderProfile, Rung, RungCalibration};
 pub use lexical::{Bm25Index, negation_polarity, softmax, tokenize};
 pub use narrowing::{LexicalScores, NarrowingOutcome};
 pub use optimize::optimize;
