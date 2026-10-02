@@ -1072,3 +1072,41 @@ has been receiving the wrong signal. The decision:
   default mode: existing traces, artifacts, and calibration cells
   remain valid; only policies that opt into `lexical_band` get the
   new semantics, and they get them spelled out here.
+
+## D29 — First-party integrations are adapters over the public surfaces, never a privileged stack (2026-10-02)
+
+User directive (2026-10-02): OpenCodifier will integrate with Amortyx
+and the other in-house services "for full stack and compatibility …
+but we don't want to force people to use one stack, workflow, pipeline,
+or another."
+
+- **The public surfaces are the only surfaces.** Everything an
+  in-house consumer can do — HTTP (`/v1/decide`, `/v1/batch`,
+  `/v1/graph/*`, `/v1/validate`, `/v1/models`, `/v1/capabilities`),
+  MCP (the six `codify_*` tools), the CLI, the Rust crates, the WASM
+  runtime — is what any third party gets. A first-party integration
+  may not take a back door: no in-process linkage beyond the public
+  crate layering, no endpoint that only Amortyx/Control-Center can
+  call, no feature that ships only through a first-party path.
+- **First-party consumers are examples, not requirements.** The
+  default posture stays exactly what PLANNING.md §1 states:
+  fully local, offline, no accounts. Installing Amortyx, the harness,
+  or any sibling service is never a prerequisite for any OpenCodifier
+  capability, and no OpenCodifier capability may detect or prefer a
+  first-party consumer.
+- **Each side keeps its own responsibilities** (INTEGRATION_AMORTYX.md
+  §1, unchanged): OpenCodifier makes semantic decisions; Amortyx makes
+  economic/operational ones; neither absorbs the other. The Jev
+  adapter doctrine generalizes: compatibility with any ecosystem —
+  Jev/System-One, Fastino-style `systemone` callers, OpenAI or
+  Anthropic clients — is an adapter mode over the IR, never the
+  identity of the runtime.
+- **Failure posture stays degrade-to-consumer.** A first-party
+  consumer must treat the decision runtime as optional: connection
+  refused, timeout, or `abstain` falls back to that consumer's own
+  prior behavior (the INTEGRATION_AMORTYX.md §4 rule). No consumer's
+  availability may depend on the decision runtime's availability.
+- **Docs follow the same rule.** `docs/INTEGRATIONS.md` documents
+  third-party integration paths as the primary story; first-party
+  integrations appear in it as worked examples of the same public
+  surfaces, pointing at their own design docs of record.

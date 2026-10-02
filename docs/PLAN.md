@@ -1027,6 +1027,56 @@ fills quiet windows throughout. 18j last. WGCA/web-standards: no web
 frontend exists — the clause maps to 18d's HTTP contract suite and the
 API reference; noted here so it is not silently dropped.
 
+## Phase 19 — adoption + integration documentation (opened 2026-10-02)
+
+User directive (2026-10-02): "add docs and clear instructions on how to
+integrate with various coding tools, harnesses, and so on that people
+use … build out solid integration, usage documentation … for ease of
+adoption" — with the D29 constraint that first-party integrations
+(Amortyx et al.) are worked examples over public surfaces, never a
+privileged stack.
+
+- **Doc of record: `docs/INTEGRATIONS.md`.** One entry point for every
+  integration path, with the honesty rule that every documented
+  endpoint, flag, and tool name is verified against the shipped tree
+  (the same discipline SPEC_COVERAGE applies to §-items). Covers: the
+  HTTP surface (native `/v1/*`), the six `codify_*` MCP tools with
+  client registration, the CLI (`--format native|openai|anthropic|jev`),
+  Rust library consumption under the dependency-layering rules, the
+  WASM zero-ML runtime (D23), CI decision-gate patterns (GitForge
+  pipeline of record), and first-party integrations as examples
+  (Amortyx → `docs/INTEGRATION_AMORTYX.md`).
+- **19a — wire-format selection over HTTP (gap, code).** Today every
+  HTTP route decodes via the `Native` adapter only
+  (`opencodifier-http/src/routes.rs`:73,137,164,275); the
+  `OpenAI`/`Anthropic`/`Jev` adapters are reachable through the CLI
+  `--format` flag and as library types, not over HTTP. Adopters with
+  existing OpenAI/Anthropic/Jev-shaped tooling currently must shell
+  out to the CLI. Land an explicit, versioned format selector on the
+  HTTP surface (envelope field or content negotiation — decide in a
+  DECISIONS record before coding), keeping `Native` the default and
+  documenting fidelity limits per adapter (schema adapter contract).
+- **19b — Jev-ecosystem callers.** The `/v1/systemone` convention
+  (Jev/System-One clients; now also Fastino's GLiDE demo) is NOT an
+  OpenCodifier route and must not be claimed as one. Decide whether a
+  Jev-shaped HTTP route earns its place under the same adapter rules
+  as 19a, or whether the documented path stays CLI/library-only.
+- **19c — quickstart + copy-paste examples.** Serve on the default
+  loopback address, one native request per decision kind (Choice /
+  Boolean / Score) as runnable `curl`s, MCP registration snippets,
+  and an abstention example showing the refused-decision envelope —
+  all exercised by a test or checked by a docs test so they cannot
+  rot silently.
+- **19d — publish path (blocked on user go, unchanged).** crates.io /
+  Homebrew / winget / §58 publication remain explicitly
+  user-gated (§58 note below); this phase only prepares the docs
+  those channels need.
+
+Acceptance: every INTEGRATIONS.md claim mechanically checkable (route
+exists in `routes.rs`, tool registered in `opencodifier-mcp`, flag in
+`args.rs`); no aspirational endpoint anywhere; D29 respected in every
+example.
+
 ## Spec coverage map (audit, 2026-09-28; refreshed 2026-09-30)
 
 All 17 tracked phases are done; the §-by-§ check that every PLANNING
