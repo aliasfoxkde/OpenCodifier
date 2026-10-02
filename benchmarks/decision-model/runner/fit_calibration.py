@@ -64,7 +64,11 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "suite"))
+from generate_suite import build_suite  # noqa: E402
 
 # Board arm -> artifact file stem. The D16 tier scheme plus the two
 # sub-LLM rungs; everything else on the board is analysis-only.
@@ -255,6 +259,40 @@ def build_artifact(name: str, run: dict, run_path: Path) -> dict:
         )[0]
         for item_class in classes
     }
+    # Per-cardinality bucket fits (RESEARCH.md §7.3 delta 3): candidate
+    # count is a prompt-shape variable that shifts distribution spread, so
+    # one temperature may not serve all option counts. Suite cardinalities
+    # are joined by item id from the seed-deterministic generator. Analysis
+    # evidence only — the shipped artifact keys stay what the engine can
+    # address, the same discipline as per_class.
+    card_of = {it["id"]: len(it["candidates"]) for it in build_suite()["items"]}
+    per_card: dict[str, dict] = {}
+    if dists is not None:
+        card_by_index = [
+            card_of.get(item.get("id")) for item in run["single"]
+        ]
+        for k in sorted({c for c in card_by_index if c is not None}):
+            sub = [obs for obs, c in zip(dists, card_by_index) if c == k]
+            if len(sub) < 8:
+                continue  # a bucket too small to fit honestly is not a bucket
+            t, degen = fit_temperature_full(sub)
+            per_card[str(k)] = {"T": t, "n": len(sub), "degenerate": degen}
+    else:
+        by_card: dict[int, list[tuple[float, int]]] = {}
+        for it in run["single"]:
+            k = card_of.get(it["id"])
+            if k is not None:
+                by_card.setdefault(k, []).append(
+                    (float(it["prob"]), int(it["pred"] == it["answer"]))
+                )
+        for k in sorted(by_card):
+            if len(by_card[k]) < 8:
+                continue
+            t, degen = fit_temperature(by_card[k])
+            sub_ece = expected_calibration_error(by_card[k], t)
+            per_card[str(k)] = {"T": t, "n": len(by_card[k]),
+                                "degenerate": degen, "ece_after": sub_ece,
+                                "ece_before": raw_ece(by_card[k])}
     ece_before = raw_ece(pairs)
     ece_after = expected_calibration_error(pairs, temperature)
     model = run.get("model") or {}
@@ -282,6 +320,7 @@ def build_artifact(name: str, run: dict, run_path: Path) -> dict:
         "temperature": temperature,
         "degenerate": degenerate,
         "per_class": per_class,
+        "per_cardinality": per_card,
     }
 
 
@@ -328,8 +367,14 @@ def main() -> None:
         per_class = ", ".join(
             f"{item_class}={value:.3f}" for item_class, value in fitted["per_class"].items()
         )
+        per_card = ", ".join(
+            f"k{key}={bucket['T']:.3f}(n={bucket['n']})"
+            + ("[degenerate]" if bucket["degenerate"] else "")
+            for key, bucket in fitted["per_cardinality"].items()
+        )
         print(f"{artifact_name}: T={fitted['temperature']:.3f} "
               f"ECE {fitted['ece_before']:.3f} -> {fitted['ece_after']:.3f} [{per_class}]"
+              + (f" | per-cardinality: {per_card}" if per_card else "")
               + ("  [DEGENERATE: T->inf, no artifact]" if fitted["degenerate"] else "")
               + ("  [SKIP: ECE worsens, no artifact]"
                  if not fitted["degenerate"] and not helps else ""))
