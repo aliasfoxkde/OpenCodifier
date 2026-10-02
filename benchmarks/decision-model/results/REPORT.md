@@ -1053,3 +1053,33 @@ hash is a changed artifact and invalidates the row (D14).
   smoke-verified under load 70–90 and those numbers are marked DIRTY —
   context for B3's build-once case, never citable as D9 results. No
   tier changes (D16 unchanged).
+- **2026-10-01 (params A/B matrix, quiet-window arms)** — the CTX /
+  threads / prompt-diet arms landed and are integrated here (supersedes
+  this entry's "diet100 in flight" note: diet100 was watchdog-killed at
+  load 438.75 and marked `.contaminated`; a re-arm is queued to
+  complete the curve). All arms are the rebuilt parallel-decision
+  binary, Qwen3.5-4B-UD-Q4_K_XL, decision-seqs 24, tree mode, 200-task
+  suite unless noted; every arm's own double-replay was clean
+  (`predictions_match`, max-prob delta 0.0). **Finding 1 — quality is
+  invariant to threads and context**: t08 (8t/8k, quiet), t16
+  (16t/8k, storm-gated), ctx4k (12t/4k, quiet 4.9→15.3) and ctx16k
+  (12t/16k, quiet 16.6→20.1) all score **0.800 / ECE 0.0736** —
+  aggregate, all three per-class accuracies (0.95 / 1.0 / 0.45), and
+  ECE at full float precision (0.07363460237781208 in all four run
+  JSONs) are identical, i.e. identical per-item predictions and
+  probabilities everywhere. Threads and context are performance knobs
+  with zero measured quality effect at this suite's context lengths.
+  **Finding 2 — ctx4k is the cheapest verified configuration**: p50
+  4833 ms / mean 5513 ms / wall 1778 s at full quality, vs ctx16k p50
+  8040 ms / wall 5117 s — latency is monotone in context within the
+  12-thread family. The 8k row of record stays t08 (quiet, p50 7630
+  ms): no 12-thread/8k arm exists, so the threads axis is not cleanly
+  isolated (t16's p50 19.2 s is the storm row already marked
+  not-of-record). **Finding 3 — the prompt diet is dominated, do not
+  ship**: diet200 (12t/8k, load 45.6→23.8) collapses to 0.633
+  accuracy with `metadata_match` 1.0→0.525 and relational
+  0.45→0.425 (lexical 0.95 unchanged), ECE worsening 0.0736→0.1203 —
+  and it is the slowest arm (p50 15 855 ms). The diet trims exactly
+  the metadata evidence the suite's metadata class runs on. Negative
+  on both axes; the rung's context budget stays full-context, 4k
+  floor verified. No tier changes (D16 unchanged).
