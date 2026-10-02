@@ -14,12 +14,12 @@ name = "opencodifier"
 path = "src/main.rs"
 
 [dependencies]
-opencodifier-core = { path = "../opencodifier-core", version = "0.3.0" }
-opencodifier-engine = { path = "../opencodifier-engine", version = "0.3.0" }
-opencodifier-model = { path = "../opencodifier-model", version = "0.3.0" }
-opencodifier-schema = { path = "../opencodifier-schema", version = "0.3.0" }
-opencodifier-http = { path = "../opencodifier-http", version = "0.3.0" }
-opencodifier-mcp = { path = "../opencodifier-mcp", version = "0.3.0" }
+opencodifier-core = { path = "../opencodifier-core", version = "0.4.0" }
+opencodifier-engine = { path = "../opencodifier-engine", version = "0.4.0" }
+opencodifier-model = { path = "../opencodifier-model", version = "0.4.0" }
+opencodifier-schema = { path = "../opencodifier-schema", version = "0.4.0" }
+opencodifier-http = { path = "../opencodifier-http", version = "0.4.0" }
+opencodifier-mcp = { path = "../opencodifier-mcp", version = "0.4.0" }
 clap = { version = "4", features = ["derive"] }
 serde.workspace = true
 serde_json.workspace = true
