@@ -891,6 +891,29 @@ impl<'a> Executor<'a> {
                 continue;
             }
             let Some(narrowed) = self.prepare_question(question) else { continue };
+            // Build-once handoff (D28/#80): the lexical node's index over
+            // the surviving candidates. Reusable only when the deciding
+            // list is exactly those documents in the same order — a later
+            // `retrieve` prune or `rerank` reorder changes the list, and a
+            // length-equal order mismatch would silently mispair scores
+            // with candidates. Anything else hands `None` and the
+            // classifier builds its own (bit-identical either way).
+            let handoff = match (question, &narrowed) {
+                (DecisionQuestion::Choice(choice), DecisionQuestion::Choice(narrowed_choice)) => {
+                    self.narrowing.get(choice.id()).zip(self.lexical.get(choice.id())).and_then(
+                        |(outcome, scores)| {
+                            let index = scores.index()?;
+                            let same_order = outcome
+                                .surviving()
+                                .iter()
+                                .map(Candidate::id)
+                                .eq(narrowed_choice.candidates().iter().map(Candidate::id));
+                            same_order.then_some(index)
+                        },
+                    )
+                }
+                _ => None,
+            };
             // Focused extraction (PLANNING.md §45): when configured and the
             // state exceeds the budget, the classifier reads a per-question
             // view; a weak view escalates to the full state before any
@@ -904,12 +927,12 @@ impl<'a> Executor<'a> {
                 None => (&self.state, false),
             };
             let (raw, mut lexical_support) =
-                self.classifier.decide_extended(decide_state, &narrowed, None)?;
+                self.classifier.decide_extended(decide_state, &narrowed, handoff)?;
             let (mut distribution, mut clipped) = Self::clip(&raw, &narrowed)?;
             let mut escalated = false;
             if extracted && Self::escalation_warranted(policy, &distribution) {
                 let (full_raw, full_support) =
-                    self.classifier.decide_extended(&self.state, &narrowed, None)?;
+                    self.classifier.decide_extended(&self.state, &narrowed, handoff)?;
                 let (full, full_clipped) = Self::clip(&full_raw, &narrowed)?;
                 distribution = full;
                 clipped = full_clipped;
