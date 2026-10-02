@@ -69,10 +69,15 @@ impl Reranker for LexicalReranker {
 
     fn rerank(&self, query: &str, candidates: &[Candidate]) -> EngineResult<Vec<ScoredCandidate>> {
         let index = Bm25Index::new(candidates.iter().map(Candidate::description));
+        // The candidate's own position, by enumeration: the former
+        // `position()` by id re-scanned the slice once per candidate
+        // (B2). Ids are unique upstream (validated at question
+        // construction), so the document index is identical.
         let mut scored: Vec<ScoredCandidate> = candidates
             .iter()
-            .map(|candidate| ScoredCandidate {
-                score: index.score(query, candidate_index(candidates, candidate)),
+            .enumerate()
+            .map(|(position, candidate)| ScoredCandidate {
+                score: index.score(query, position),
                 candidate: candidate.clone(),
             })
             .collect();
@@ -84,11 +89,6 @@ impl Reranker for LexicalReranker {
         });
         Ok(scored)
     }
-}
-
-/// The candidate's position in `candidates`.
-fn candidate_index(candidates: &[Candidate], candidate: &Candidate) -> usize {
-    candidates.iter().position(|seeking| seeking.id() == candidate.id()).unwrap_or_default()
 }
 
 /// Cosine-similarity reranking through an embedding backend.

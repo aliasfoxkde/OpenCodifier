@@ -15,6 +15,8 @@
 //! knob and is rejected by the engine when safe mode is on (PLANNING.md
 //! §45: never eliminate based solely on weak semantic evidence).
 
+use std::collections::HashSet;
+
 use opencodifier_core::{Candidate, CandidateId, ChoiceQuestion, QuestionId};
 
 use crate::lexical::Bm25Index;
@@ -42,12 +44,19 @@ impl NarrowingOutcome {
         exclusions: &[CandidateId],
         pins: &[CandidateId],
     ) -> Self {
-        let mut removed: Vec<CandidateId> = Vec::new();
+        // Set views over the selector output: `apply` probes pins and
+        // removed once per exclusion and removed once per declared
+        // candidate, which is quadratic string-compare work on wide
+        // questions (B2). Membership semantics are unchanged.
+        let pinned: HashSet<&CandidateId> = pins.iter().collect();
+        let mut removed_vec: Vec<CandidateId> = Vec::new();
+        let mut removed: HashSet<&CandidateId> = HashSet::new();
         for candidate in exclusions {
-            if pins.contains(candidate) || removed.contains(candidate) {
+            if pinned.contains(candidate) || removed.contains(candidate) {
                 continue;
             }
-            removed.push(candidate.clone());
+            removed.insert(candidate);
+            removed_vec.push(candidate.clone());
         }
         let surviving: Vec<Candidate> = question
             .candidates()
@@ -59,7 +68,7 @@ impl NarrowingOutcome {
             question_id: question.id().clone(),
             before: question.candidates().len(),
             after: surviving.len(),
-            removed,
+            removed: removed_vec,
             surviving,
         }
     }
