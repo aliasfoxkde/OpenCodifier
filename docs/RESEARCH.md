@@ -459,6 +459,25 @@ Grounded answer, separating what is measured from what is plausible:
   adopt a deterministic canonical order (and record it in the rung's
   manifest, since it changes the prompt contract and therefore the
   cache key).
+  **Post-hoc half done (2026-10-02, `results/position-bias.md`,
+  `runner/position_bias.py` — zero inference):** indexing each arm's
+  winners against its tasks' ordered candidate lists (shares normalized
+  per cardinality against the benchmark's own gold-position
+  distribution) shows the prior is rung-specific, not universal. The
+  decision fork is nearly position-neutral — position 0 captures 0.289
+  of normalized share vs 0.262 gold (+2.7 pp), and its accuracy-by-gold
+  -position curve has no primacy slope. The embedding rung (vtx) has a
+  strong primacy prior — position 0 takes 0.413 vs 0.262 gold
+  (+15.1 pp), starving position 2 (0.112 vs 0.216) — so for THAT rung
+  the permutation replay is worth a server slot, and a deterministic
+  canonical order (or order-permutation TTA) is a real candidate fix.
+  The engine rung shows the third shape: no position-0 excess
+  (0.255 vs 0.262) but it *never* selects position 5 (0.000 vs 0.025)
+  and under-selects position 2 — an evaluation-order artifact of
+  rule/lexical matching, i.e. the bias lives in the mechanism, not a
+  learned slot preference. The permutation replay (flip-rate under
+  canonical reordering) remains queued for a server slot; its value is
+  now concentrated on the vtx rung.
 - **Per-cardinality calibration is prompt-shape-aware calibration.**
   Laya fits temperatures per option-count (§6.3) — the number of
   candidates is a prompt-shape variable that shifts distribution
@@ -466,6 +485,16 @@ Grounded answer, separating what is measured from what is plausible:
   buckets to the fit script (`fit_calibration.py`) is a small,
   measurable refinement consistent with D15's schema (class keys are
   arbitrary strings).
+  **Done as analysis evidence (2026-10-02, CALIBRATION.md):** the
+  fitter joins suite cardinalities from the seed-deterministic
+  generator and fits per bucket. Confirmed on our own data — the
+  margin-fit 4B fork of record wants T 1.44 at k=4 vs **0.15 at k=5**
+  (raw winner mass dilutes across options, so the winner-gate channel
+  reads badly underconfident on wide boards); the exact-fit 2B board
+  is flatter (k5 1.49 around a global 0.93) and is the shape to trust,
+  since the margin proxy over-sharpens multi-way boards (the
+  synthetic-grid finding). Shipped artifacts unchanged — buckets ship
+  as engine keys only when the engine can address them.
 - **What prompting cannot fix here**: the fork's single-token
   verdict-slot readout has no generation, so the CoT-prompting axis
   and the constrained-decoding "formatting traps" failure mode
@@ -476,8 +505,12 @@ Grounded answer, separating what is measured from what is plausible:
   that the prompt needs work.
 
 **Actionable deltas**: (1) template-on/off + minimal-system-message A/B
-queued for the next fork arm; (2) candidate-order permutation study on
-existing run JSONs (no new inference needed); (3) per-cardinality
-buckets in the next calibration fit; (4) when a PrefixLM/encoder rung
-lands, encode the no-KV-reuse and one-batch-prefill constraints as
-flags + manifest statements (§7.2).
+queued for the next fork arm (running, `fork_4b-instr-*-v1`); (2)
+candidate-order — post-hoc position-prior half DONE (§7.3, fork
++2.7 pp / vtx +15.1 pp at position 0 / engine never-position-5);
+permutation flip-rate replay queued for a server slot, value
+concentrated on vtx; (3) per-cardinality buckets in the next
+calibration fit (the d15 re-run provides the first JevBench-native
+probability channel to fit); (4) when a PrefixLM/encoder rung lands,
+encode the no-KV-reuse and one-batch-prefill constraints as flags +
+manifest statements (§7.2).

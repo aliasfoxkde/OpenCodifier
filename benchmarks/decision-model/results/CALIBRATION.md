@@ -147,3 +147,25 @@ artifact_schema_check.rs` deserializes every artifact of record into
 Fits are **in-sample**: fitted and evaluated on the same 120 items.
 ECE-after values are consistency checks, not generalization claims —
 the same n=120/single-seed limitation recorded in `REPORT.md` applies.
+
+**Per-cardinality bucket fits (2026-10-02, analysis evidence).** RESEARCH.md
+§7.3 delta 3 (from Laya's §6.3 per-option-count temperatures): the fitter now
+joins each suite item's candidate count from the seed-deterministic generator
+(`runner/fit_calibration.py`, bucket < 8 items skipped) and prints per-bucket
+temperatures. Shipped artifacts are unchanged (validated byte-identical on all
+seven arms, both fit paths). What the buckets show:
+
+- The margin-fit 4B/9B arms carry the largest cardinality gradient —
+  qwen3.5-4b-ud-q4_k_xl wants T 1.44 at k=4 but **T 0.15 at k=5** and
+  T 0.20 at k=6 (raw winner probabilities dilute as options grow, so
+  the winner-gate channel reads badly underconfident on wide boards).
+- The exact-fit 2B board (the only arm whose buckets rest on full
+  distributions, per the synthetic-grid finding that the margin proxy
+  over-sharpens multi-way boards) is flatter: k=4 0.82, k=5 1.49,
+  k=6 0.77 around its global 0.93. Trust the exact-fit buckets'
+  *shape*; treat the margin-fit buckets as upper bounds on the
+  gradient until those arms re-run with distribution emission (the
+  d15 fork re-run queues exactly that for the 4B).
+- n=18/n=15 at k=5/k=6 — the k=5/k=6 buckets are small-sample fits and
+  inherit the in-sample caveat above; the k=4 bucket (n=87) is the
+  only well-populated one.
