@@ -791,8 +791,11 @@ is proven, and nothing ships a claim its evidence cannot carry:
   "pending a quiet window", it is structurally out of scope for this
   host (a Windows box or CI runner with wine would be the venue).
 - **linux-aarch64** — `aarch64-unknown-linux-{gnu,musl}` targets
-  installed, `cargo-zigbuild`/`zig` present for linking. Build + QEMU
-  smoke pending quiet.
+  installed, `cargo-zigbuild`/`zig` present for linking; both linked
+  2026-10-01 (the gnu one dynamically, the musl one static). A smoke
+  run is structurally out of scope on this host for the same reason
+  as windows: no qemu-user (and no arm hardware) exists here — an
+  arm box or a qemu-capable runner would be the venue.
 - **darwin x86_64/aarch64** — rust targets installed; `cargo-zigbuild`
   can link Mach-O without an Apple SDK. Verification is link success +
   `file` magic only: no macOS host runs it here, no codesigning or
