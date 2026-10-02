@@ -416,6 +416,94 @@ fn graph_validate_rejects_a_document_without_the_graph_shape() {
 }
 
 #[test]
+fn a_ladder_profile_overrides_the_gate_end_to_end() {
+    let scratch = Scratch::new("ladder");
+    let payload = scratch.write_json("request.json", &choice_request(permissive_policy()));
+    // The choice rung demands certainty the lexical engine cannot give,
+    // so the request policy's 0.0 floor is overridden into a Verify.
+    let strict = scratch.write_json(
+        "strict-ladder.json",
+        &json!({
+            "id": "strict-test-v1",
+            "per_kind": { "choice": {
+                "min_confidence": 1.0, "verify_below": 0.0,
+                "abstain_below": 0.0, "risk": "low"
+            } }
+        }),
+    );
+
+    let output = decide(&payload)
+        .arg("--ladder")
+        .arg(&strict)
+        // A Verify is non-decisive, which `decide` reports as exit 2
+        // unless the caller opts into treating it as a successful answer.
+        .arg("--abstain-is-success")
+        .output()
+        .expect("run opencodifier");
+    assert_eq!(output.status.code(), Some(0), "stderr: {:?}", output.stderr);
+    let response: Value =
+        serde_json::from_slice(&output.stdout).expect("stdout is one JSON document");
+    assert_eq!(response["outcome"], "verify", "{response}");
+
+    // The empty-rung mirror image: the identical request under a profile
+    // that never overrides anything is accepted, as without --ladder.
+    let permissive = scratch.write_json(
+        "loose-ladder.json",
+        &json!({
+            "id": "loose-test-v1",
+            "per_kind": { "choice": {
+                "min_confidence": 0.0, "verify_below": 0.0,
+                "abstain_below": 0.0, "risk": "low"
+            } }
+        }),
+    );
+    let output =
+        decide(&payload).arg("--ladder").arg(&permissive).output().expect("run opencodifier");
+    assert_eq!(output.status.code(), Some(0), "stderr: {:?}", output.stderr);
+    let response: Value =
+        serde_json::from_slice(&output.stdout).expect("stdout is one JSON document");
+    assert_eq!(response["outcome"], "accept", "{response}");
+}
+
+#[test]
+fn a_ladder_profile_refuses_to_be_empty() {
+    let scratch = Scratch::new("ladder-empty");
+    let payload = scratch.write_json("request.json", &choice_request(permissive_policy()));
+    let empty = scratch.write_json("empty-ladder.json", &json!({ "id": "empty-test-v1" }));
+
+    decide(&payload)
+        .arg("--ladder")
+        .arg(&empty)
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("cli.invalid_ladder"));
+}
+
+#[test]
+fn a_malformed_or_unreadable_ladder_is_an_input_error() {
+    let scratch = Scratch::new("ladder-bad");
+    let payload = scratch.write_json("request.json", &choice_request(permissive_policy()));
+
+    let malformed = scratch.write("malformed-ladder.json", b"{ not json");
+    decide(&payload)
+        .arg("--ladder")
+        .arg(&malformed)
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("cli.invalid_ladder"));
+
+    decide(&payload)
+        .arg("--ladder")
+        .arg(scratch.path().join("absent-ladder.json"))
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("cli.invalid_ladder"));
+}
+
+#[test]
 fn models_verify_accepts_matching_bytes_and_rejects_tampered_ones() {
     let scratch = Scratch::new("models");
     let bytes = b"opencodifier decision model artifact bytes";
