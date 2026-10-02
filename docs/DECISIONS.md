@@ -960,3 +960,54 @@ Acceptance is the F23 target the ladder has been simulating: blended
 accuracy ≥ 0.80 at ≤ 1 s mean on the locked suite, measured
 in-process through the real engine, not through the benchmark
 harness's post-hoc blend.
+
+## D27 — Cross-rung escalation: a configured rung list, fired only by the gate (2026-10-02)
+
+D25 gave every rung its own gate; D26 gave the ladder its model rung.
+What the F23 cascade actually does is still missing: when a rung's
+gate does not accept, the question moves to the *next* rung. Today a
+non-accepting outcome dead-ends in `Verify`/`Abstain` against a single
+optional verifier. The decision:
+
+- **Fallbacks are an engine-level ordered rung list, not graph nodes.**
+  `Rung { classifier, calibration, policy }` (all optional beyond the
+  classifier) lives in `ladder.rs` because it *is* a ladder rung — the
+  same escalation vocabulary, now with an ordered tail. The graph stays
+  a declarative DAG of pipeline stages; model routing is engine
+  configuration, and no IR or wire shape changes. Engines assemble
+  through `DecisionEngine::new_with_rungs` /
+  `EngineHandle::with_rungs`; every existing constructor passes an
+  empty list and is unaffected.
+- **The gate is the only trigger — never two classifiers on a happy
+  path.** At the threshold node the primary rung is gated exactly as
+  today. Only a non-`Accept` outcome (`Verify` *or* `Abstain` — both
+  mean "this rung could not decide") fires the next rung, which is
+  gated by *its own* policy when it carries one, else the deciding
+  node's ladder-resolved policy. The list walks until a rung accepts
+  or is exhausted; the last rung's outcome stands and the existing
+  verifier cascade (agree → `Verified`, disagree → `Abstain`) applies
+  to the *final* distribution. Abstention at the end of the list
+  remains a successful outcome, never an error.
+- **Rung overrides are honest about scope.** A rung's calibration
+  replaces the engine-level calibration for its own distribution (the
+  D15 seam, per rung, as B4 did for gates); a rung's policy replaces
+  the node-resolved policy the same way. Fallbacks decide on the full
+  state over the already-narrowed question — the same inputs the
+  verifier gets today — and their distributions are clipped to the
+  surviving candidate set like every other classifier's.
+- **Cache identity carries the rung list.** A non-empty list decorates
+  the model id `|rungs-v1@<model>@<cal-ver>+…` in list order, so a
+  changed composition (model swap, calibration refit, list reorder)
+  re-keys every cached decision mechanically. A rung's *policy* has no
+  version of its own: changing one is an artifact change under the
+  same discipline D25 set for calibrations — express it by bumping the
+  ladder id (or altering the composition the decoration already sees).
+- **The trace explains the walk.** A question that escalated gains
+  `rungs_fired` and a `rung_chain` fact naming each rung's model, top
+  key, and gate outcome in order — the deterministic-explainability
+  rule (§71) applied to routing, no chain-of-thought involved. An
+  engine without fallbacks emits byte-identical traces, which the
+  fixture suite asserts.
+- **Confidence-gated, budget-aware.** Each rung firing passes the
+  wave guard (deadline + cancellation) before the call, so a rung
+  walk cannot outrun the request's budget.

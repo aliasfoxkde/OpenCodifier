@@ -34,15 +34,72 @@
 //! through the interfaces' `--ladder` flag. A profile is data, not
 //! code: loading validates every policy and artifact before an engine
 //! is built.
+//!
+//! Beyond gates, the ladder owns the escalation *tail* (D27): a
+//! [`Rung`] pairs a classifier with its own optional calibration and
+//! gate policy, and an engine assembled with a rung list walks it in
+//! order at the threshold node — firing a rung only while the previous
+//! rung's gate does not accept, so an accepted question runs exactly
+//! one classifier. The F23 fusion cascade's central move, as engine
+//! configuration rather than graph shape.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use opencodifier_core::DecisionPolicy;
 use serde::Deserialize;
 
 use crate::calibration::{Calibration, CalibrationArtifact, ProofAwareCalibration};
+use crate::classifier::Classifier;
 use crate::error::{EngineError, EngineResult};
 use crate::graph::NodeKind;
+
+/// One decider a question can escalate to: a classifier plus the
+/// optional per-rung calibration and gate policy that make its
+/// confidences and thresholds commensurable with the rest of the ladder
+/// (D27).
+///
+/// A rung list is engine-level configuration (`EngineHandle::with_rungs`);
+/// the executor walks it in order at the threshold node, firing a rung
+/// only when the previous rung's gate did not accept. `calibration:
+/// None` applies the engine-level calibration to the rung's
+/// distributions; `policy: None` gates the rung with the deciding
+/// node's ladder-resolved policy.
+#[derive(Debug)]
+pub struct Rung {
+    /// The decider. Its `model_id()` rides the cache-key decoration, so
+    /// swapping it re-keys mechanically.
+    pub classifier: Arc<dyn Classifier>,
+    /// This rung's calibration (`None`: the engine-level calibration).
+    pub calibration: Option<Arc<dyn Calibration>>,
+    /// This rung's gate policy (`None`: the deciding node's resolved
+    /// policy).
+    pub policy: Option<DecisionPolicy>,
+}
+
+impl Rung {
+    /// A rung that decides with `classifier` and inherits the engine's
+    /// calibration and the node's policy.
+    #[must_use]
+    pub fn new(classifier: Arc<dyn Classifier>) -> Self {
+        Self { classifier, calibration: None, policy: None }
+    }
+
+    /// Attaches a per-rung calibration (D15), consuming and returning
+    /// `self`.
+    #[must_use]
+    pub fn with_calibration(mut self, calibration: Arc<dyn Calibration>) -> Self {
+        self.calibration = Some(calibration);
+        self
+    }
+
+    /// Attaches a per-rung gate policy, consuming and returning `self`.
+    #[must_use]
+    pub fn with_policy(mut self, policy: DecisionPolicy) -> Self {
+        self.policy = Some(policy);
+        self
+    }
+}
 
 /// Optional per-node / per-kind confidence-gate policy overrides.
 ///

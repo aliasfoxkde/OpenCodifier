@@ -8,6 +8,18 @@ releases may break, and every breaking change is recorded in this file
 
 ## [Unreleased]
 
+- B6 — cross-rung escalation (D27): a configured, ordered `Rung` list
+  (`classifier` + optional per-rung calibration and gate policy) the
+  threshold node walks when a rung's gate does not accept — `Verify` and
+  `Abstain` both mean "this rung could not decide". The gate is the only
+  trigger: an accepted question runs exactly one classifier; the walk
+  stops at the first accepting rung or the end of the list; the existing
+  verifier cascade reads the final rung's distribution; each firing
+  passes the deadline/cancellation guard. Cache identity carries the list
+  (`|rungs-v1@<model>@<cal-ver>+…`, in order) so composition changes
+  re-key mechanically; traces gain `rungs_fired` + `rung_chain` naming
+  each rung's model, answer, and gate outcome. Empty list = byte-identical
+  engine (12 new integration tests).
 - B5 — the model rung of the escalation ladder (`LlamaDecisionClassifier`,
   D26): the measured `POST /v1/decision` tree-mode contract of the
   llama.cpp `parallel-decision` fork as an `opencodifier_engine::Classifier`

@@ -45,6 +45,7 @@ use crate::clock::{CancellationToken, Clock, Deadline};
 use crate::error::{EngineError, EngineResult};
 use crate::executor::{Executor, GraphOutcome, RunReport};
 use crate::graph::DecisionGraph;
+use crate::ladder::Rung;
 use crate::rules::RuleEngine;
 
 /// Everything the engine needs besides the request.
@@ -238,6 +239,11 @@ pub struct DecisionEngine {
     clock: Arc<dyn Clock>,
     classifier: Arc<dyn Classifier>,
     verifier: Option<Arc<dyn Classifier>>,
+    /// Ordered escalation rungs (D27): consulted at the threshold node,
+    /// in order, only while the previous rung's gate does not accept.
+    /// Empty — the default — means the gate cascade is exactly as it was
+    /// before rungs existed.
+    fallbacks: Vec<Rung>,
     token: Arc<CancellationToken>,
 }
 
@@ -255,6 +261,25 @@ impl DecisionEngine {
         clock: Arc<dyn Clock>,
         classifier: Arc<dyn Classifier>,
         verifier: Option<Arc<dyn Classifier>>,
+    ) -> EngineResult<Self> {
+        Self::new_with_rungs(config, clock, classifier, verifier, Vec::new())
+    }
+
+    /// Builds and validates an engine with an ordered escalation tail
+    /// (D27): when the primary rung's gate does not accept a question,
+    /// the executor walks `fallbacks` in order, firing a rung only while
+    /// the previous one did not accept. A non-empty list decorates the
+    /// model id `|rungs-v1@…` in list order so cached decisions re-key.
+    ///
+    /// # Errors
+    ///
+    /// [`DecisionEngine::new`]'s refusals.
+    pub fn new_with_rungs(
+        config: EngineConfig,
+        clock: Arc<dyn Clock>,
+        classifier: Arc<dyn Classifier>,
+        verifier: Option<Arc<dyn Classifier>>,
+        fallbacks: Vec<Rung>,
     ) -> EngineResult<Self> {
         if config.parallelism == 0 {
             return Err(EngineError::InvalidConfig {
@@ -328,6 +353,26 @@ impl DecisionEngine {
         if !config.ladder.is_empty() {
             model_id = format!("{}|ladder-v1@{}", model_id, config.ladder.id);
         }
+        // Fallback rungs ride the same identity rule (D27): the ordered
+        // list is part of what a cached decision decided with, so each
+        // rung's model id and calibration version decorate the id in
+        // list order — a swap, refit, or reorder re-keys mechanically.
+        // A rung's policy has no version of its own; changing one is an
+        // artifact change under D25's discipline (bump the ladder id).
+        if !fallbacks.is_empty() {
+            let signature = fallbacks
+                .iter()
+                .map(|rung| {
+                    format!(
+                        "{}@{}",
+                        rung.classifier.model_id(),
+                        rung.calibration.as_ref().map_or(0, |calibration| calibration.version())
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("+");
+            model_id = format!("{model_id}|rungs-v1@{signature}");
+        }
         let config = EngineConfig {
             identity: EngineIdentity {
                 model_id,
@@ -345,6 +390,7 @@ impl DecisionEngine {
             clock,
             classifier,
             verifier,
+            fallbacks,
             token: Arc::new(CancellationToken::new()),
         })
     }
@@ -418,6 +464,7 @@ impl DecisionEngine {
             &self.clock,
             &self.classifier,
             self.verifier.as_ref(),
+            &self.fallbacks,
             request,
             key,
             deadline,
