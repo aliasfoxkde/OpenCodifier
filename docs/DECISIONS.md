@@ -1155,3 +1155,32 @@ or Jev-shaped tooling had to shell out to the CLI to be understood.
   conversion. `/v1/systemone` still does not exist and is still not
   claimed (Phase 19b decides whether a Jev-shaped route earns its
   place under these same rules).
+
+## D31 — No dedicated Jev-shaped route; the format header is the integration path (2026-10-02)
+
+Phase 19b, closing the question D30 left open. The Jev/System-One
+ecosystem (and Fastino's GLiDE demo) convention is a
+`/v1/systemone` path. Does a route by that name earn its place?
+
+- **No.** D30's `x-opencodifier-format: jev` header already carries the
+  entire capability: the same adapter, the same decode/encode
+  symmetry, the same cache identity. A `/v1/systemone` route would be
+  a byte-for-byte alias of `POST /v1/decide` with the header
+  pre-set — new surface, zero new capability, a second URL to document,
+  version, and keep honest.
+- **Identity doctrine (CLAUDE.md) is the tiebreaker**: OpenCodifier is
+  not a Jev clone — Jev/System-One compatibility is one adapter mode,
+  not the identity. Promoting a Jev convention to a top-level route
+  inverts that: it advertises the adapter mode as the product's shape.
+  Headers compose; brands should not.
+- **Revisit condition, stated up front**: a concrete consumer that
+  cannot set a request header (a hard-coded ecosystem client with no
+  configuration surface) changes the calculus. Then the alias route
+  ships as pure dispatch to the decide handler with the Jev adapter
+  selected — no separate pipeline, no separate error contract, no
+  separate cache namespace. Until a named consumer exists, the route
+  stays unshipped and `/v1/systemone` stays unclaimed.
+- **Jev-shaped callers are served today**: `POST /v1/decide` with
+  `x-opencodifier-format: jev` (HTTP), `opencodifier decide --format
+  jev` (CLI), `Jev` adapter in-process (library). This is documented as
+  the integration path in `INTEGRATIONS.md` §2.4, not a workaround.

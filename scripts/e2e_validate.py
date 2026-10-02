@@ -85,8 +85,9 @@ def wait_health(base: str, deadline_s: float = 30.0) -> bool:
 
 
 def decide_payload(question: dict, policy: dict | None = None) -> dict:
-    # `policy` is a required request field (schema.invalid_value: "missing
-    # field `policy`"), not an optional override.
+    # `policy` and `metadata` are optional on the wire since Phase 19c
+    # (omitted fields take the engine defaults); sent explicitly here so
+    # the suite exercises non-default policies and request ids.
     return {
         "state": {"text": "The service is down and customers are affected.",
                   "facts": {}},
@@ -219,11 +220,13 @@ def run_http_checks(base: str) -> None:
           f"status={st} outcome={resp.get('outcome')}")
 
     # --- malformed native state --------------------------------------------
+    # (`facts` is optional on the wire since 19c; a state missing its text
+    # is still refused.)
     bad = decide_payload(q)
-    del bad["state"]["facts"]
+    del bad["state"]["text"]
     st, resp = post(base, "/v1/decide", bad)
     code = resp.get("error", {}).get("code", "") if isinstance(resp, dict) else ""
-    check("malformed state (missing facts): 400 schema.*",
+    check("malformed state (missing text): 400 schema.*",
           st == 400 and code.startswith("schema."), f"status={st} code={code}")
 
     # --- oversized body at the socket boundary ------------------------------
@@ -439,10 +442,10 @@ def run_surface_checks(base: str) -> None:
           and resp.get("questions") == 1,
           json.dumps(resp)[:120])
     bad = decide_payload(q)
-    del bad["policy"]
+    del bad["state"]
     st, resp = post(base, "/v1/validate", bad)
     code = (resp.get("error") or {}).get("code", "?") if isinstance(resp, dict) else "?"
-    check("validate: missing policy is a 400 schema.*",
+    check("validate: a payload missing its state is a 400 schema.*",
           st == 400 and str(code).startswith("schema."), f"status={st} code={code}")
 
     # --- /v1/batch ---------------------------------------------------------
