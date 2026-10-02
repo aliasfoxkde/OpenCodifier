@@ -98,24 +98,46 @@ Stable codes are namespaced `ir.*` (payload refused by the IR), `schema.*`
 (wire decode), `engine.*` (execution), so a client can distinguish
 "your payload is wrong" from "the runtime could not decide".
 
-### 2.4 Wire formats over HTTP — current state (read before integrating)
+### 2.4 Wire formats over HTTP — `x-opencodifier-format` (D30)
 
-Every HTTP route decodes through the **native** adapter today
-(`routes.rs` decodes via `Native.decode_request`). The OpenAI,
-Anthropic, and Jev/System-One adapters ship in `opencodifier-schema`
-and are selectable through the CLI `--format` flag and the library —
-not yet over HTTP. If your tooling already emits OpenAI- or
-Anthropic-shaped payloads, the bridge today is one line of shell
-(`opencodifier decide --format openai -i request.json`); the versioned
-HTTP format selector is [Phase 19a](PLAN.md) and will be recorded in a
-DECISIONS entry before it lands.
+The decode routes (`/v1/decide`, `/v1/batch`, `/v1/validate`) accept a
+request header selecting the wire adapter:
+
+```bash
+# An existing OpenAI-shaped structured-output request, no rewriting:
+curl -s http://127.0.0.1:8177/v1/decide \
+     -H 'content-type: application/json' \
+     -H 'x-opencodifier-format: openai' \
+     -d @chat-shaped-request.json
+
+# Anthropic-shaped messages, Jev/System-One shapes likewise:
+-H 'x-opencodifier-format: anthropic'
+-H 'x-opencodifier-format: jev'
+```
+
+- Values: `native` (default — also when the header is absent) |
+  `openai` | `anthropic` | `jev`. Unknown values are `400`
+  `schema.invalid_value`; the surface never guesses.
+- **Symmetric**: the same adapter decodes the request and projects the
+  response, so an OpenAI-shaped client gets an OpenAI-shaped answer.
+  Batch items are each projected through the batch's adapter.
+- **Errors keep one contract**: the native
+  `{"error": {"code", "message"}}` envelope on every route regardless
+  of format.
+- **Format is transport, not identity**: cache keys are computed on the
+  canonical request after decode, so the same semantic request in two
+  formats shares one cache entry.
+- Fidelity limits are each adapter's own documented posture — where a
+  wire format cannot express an IR feature, it is refused or disclosed,
+  never silently converted (PLANNING §7/§42). Graph routes
+  (`/v1/graph/*`) stay native-only: a graph document has no external
+  analog.
 
 **`/v1/systemone` does not exist.** That path is the Jev/System-One
 ecosystem's convention (now also used by Fastino's GLiDE demo); it is
-not an OpenCodifier route and is not claimed to be. The Jev shape is
-normalized into the IR by the `Jev` adapter (CLI/library). A Jev-shaped
-HTTP route is an open Phase 19b question, decided by the same
-adapter rules as 19a.
+not an OpenCodifier route and is not claimed to be. Jev-shaped callers
+use the header above; whether a dedicated Jev-shaped route earns its
+place is the open [Phase 19b](PLAN.md) question.
 
 ---
 
@@ -296,7 +318,7 @@ all.
 
 | Item | Phase | State |
 |---|---|---|
-| HTTP wire-format selection (`openai`/`anthropic`/`jev` over `/v1/*`) | 19a | planned — DECISIONS record first |
+| HTTP wire-format selection (`x-opencodifier-format`) | 19a | **shipped** (D30) |
 | Jev-shaped HTTP route (the `systemone` convention) | 19b | open question, adapter rules apply |
 | Copy-paste quickstart set exercised by tests | 19c | planned |
 | crates.io / Homebrew / winget publication | 19d | user-gated (§58) |

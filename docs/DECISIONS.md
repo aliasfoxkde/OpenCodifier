@@ -1110,3 +1110,48 @@ or another."
   third-party integration paths as the primary story; first-party
   integrations appear in it as worked examples of the same public
   surfaces, pointing at their own design docs of record.
+
+## D30 — Wire-format selection over HTTP is an explicit header, native by default (2026-10-02)
+
+Phase 19a. The `OpenAI`/`Anthropic`/`Jev` adapters were reachable only
+through the CLI `--format` flag and as library types; every HTTP route
+decoded through `Native`. Adopters with existing OpenAI-, Anthropic-,
+or Jev-shaped tooling had to shell out to the CLI to be understood.
+
+- **Selection is the `x-opencodifier-format` request header**, valued
+  with the adapters' own stable `name()`s (`native` | `openai` |
+  `anthropic` | `jev`). Not an envelope field: a drop-in OpenAI or
+  Anthropic client posts *its own* body shape and cannot be asked to
+  wrap it. Not content negotiation: `Content-Type` describes the
+  media type, not the decision-runtime projection, and sniffing a body
+  to pick a decoder is exactly the guesswork this surface refuses.
+  Header absent ⇒ `Native`, so every pre-D30 caller — and every
+  recorded trace, benchmark, and fixture — is byte-identical.
+- **Decode and encode are symmetric per request.** The same adapter
+  that decodes the request projects the response
+  (`/v1/decide`, and every `/v1/batch` item), so an OpenAI-shaped
+  client gets an OpenAI-shaped answer and never parses our native
+  envelope to reach its data. `/v1/validate` decodes through the
+  selected adapter but keeps the runtime's own verdict shape — a
+  preflight has no external shape to preserve. The graph routes stay
+  native-only: a graph document is a native construct with no external
+  analog.
+- **Errors keep one contract.** The `{"error": {"code", "message"}}`
+  envelope is the native one on every route regardless of the selected
+  format. A client integrates against exactly one error vocabulary;
+  projecting errors into vendor shapes would fork that vocabulary per
+  format for no capability.
+- **An unknown format name is a refusal, never a guess**:
+  `400` `schema.invalid_value` naming the supported set. Header
+  matching is case-insensitive on the value; the adapters remain
+  stateless value objects built per request, so no server state grows.
+- **Cache semantics are unchanged by construction**: decisions are
+  keyed on the canonical IR *after* decode, so the same semantic
+  request arriving as `native` and as `openai` shares one cache entry —
+  the format is transport, not identity.
+- **Fidelity stays the adapter's own documented posture** (PLANNING
+  §7/§42): where a format cannot express an IR feature the adapter
+  refuses or discloses — the HTTP layer adds selection, not silent
+  conversion. `/v1/systemone` still does not exist and is still not
+  claimed (Phase 19b decides whether a Jev-shaped route earns its
+  place under these same rules).

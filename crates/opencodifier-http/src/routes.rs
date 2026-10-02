@@ -6,10 +6,14 @@
 //! HTTP and MCP cannot drift apart on what a decision is.
 //!
 //! ```text
-//! bytes ──► serde_json::Value ──► Native.decode_request ──► EngineHandle.decide
-//!                                                                     │
-//! ◄── Native.encode_response ◄────────────────────────────────────────┘
+//! bytes ──► serde_json::Value ──► <selected>.decode_request ──► EngineHandle.decide
+//!                                                                        │
+//! ◄── <selected>.encode_response ◄───────────────────────────────────────┘
 //! ```
+//!
+//! The adapter is selected by the `x-opencodifier-format` header (D30);
+//! absent or `native`, the surface behaves exactly as it did when every
+//! route decoded through [`Native`] — existing callers are byte-identical.
 //!
 //! Posture: every request body is hostile input. The body size is capped
 //! before parsing, payloads are never echoed back, and abstention is a
@@ -19,12 +23,15 @@ use std::sync::Arc;
 
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, State};
+use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use opencodifier_core::{DecisionRequest, DecisionResponse, Limits};
 use opencodifier_engine::{DecisionGraph, EngineHandle, EngineResult, GraphDocument, MAX_BATCH};
 use opencodifier_schema::native::Native;
-use opencodifier_schema::{SchemaError, WireFormat};
+use opencodifier_schema::{
+    SchemaError, WireFormat, anthropic::Anthropic, jev::Jev, openai::OpenAi,
+};
 use serde_json::{Value, json};
 
 use crate::error::HttpError;
@@ -38,6 +45,57 @@ use crate::error::HttpError;
 /// values together, so a change to the limit cannot silently desynchronize
 /// them.
 pub const MAX_BODY_BYTES: usize = 1_048_576;
+
+/// The request header that selects the wire adapter (D30).
+///
+/// Values are the adapters' own stable `name()`s: `native` (the default,
+/// also when the header is absent), `openai`, `anthropic`, `jev`. A value
+/// that names no adapter is a `400` with a `schema.invalid_value` code —
+/// the surface never guesses at a near-miss format name.
+pub const FORMAT_HEADER: &str = "x-opencodifier-format";
+
+/// A selected wire adapter, boxed with the thread-safety the transport
+/// needs.
+///
+/// The `WireFormat` trait itself carries no `Send` bound; the HTTP
+/// handlers need it because a selected adapter is held across the
+/// `spawn_blocking` await (and the batch moves one into the blocking
+/// task). Every shipped adapter is a stateless value object, so the
+/// bound is free to satisfy — the narrower local alias keeps the
+/// public trait untouched (D30).
+type SelectedFormat = Box<dyn WireFormat + Send>;
+
+/// Resolves [`FORMAT_HEADER`] to the wire adapter for this request.
+///
+/// Header absent ⇒ [`Native`], which is why every pre-D30 caller is
+/// byte-identical. The adapters are stateless value objects, so building
+/// one per request is free; a shared registry would buy nothing (D30).
+///
+/// # Errors
+///
+/// A header value that is not valid ASCII, or that names no known
+/// adapter, is a `schema.invalid_value` refusal naming the supported set.
+fn selected_format(headers: &HeaderMap) -> Result<SelectedFormat, HttpError> {
+    let Some(value) = headers.get(FORMAT_HEADER) else {
+        return Ok(Box::new(Native));
+    };
+    let name = value.to_str().map_err(|_| {
+        HttpError::from(SchemaError::invalid_value(
+            FORMAT_HEADER,
+            "header value is not valid ASCII",
+        ))
+    })?;
+    match name.trim().to_ascii_lowercase().as_str() {
+        "native" => Ok(Box::new(Native)),
+        "openai" => Ok(Box::new(OpenAi)),
+        "anthropic" => Ok(Box::new(Anthropic)),
+        "jev" => Ok(Box::new(Jev)),
+        other => Err(HttpError::from(SchemaError::invalid_value(
+            FORMAT_HEADER,
+            format!("`{other}` names no wire format; supported: native, openai, anthropic, jev"),
+        ))),
+    }
+}
 
 /// Builds the `/v1` router over `handle`.
 ///
@@ -58,19 +116,23 @@ pub fn router(handle: Arc<EngineHandle>) -> Router {
         .with_state(handle)
 }
 
-/// `POST /v1/decide` — native decision request in, native decision out.
+/// `POST /v1/decide` — decision request in (adapter-selected), the same
+/// adapter's projection out.
 ///
 /// Abstention and every other typed outcome are `200`: the outcome field
 /// carries the decision, not the transport status. Decode failures are
 /// `400` with the adapter's `schema.*` code; only an engine fault is
-/// `500`.
+/// `500`. The error envelope itself is always the native one (D30): a
+/// client needs exactly one error contract regardless of request format.
 async fn decide(
     State(handle): State<Arc<EngineHandle>>,
+    headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<Value>, HttpError> {
+    let format = selected_format(&headers)?;
     let payload = parse_json(&body)?;
     let request: DecisionRequest =
-        Native.decode_request(&payload, &Limits::default()).map_err(HttpError::from)?;
+        format.decode_request(&payload, &Limits::default()).map_err(HttpError::from)?;
 
     // The engine is synchronous and CPU-bound (D5): keep it off the async
     // workers so one heavy request cannot stall unrelated connections.
@@ -83,7 +145,7 @@ async fn decide(
 
     // Encoding an engine-produced response cannot fail; if it ever does,
     // it is a server fault (`engine.serialization`), not bad input.
-    let encoded = Native.encode_response(&response).map_err(|error| {
+    let encoded = format.encode_response(&response).map_err(|error| {
         HttpError::Engine(opencodifier_engine::EngineError::Serialization {
             reason: error.to_string(),
         })
@@ -103,8 +165,10 @@ async fn decide(
 /// mirroring the posture that a refused decision is the runtime working.
 async fn batch(
     State(handle): State<Arc<EngineHandle>>,
+    headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<Value>, HttpError> {
+    let format = selected_format(&headers)?;
     let payload = parse_json(&body)?;
     let body: BatchBody = serde_json::from_value(payload).map_err(|error| {
         HttpError::from(SchemaError::invalid_value("requests", error.to_string()))
@@ -118,7 +182,10 @@ async fn batch(
     // blocking task walks the whole batch so a 16-item batch costs the
     // async workers a single wake-up.
     let results = tokio::task::spawn_blocking(move || {
-        requests.iter().map(|document| batch_item(&handle, document)).collect::<Vec<Value>>()
+        requests
+            .iter()
+            .map(|document| batch_item(&handle, format.as_ref(), document))
+            .collect::<Vec<Value>>()
     })
     .await
     .map_err(|_| HttpError::Engine(opencodifier_engine::EngineError::Cancelled))?;
@@ -131,14 +198,15 @@ async fn batch(
 /// A decode failure and an engine failure land in the same envelope —
 /// `{"error": {"code", "message"}}` — because from the client's side
 /// both are "this item has no decision"; the `schema.*` vs `engine.*`
-/// code keeps the cause distinguishable.
-fn batch_item(handle: &EngineHandle, document: &Value) -> Value {
-    let encoded = Native
+/// code keeps the cause distinguishable. The per-item response is
+/// projected through the batch's selected adapter (D30).
+fn batch_item(handle: &EngineHandle, format: &dyn WireFormat, document: &Value) -> Value {
+    let encoded = format
         .decode_request(document, &Limits::default())
         .map_err(HttpError::from)
         .and_then(|request| {
             let response = handle.decide(&request).map_err(HttpError::from)?;
-            Native.encode_response(&response).map_err(|error| {
+            format.encode_response(&response).map_err(|error| {
                 HttpError::Engine(opencodifier_engine::EngineError::Serialization {
                     reason: error.to_string(),
                 })
@@ -152,16 +220,20 @@ fn batch_item(handle: &EngineHandle, document: &Value) -> Value {
     }
 }
 
-/// `POST /v1/validate` — canonical request in, validity verdict out.
+/// `POST /v1/validate` — wire request in (adapter-selected), validity
+/// verdict out.
 ///
 /// The decode-and-validate path only: no decision is computed, nothing
 /// is cached, and the answer says what was accepted so a client can
 /// preflight a payload (question kinds, candidate counts) before paying
-/// for execution.
-async fn validate_request(body: Bytes) -> Result<Json<Value>, HttpError> {
+/// for execution. The verdict shape is the runtime's own — it does not
+/// project through the adapter, because there is no external shape to
+/// preserve for a preflight.
+async fn validate_request(headers: HeaderMap, body: Bytes) -> Result<Json<Value>, HttpError> {
+    let format = selected_format(&headers)?;
     let payload = parse_json(&body)?;
     let request: DecisionRequest =
-        Native.decode_request(&payload, &Limits::default()).map_err(HttpError::from)?;
+        format.decode_request(&payload, &Limits::default()).map_err(HttpError::from)?;
     Ok(Json(json!({
         "valid": true,
         "questions": request.questions().len(),
@@ -471,12 +543,141 @@ mod tests {
     async fn a_malformed_batch_body_is_a_schema_refusal() {
         let handle = zero_ml_engine();
         for payload in ["{}", r#"{"requests": "all at once"}"#] {
-            let error = batch(State(Arc::clone(&handle)), Bytes::from(payload.to_owned()))
-                .await
-                .unwrap_err();
+            let error = batch(
+                State(Arc::clone(&handle)),
+                HeaderMap::new(),
+                Bytes::from(payload.to_owned()),
+            )
+            .await
+            .unwrap_err();
             assert_eq!(error.code(), "schema.invalid_value", "{payload}");
             assert_eq!(error.status(), axum::http::StatusCode::BAD_REQUEST);
         }
+    }
+
+    /// The one-question choice every format test decides: two candidates,
+    /// lexical-decidable, deterministic under the zero-ML engine.
+    fn one_choice_request() -> DecisionRequest {
+        DecisionRequest::new(
+            State::from_text("deploy is failing; choose an action"),
+            vec![DecisionQuestion::Choice(
+                ChoiceQuestion::new(
+                    "action",
+                    "Which action should the on-call take?",
+                    vec![
+                        Candidate::new("rollback", "roll back to the last healthy build").unwrap(),
+                        Candidate::new("hotfix", "patch forward on the broken build").unwrap(),
+                    ],
+                )
+                .unwrap(),
+            )],
+            DecisionPolicy::default(),
+            RequestMetadata::default(),
+        )
+        .unwrap()
+    }
+
+    /// D30: the format header selects the adapter end to end. An
+    /// `OpenAI`-encoded body is decoded by the `OpenAI` adapter and answered
+    /// with the `OpenAI` projection of the *same* decision the native body
+    /// produces; an explicit `native` header is byte-identical to the
+    /// absent header.
+    #[tokio::test]
+    async fn the_format_header_selects_the_wire_adapter() {
+        let handle = zero_ml_engine();
+        let request = one_choice_request();
+        let expected = OpenAi.encode_response(&handle.decide(&request).unwrap()).unwrap();
+        let native_body = Native.encode_request(&request).unwrap();
+        let openai_body = OpenAi.encode_request(&request).unwrap();
+
+        let native = decide(
+            State(Arc::clone(&handle)),
+            HeaderMap::new(),
+            Bytes::from(serde_json::to_vec(&native_body).unwrap()),
+        )
+        .await
+        .unwrap();
+
+        let mut openai_headers = HeaderMap::new();
+        openai_headers.insert(FORMAT_HEADER, "openai".parse().unwrap());
+        let openai = decide(
+            State(Arc::clone(&handle)),
+            openai_headers,
+            Bytes::from(serde_json::to_vec(&openai_body).unwrap()),
+        )
+        .await
+        .unwrap();
+
+        let mut native_headers = HeaderMap::new();
+        native_headers.insert(FORMAT_HEADER, "native".parse().unwrap());
+        let explicit_native = decide(
+            State(Arc::clone(&handle)),
+            native_headers,
+            Bytes::from(serde_json::to_vec(&native_body).unwrap()),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(openai.0, expected, "OpenAI body in, OpenAI projection out");
+        assert_eq!(explicit_native.0, native.0, "explicit native == absent header");
+        assert_ne!(openai.0, native.0, "the projections are distinct shapes");
+    }
+
+    /// D30: a format name that names no adapter is refused before the
+    /// body is parsed, with the stable `schema.invalid_value` code.
+    #[tokio::test]
+    async fn an_unknown_format_header_is_a_schema_refusal() {
+        let handle = zero_ml_engine();
+        let mut headers = HeaderMap::new();
+        headers.insert(FORMAT_HEADER, "yaml".parse().unwrap());
+        let error = decide(State(Arc::clone(&handle)), headers, Bytes::from_static(b"{}"))
+            .await
+            .unwrap_err();
+        assert_eq!(error.code(), "schema.invalid_value");
+        assert_eq!(error.status(), axum::http::StatusCode::BAD_REQUEST);
+    }
+
+    /// D30: the batch applies the header's adapter to every item, each in
+    /// its own per-item envelope.
+    #[tokio::test]
+    async fn batch_applies_the_selected_format_per_item() {
+        let handle = zero_ml_engine();
+        let request = one_choice_request();
+        let wire = OpenAi.encode_request(&request).unwrap();
+        let expected = OpenAi.encode_response(&handle.decide(&request).unwrap()).unwrap();
+
+        let mut headers = HeaderMap::new();
+        headers.insert(FORMAT_HEADER, "openai".parse().unwrap());
+        let body = json!({ "requests": [wire, wire] });
+        let batched = batch(
+            State(Arc::clone(&handle)),
+            headers,
+            Bytes::from(serde_json::to_vec(&body).unwrap()),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(batched.0["count"], json!(2));
+        let items = batched.0["results"].as_array().unwrap();
+        for item in items {
+            assert_eq!(item["response"], expected);
+            assert!(item.get("error").is_none());
+        }
+    }
+
+    /// D30: the preflight route decodes through the selected adapter too,
+    /// while its verdict stays the runtime's own shape.
+    #[tokio::test]
+    async fn validate_accepts_the_selected_format() {
+        let request = one_choice_request();
+        let wire = OpenAi.encode_request(&request).unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(FORMAT_HEADER, "openai".parse().unwrap());
+        let verdict = validate_request(headers, Bytes::from(serde_json::to_vec(&wire).unwrap()))
+            .await
+            .unwrap();
+        assert_eq!(verdict.0["valid"], json!(true));
+        assert_eq!(verdict.0["questions"], json!(1));
     }
 
     /// The same posture for `POST /v1/graph/run`: a body without a
