@@ -333,8 +333,12 @@ class ForkAdapter:
             description = fold_criteria(description, t.question.get("criteria"))
         elif qtype == "score":
             description = fold_criteria(description, t.question.get("criteria"))
+        # Template A/B sentinel (#76): "@task" repeats the item's own
+        # instructions at the top level — the schema description already
+        # carries them, this arm measures the emphasis.
+        instructions = description if self.instructions == "@task" else self.instructions
         payload = {
-            "instructions": self.instructions,
+            "instructions": instructions,
             "schema": {"choice": {"type": "enum", "choices": choices, "description": description}},
             "contexts": [t.state if isinstance(t.state, str) else json.dumps(t.state)],
             "mode": "tree",
@@ -350,6 +354,13 @@ class ForkAdapter:
         raw = {"request": payload, "field": field}
         if label not in choices:
             return DecisionResult(self.name, False, error="out_of_set_label",
+                                  latency_s=latency, raw=raw)
+        # The d15 fork adds the full per-choice distribution (additive JSON;
+        # pre-d15 binaries omit it and stay label-only, D15).
+        probs = probs_from_distribution(field.get("distribution"), choices)
+        if probs is not None:
+            return DecisionResult(self.name, True, label=label, probs=probs,
+                                  probs_source="native",
                                   latency_s=latency, raw=raw)
         return DecisionResult(self.name, True, label=label,
                               probs_source="label_only_no_calibrated_distribution",
