@@ -34,7 +34,11 @@ pub(crate) fn run(args: &DecideArgs) -> Result<(), CliError> {
         None => request,
     };
 
-    let handle = EngineHandle::lexical(runtime::engine_config(None, args.focus_budget)?)?;
+    let handle = EngineHandle::lexical(runtime::engine_config(
+        None,
+        args.focus_budget,
+        args.ladder.as_deref(),
+    )?)?;
     let (response, executed) = handle.decide_with_report(&request)?;
 
     output::print_json(&Native.encode_response(&response)?)?;

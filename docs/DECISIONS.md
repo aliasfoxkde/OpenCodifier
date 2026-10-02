@@ -860,3 +860,44 @@ all of them. The wiring decision:
   fingerprinted since introduction, never consumed by the executor).
   The ladder composes alongside it; wiring the graph scalar to the
   gate is a separate, deliberate change with its own record.
+
+**Amendment (2026-10-01 — per-rung calibration and shipped profiles).**
+The ladder's remaining D25 scope is wired and the profile documents
+ship:
+
+- **Per-rung calibration.** `LadderPolicy` carries
+  `calibrations: BTreeMap<String, Arc<dyn Calibration>>` keyed by the
+  same `node:<id>` / `kind:<name>` strings the trace records; the
+  executor resolves it beside the policy and a rung calibration
+  replaces the engine-level calibration for that rung's questions
+  (`None` = unchanged, byte-identical). The trace records
+  `calibration_source` when one fires. A calibration-only ladder is
+  non-empty — validate() demands the identity for it too, so an
+  artifact swap can never re-gate decisions under single-policy cache
+  keys.
+- **`ProofAwareCalibration`** (CALIBRATION finding 2, no artifact
+  shipped): exact proofs arrive as single-entry distributions at
+  p = 1.0 and pass through raw; multi-entry distributions delegate to
+  the inner calibration. Its `version()` is the inner version — safe
+  because the wrapper only changes semantics inside a ladder whose id
+  decorates the cache identity; bump the ladder id when wrapper
+  behavior changes, exactly like an artifact swap.
+- **Profiles are data.** `LadderProfile` (serde, `deny_unknown_fields`)
+  loads a JSON document — per-kind/per-node policies through
+  `DecisionPolicy`'s validated mirror, rung calibrations as D15
+  artifacts with an optional `proof_aware` wrapper — and refuses an
+  empty profile. The CLI surfaces it as `--ladder <PATH>` on `decide`,
+  `serve`, and `mcp serve` through the one shared `runtime::engine_config`,
+  so the three interfaces cannot drift. HTTP config surfacing stays
+  deferred: no engine-configuration surface exists on `/v1` yet
+  (D12), and a flag that silently re-gates a running server would
+  need its own record.
+- **Shipped profiles** (`ladders/`, kept loadable by test):
+  `fusion-v1` — rule rung accepts proofs at 1.0; classifier kinds run
+  the measured accept-on-margin shape (`min_confidence 0.0` +
+  `min_margin 0.0183`, `results/embed-margin-study.md` — the gate
+  cascade is demote-only, so accept-on-margin is expressed by a
+  probability gate that never fires and a margin floor that demotes
+  near-ties). `proofs-only-v1` — only proofs accept outright.
+  Ladders remain opt-in (F24: per-domain calibration precedes any
+  default-on ladder).

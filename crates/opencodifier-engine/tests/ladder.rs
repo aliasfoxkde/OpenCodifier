@@ -19,7 +19,8 @@ use std::sync::Arc;
 use common::{boolean_question, choice_question, config, engine_with, request_with_policy};
 use opencodifier_core::{DecisionOutcome, DecisionPolicy, RequestMetadata, RiskLevel, State};
 use opencodifier_engine::{
-    CacheKeyBuilder, EngineConfig, EngineError, LadderPolicy, MockClassifier, NodeKind,
+    CacheKeyBuilder, EngineConfig, EngineError, IdentityCalibration, LadderPolicy, LadderProfile,
+    MockClassifier, NodeKind, TemperatureCalibration,
 };
 
 /// A request policy looser than the rung overrides below: accept at
@@ -127,6 +128,7 @@ fn a_per_node_rung_beats_the_per_kind_rung() {
         id: "nodes-first-v1".to_owned(),
         per_node: BTreeMap::from([("boolean".to_owned(), rung(0.95))]),
         per_kind: BTreeMap::from([(NodeKind::Boolean, rung(0.70))]),
+        ..LadderPolicy::default()
     };
     let engine = engine_with(config(1).with_ladder(ladder), classifier).unwrap();
     let (response, _) = engine.decide_with_report(&request).unwrap();
@@ -217,4 +219,117 @@ fn a_cache_hit_serves_the_same_gated_outcome() {
         "the rung gate rides the cached response"
     );
     assert_eq!(policy_source(&second).as_deref(), Some("kind:boolean"));
+}
+
+/// Loads a shipped profile document from the repository root: the files
+/// under `ladders/` must stay loadable by the engine, forever — they are
+/// deployment artifacts, not illustrations.
+fn shipped_ladder(file: &str) -> opencodifier_engine::LadderPolicy {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ladders").join(file);
+    let document = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+    let profile: LadderProfile = serde_json::from_str(&document)
+        .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+    profile.into_ladder().unwrap()
+}
+
+#[test]
+fn the_shipped_fusion_profile_loads_and_names_its_rungs() {
+    let ladder = shipped_ladder("fusion-v1.json");
+    assert_eq!(ladder.id, "fusion-v1");
+    // Proofs gate themselves; the classifier kinds accept on margin
+    // alone (the gate cascade is demote-only, so min_confidence 0.0 +
+    // the measured floor is the accept-on-margin shape).
+    let rule = &ladder.per_kind[&NodeKind::Rule];
+    assert_eq!(rule.min_confidence(), 1.0);
+    for kind in [NodeKind::Choice, NodeKind::Boolean, NodeKind::Score] {
+        let rung = &ladder.per_kind[&kind];
+        assert_eq!(rung.min_confidence(), 0.0, "{kind:?}");
+        assert_eq!(rung.min_margin(), 0.0183, "{kind:?}");
+    }
+}
+
+#[test]
+fn the_shipped_proofs_only_profile_accepts_only_proofs() {
+    let ladder = shipped_ladder("proofs-only-v1.json");
+    for kind in [NodeKind::Rule, NodeKind::Choice, NodeKind::Boolean, NodeKind::Score] {
+        assert_eq!(ladder.per_kind[&kind].min_confidence(), 1.0, "{kind:?}");
+    }
+}
+
+/// A flattening fit (T = 3): the raw 0.9 boolean top lands near 0.675.
+fn flattening() -> Arc<TemperatureCalibration> {
+    Arc::new(TemperatureCalibration::from_artifact(common::calibration_artifact(3.0)).unwrap())
+}
+
+#[test]
+fn a_rung_calibration_replaces_the_engine_calibration() {
+    // The engine-level fit flattens, so the raw 0.9 verdict calibrates to
+    // ~0.675 and the 0.80 gate verifies. A `kind:boolean` rung carrying
+    // the identity calibration restores raw confidence for that rung
+    // only — replacement, not composition: if the engine fit still
+    // applied underneath, 0.675 would verify regardless of the rung.
+    let classifier = Arc::new(
+        MockClassifier::new("mock/bools")
+            .with_script("tools", vec![("true", 0.9), ("false", 0.1)])
+            .unwrap(),
+    );
+    let request = loose_request(vec![boolean_question("tools", "Does this request need tools?")]);
+    let flattened =
+        engine_with(config(1).with_calibration(flattening()), classifier.clone()).unwrap();
+    let (control, _) = flattened.decide_with_report(&request).unwrap();
+    assert_eq!(control.outcome(), DecisionOutcome::Verify);
+    assert_eq!(common::trace_fact(&control, "boolean", "calibration_source"), None);
+
+    let laddered = engine_with(
+        config(1).with_calibration(flattening()).with_ladder(
+            LadderPolicy::new("rung-cal-v1")
+                .with_calibration("kind:boolean", Arc::new(IdentityCalibration) as _),
+        ),
+        classifier,
+    )
+    .unwrap();
+    let (response, _) = laddered.decide_with_report(&request).unwrap();
+    assert_eq!(response.outcome(), DecisionOutcome::Accept);
+    let calibrated = common::trace_fact(&response, "boolean", "calibrated");
+    assert_eq!(calibrated, Some(&opencodifier_core::FactValue::Float(0.9)));
+    // A calibration-only ladder is non-empty: its identity decorates the
+    // model id, so swapping the rung artifact re-keys every cached
+    // decision exactly like a model change.
+    assert_eq!(laddered.config().identity.model_id, "mock/bools|ladder-v1@rung-cal-v1");
+}
+
+#[test]
+fn the_rung_calibration_source_is_recorded_in_the_trace() {
+    // Inverse of the test above: the rung carries the flattening fit and
+    // the engine stays identity. The gate must read the rung's 0.675 and
+    // the trace must name the rung that calibrated the answer.
+    let classifier = Arc::new(
+        MockClassifier::new("mock/bools")
+            .with_script("tools", vec![("true", 0.9), ("false", 0.1)])
+            .unwrap(),
+    );
+    let request = loose_request(vec![boolean_question("tools", "Does this request need tools?")]);
+    let laddered = engine_with(
+        config(1).with_ladder(
+            LadderPolicy::new("rung-flat-v1").with_calibration("kind:boolean", flattening() as _),
+        ),
+        classifier,
+    )
+    .unwrap();
+    let (response, _) = laddered.decide_with_report(&request).unwrap();
+    assert_eq!(response.outcome(), DecisionOutcome::Verify);
+    let Some(&opencodifier_core::FactValue::Float(calibrated)) =
+        common::trace_fact(&response, "boolean", "calibrated")
+    else {
+        panic!("the boolean node must record its calibrated confidence");
+    };
+    assert!(
+        (0.67..=0.68).contains(&calibrated),
+        "T = 3 flattens a raw 0.9 to ~0.675, got {calibrated}"
+    );
+    assert_eq!(
+        common::trace_fact(&response, "boolean", "calibration_source"),
+        Some(&opencodifier_core::FactValue::Text("kind:boolean".to_owned()))
+    );
 }

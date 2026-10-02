@@ -23,7 +23,9 @@ use crate::runtime;
 /// [`CliError::engine`] when the runtime or the MCP session itself fails.
 pub(crate) fn run(args: &McpArgs) -> Result<(), CliError> {
     match &args.command {
-        McpSubcommand::Serve { graph, focus_budget } => serve(graph.as_deref(), *focus_budget),
+        McpSubcommand::Serve { graph, focus_budget, ladder } => {
+            serve(graph.as_deref(), *focus_budget, ladder.as_deref())
+        }
     }
 }
 
@@ -34,8 +36,13 @@ pub(crate) fn run(args: &McpArgs) -> Result<(), CliError> {
 /// [`CliError::input`] for a rejected `--graph` document, and
 /// [`CliError::engine`] when the runtime cannot be assembled or the MCP
 /// session fails.
-fn serve(graph_path: Option<&Path>, focus_budget: Option<usize>) -> Result<(), CliError> {
-    let handle = EngineHandle::lexical(runtime::engine_config(graph_path, focus_budget)?)?;
+fn serve(
+    graph_path: Option<&Path>,
+    focus_budget: Option<usize>,
+    ladder_path: Option<&Path>,
+) -> Result<(), CliError> {
+    let handle =
+        EngineHandle::lexical(runtime::engine_config(graph_path, focus_budget, ladder_path)?)?;
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|error| CliError::engine(CODE_RUNTIME_FAILED, error.to_string()))?;
     runtime

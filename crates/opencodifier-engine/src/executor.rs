@@ -873,6 +873,11 @@ impl<'a> Executor<'a> {
             || (self.request.policy(), None),
             |(policy, source)| (policy, Some(source)),
         );
+        // Per-rung calibration (D15/B4): a rung's confidences are not
+        // commensurable with the engine default's, so a configured rung
+        // calibration replaces it for this rung's questions. `None`
+        // leaves the engine-level calibration — byte-identical.
+        let ladder_calibration = self.config.ladder.resolve_calibration(id, kind);
         for question in self.request.questions() {
             if !Self::wants(kind, question) {
                 continue;
@@ -900,14 +905,12 @@ impl<'a> Executor<'a> {
                 clipped = full_clipped;
                 escalated = true;
             }
-            let decision = Self::decide_question(
-                &narrowed,
-                distribution,
-                policy,
-                self.config.calibration.as_ref(),
-                id,
-                kind,
-            )?;
+            let (calibration, calibration_source) = ladder_calibration.as_ref().map_or_else(
+                || (self.config.calibration.as_ref(), None),
+                |(calibration, source)| (*calibration, Some(source.clone())),
+            );
+            let decision =
+                Self::decide_question(&narrowed, distribution, policy, calibration, id, kind)?;
             let mut detail = vec![
                 ("question", FactValue::Text(question.id().to_string())),
                 ("top", FactValue::Text(decision.distribution.top().key.clone())),
@@ -919,6 +922,9 @@ impl<'a> Executor<'a> {
             ];
             if let Some(source) = &ladder_source {
                 detail.push(("policy_source", FactValue::Text(source.clone())));
+            }
+            if let Some(source) = calibration_source {
+                detail.push(("calibration_source", FactValue::Text(source)));
             }
             if let Some(view) = &view {
                 detail.push(("focus_engaged", FactValue::Boolean(view.extracted)));

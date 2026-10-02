@@ -132,7 +132,10 @@ pub mod rerank;
 pub mod rules;
 
 pub use cache::{CacheConfig, CacheKey, CacheKeyBuilder, DecisionCache, EngineIdentity};
-pub use calibration::{Calibration, IdentityCalibration, TemperatureCalibration};
+pub use calibration::{
+    Calibration, CalibrationArtifact, CalibrationFit, IdentityCalibration, ProofAwareCalibration,
+    TemperatureCalibration,
+};
 pub use classifier::{Classifier, LexicalClassifier, MockClassifier};
 pub use clock::{CancellationToken, Clock, Deadline, ManualClock, SystemClock};
 pub use engine::{DecisionEngine, EngineConfig};
@@ -144,7 +147,7 @@ pub use focus::{
 };
 pub use graph::{DecisionGraph, GraphDocument, NodeKind, NodeSpec};
 pub use handle::{EngineHandle, EngineHealth, MAX_BATCH};
-pub use ladder::LadderPolicy;
+pub use ladder::{LadderPolicy, LadderProfile, RungCalibration};
 pub use lexical::{Bm25Index, negation_polarity, softmax, tokenize};
 pub use narrowing::{LexicalScores, NarrowingOutcome};
 pub use optimize::optimize;
