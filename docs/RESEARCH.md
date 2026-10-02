@@ -636,6 +636,57 @@ certificate, no cardinality invariance, no rotation invariance.
    lifts rephrasing robustness 75.7 → 85.9. Adopt as a fine-tune
    stage (KL between option distributions under paraphrase, head
    frozen) for whichever decision model wins item 2's bake-off.
+9. **Fastino GLiNER2.5-Decide family (2026-09-24, Apache-2.0) —
+   third-party validation of the ladder's model rung shape, and a
+   real encoder-rung candidate.** `fastino/GLiNER2.5-Decide` is a
+   340M DeBERTa-v3-large *encoder* decision model: label set passed
+   at call time (schema-driven, §63-shaped), several heads scored in
+   one forward pass, zero generated tokens, ordinal scales as string
+   levels ("0".."10") and described labels supported; explicitly not
+   general-purpose (no reasoning/explanations). Their
+   `fastino/fast-decisions` leaderboard (held-out exact match, 17
+   domains × 300): GLiNER2.5-Decide **60.2** > GLiNER2 XL 1B 59.6 >
+   JevK5 57.6 > multi-Decide (287M mDeBERTa, "boundary"
+   propose-then-rerank arch) 56.7 > SemIf (Qwen3.5-4B) 56.4 >
+   GLiFormer 49.0 > Laya Router 46.6 — our fleet overlaps theirs
+   (Laya is a queued arm; Qwen3.5-4B is our distill base), so the
+   suites cross-check. The GGUF port
+   (`3ntr0py-t4m3r/GLiNER2.5-Decide-GGUF`, f32/Q8_0 465 MB/Q4_K) is
+   **not** a drop-in: parity vs torch fails (cos 0.87–0.93 vs gate
+   >0.9999; the disentangled-attention relative-position term is
+   ~3 orders under-weighted; 1–3-token inputs exact, divergence from
+   4+ tokens), the 2.1M-param decision head ships separately (run
+   host-side, keep f32), and the patch targets the kade/llama.cpp
+   fork (`spec-multi-output`), not upstream. Latency is flat across
+   quants (activation-bound; ~33 ms/req on one 4090). Two things to
+   steal: (a) **calibration doctrine, independently restated** — the
+   card measures its own ship state as uncalibrated (T=1.0, argmax
+   correct on 6/6 with mean top-prob 0.628), rejects a single global
+   temperature (per-task logit spreads differ ~10×), and gates
+   adoption on **mean ECE < 0.15 per (task type, label count,
+   activation) bucket plus non-inverted reliability curves** — the
+   same per-(kind, cardinality) bucketing as §9.3-3; (b) **the
+   encoder rung**: a plain transformer encoder is the opposite ORT
+   failure mode from the qwen3.5 hybrid conv+recurrent arch
+   (F25: ≥9× latency) — encoder + Rust-f64 head (4 tensors) behind
+   the existing `onnx` feature is a credible sub-100 ms CPU model
+   rung. The dataset (17 × 100 dev rows public, test 300/domain held
+   out; `{"input", "classifications": [{task, true_label, labels,
+   multi_label}]}`) maps 1:1 onto Choice IR (task→question,
+   labels→candidates, true_label→gold; multi-label compared as sets;
+   ordinals → Score ordered levels) — an extra bake-off slice, with
+   the standing disclosure that dev-split numbers are not comparable
+   to the published leaderboard. Company context: Fastino (Palo
+   Alto, $25M raise) sells this exact shape as "TLMs" — task-specific
+   scored decisions, "<100 ms", "route on confidence rather than
+   parse prose" (GLiDE demo), exposed through a Jev-style
+   `POST /v1/systemone`. ACTIONABLE: (a) eval-only reference arm via
+   the `gliner2` pip package on Fedora scoring JevBench-231 +
+   fast-decisions-dev; (b) ONNX export study (encoder under `ort`,
+   head in Rust f64) as the candidate CPU model rung; (c) adopt the
+   ECE-per-bucket + non-inverted-reliability gate wording for any
+   adopted arm; (d) re-check the GGUF port after an upstream parity
+   fix.
 
 ### §9.3 Priority queue (replaces the §6.6 deltas' ordering)
 
@@ -651,4 +702,11 @@ certificate, no cardinality invariance, no rotation invariance.
    vtx; own pooler spec; version into cache keys.
 6. Engine internals: wire a real input-likeness OOD feature
    (lexical-band / TV / set-size) through `ood_ceiling`; BM25
-   build-once completion.
+   build-once completion. **LANDED** (2026-10-02): D28 lexical-band
+   OOD channel (d7eefdf); BM25 build-once handoff to the deciding
+   classifier (0bfcf33).
+7. Fastino GLiNER2.5-Decide arms (§9-9): `gliner2` reference arm on
+   the 231 harness + fast-decisions-dev slice (eval-only, Fedora);
+   ONNX encoder + Rust-f64-head rung study behind the `onnx`
+   feature; ECE-per-bucket adoption gate. GGUF port deferred until
+   upstream parity passes.
