@@ -170,7 +170,7 @@ mod tests {
         let formats: Vec<BoxedWireFormat> =
             vec![Box::new(Native), Box::new(openai::OpenAi), Box::new(jev::Jev)];
         assert_eq!(formats.len(), 3);
-        assert!(!format!("{:?}", formats[0]).is_empty());
+        assert_ne!(format!("{:?}", formats[0]), "");
     }
 
     #[test]

@@ -149,7 +149,7 @@ mod tests {
         }
         // Every executed node appears in wave order, and the question's
         // outcome is reported once.
-        assert!(!document["waves"].as_array().unwrap().is_empty());
+        assert!(document["waves"].as_array().is_some_and(|waves| !waves.is_empty()));
         assert_eq!(document["outcomes"].as_array().unwrap().len(), 1);
     }
 }

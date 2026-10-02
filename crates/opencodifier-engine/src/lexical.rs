@@ -182,6 +182,31 @@ impl Bm25Index {
         (0..self.frequencies.len()).map(|index| self.score_terms(&terms, index)).collect()
     }
 
+    /// Fraction of `query`'s informative (non-stop) tokens present in
+    /// document `index`'s term set — the deterministic input-likeness
+    /// signal behind [`OodMode::LexicalBand`](opencodifier_core::OodMode)
+    /// (D28).
+    ///
+    /// Repeated tokens count once; the denominator is the distinct
+    /// informative-token count. A query with *no* informative tokens has
+    /// nothing to ground it, and scores `0.0`: under the lexical-band
+    /// mode that maps to maximal OOD, so an ungroundable input escalates
+    /// rather than trusting a softmax over nothing.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
+    pub fn coverage(&self, index: usize, query: &str) -> f64 {
+        // `query_terms` runs the shared tokenizer (stop words dropped) and
+        // collapses repeats into map keys, so its keys *are* the distinct
+        // informative tokens.
+        let terms = query_terms(query);
+        if terms.is_empty() || index >= self.frequencies.len() {
+            return 0.0;
+        }
+        let document = &self.frequencies[index];
+        let hits = terms.keys().filter(|token| document.contains_key(token.as_str())).count();
+        hits as f64 / terms.len() as f64
+    }
+
     /// Scores one document against pre-built query terms. Shared by
     /// [`Bm25Index::score`] and [`Bm25Index::score_all`] so the two can
     /// never drift apart arithmetically: same term order (sorted), same
@@ -287,7 +312,7 @@ mod tests {
     fn drops_stop_words_and_overlong_tokens() {
         assert_eq!(tokenize("the and of"), Vec::<String>::new());
         let overlong = "x".repeat(MAX_TOKEN_LEN + 1);
-        assert!(tokenize(&overlong).is_empty());
+        assert_eq!(tokenize(&overlong), Vec::<String>::new());
         assert_eq!(tokenize("not").len(), 1, "negators must survive tokenization");
     }
 
@@ -404,7 +429,7 @@ mod tests {
         // resolves numerically rather than degrading.
         let garbage = softmax(&[f64::NAN, 1.0]);
         assert!(garbage.iter().all(|value| (value - 0.5).abs() < 1e-12));
-        assert!(softmax(&[]).is_empty());
+        assert_eq!(softmax(&[]), Vec::<f64>::new());
     }
 
     #[test]
@@ -439,5 +464,36 @@ mod tests {
         // With an average to normalize against the same hit scores lower.
         let normalized = Bm25Index::new(["coding coding coding", "coding"]);
         assert!(normalized.saturated_frequency(2, 3.0) < index.saturated_frequency(2, 0.0));
+    }
+
+    #[test]
+    fn coverage_measures_distinct_informative_token_hits() {
+        // "coding reasoning" has two informative tokens; the first document
+        // contains both, the second neither.
+        let index = Bm25Index::new(["coding and reasoning", "vision understanding"]);
+        assert!((index.coverage(0, "coding reasoning") - 1.0).abs() < 1e-12);
+        assert!((index.coverage(1, "coding reasoning") - 0.0).abs() < 1e-12);
+        // Stop words never count in either direction.
+        assert!((index.coverage(0, "the and of") - 0.0).abs() < 1e-12);
+        assert!((index.coverage(0, "coding the and reasoning") - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn coverage_counts_repeated_tokens_once() {
+        let index = Bm25Index::new(["coding"]);
+        // One distinct token ("coding") whichever way it repeats.
+        assert!((index.coverage(0, "coding coding coding") - 1.0).abs() < 1e-12);
+        assert!((index.coverage(0, "coding vision coding") - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn coverage_degrades_to_zero_without_groundable_input() {
+        let index = Bm25Index::new(["coding"]);
+        // Out-of-range document: no ground, maximal unlikeness.
+        assert!((index.coverage(7, "coding") - 0.0).abs() < 1e-12);
+        // A query of only stop words tokenizes to nothing: the doc comment
+        // pins that as 0.0 (maximal OOD under the lexical band).
+        assert!((index.coverage(0, "the and of") - 0.0).abs() < 1e-12);
+        assert!((index.coverage(0, "") - 0.0).abs() < 1e-12);
     }
 }

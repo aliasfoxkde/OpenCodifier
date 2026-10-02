@@ -180,7 +180,7 @@ mod tests {
         )
         .expect("valid abstention");
         assert!(!response.outcome().is_decisive());
-        assert!(response.answers().is_empty());
+        assert_eq!(response.answers(), []);
     }
 
     #[test]

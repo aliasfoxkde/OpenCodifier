@@ -302,7 +302,11 @@ mod tests {
 
         let (response_with_report, report) = handle.decide_with_report(&choice_request()).unwrap();
         assert_eq!(response_with_report.answers().len(), 1);
-        assert!(!report.waves().is_empty());
+        // The explicitly-typed empty vector is the one "not empty" encoding
+        // clippy 1.99 accepts: `assert_is_empty` bans the direct form while
+        // `unnecessary_first_then_check`/`len_zero`/`bool_assert_comparison`
+        // ban every alternative spelling of it.
+        assert_ne!(report.waves(), Vec::<Vec<opencodifier_core::NodeId>>::new());
         // The composed id: solver over lexical, folded into the identity.
         assert_eq!(handle.identity().model_id, "relational-v1|builtin-lexical-v1");
     }

@@ -884,7 +884,7 @@ mod tests {
         let questions = OpenAi.decode_schema(&schema, &Limits::default()).unwrap();
         let DecisionQuestion::Choice(choice) = &questions[0] else { unreachable!() };
         assert_eq!(choice.text(), "Which model?");
-        assert!(choice.candidates()[0].description().is_empty());
+        assert_eq!(choice.candidates()[0].description(), "");
         assert_eq!(choice.candidates()[1].id().as_str(), "b");
     }
 

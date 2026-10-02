@@ -907,7 +907,7 @@ fn mcp_serve_answers_a_real_session_over_stdio() {
     let response = &decided["structuredContent"];
     assert_eq!(response["answers"].as_array().expect("answers").len(), 1);
     assert_eq!(response["answers"][0]["type"], "choice");
-    assert!(!response["trace"]["entries"].as_array().expect("trace").is_empty());
+    assert!(response["trace"]["entries"].as_array().is_some_and(|entries| !entries.is_empty()));
 }
 
 #[test]

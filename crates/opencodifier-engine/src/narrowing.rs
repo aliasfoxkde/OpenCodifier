@@ -262,7 +262,7 @@ mod tests {
         let outcome = NarrowingOutcome::apply(&question(), &[], &[]);
         assert_eq!(outcome.before(), outcome.after());
         assert_eq!(outcome.reduction_ratio(), 1.0);
-        assert!(outcome.removed().is_empty());
+        assert_eq!(outcome.removed(), []);
         assert_eq!(outcome.narrowed_question(&question()), Some(question()));
     }
 
@@ -306,7 +306,7 @@ mod tests {
         };
         let kept = tied.clone().prune(2);
         assert_eq!(kept.scores().len(), 3, "candidates tied at the cut must survive");
-        assert!(kept.pruned().is_empty());
+        assert_eq!(kept.pruned(), []);
 
         // The same tie below the cut is eliminated with the rest.
         let cut = tied.prune(1);
@@ -319,7 +319,7 @@ mod tests {
         let scores = LexicalScores::score(&question(), question().candidates(), "coding");
         assert_eq!(scores.clone().prune(10).scores().len(), 3);
         assert_eq!(scores.clone().prune(0).scores().len(), 3, "keep=0 means 'no pruning'");
-        assert!(scores.clone().prune(0).pruned().is_empty());
+        assert_eq!(scores.clone().prune(0).pruned(), []);
     }
 
     #[test]

@@ -1020,3 +1020,55 @@ optional verifier. The decision:
 - **Confidence-gated, budget-aware.** Each rung firing passes the
   wave guard (deadline + cancellation) before the call, so a rung
   walk cannot outrun the request's budget.
+
+## D28 — The OOD channel gains a policy-selected input-likeness mode (2026-10-02)
+
+Measured motivation (REPORT, JevBench engine row; RESEARCH §9.1): the
+zero-ML ladder admits 81% of adversarial items with a 0.377-accuracy
+rung, and a 3-rung fusion tops out *below* its best single arm —
+because the OOD channel feeding `ood_ceiling` is **normalized answer
+entropy**, which measures the shape of the distribution, not whether
+the input resembles anything the rung was calibrated on. The policy
+seam (`Policy::with_ood_ceiling`, §19) has existed since Phase 14; it
+has been receiving the wrong signal. The decision:
+
+- **Two deterministic OOD modes, selected by policy, never fused.**
+  `OodMode::AnswerEntropy` (the default — today's behavior,
+  byte-identical) and `OodMode::LexicalBand`. In lexical-band mode the
+  OOD score is `1 − lexical_coverage`, where coverage is the fraction
+  of non-stop query tokens (the closed BM25 stop-word list, same
+  tokenizer) present in the best-scoring document's term set —
+  computable from the index the rung already builds, zero new
+  inference, fully deterministic. Answer-entropy stays the fallback
+  wherever a rung exposes no lexical evidence (relational proofs,
+  the model rung), so every rung has a defined OOD value in both
+  modes.
+- **No-evidence is maximal OOD.** A query whose informative tokens are
+  all stop words yields coverage 0 → OOD 1. A lexical rung that cannot
+  lexically ground its input must escalate, not trust a softmax over
+  nothing — the §73 posture, made mechanical.
+- **Policy selects; the ladder composes.** `DecisionPolicy` gains
+  `ood_mode` (serde default `answer_entropy`; old payloads
+  deserialize unchanged), so the D25/D27 machinery overrides it per
+  node, per kind, and per fallback rung like every other gate. The
+  gate relationship check is unchanged (mode is orthogonal to
+  `abstain_below <= verify_below <= min_confidence`). Cache identity
+  is carried by the existing ladder decoration, and a policy change
+  re-keys mechanically through it.
+- **Raw lexical evidence leaves the classifier through the deciding
+  path only.** `Classifier::decide_extended(state, question, index)`
+  returns `(Distribution, Option<f64>)` — the coverage of the best
+  document — with a default impl delegating to `decide` and returning
+  `None`. The `index` parameter is the build-once handoff (task #80):
+  the executor may pass the narrowing node's already-built index for
+  the identical candidate set; classifiers remain free to ignore it
+  and build their own (bit-identical either way — same documents,
+  same index, same scores).
+- **What this is not.** Not a trained density model, not a learned
+  projector — a deterministic lexical grounding signal, the
+  input-unlikeness evidence available before any model exists (the
+  same doctrine the entropy placeholder's own comment states). It
+  also deliberately does not change what `ood_score` means under the
+  default mode: existing traces, artifacts, and calibration cells
+  remain valid; only policies that opt into `lexical_band` get the
+  new semantics, and they get them spelled out here.
