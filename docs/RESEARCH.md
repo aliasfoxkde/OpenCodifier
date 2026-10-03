@@ -504,16 +504,23 @@ Grounded answer, separating what is measured from what is plausible:
   *rung is wrong* (the model is being asked to be a generator), not
   that the prompt needs work.
 
-**Actionable deltas**: (1) template-on/off + minimal-system-message A/B
-queued for the next fork arm (running, `fork_4b-instr-*-v1`); (2)
-candidate-order — post-hoc position-prior half DONE (§7.3, fork
-+2.7 pp / vtx +15.1 pp at position 0 / engine never-position-5);
-permutation flip-rate replay queued for a server slot, value
-concentrated on vtx; (3) per-cardinality buckets in the next
-calibration fit (the d15 re-run provides the first JevBench-native
-probability channel to fit); (4) when a PrefixLM/encoder rung lands,
-encode the no-KV-reuse and one-batch-prefill constraints as flags +
-manifest statements (§7.2).
+**Actionable deltas, resolved**: (1) template A/B **landed 2026-10-02**
+(`fork_4b-instr-*` on the anchor board): decide-template 0.7662 ==
+anchor default, rules-template 0.7749 and task-template 0.7576 — all
+within single-board noise of each other; nothing adopted, default
+instructions retained (BENCHMARKS.md table). (2) candidate-order —
+post-hoc position-prior half DONE (fork +2.7 pp / vtx +15.1 pp at
+position 0 / engine never-position-5); the flip-rate replay needs
+re-inference under permuted orders (stored rows are label-only, and
+even probability-bearing rows hold logits computed under the original
+order, so no post-hoc remap can measure it) — handed to the new-arm
+queue, value concentrated on vtx. (3) per-cardinality buckets
+**implemented** in `fit_calibration.py` (2026-10-02, committed
+6f90bfd, CALIBRATION.md): the d15 re-run provides the first
+JevBench-native probability channel to exercise the exact-fit path
+with buckets. (4) when a PrefixLM/encoder rung lands, encode the
+no-KV-reuse and one-batch-prefill constraints as flags + manifest
+statements (§7.2).
 
 ## §9 — Known-knowns audit + external sweep (2026-10-02)
 
