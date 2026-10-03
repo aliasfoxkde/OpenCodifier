@@ -1,0 +1,16 @@
+{
+  "format_version": 1,
+  "scheme": "temperature",
+  "model_id": "fork_4b-d15-v1",
+  "calibration_version": 1,
+  "default_temperature": 1.313212,
+  "temperatures": {
+    "choice": 1.313212
+  },
+  "fit": {
+    "items": 231,
+    "ece_before": 0.069554,
+    "ece_after": 0.048424,
+    "source": "JevBench public split (231 items, fstandhartinger/jevbench MIT, labels joined from the pinned dataset), single-run arm fork_4b-d15-v1, model fork_4b-d15-v1; exact full-distribution reverse-softmax fit (d15), in-sample"
+  }
+}
