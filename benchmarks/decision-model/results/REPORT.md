@@ -1162,7 +1162,17 @@ hash is a changed artifact and invalidates the row (D14).
   channel (llm-rung ECE **0.070** vs the NAS arm's 0.142) buys the
   same routing shape (engine 32 %, llm 68 %) at 4.4× lower mean
   latency, and the vtx rung earns zero routing at the best point.
-  F24's rule stands a third time. An anchor replicate
-  (`fork_4b-anchor-rep1-v1`, second default-instruction draw) is in
-  flight on the follower queue to measure Board-A single-draw
-  variance directly.
+  F24's rule stands a third time. **Anchor replicate landed
+  (`fork_4b-anchor-rep1-v1`, fresh server session, same build /
+  instructions / split) — bit-identical to the anchor**: 231/231 rows
+  match on both `predicted` and `raw_sha256`, in-run replay 231/231
+  (`predictions_match: true`), acc/macro identical at 0.7662/0.7571
+  (p50 1.74 s). Board-A single-draw variance at this configuration is
+  measured at zero on the anchor host, which sharpens the superseded
+  NAS row's standing: its 10-point delta to the anchor cannot be
+  sampling noise and remains an unresolved run-vintage/config
+  discrepancy (what the NAS-era session actually ran), with a seeded
+  or fork-greedy cross-check of that configuration the only remaining
+  way to explain it. (The follower queue's `rc=1` on this arm was a
+  script artifact — `rc` initialized to 1 and only overwritten on
+  failure — not a runner failure; script fixed for future arms.)

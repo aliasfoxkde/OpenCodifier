@@ -55,12 +55,15 @@ zero synthesized probabilities, full replay determinism.
 | OpenCodifier engine (relational solver over lexical, `/v1/decide`) | 231 | 0.3766 | 0.4011 | 0.402 | 0.890 | **2.0 ms** | 231/231 |
 | **vtx: VTX-JEV-3** (20.5 MB 2-bit static table, vendor client) | 231 | 0.4113 | 0.4318 | 0.126 | 0.684 | **7.9 ms** | 231/231 |
 | Jev-Style-0.8B-Decision-v3 Q4_K_M (native verdict-slot readout — comparability bridge) | 231 | 0.6494 | 0.6378 | **0.080** | **0.425** | 6.72 s | 231/231 (labels + probabilities) |
-| **fork: Qwen3.5-4B UD-Q4_K_XL tree mode** (D16 tier, fork-default T — base model, no decision tune; **fedora anchor**, 2026-10-02, default instructions) | 231 | **0.7662** | **0.7571** | — ¹ | — ¹ | 2.28 s | 231/231 (labels only ¹) |
+| **fork: Qwen3.5-4B UD-Q4_K_XL tree mode** (D16 tier, fork-default T — base model, no decision tune; **fedora anchor**, 2026-10-02, default instructions; replicate bit-identical ²) | 231 | **0.7662** | **0.7571** | — ¹ | — ¹ | 2.28 s | 231/231 (labels only ¹) |
 
 ¹ The fork's tree mode ships the winner's mass only (label-only mapping,
 D15), so no ECE/Brier is computable — the bridge row is the calibrated
 reference. The anchor's latency is a clean-host client wall (p95
 45.9 s carries sibling-session CUDA load, not arm time).
+² The replicate (`fork_4b-anchor-rep1-v1`, fresh session, same build /
+instructions / split) matched the anchor on all 231 `predicted` and
+`raw_sha256` values (p50 1.74 s) — see the superseded-row paragraph.
 
 **Superseded row, kept for the record**: the same arm's first run
 (2026-09-30, this NAS box) scored 0.6667 / macro 0.6541 at p50 15.53 s
@@ -72,9 +75,20 @@ default (no temperature in the runner payload, no seed in either
 manifest), each row is a single draw, and the NAS row additionally ran
 through the storm. The fedora anchor — same fork binary of record
 (`ad129b0`), same harness commit, same split bytes
-(`dc3995d8…`), in-run replay 231/231 — is the fork number of record. A
-seeded (or fork-greedy) anchor run is the queued follow-up that would
-settle it.
+(`dc3995d8…`), in-run replay 231/231 — is the fork number of record.
+
+An anchor **replicate** (`fork_4b-anchor-rep1-v1`, 2026-10-02, fresh
+server session, same build / default instructions / split) reproduced
+the anchor **bit-identically**: 231/231 rows match on both `predicted`
+and `raw_sha256`, in-run replay 231/231 (`predictions_match: true`),
+acc/macro identical at 0.7662 / 0.7571 (p50 1.74 s on the quieter
+host). Single-draw sampling variance at this configuration is
+therefore measured at **zero** on the anchor host. This does not
+explain the NAS delta — it rules out one candidate explanation
+(sampling) and narrows the discrepancy to run vintage/configuration
+(what the NAS-era session actually ran). A seeded or fork-greedy
+cross-check of that NAS-era configuration remains the only remaining
+way to settle it.
 
 ### Fork instruction-template A/B (#76, 2026-10-02 — anchor host, build `ad129b0`)
 
