@@ -503,11 +503,17 @@ scoring drift against every published row is zero by construction.
 | **engine** (`relational-v1` via `/v1/decide`) | 231 | 0.3766 | 0.4011 | 0.402 | 0.890 | **2.0 ms** | done, det 231/231 |
 | **jev_native bridge** (Jev-Style-0.8B-v3 Q4_K_M verdict slot) | 231 | 0.6494 | 0.6378 | **0.080** | **0.425** | 6.72 s | done, det 231/231 |
 | **vtx** (VTX-JEV-3 LF2 via vendor `JevClient`) | 231 | 0.4113 | 0.4318 | 0.126 | 0.684 | **7.9 ms** | done, det 231/231 |
-| **fork_4b** (tree mode, D16 config, T 1.400) | 231 | **0.6667** | **0.6541** | — ¹ | — ¹ | 15.5 s ² | done, det 231/231 (labels) |
+| **fork_4b** (tree mode, D16 config, fork-default T — **fedora anchor**, 2026-10-02) | 231 | **0.7662** | **0.7571** | — ¹ | — ¹ | 2.28 s | done, det 231/231 (labels) |
 
 ¹ Label-only mapping (the tree ships the winner's mass, D15) — no
-calibration row is computable. ² Co-tenant storm across the 3.9 h wall
-(load 25→20): latency is context, not a speed row.
+calibration row is computable. The first run of this arm (this NAS box,
+2026-09-30: 0.6667 / macro 0.6541, p50 15.5 s through a co-tenant
+storm) is superseded by the clean-host anchor; the 23-task delta
+exceeds the strands retrain-noise bar and is recorded as an unresolved
+run-vintage discrepancy (no seed at the fork's default decision
+temperature; single draw each) — `docs/BENCHMARKS.md` carries the full
+note plus the instruction-template A/B (#76) and the anchor-joined
+fusion study.
 
 Published anchors for the same split: hosted Jev 86.6 %, llm-qwen3.5-4b
 80.5 % / 651 ms, Jev-Style-2B 73.6 %, decider-2b 71.0 %, open-jev-2b
@@ -516,7 +522,7 @@ newer anchor set (autotrust's runs of the same public 231, scored
 family-macro, published 2026-09-27): autotrust/JEV-27B **88.70**,
 TypeSafe Jev 1.13 hosted **87.18**, Open-Jev-9B 77.13,
 NeoHorse-Jev-4B 75.73, Kev-4B 73.71, Laya English 55.82 — our rows on
-that scale: fork_4b 65.41, bridge 63.78, vtx 43.18, engine 40.11. The full six-benchmark
+that scale: fork_4b 75.71 (fedora anchor), bridge 63.78, vtx 43.18, engine 40.11. The full six-benchmark
 external comparison lives in `docs/BENCHMARKS.md`.
 
 **Reading the vtx row.** VTX-JEV-3 is a Model2Vec-class static embedding
@@ -1134,3 +1140,29 @@ hash is a changed artifact and invalidates the row (D14).
   inflated (engine 0.798 → the harness's 0.402; the regenerated
   fusion-jevbench*.md cascade tables are bit-identical, confirming no
   cascade behavior moved).
+- **2026-10-02 (fedora anchor; #76 template A/B; fusion re-joined)** —
+  the arm fleet re-ran on the clean fedora host
+  (`~/oc-model-eval/fedora_queue.sh`, build-pd @ ad129b0, T = 14,
+  gate < 20 throughout): **fork_4b-fedora-v1 0.7662 (177/231),
+  family-macro 0.7571, p50 2.28 s** — the fork number of record,
+  superseding the NAS 0.6667 row (supersession note in the Board-A
+  table above; the 23-task delta is an unresolved run-vintage
+  discrepancy, larger than the strands retrain-noise bar, with the
+  fork's default decision temperature unseeded in both runs).
+  Instruction-template A/B (#76): `Decide.` 0.7662, rules-phrasing
+  **0.7749** (nominal best, not adopted), `@task` 0.7576 — a 4-of-231
+  spread, inside single-draw noise; the template question is closed
+  for this fork at this n. **build-d15 arm decision-identical to the
+  anchor (0.7662, same predictions)** — the D15 full-distribution
+  patch changes reporting only, so the #61 calibration refit carries
+  no accuracy claim. Board-A fusion re-joined on the anchor
+  (`fusion-jevbench-fork-anchor.md`): oracle **0.853**, best gated
+  **0.688 @ engine t=0.95 / vtx t=0.80, mean 3.2 s** — still under
+  the fork alone (0.766), but the anchor's sharper winner-probability
+  channel (llm-rung ECE **0.070** vs the NAS arm's 0.142) buys the
+  same routing shape (engine 32 %, llm 68 %) at 4.4× lower mean
+  latency, and the vtx rung earns zero routing at the best point.
+  F24's rule stands a third time. An anchor replicate
+  (`fork_4b-anchor-rep1-v1`, second default-instruction draw) is in
+  flight on the follower queue to measure Board-A single-draw
+  variance directly.
