@@ -42,7 +42,10 @@ jobs:
   - name: test
     image: opencodifier-ci-rust:2
     needs: [lint]
-    timeout: 20m
+    # 45m: killed at 43m under co-tenant load ~95 (2026-10-03 receipts,
+    # `job_timeout_reconciled_by_watchdog` + a 20m18s step timeout) — both
+    # timeout-shaped, no code failure. Capacity fix, check unchanged.
+    timeout: 45m
     steps:
       - name: Unit and integration tests
         run: cargo test --workspace
@@ -52,7 +55,8 @@ jobs:
   - name: doc
     image: opencodifier-ci-rust:2
     needs: [lint]
-    timeout: 15m
+    # 30m: doc timed out at 15m in the same storm window (2026-10-03).
+    timeout: 30m
     steps:
       - name: Build docs with warnings as errors
         run: |

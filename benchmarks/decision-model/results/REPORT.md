@@ -1117,9 +1117,9 @@ hash is a changed artifact and invalidates the row (D14).
   lexical holds 0.95 throughout — the suite's metadata class runs on
   evidence the diet deletes. Conclusion unchanged and strengthened:
   the rung ships full-context (4k floor verified); no diet tier. The
-  params A/B's `long` arm (~3.7k-token contexts) is the last
-  measurement in flight; Board B rows are unchanged until it lands
-  (no tier changes, D16 unchanged). **Board-A fusion closed
+  params A/B's `long` arm (~3.7k-token contexts) was the last
+  measurement in flight — landed 2026-10-03, entry below; Board B
+  rows are unchanged by it (no tier changes, D16 unchanged). **Board-A fusion closed
   (`fusion-jevbench-fork.md`)**: the full ladder — engine → vtx → 4B
   fork — joined over all three arms' per-item rows (231/231; the
   label-only fork's winner mass recovered from its raw payloads,
@@ -1176,3 +1176,31 @@ hash is a changed artifact and invalidates the row (D14).
   way to explain it. (The follower queue's `rc=1` on this arm was a
   script artifact — `rc` initialized to 1 and only overwritten on
   failure — not a runner failure; script fixed for future arms.)
+- **2026-10-03 (params A/B `long` arm landed — #32 closed)** —
+  `params__long.json` (fedora, build-pd @ ad129b0, T = 14, ctx 8192,
+  decision-seqs 24, gated follower script, load 14.5 → 17.3 — clean
+  window, no storm): **0.7667 (80/120), ECE 0.0825** on the derived
+  long suite (measured context p50 3,025 tokens, range 2,977–3,185 —
+  the "~3.7k" planning figure was an overestimate). Per-class:
+  lexical_semantic **0.825**, metadata_match **1.0**,
+  relational_compositional 0.475. **p50 46.7 s/item (mean 48.3, max
+  106.8), prefill-bound** — p50 prefill 46.5 s of the 46.7 s total
+  (~65 tok/s prefill on 14 CPU threads); wall 2 h 58 m, peak RSS
+  5.3 GB. Readings: (1) long-context accuracy sits at the anchor's
+  level (0.7667 vs 0.7662 on the mixed board) — no sign of
+  long-context collapse, though the item sets differ. (2) The latency
+  profile is prefill, not decode: a CPU ladder that routes long items
+  to the LLM rung pays ~47 s/item, so the F23/F24 cost-policy reading
+  of the ladder sharpens — long contexts are exactly where the cheap
+  rungs must decide. (3) The rungs are complementary on long items:
+  the engine arm on the same suite (0.683) wins
+  relational_compositional **0.95** vs the fork's 0.475, the fork
+  wins lexical_semantic 0.825 vs 0.225 — the fork's global weak class
+  is the engine's global strong class. **Two-rung oracle on the 120
+  joined long items: 0.9417 (113/120; 7 items miss both)** — the
+  highest oracle measured on any board slice, from two rungs, no vtx.
+  The fusion-estimation caveat stands (post-hoc, gated thresholds not
+  refit on this slice), but the shape argues for per-context-length
+  routing: long items are where engine-first ordering pays most.
+  Params A/B fully closed: no tier changes (D16 unchanged);
+  full-context floor verified again at long context.
