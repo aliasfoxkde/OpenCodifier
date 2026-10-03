@@ -55,14 +55,49 @@ zero synthesized probabilities, full replay determinism.
 | OpenCodifier engine (relational solver over lexical, `/v1/decide`) | 231 | 0.3766 | 0.4011 | 0.402 | 0.890 | **2.0 ms** | 231/231 |
 | **vtx: VTX-JEV-3** (20.5 MB 2-bit static table, vendor client) | 231 | 0.4113 | 0.4318 | 0.126 | 0.684 | **7.9 ms** | 231/231 |
 | Jev-Style-0.8B-Decision-v3 Q4_K_M (native verdict-slot readout — comparability bridge) | 231 | 0.6494 | 0.6378 | **0.080** | **0.425** | 6.72 s | 231/231 (labels + probabilities) |
-| **fork: Qwen3.5-4B UD-Q4_K_XL tree mode** (D16 tier, T 1.400 — base model, no decision tune) | 231 | **0.6667** | **0.6541** | — ¹ | — ¹ | 15.53 s ² | 231/231 (labels only ¹) |
+| **fork: Qwen3.5-4B UD-Q4_K_XL tree mode** (D16 tier, fork-default T — base model, no decision tune; **fedora anchor**, 2026-10-02, default instructions) | 231 | **0.7662** | **0.7571** | — ¹ | — ¹ | 2.28 s | 231/231 (labels only ¹) |
 
 ¹ The fork's tree mode ships the winner's mass only (label-only mapping,
 D15), so no ECE/Brier is computable — the bridge row is the calibrated
-reference. ² Latency is load-contaminated context, not a speed row: the
-arm ran through a co-tenant storm (1-min load 25→20 across the 3.9 h
-wall); the D16 internal p50 for the same weights is 4.9 s on the
-120-item suite.
+reference. The anchor's latency is a clean-host client wall (p95
+45.9 s carries sibling-session CUDA load, not arm time).
+
+**Superseded row, kept for the record**: the same arm's first run
+(2026-09-30, this NAS box) scored 0.6667 / macro 0.6541 at p50 15.53 s
+through a co-tenant storm. The 23-task delta to the anchor exceeds the
+strands retrain-noise bar below (σ ≈ 3.2 tasks), so it is recorded as
+an **unresolved run-vintage discrepancy**, not explained away: the fork
+reads its decision sampling temperature from its own `/v1/decision`
+default (no temperature in the runner payload, no seed in either
+manifest), each row is a single draw, and the NAS row additionally ran
+through the storm. The fedora anchor — same fork binary of record
+(`ad129b0`), same harness commit, same split bytes
+(`dc3995d8…`), in-run replay 231/231 — is the fork number of record. A
+seeded (or fork-greedy) anchor run is the queued follow-up that would
+settle it.
+
+### Fork instruction-template A/B (#76, 2026-10-02 — anchor host, build `ad129b0`)
+
+Four instruction families over the identical tree readout, single draw
+each, n = 231:
+
+| instructions | accuracy | family-macro | p50 |
+|---|---:|---:|---:|
+| `Select the correct option.` (default = the anchor) | 0.7662 | 0.7571 | 2.28 s |
+| `Decide.` | 0.7662 | 0.7587 | 3.23 s |
+| `Apply the stated rules exactly, then select the single correct option.` | **0.7749** | **0.7674** | 2.23 s |
+| `@task` | 0.7576 | 0.7520 | 2.16 s |
+| build-`d15` + default instructions (#61) | 0.7662 | 0.7571 | 1.98 s |
+
+Findings, stated at their honest strength: (1) the instruction family
+is **not an established lever** — the whole spread is 4 of 231 tasks,
+inside the single-draw noise the strands caveat warns about; the rules
+phrasing is nominally best and is *not* adopted. (2) The `d15` build is
+**decision-identical** to the anchor build — the D15 full-distribution
+patch changes reporting only, so #61's calibration refit is purely
+distribution-fidelity work with no accuracy claim attached. (3) The
+template question is closed for this fork at this n; reopen only with a
+seeded multi-draw design.
 
 The bridge row is the validity anchor: its authors self-ran exactly
 these weights on exactly these items with the official harness and
@@ -85,7 +120,7 @@ the macro column above.
 | NeoHorse-Jev-4B | 75.73 |
 | Kev-4B | 73.71 |
 | Laya English | 55.82 |
-| *fork: Qwen3.5-4B tree mode (our run)* | *65.41* |
+| *fork: Qwen3.5-4B tree mode (our run — fedora anchor)* | *75.71* |
 | *Jev-Style-0.8B bridge (our run)* | *63.78* |
 | *VTX-JEV-3 (our run)* | *43.18* |
 | *OpenCodifier engine (our run)* | *40.11* |
@@ -103,7 +138,7 @@ Source: jev-style repo README, JevBench RESULTS, jev.page (recorded in
 | strands-decider-2B-hobson-v19 | 72.3 % (167/231), Brier 0.342, ECE 0.050 | official, preregistered run record |
 | open-jev-zefan-2b | 64.5 % | board |
 | **Jev-Style-0.8B v3** | **64.1 % (148/231)** | self-run, official harness — reproduced by our bridge |
-| *fork: Qwen3.5-4B tree mode (our run, base model)* | *66.7 % (154/231)* | our run, authors' harness — no decision tune, so the gap to jev.page's 4B (80.5 %) is a training-recipe delta, not harness drift |
+| *fork: Qwen3.5-4B tree mode (our run, base model — fedora anchor)* | *76.6 % (177/231)* | our run, authors' harness — no decision tune, so the gap to jev.page's 4B (80.5 %) is a training-recipe delta, not harness drift |
 | decider-2b | 71.0 % | board |
 | Laya | 58.4 % | official |
 
@@ -233,14 +268,20 @@ What the board established (full findings catalog in REPORT.md):
   (F24). Gates inherit their rung's calibration; validate them per
   domain before trusting them to route. With the 4B fork arm landed the
   full Board-A ladder is measurable end to end (engine → vtx → 4B
-  fork, `results/fusion-jevbench-fork.md`): the oracle is **0.823**,
-  but the best gated point is **0.636 — under the fork alone at
-  0.667** — because the cheap rungs' accepted mass stays wrong even at
-  strict gates (their raw probabilities are uncalibrated here). On
-  Board A the ladder is a cost policy, not an accuracy policy: engine
-  t=0.50 answers 81 % of items at 2 ms for 0.524, and every
-  accuracy-competitive point routes ~⅔ of items to the 4 s-plus rung.
-  The 0.867-at-home result stands — on Board B the gates separate
+  fork). Re-joined on the fedora anchor
+  (`results/fusion-jevbench-fork-anchor.md`): the oracle is **0.853**,
+  but the best gated point is **0.688 — under the fork alone at
+  0.766** — because the cheap rungs' accepted mass stays wrong even at
+  strict gates (their raw probabilities are uncalibrated here). (The
+  first join, `results/fusion-jevbench-fork.md`, used the superseded
+  NAS-era arm: oracle 0.823, best gated 0.636 at 14.2 s mean.) On
+  Board A the ladder is a cost policy, not an accuracy policy — but the
+  anchor's sharper winner-probability channel (llm-rung ECE 0.070 vs
+  the NAS arm's 0.142) buys the same best-point routing shape
+  (engine 32 %, llm 68 %) at 3.2 s mean instead of 14.2 s, and the vtx
+  rung earns no routing at the best point at all. Engine t=0.50 still
+  answers 81 % of items for 0.532 at sub-millisecond rung cost. The
+  0.867-at-home result stands — on Board B the gates separate
   because the rungs are calibrated there (F24's rule, twice confirmed).
   Study: `fusion_study.py`,
   outputs `results/fusion-*.md` in the decision-model README.
@@ -283,13 +324,15 @@ detachable, calibrated, and the backbone is untouched — exactly the
 
 **The honest gap.** On the shared axis (JevBench public 231,
 family-macro): JEV-27B 88.70 — our best row is now the 4B fork arm at
-65.41 (a base Qwen3.5-4B through the constrained tree readout, no
-decision tune), then the 0.8B bridge at 63.78, the 20 MB VTX static
-table at 43.18, our engine at 40.11. Nothing on our board today is
-within 20 points of the bar, and the fork arm's own margin — 66.7 %
-plain against jev.page's decision-tuned 4B at 80.5 % — is the measured
-price of skipping the training recipe, not a harness difference (the
-bridge reproduced the authors' own row at +0.9 pp). The road there, in
+75.71 (a base Qwen3.5-4B through the constrained tree readout, no
+decision tune, fedora anchor), then the 0.8B bridge at 63.78, the
+20 MB VTX static table at 43.18, our engine at 40.11. The clean-host
+anchor moved us from "20 points behind the bar" to 13 points behind
+it, and the fork arm's own margin — 76.6 % plain against jev.page's
+decision-tuned 4B at 80.5 % — is the measured price of skipping the
+training recipe, not a harness difference (the bridge reproduced the
+authors' own row at +0.9 pp; the fork delta is decision tuning plus
+the anchor's unresolved-vintage caveat above). The road there, in
 order of expected leverage: (1) a real candidate-conditioned
 decision rung trained on typed-distribution distillation (the
 `opencodifier-model` crate exists for exactly this; the corpus below is
