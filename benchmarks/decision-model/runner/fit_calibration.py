@@ -83,6 +83,8 @@ ARMS: dict[str, str] = {
     "llama__Qwen3.5-4B-Q3_K_S.json": "qwen3.5-4b-q3_k_s",
     "llama__Qwen3.5-4B-UD-Q4_K_XL.json": "qwen3.5-4b-ud-q4_k_xl",
     "llama__MiMo-V2.6-Distill-Qwen-9B-Q3_K_S.json": "mimo-v2.6-9b-q3_k_s",
+    "llama__jebadiah-4b-v2-Q8_0.json": "jebadiah-4b-v2-q8_0",
+    "llama__jebadiah-9b-v2-Q8_0.json": "jebadiah-9b-v2-q8_0",
 }
 
 

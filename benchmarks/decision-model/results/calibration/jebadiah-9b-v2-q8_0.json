@@ -1,0 +1,16 @@
+{
+  "format_version": 1,
+  "scheme": "temperature",
+  "model_id": "jebadiah-9b-v2-q8_0",
+  "calibration_version": 1,
+  "default_temperature": 1.065017,
+  "temperatures": {
+    "choice": 1.065017
+  },
+  "fit": {
+    "items": 120,
+    "ece_before": 0.075331,
+    "ece_after": 0.072723,
+    "source": "benchmarks/decision-model suite (seed 20260926, 120 items, single-run arm llama__jebadiah-9b-v2-Q8_0.json, model jebadiah-9b-v2.Q8_0.gguf); winner-vs-rest margin fit, in-sample"
+  }
+}

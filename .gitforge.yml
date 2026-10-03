@@ -42,10 +42,12 @@ jobs:
   - name: test
     image: opencodifier-ci-rust:2
     needs: [lint]
-    # 45m: killed at 43m under co-tenant load ~95 (2026-10-03 receipts,
-    # `job_timeout_reconciled_by_watchdog` + a 20m18s step timeout) — both
-    # timeout-shaped, no code failure. Capacity fix, check unchanged.
-    timeout: 45m
+    # 60m: 2026-10-03 receipts — killed at 43m (old 20m budget, watchdog
+    # reconcile) and again at 45m17s under the new budget, both in
+    # co-tenant storms at load 95-135. Coverage (strictly heavier:
+    # instrumented rebuild + all tests) goes green in ~16 min when calm,
+    # so this is contention headroom, not workload growth.
+    timeout: 60m
     steps:
       - name: Unit and integration tests
         run: cargo test --workspace

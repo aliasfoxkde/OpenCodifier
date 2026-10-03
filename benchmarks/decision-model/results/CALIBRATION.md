@@ -19,6 +19,8 @@ until it is calibrated.
 | qwen3.5-4b-q3_k_s | 1.672 | 0.069 | 0.039 | shipped |
 | qwen3.5-4b-ud-q4_k_xl | 1.400 | 0.074 | 0.058 | shipped |
 | mimo-v2.6-9b-q3_k_s | 1.372 | 0.048 | 0.026 | shipped |
+| jebadiah-4b-v2-q8_0 | 1.282 (margin fit) | 0.051 | 0.047 | shipped |
+| jebadiah-9b-v2-q8_0 | 1.065 (margin fit) | 0.075 | 0.073 | shipped |
 
 (The `builtin-lexical-v1` row from the first fit described the bare
 lexical stack, which the relational solver has since replaced as the
@@ -27,7 +29,12 @@ T 0.602, ECE 0.115 → 0.108 — remain in git history.)
 
 Shipped artifacts (validated against the engine's `CalibrationArtifact`
 schema): `calibration/{qwen3.5-0.8b-q4_0,qwen3.5-2b-q4_k_m,
-qwen3.5-4b-q3_k_s,qwen3.5-4b-ud-q4_k_xl,mimo-v2.6-9b-q3_k_s}.json`.
+qwen3.5-4b-q3_k_s,qwen3.5-4b-ud-q4_k_xl,mimo-v2.6-9b-q3_k_s,
+jebadiah-4b-v2-q8_0,jebadiah-9b-v2-q8_0}.json`. The jebadiah arms
+(2026-10-03) are `run_llama.py` margin-fit rows — the direct-fork
+runner records the winner probability only; an exact d15 refit for
+them rides the same distribution-emission re-run queued for the
+other margin-fit arms.
 
 **Shipping gate (added with the relational fit):** an artifact ships
 only if the fit does not worsen ECE. NLL — the fit objective — improves

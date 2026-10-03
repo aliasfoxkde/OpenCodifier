@@ -1117,9 +1117,10 @@ hash is a changed artifact and invalidates the row (D14).
   lexical holds 0.95 throughout — the suite's metadata class runs on
   evidence the diet deletes. Conclusion unchanged and strengthened:
   the rung ships full-context (4k floor verified); no diet tier. The
-  params A/B's `long` arm (~3.7k-token contexts) was the last
-  measurement in flight — landed 2026-10-03, entry below; Board B
-  rows are unchanged by it (no tier changes, D16 unchanged). **Board-A fusion closed
+  params A/B's `long` arm (~3.7k-token contexts) and the
+  jebadiah-4b-v2 board arm were the last measurements in flight —
+  both landed 2026-10-03 (entries below); the board's D16 tiers are
+  unchanged by either. **Board-A fusion closed
   (`fusion-jevbench-fork.md`)**: the full ladder — engine → vtx → 4B
   fork — joined over all three arms' per-item rows (231/231; the
   label-only fork's winner mass recovered from its raw payloads,
@@ -1204,3 +1205,43 @@ hash is a changed artifact and invalidates the row (D14).
   routing: long items are where engine-first ordering pays most.
   Params A/B fully closed: no tier changes (D16 unchanged);
   full-context floor verified again at long context.
+- **2026-10-03 (jebadiah-4b-v2 Q8_0 board arm — #78 first arm)** —
+  `llama__jebadiah-4b-v2-Q8_0.json` (fedora, build-pd @ ad129b0,
+  T = 12, ctx 8192, decision-seqs 24, board suite sha 9f0afaf6, full
+  lanes: single + replay + batched + chat; wall 25 m, peak RSS
+  14.4 GB, load 0.0 → 19.5): **0.800 (96/120), ECE 0.0512**, per-class
+  metadata 1.00 / lexical 0.90 / relational 0.50, determinism clean
+  (max prob delta 0.0). **Fastest 4B-tier decision lane on the
+  board: p50 2.72 s/item** (vs Qwen3.5-4B-UD-Q4_K_XL 4.9 s,
+  Qwen3.8-4B-Distill 3.8 s) at tied-best 4B accuracy with better
+  calibration than the anchor (0.051 vs 0.074). The HF card lists 5B
+  params despite the `4b` name; Q8_0 quant (~5.4 GB weights,
+  mradermacher GGUF, model sha 73bf1189…); text-only arm (the repo's
+  mmproj files unused). Relational sits at the ≤ 4B ceiling (0.50,
+  does not cross); the class shape is the familiar
+  engine-complementary one — rel 0.50 is exactly where the relational
+  solver (0.95) takes over in a ladder. Calibration artifact
+  **shipped: margin fit T = 1.282, ECE 0.051 → 0.047** — the
+  `run_llama.py` direct-fork lane records winner probability only,
+  so the exact d15 refit for this arm rides the distribution-emission
+  re-run queued for the margin-fit cohort (same as the other
+  `run_llama.py` arms). Board B row added; D16 tiers unchanged.
+- **2026-10-03 (jebadiah-9b-v2 Q8_0 board arm — new board leader)** —
+  `llama__jebadiah-9b-v2-Q8_0.json` (fedora, build-pd @ ad129b0,
+  T = 12, ctx 8192, decision-seqs 24, board suite sha 9f0afaf6, full
+  lanes: single + replay + batched + chat; wall 54.5 m, load 4.1 →
+  13.2): **0.8333 (100/120), ECE 0.0753**, per-class metadata 1.00 /
+  lexical 0.95 / **relational 0.55 — the highest model-arm relational
+  score on the board**, determinism clean (max prob delta 0.0).
+  **p50 5.63 s/item** — the 9B accuracy crown changes hands at 2.5×
+  the incumbent's speed: MiMo-V2.6-9B-Q3_K_S held 0.817 at p50 14.3 s
+  (ECE 0.048); jebadiah-9b-v2 takes 0.833 at 5.6 s with worse raw
+  calibration (0.075 vs 0.048 — its margin-fit artifact shipped at
+  T = 1.065, ECE 0.075 → 0.073). Same family size-sweep as the 4B arm
+  above (0.800 → 0.833, rel 0.50 → 0.55, p50 2.7 s → 5.6 s): the
+  recipe scales and stays fast — the "relational needs 9B" reading
+  sharpens into "relational needs the right 9B". The
+  relational-ceiling line in BENCHMARKS.md now names both 9B crossers.
+  D16 tiers unchanged (tier boundaries were set by cost, not this
+  ranking). Nothing in flight: the #78 queue resumes with Winnow-E4B
+  and the vtx permutation replay (runner work first).
