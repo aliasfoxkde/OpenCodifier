@@ -717,3 +717,49 @@ certificate, no cardinality invariance, no rotation invariance.
    ONNX encoder + Rust-f64-head rung study behind the `onnx`
    feature; ECE-per-bucket adoption gate. GGUF port deferred until
    upstream parity passes.
+8. Vision path (2026-10-03, extended after the SigLIP 2 + OCR survey):
+   - **V1 = Winnow-E4B's own mmproj**, at the best 4-bit the quantize
+     tool accepts (r11 arms); fallback if llama-quantize cannot
+     quantize the tower is stock mmproj. External evidence backs the
+     fallback as the likely pick: the Unlimited-OCR GGUF repo keeps
+     its vision encoder at **F16 (774 MiB) deliberately** — "it is
+     small and quantizing it hurts OCR accuracy" — and its own
+     limitations section says prefer Q4_K_M or higher, converging
+     with the 2026-10-03 operator quant floor. Tower-quant stays an
+     arm, never the default; the tower is small next to the body.
+   - **OCR ≠ vision understanding — two different rungs.** OCR is
+     text extraction: a *preprocessing* rung that turns image state
+     into text state, after which the existing deterministic ladder
+     decides. Visual scene understanding ("is this a failing-test
+     screenshot?") is mmproj-class. SigLIP2-class encoders do the
+     second; only OCR models do the first.
+   - **Unlimited-OCR-GGUF** (sahilchachra; baidu/Unlimited-OCR, MIT;
+     DeepSeek-OCR arch: SAM-ViT-B + CLIP-L/14 DeepEncoder → linear
+     projector → DeepSeek-V2 MoE 3B): strong shape — grounded
+     markdown with `<|det|>` boxes, `--temp 0` deterministic,
+     Q4_K_M 1.82 GiB recommended, serves via llama-server
+     OpenAI-compatible image_url (matches the Amortyx registration
+     pattern). **Parked, two blockers:** (a) requires the PR #17400
+     llama.cpp branch — not merged to upstream main, stock llama.cpp
+     will not load these files, and a second llama.cpp build breaks
+     our single-runtime discipline; (b) a second resident 3B model
+     doubles footprint for a rung that only fires on image input.
+     Revisit when DeepSeek-OCR lands in upstream main.
+   - **SigLIP2 NaFlex** as a standalone ONNX vision-embedding rung:
+     the naming is Base 86M / Large 303M / so400m ("shape-optimized")
+     400M / Giant 1B, with **NaFlex = dynamic-resolution variants**
+     (FlexiViT/NaViT lineage) of Base and so400m — one model for
+     aspect-sensitive inputs (native aspect ratio, little distortion)
+     and document resolution. Beats SigLIP 1 at all scales on
+     zero-shot classification, retrieval, and VLM transfer. It is an
+     **encoder**: embeddings + zero-shot label matching only — no
+     text extraction, no captioning; the text side is trained at a
+     64-token max_length, so longer candidate labels must be chunked
+     (author guidance: chunk to 64 tokens, average/max the scores).
+     Fit: ~86M tower ≈ 90 MB int8 ONNX behind `EmbeddingBackend`,
+     feeding the embedding→lexical ladder for image triage — NOT a
+     drop-in for the Winnow mmproj (its projector is trained to
+     Winnow's space; a swap means projector training, a
+     §9-distill-program task). Gemma-4's stock tower is SigLIP-family
+     so the lineage fits; embedding spaces do not transfer zero-shot.
+

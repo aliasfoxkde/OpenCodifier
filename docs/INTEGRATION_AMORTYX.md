@@ -1,8 +1,11 @@
 # Amortyx Integration Design — Router Decisions as IR
 
-Status: design (task #40, PLANNING.md §60–§62). Nothing here is
-implemented yet; every code anchor cites the tree as it exists today
-(2026-09-28). Amortyx lives at `/nas/Temp/repos/Amortyx`.
+Status: design + first V1 integration shipped (2026-10-03, §12). The
+design sections were written at task #40 against PLANNING.md §60–§62;
+every code anchor cites the tree as it existed on 2026-09-28 (the
+Amortyx-side routing-plane anchors were re-verified at Amortyx HEAD
+`520bd60a` — see the correction in §2). Amortyx lives at
+`/nas/Temp/repos/Amortyx`.
 
 ## 1. The boundary (non-negotiable)
 
@@ -44,6 +47,19 @@ and silent: a wrong complexity guess looks identical to a right one.
 Exactly the gap OpenCodifier's IR exists to close: same decisions, typed,
 with calibrated confidence, an execution trace, and an explicit
 abstention outcome.
+
+> **Correction (HEAD `520bd60a`, verified 2026-10-03).** The anchors in
+> the table above are stale: `assess_complexity` and `select_provider`
+> are **test-only** at HEAD. The live routing chain is
+> `server.rs` → `chat_completions_with_headers` → `chat_completions_inner`
+> → `chat_completions_route` (`amortyx-router/src/handlers/main.rs`),
+> with the capability plane at `TaskProfile::classify` →
+> `registry.select_for_task` → `policy_engine.decide` and the adapter
+> bound inside `chat_completions_route`. `doc/INTEGRATION_AMORTYX.md`
+> lines citing the two functions as the live path describe tests, not
+> production. The replacement target is the *live chain* above; the
+> trail attribution (`Selection` in `handlers/routing_trail/mod.rs`)
+> and holdout rows are unchanged.
 
 ## 3. The decisions as IR (§63 registry shape)
 
@@ -236,3 +252,48 @@ shadow ledger ─► privacy filter ─► dedup ─► label extraction
 | Heuristic-vs-OC disagreement noise | shadow lane measures would-have deltas before any promotion (§7); no behavior change until evidence |
 | Long hostile request bodies | §45 focus extraction + hostile-input rule; §16 A/B: answer-identical on 120/120 padded items |
 | Drift between the trees' expectations | the §3 registry entries are versioned artifacts; cache keys fold their versions, so a stale consumer gets invalidated decisions, not silently stale ones |
+
+## 12. Shipped V1 (2026-10-03) — provider registration over the chat surface
+
+The first integration running on this host is the **zero-Amortyx-code
+path**: OpenCodifier registers in Amortyx's provider config, and the
+semantic decision capability arrives as just another
+OpenAI-compatible provider.
+
+- **Runtime**: `opencodifier serve --focus-budget 512` as a systemd
+  `--user` unit (`opencodifier.service`), loopback `127.0.0.1:8177`,
+  engine identity `relational-v1|builtin-lexical-v1|focused-v1@512`.
+- **Surface**: `POST /v1/chat/completions`
+  ([INTEGRATIONS.md §2.5](INTEGRATIONS.md)) — the OpenAI-shaped
+  decision projection. Amortyx's router speaks
+  `POST {base_url}/chat/completions` to every `openai_compatible`
+  provider, so the config-only registration needs no router changes:
+
+  ```yaml
+  # ~/.config/amortyx/amortyx.yaml → providers:
+  - name: opencodifier
+    provider_type: openai_compatible
+    base_url: "http://127.0.0.1:8177/v1"
+    models:
+      - name: opencodifier-decision   # echoed verbatim; not an LLM
+  ```
+
+- **Contract on the wire**: strict `json_schema` in, structured-output
+  JSON in `choices[0].message.content` out, outcome + calibrated
+  confidence in the `opencodifier` extension object, abstention as
+  `200` with `outcome: "abstain"`. A request without a strict schema is
+  refused `schema.unsupported_generation_field` — the runtime decides,
+  it does not generate prose, and a chat-shaped refusal is still a
+  typed error Amortyx can route on.
+- **Boundary preserved**: this registration does NOT make Amortyx route
+  user traffic to OpenCodifier as if it were an LLM. The provider is
+  for decision-shaped requests (structured output, candidate lists in
+  the schema); the economic routing plane stays Amortyx's (§1), and the
+  routing-plane side-car of §6 remains the phase-2 path — native
+  `/v1/decide`, one batched call per request's five decisions, wired at
+  `chat_completions_route` (pre-`main.rs:1963`), with `abstain` ⇒
+  byte-identical heuristic fallback (§4).
+- **E2E validation**: dual-arm (direct vs through-router) latency and
+  outcome parity, burst behavior, abstention pass-through, and OC-down
+  ⇒ Amortyx circuit-breaker/fallback — recorded in the repo's
+  validation notes before this section claims more than registration.

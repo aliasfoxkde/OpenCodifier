@@ -247,10 +247,14 @@ arm — sampled decode, never comparable to decision rows.
 | llama__glm5.1-distill.json | 0.40 / 0.15 / 0.20 | 0.250 | 0.285 | 2194.4ms | yes |
 | llama__granite-4.0-350m-q4_k_m.json | 0.30 / 0.50 / 0.23 | 0.342 | 0.239 | 422.8ms | yes |
 | llama__jebadiah-4b-v2-Q8_0.json | 1.00 / 0.90 / 0.50 | 0.800 | 0.051 | 2722.9ms | yes |
+| llama__jebadiah-4b-v2-Q8_0__dist.json ³ | 1.00 / 0.90 / 0.50 | 0.800 | 0.051 | 2722.9ms | yes |
+| llama__jebadiah-4b-v2-Q3_K_S.json | 1.00 / 0.88 / 0.50 | 0.792 | 0.087 | 2500.6ms | yes |
 | llama__jebadiah-9b-v2-Q8_0.json | 1.00 / 0.95 / 0.55 | 0.833 | 0.075 | 5626.3ms | yes |
+| llama__jebadiah-9b-v2-Q3_K_S.json | 1.00 / 0.90 / 0.55 | 0.817 | 0.099 | 5416.4ms | yes |
 | llama__qwen0.5b.json | 0.60 / 0.33 / 0.25 | 0.392 | 0.218 | 694.8ms | yes |
 | llama__qwen1.5b.json | 0.90 / 0.45 / 0.40 | 0.583 | 0.191 | 1247.8ms | yes |
 | llama__qwen3b.json | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2575.2ms | yes |
+| stock__winnow-e4b-letters.json | 1.00 / 0.97 / 0.55 | 0.842 | 0.109 | 2171.3ms | yes (Δp 0.017) |
 | vtx__VTX-JEV-3-fp32.json | 0.20 / 0.33 / 0.42 | 0.317 | 0.099 | 0.8ms | yes |
 | vtx__VTX-JEV-3-lf2.json | 0.17 / 0.25 / 0.30 | 0.242 | 0.136 | 1.1ms | yes |
 
@@ -261,6 +265,12 @@ completeness, not a board row of the 120-item suite.
 slots (its trained interface) and was never trained on this harness's
 readouts — the row measures the mismatch; its JevBench-native row is the
 bridge above (0.6494).
+³ Distribution-emission validation (2026-10-03): the fork rebuilt at
+`38de7eb` (native per-choice distributions) reproduces the verdict-slot
+4B arm **exactly** — same decisions, same ECE, 100 % winner agreement,
+near-one-hot native distributions (peaked decision-slot logits). This is
+determinism evidence across builds and means the D15 refits are purely
+distribution-fidelity work, as with the `d15` JevBench arm above.
 
 What the board established (full findings catalog in REPORT.md):
 
@@ -272,6 +282,13 @@ What the board established (full findings catalog in REPORT.md):
 - **Quantization is mostly free until it isn't.** Q3_K_S ↔ Q8_0 is
   within noise on 2B/4B; the collapses are sharp (int8 embedding rung,
   IQ2_XXS), not gradual.
+- **Operator quant floor (2026-10-03): 4-bit K-quant or higher for
+  anything deployment-picked.** Sub-3-bit is worthless (IQ2_XXS
+  collapse), and the odd-bit i-quants carry a measured speed penalty
+  that the composite prices correctly: Qwen3.5-4B UD-IQ3_XXS ran
+  15.7 s vs 4.9 s for UD-Q4_K_XL — 3.2× slower for −0.8 pp. 3-bit
+  arms in future sweeps (r11) are confirmatory measurements of this
+  rule, not pick candidates.
 - **Raw winner probabilities are overconfident everywhere** (ECE
   0.048–0.626) — calibration artifacts are fitted per tier (D15) before
   any confidence is exposed.
@@ -312,6 +329,66 @@ What the board established (full findings catalog in REPORT.md):
   (prefill-bound) and 2.6× the memory (F25). ONNX stays the product's
   model-rung format for portability; the decision arm stays on
   llama.cpp.
+
+## Composite deployment score
+
+A single number for "which arm should a deployment pick", combining the
+three axes that matter on this box. Every component is a measured
+value; the weights are a stated choice, not a discovery.
+
+```
+A_trust = clamp(accuracy − ECE)                 # accuracy you can act on
+Spd     = clamp(1 − log10(p50_ms) / 4)          # 1ms→1.00 10ms→0.75 100ms→0.50 1s→0.25
+Res     = clamp((4.4 − log10(size_MiB)) / 2.2)  # 20MiB→1.00 2GiB→0.50 9GiB→0.20
+Overall = 100 × (0.45·A_trust + 0.30·Spd + 0.25·Res)
+```
+
+Scored rows are arms whose artifacts are resident and measured on this
+host (p50 values carry the standing co-tenant-load caveat; they
+overstate latency, never understate it). **A composite below the
+engine's accuracy cannot route decisions** regardless of its score —
+sub-engine arms are screening rungs, and the ladder (F23/F24) is the
+instrument that decides whether a rung earns traffic.
+
+| System | Acc | ECE | A_trust | Spd | Res | **Overall** | Vision |
+|---|---:|---:|---:|---:|---:|---:|---|
+| OpenCodifier engine (relational over lexical) | 0.683 | 0.094 | 0.589 | 0.97 | 1.00 | **80.7** | no |
+| VTX-JEV-3 lf2 (static embedding) | 0.242 | 0.136 | 0.106 | 0.99 | 1.00 | **59.5** | no |
+| jebadiah-4b-v2 **Q3_K_S** | 0.792 | 0.087 | 0.705 | 0.15 | 0.50 | **48.7** | no |
+| Suite ladder (simulated fusion, F23) | 0.867 | — | —¹ | 0.28 | —¹ | **47.4**¹ | no |
+| jebadiah-4b-v2 Q8_0 | 0.800 | 0.051 | 0.749 | 0.14 | 0.34 | **46.5** | no |
+| Qwen3.5-4B UD-Q4_K_XL (tree readout) | 0.800 | 0.074 | 0.726 | 0.08 | 0.43 | **45.9** | no |
+| Winnow-E4B (letters, stock llama.cpp) | 0.842 | 0.109 | 0.733 | 0.17 | 0.23 | **43.8** | **yes** (mmproj BF16) |
+| jebadiah-9b-v2 Q3_K_S | 0.817 | 0.099 | 0.718 | 0.07 | 0.36 | **43.2** | no |
+| jebadiah-9b-v2 Q8_0 | 0.833 | 0.075 | 0.758 | 0.06 | 0.20 | **40.9** | no |
+
+¹ A composition of measured rungs, not one artifact: its Spd/Res are the
+slowest rung's, its ECE is per-rung — scored on accuracy and speed only,
+flagged rather than hidden.
+
+What the composite says (2026-10-03, Q3 sweep in flight):
+
+- **The 4B class is the deployment sweet spot on CPU** — jebadiah-4b-v2
+  Q3_K_S scores highest of all model arms at 1.98 GiB (half the 9B Q8_0
+  footprint, ~4 pp under its accuracy). Among 9B-class arms, Q3_K_S
+  strictly dominates Q8_0 (−2 pp accuracy, −55 % size).
+- **The engine wins by construction of the weights** — and that is the
+  intended reading: the architecture's first principle is that the
+  zero-ML rung decides everything it can, and the measured tiers above
+  price the model rungs it cannot.
+- **VTX scores 59.5 and is still not deployable as a decider** (0.242
+  accuracy, 0.0 at answer positions 4–5): speed and footprint cannot
+  buy accuracy. Its role is screening/routing rung, pending position-
+  bias mitigation (#76's instrument).
+- **Winnow-E4B is the accuracy leader among deployable single models**
+  (0.842) and the only vision-capable arm (mmproj ships in the repo);
+  its cost is 7.46 GiB at Q8_0 and 2.2 s p50. Quantizing it is the open
+  lever (below).
+- Not scored (artifact not resident on the measuring host; board rows
+  above carry their numbers): MiMo-V2.6-9B Q3_K_S (0.817 / ECE 0.048 /
+  14.3 s — the D16 frontier pick), Qwen3.8-4B-Distill (0.767 / 0.057 /
+  3.8 s, ours), gemma-3-4b-it (0.750 / 0.236 / 3.0 s, **vision yes**),
+  Qwen3.5-2B Q8_K_XL (0.767 / 2.2 s).
 
 ## The target bar
 

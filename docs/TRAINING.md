@@ -144,3 +144,49 @@ runtime refuses free-form generation fields by contract).
   multi-adapter serving — accessed 2026-09-29.
 - Arabpour et al., *LoRA Fine-Tuning Without GPUs: A CPU-Efficient
   Meta-Learning Algorithm*, 2025 — CPU-only LoRA as an active (niche) area.
+
+## 9. Own-model distill program (opened 2026-10-03, task #88)
+
+Goal: best-of-all-worlds on the composite (accuracy you can act on,
+speed, footprint) rather than the best single arm. The board says the
+pieces exist separately — Winnow-E4B owns accuracy (0.842) and vision
+(mmproj), jebadiah-4b-v2 Q3_K_S owns the size/accuracy knee (1.98 GiB
+at 0.792), the engine owns latency — no single artifact owns all three.
+
+Plan, in dependency order:
+
+1. **Dataset merge.** Inventory + license-audit the trainable corpora:
+   SargeDev/jev-distill-corpus-v3 (Apache-2.0, JEV-27B's corpus), the
+   120-item suite + `suite_long` (ours, Apache-2.0), the fork arms'
+   prompt/response logs (ours), and any jebadiah training corpus only
+   if its license permits. Merge = dedupe (exact + near-dup on
+   question id), normalize to the IR request/response shape, and pin
+   the merged artifact (SHA-256, source window) per §5.
+2. **Quantization floor first (r11, in flight).** Winnow-E4B Q4_K_M /
+   Q4_K_S / Q4_0 / IQ4_XS / IQ3_M / Q3_K_S, letters readout, scored by
+   the same composite as every arm. The quant curve tells the distill
+   program what accuracy a 4-bit E4B-class body can carry before any
+   training run is bought. Working floor per the board rule
+   (BENCHMARKS.md, 2026-10-03): **4-bit K-quant or higher** — sub-3-bit
+   collapses and odd-bit i-quants carry a measured speed penalty
+   (UD-IQ3_XXS: 3.2× slower than UD-Q4_K_XL for −0.8 pp), so the 3-bit
+   arms run as confirmation only; distill outputs target the 4-bit-and-
+   up range.
+3. **Distill candidates** (each benchmarked through the standard arms
+   before any tier claim — same harness, same honesty rules):
+   - **Winnow-E4B base + LoRA** on the merged corpus: keeps vision and
+     the measured accuracy leader; Q8_0 teacher outputs from the
+     quant-bake-off arms provide soft labels for free.
+   - **Qwen3.5-2B/4B + LoRA**: the readout path (fork tree mode) is
+     the most measured; a decision tune closes the gap its own JevBench
+     anchor showed (76.6 % untuned vs 80.5 % tuned at 4B).
+   - Acceptance bar: beat the best same-size arm on the composite, not
+     accuracy alone — a tie on accuracy at half the size wins.
+4. **VIVERE knowledge extraction** stays experimental-labeled and
+   outside the promotion gate (INTEGRATION_AMORTYX §8): corpus runs
+   consume shadow-ledger exports, never live traffic, and any
+   VIVERE-derived claim is labeled experimental in both trees.
+
+Non-goals carried from §8: no non-Apache-2.0 corpora, no cloud
+training by default; the burst node (T5500 2×V100) or Kaggle/Modal
+remain the GPU paths, user-gated.

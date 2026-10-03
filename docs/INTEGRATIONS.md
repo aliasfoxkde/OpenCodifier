@@ -54,6 +54,7 @@ probe.
 |---|---|---|
 | `/v1/decide` | POST | one canonical request → typed decisions + trace |
 | `/v1/batch` | POST | up to 16 requests; one item's failure is that item's `error` object — the transport stays `200` when the batch itself was well-formed |
+| `/v1/chat/completions` | POST | OpenAI chat-completions shape over the same engine: messages become the state, a strict `json_schema` `response_format` names the questions; content is the structured-output JSON, outcome rides in the `opencodifier` extension object. Free-form generation (`json_object`, prose properties, no format) is refused `schema.unsupported_generation_field` — see §2.5 |
 | `/v1/validate` | POST | decode-and-validate only: preflight a payload (question kinds, candidate counts) before paying for execution |
 | `/v1/graph/validate` | POST | validate a declarative graph document |
 | `/v1/graph/run` | POST | execute a graph document (body carries `request` + graph) |
@@ -144,6 +145,61 @@ is the Jev/System-One ecosystem's convention (now also used by
 Fastino's GLiDE demo). [D31](DECISIONS.md) closed the question: the
 header above is the integration path; a dedicated route would be a
 pure alias with zero new capability.
+
+### 2.5 `POST /v1/chat/completions` — the OpenAI-shaped decision surface
+
+Tooling that speaks chat completions but cannot set a custom header
+(gateway routers, provider registries, no-code chains) points at this
+route. It is a **projection** of the same engine as `/v1/decide`, not a
+second pipeline — D12's adapter-first rule applied at the transport:
+
+- `messages` become the state text. `system` and `user` contents join
+  in message order; `assistant` turns are skipped (the runtime decides
+  over the caller's state, not a conversation to continue). Multimodal
+  content is refused — the IR's state is text, and silently dropping a
+  part would decide over less than was sent.
+- `response_format` must be a strict `json_schema` whose `properties`
+  name one question per property — the exact subset the
+  [OpenAI structured-outputs adapter](#24-wire-formats-over-http--x-opencodifier-format-d30)
+  documents (`string`+`enum` → choice, `boolean` → boolean,
+  `integer`+bounds → score). A `required` list is synthesized from the
+  property names when the caller omits it; a caller-supplied list is
+  honored and strict-mode-validated by the adapter.
+- The answer's `content` is the structured-output JSON — one field per
+  question holding the chosen value — exactly what a strict OpenAI
+  client parses. Outcome and calibrated confidence have no slot in a
+  chat shape, so they travel in an `opencodifier` extension object.
+- **Generation is refused, honestly**: no `response_format`, a
+  non-`json_schema` type (`json_object`), or a prose property (a
+  string with no `enum`) is `400` `schema.unsupported_generation_field`
+  naming the field. The runtime decides; it does not pretend to write
+  prose.
+- `abstain` and every other typed outcome stay `200` — the outcome
+  field carries the decision, not the transport status.
+
+```bash
+curl -s http://127.0.0.1:8177/v1/chat/completions \
+     -H 'content-type: application/json' -d '{
+  "model": "opencodifier-decision",
+  "messages": [
+    {"role": "system", "content": "On-call context: payments deploy 20:00 UTC."},
+    {"role": "user",   "content": "Checkout errors hit 12% eight minutes in. Rollback window closes in 20 minutes."}
+  ],
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": { "name": "decision", "schema": {
+      "type": "object",
+      "properties": { "action": { "type": "string",
+        "enum": ["rollback", "hotfix", "wait"] } },
+      "required": ["action"], "additionalProperties": false } }
+  }
+}'
+```
+
+For routers: register the runtime as an OpenAI-compatible provider with
+`base_url http://127.0.0.1:8177/v1` and any model name (it is echoed
+verbatim); route structured-output requests to it. No credentials sit
+on the path — the bind is loopback by policy.
 
 ---
 
@@ -288,6 +344,58 @@ required.
 - OpenCodifier's own pipeline of record is GitForge (`.gitforge.yml`
   mirrors `just ci` line-for-line); a decision-gated job is just
   another step in that shape on your side.
+
+### 7.1 Where this fits a pipeline (and where it does not)
+
+The CI questions that are actually decisions, with their IR shapes:
+
+| Pipeline question | IR | What decides it, cheapest-first |
+|---|---|---|
+| Retry, bisect, or block on a failed job? | `choice` | exact rule over the failure signature → cache → lexical match against the known-flaky corpus → decision model; `abstain` → page a human |
+| Is this test flaky or broken? | `boolean` | historical signature rules → lexical similarity to prior flake reports → model rung for the tail |
+| Is this benchmark delta a regression or noise? | `score`/`boolean` | threshold rules on the measured distribution → calibration-aware gate (§73: probability ≠ confidence) |
+| Which model tier should this AI-pipeline step use? | `choice` | the Amortyx §8.1 pattern, generalized: eligibility upstream, ranking here |
+
+Two properties make it pipeline-native rather than a vendor call: the
+service is local-first (no keys, no egress, works on air-gapped
+self-hosted runners), and most requests never reach a model — the
+deterministic rungs answer in microseconds, with the trace as the
+audit trail for why the gate did what it did.
+
+Honest limits: a decision runtime is **not** a workflow engine — it
+answers typed questions inside your orchestrator, it does not
+orchestrate. And its accuracy is a function of state quality: raw log
+spew gives the lexical rung nothing to match, and it abstains (the
+correct behavior) unless the pipeline extracts structure — job names,
+labels, error classes, metrics — into the state. The wins are largest
+where CI already produces structured-ish state, which is exactly where
+regex-and-keyword heuristics are silently wrong today.
+
+### 7.1 Where this fits a pipeline (and where it does not)
+
+The CI questions that are actually decisions, with their IR shapes:
+
+| Pipeline question | IR | What decides it, cheapest-first |
+|---|---|---|
+| Retry, bisect, or block on a failed job? | `choice` | exact rule over the failure signature → cache → lexical match against the known-flaky corpus → decision model; `abstain` → page a human |
+| Is this test flaky or broken? | `boolean` | historical signature rules → lexical similarity to prior flake reports → model rung for the tail |
+| Is this benchmark delta a regression or noise? | `score`/`boolean` | threshold rules on the measured distribution → calibration-aware gate (§73: probability ≠ confidence) |
+| Which model tier should this AI-pipeline step use? | `choice` | the Amortyx §8.1 pattern, generalized: eligibility upstream, ranking here |
+
+Two properties make it pipeline-native rather than a vendor call: the
+service is local-first (no keys, no egress, works on air-gapped
+self-hosted runners), and most requests never reach a model — the
+deterministic rungs answer in microseconds, with the trace as the
+audit trail for why the gate did what it did.
+
+Honest limits: a decision runtime is **not** a workflow engine — it
+answers typed questions inside your orchestrator, it does not
+orchestrate. And its accuracy is a function of state quality: raw log
+spew gives the lexical rung nothing to match, and it abstains (the
+correct behavior) unless the pipeline extracts structure — job names,
+labels, error classes, metrics — into the state. The wins are largest
+where CI already produces structured-ish state, which is exactly where
+regex-and-keyword heuristics are silently wrong today.
 
 ---
 

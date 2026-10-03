@@ -36,17 +36,26 @@ from pathlib import Path
 # The suite contract (row shape, ECE, per-class metrics, determinism) is
 # shared with the Laya encoder arm; reuse instead of duplicating it.
 sys.path.insert(0, str(Path(__file__).parent))
-from run_laya import ece, metrics, sha256_file  # noqa: E402
+from run_laya import sha256_file  # noqa: E402
+from run_stock import metrics, permute  # noqa: E402
 from resources import ResourceMonitor  # noqa: E402
 
 
-def run_once(client, items: list[dict]) -> list[dict]:
+def run_once(client, items: list[dict], perm: int = 0, seed: int = 20260926) -> list[dict]:
     from inference import Choice
 
     rows = []
     for it in items:
+        # Candidate order is the position signal: `Choice` encodes
+        # candidates in insertion order, so permuting the dict order and
+        # re-deciding measures how much the pooler's position prior
+        # (vtx primacy +15.1 pp at position 0, #76) drives the answer.
+        cands = permute(it["candidates"], perm, seed, it["id"])
+        answer_position = next(
+            (i for i, c in enumerate(cands) if c["id"] == it["answer"]), None
+        )
         question = Choice(
-            it["question"], {c["id"]: c["description"] for c in it["candidates"]}
+            it["question"], {c["id"]: c["description"] for c in cands}
         )
         t0 = time.monotonic()
         response = client.system_one(state=it["context"], questions={"decision": question})
@@ -59,6 +68,8 @@ def run_once(client, items: list[dict]) -> list[dict]:
                     "id": it["id"],
                     "class": it["class"],
                     "answer": it["answer"],
+                    "perm": perm,
+                    "answer_position": answer_position,
                     "pred": None,
                     "prob": 0.0,
                     "invalid_distribution": True,
@@ -70,7 +81,7 @@ def run_once(client, items: list[dict]) -> list[dict]:
         # A distribution that misses a candidate id or does not sum to
         # within 2% of 1.0 counts as wrong and is never renormalized into
         # validity (same contract as the Laya arm).
-        missing = [c["id"] for c in it["candidates"] if c["id"] not in result.distribution]
+        missing = [c["id"] for c in cands if c["id"] not in result.distribution]
         total = sum(result.distribution.values())
         invalid = bool(missing) or not 0.98 <= total <= 1.02
         rows.append(
@@ -78,6 +89,8 @@ def run_once(client, items: list[dict]) -> list[dict]:
                 "id": it["id"],
                 "class": it["class"],
                 "answer": it["answer"],
+                "perm": perm,
+                "answer_position": answer_position,
                 "pred": result.choice,
                 "prob": float(result.confidence),
                 "invalid_distribution": invalid,
@@ -97,6 +110,11 @@ def main() -> int:
     ap.add_argument("--suite", type=Path,
                     default=Path(__file__).parent.parent / "suite" / "suite.json")
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--permutations", type=int, default=1,
+                    help="passes over the suite; 1 = identity candidate "
+                    "order only, K > 1 adds K-1 seeded order permutations "
+                    "(the position-prior replay, #76)")
+    ap.add_argument("--seed", type=int, default=20260926)
     args = ap.parse_args()
 
     sys.path.insert(0, str(args.model_dir))
@@ -116,12 +134,15 @@ def main() -> int:
     suite = json.loads(args.suite.read_text())
     items = suite["items"]
 
-    single = run_once(client, items)
-    single_again = run_once(client, items)
+    single = run_once(client, items, 0, args.seed)
+    single_again = run_once(client, items, 0, args.seed)
     determinism = {
         "predictions_match": all(a["pred"] == b["pred"] for a, b in zip(single, single_again)),
         "max_prob_delta": max(abs(a["prob"] - b["prob"]) for a, b in zip(single, single_again)),
     }
+    passes = {"0": single, "identity_replay": single_again}
+    for k in range(1, args.permutations):
+        passes[str(k)] = run_once(client, items, k, args.seed)
 
     result = {
         "arm": "static_embedding_decision",
@@ -145,9 +166,12 @@ def main() -> int:
             "choice_scoring": "softmax over cosine similarities, scale 15.0",
             "choice_encoding": "'<question> <candidate description>' vs the state",
             "client": "vendor inference.py JevClient",
+            "permutations": args.permutations,
+            "seed": args.seed,
             "device": "cpu",
         },
         "single": single,
+        "passes": passes,
         "determinism": determinism,
         "metrics": metrics(single),
     }
@@ -166,7 +190,8 @@ def main() -> int:
     print(
         f"acc={m['accuracy']:.3f} ece={m['ece']:.3f} "
         f"per_class={ {k: round(v, 3) for k, v in m['accuracy_by_class'].items()} } "
-        f"p50={m['latency']['p50_ms']:.2f}ms vendor_p50={m['vendor_p50_ms']:.2f}ms "
+        f"by_pos={ {k: round(v, 3) for k, v in m['accuracy_by_answer_position'].items()} } "
+        f"p50={m['p50_ms']:.2f}ms vendor_p50={m['vendor_p50_ms']:.2f}ms "
         f"invalid={m['invalid_distributions']} "
         f"determinism={determinism['predictions_match']}",
         flush=True,

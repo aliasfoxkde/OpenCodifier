@@ -112,8 +112,173 @@ pub fn router(handle: Arc<EngineHandle>) -> Router {
         .route("/v1/models", get(models))
         .route("/v1/capabilities", get(capabilities))
         .route("/v1/healthz", get(healthz))
+        .route("/v1/chat/completions", post(chat_completions))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(handle)
+}
+
+/// `POST /v1/chat/completions` — the OpenAI-compatible decision surface.
+///
+/// Amortyx and every other OpenAI-shapeable client speak chat
+/// completions, so the surface accepts the constrained slice of that
+/// shape which *is* a decision: a strict `json_schema` response format
+/// whose schema is exactly the strict-mode subset [`OpenAi`] documents.
+/// Messages become the state text, the response format's schema becomes
+/// the adapter's schema map (`required` synthesized from the property
+/// names when the caller omits it — strict mode makes every property
+/// required), and the answer is a chat completion
+/// whose content is the adapter's structured-output JSON. Everything
+/// flows through the same engine as `/v1/decide` — the route is a
+/// projection, never a second pipeline (D12: the `/v1` surface is
+/// adapter-first).
+///
+/// Free-form generation is refused with
+/// `schema.unsupported_generation_field`: a request without a
+/// `response_format`, with `response_format.type` other than
+/// `json_schema`, or with non-string message content asks the runtime to
+/// write prose, and the runtime decides instead of pretending.
+///
+/// Abstention and every other typed outcome stay `200`; the
+/// `opencodifier` extension object carries the outcome and calibrated
+/// confidence a chat shape has no slot for.
+async fn chat_completions(
+    State(handle): State<Arc<EngineHandle>>,
+    body: Bytes,
+) -> Result<Json<Value>, HttpError> {
+    let payload = parse_json(&body)?;
+    let obj = payload.as_object().ok_or_else(|| {
+        HttpError::from(SchemaError::invalid_type("body", "a JSON object", &payload))
+    })?;
+
+    let model = obj.get("model").and_then(Value::as_str).unwrap_or("opencodifier");
+    let state_text = state_from_messages(obj.get("messages"))?;
+    let properties = decision_properties(obj.get("response_format"))?;
+    let required = schema_required(obj.get("response_format"), &properties);
+
+    let request: DecisionRequest = OpenAi
+        .decode_request(
+            &json!({
+                "input": state_text,
+                "format": { "strict": true, "schema": {
+                    "properties": properties, "required": required,
+                } },
+            }),
+            &Limits::default(),
+        )
+        .map_err(HttpError::from)?;
+
+    let response: DecisionResponse = tokio::task::spawn_blocking(move || handle.decide(&request))
+        .await
+        .map_err(|_| HttpError::Engine(opencodifier_engine::EngineError::Cancelled))?
+        .map_err(HttpError::from)?;
+
+    let content = OpenAi.encode_response(&response).map_err(|error| {
+        HttpError::Engine(opencodifier_engine::EngineError::Serialization {
+            reason: error.to_string(),
+        })
+    })?;
+    let created = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    Ok(Json(json!({
+        "id": format!("chatcmpl-{created}"),
+        "object": "chat.completion",
+        "created": created,
+        "model": model,
+        "choices": [{
+            "index": 0,
+            "message": { "role": "assistant", "content": content.to_string() },
+            "finish_reason": "stop",
+        }],
+        "opencodifier": {
+            "outcome": response.outcome(),
+            "calibrated_confidence": response.confidence().calibrated_confidence,
+        },
+    })))
+}
+
+/// Flattens chat messages into the state text the IR decides over.
+///
+/// System and user contents join in message order; assistant turns are
+/// skipped (the runtime decides over the caller's state, not over a
+/// conversation to continue). Non-string content is refused: the IR's
+/// state is text, and silently dropping a multimodal part would decide
+/// over less than the caller sent.
+fn state_from_messages(messages: Option<&Value>) -> Result<String, HttpError> {
+    let messages = messages
+        .and_then(Value::as_array)
+        .ok_or_else(|| HttpError::from(SchemaError::missing("messages")))?;
+    let mut parts: Vec<&str> = Vec::new();
+    for message in messages {
+        let role = message.get("role").and_then(Value::as_str).unwrap_or("");
+        if role != "system" && role != "user" {
+            continue;
+        }
+        let content = message.get("content").and_then(Value::as_str).ok_or_else(|| {
+            HttpError::from(SchemaError::invalid_value(
+                "messages[].content",
+                "only string content is supported; the runtime decides over text",
+            ))
+        })?;
+        parts.push(content);
+    }
+    if parts.is_empty() {
+        return Err(HttpError::from(SchemaError::invalid_value(
+            "messages",
+            "no system or user message content to decide over",
+        )));
+    }
+    Ok(parts.join("\n\n"))
+}
+
+/// Extracts the strict-mode schema map a decision needs from
+/// `response_format`, or refuses with
+/// `schema.unsupported_generation_field` when the request is a
+/// generation request instead.
+fn decision_properties(response_format: Option<&Value>) -> Result<Value, HttpError> {
+    let format = response_format.ok_or_else(|| {
+        HttpError::from(SchemaError::UnsupportedGenerationField { field: "response_format".into() })
+    })?;
+    let kind = format.get("type").and_then(Value::as_str).unwrap_or("");
+    if kind != "json_schema" {
+        return Err(HttpError::from(SchemaError::UnsupportedGenerationField {
+            field: "response_format.type".into(),
+        }));
+    }
+    let schema = format
+        .get("json_schema")
+        .and_then(|js| js.get("schema"))
+        .and_then(|s| s.get("properties"))
+        .filter(|s| s.is_object())
+        .ok_or_else(|| {
+            HttpError::from(SchemaError::invalid_value(
+                "response_format.json_schema.schema",
+                "expected an object schema with `properties` naming one question per property",
+            ))
+        })?;
+    Ok(schema.clone())
+}
+
+/// The strict-mode `required` list the adapter needs alongside
+/// `properties`.
+///
+/// A caller-supplied list is honored verbatim — the adapter refuses an
+/// incomplete one itself. A caller who wrote a well-shaped object schema
+/// but left the list off gets the rule applied rather than a refusal:
+/// every property being required is what strict mode means.
+fn schema_required(response_format: Option<&Value>, properties: &Value) -> Value {
+    let schema = response_format
+        .and_then(|format| format.get("json_schema"))
+        .and_then(|js| js.get("schema"));
+    if let Some(required) = schema.and_then(|s| s.get("required")) {
+        return required.clone();
+    }
+    Value::Array(
+        properties
+            .as_object()
+            .map(|props| props.keys().map(|name| json!(name)).collect())
+            .unwrap_or_default(),
+    )
 }
 
 /// `POST /v1/decide` — decision request in (adapter-selected), the same
