@@ -21,6 +21,7 @@ until it is calibrated.
 | mimo-v2.6-9b-q3_k_s | 1.372 | 0.048 | 0.026 | shipped |
 | jebadiah-4b-v2-q8_0 | 1.282 (margin fit) | 0.051 | 0.047 | shipped |
 | jebadiah-9b-v2-q8_0 | 1.065 (margin fit) | 0.075 | 0.073 | shipped |
+| fork_4b-d15-v1 (JevBench 231) | 1.313 (exact, d15) | 0.070 | 0.048 | shipped |
 
 (The `builtin-lexical-v1` row from the first fit described the bare
 lexical stack, which the relational solver has since replaced as the
@@ -30,11 +31,22 @@ T 0.602, ECE 0.115 → 0.108 — remain in git history.)
 Shipped artifacts (validated against the engine's `CalibrationArtifact`
 schema): `calibration/{qwen3.5-0.8b-q4_0,qwen3.5-2b-q4_k_m,
 qwen3.5-4b-q3_k_s,qwen3.5-4b-ud-q4_k_xl,mimo-v2.6-9b-q3_k_s,
-jebadiah-4b-v2-q8_0,jebadiah-9b-v2-q8_0}.json`. The jebadiah arms
-(2026-10-03) are `run_llama.py` margin-fit rows — the direct-fork
-runner records the winner probability only; an exact d15 refit for
-them rides the same distribution-emission re-run queued for the
-other margin-fit arms.
+jebadiah-4b-v2-q8_0,jebadiah-9b-v2-q8_0,fork_4b-d15-v1}.json`. The
+jebadiah arms (2026-10-03) are `run_llama.py` margin-fit rows — the
+direct-fork runner records the winner probability only; their exact
+d15 refits ride the same distribution-emission re-run queued for the
+other margin-fit arms. The fork's own re-run has landed:
+`fork_4b-d15-v1` (2026-10-03) is the first exact fit fitted outside
+the internal suite — the rebuilt parallel-decision server emits full
+per-choice `probs` per row on the JevBench public split (231 items)
+and `fit_calibration.py` joins them to the pinned dataset labels
+(`--tasks`). Fit: T **1.313212**, ECE **0.0696 → 0.0484** in-sample.
+One fitter defect was caught on the way: score-class items carry
+integer ordinal labels while the fork's probs keys are strings, so
+unnormalized, 18 of 231 rows read as always-wrong — ECE-before
+inflated to 0.118 and the fit fell back to the margin path (T 2.377).
+The cross-check against the harness's own ECE (0.0696) exposed it;
+normalizing labels into the probs key space restored the exact path.
 
 **Shipping gate (added with the relational fit):** an artifact ships
 only if the fit does not worsen ECE. NLL — the fit objective — improves
@@ -108,8 +120,11 @@ fr.probs` zipped with `sp.values` in `assemble()`, rebuild `build-pd`,
 record the provenance as `parallel-decision ad129b0+distribution`
 (`--llamacpp-branch`), then log `probs` in
 `run_llama.py::decide_single` rows. No runner-only path exists: the
-server does not send what the fit needs. Until then the margin
-temperature stands.
+server does not send what the fit needs. **Landed for the fork
+(2026-10-03):** the rebuilt server emits `f["probabilities"]`, the
+JevBench runner logs `probs`, and the fork arm's exact fit ships
+(T 1.313, ECE 0.070 → 0.048). The decoder margin-fit arms still queue
+their distribution re-runs.
 
 **Exact fit implemented (2026-09-30; refit landed, see above).** When a
 run records full per-item `probs`, `fit_calibration.py` now fits the
@@ -171,8 +186,9 @@ seven arms, both fit paths). What the buckets show:
   over-sharpens multi-way boards) is flatter: k=4 0.82, k=5 1.49,
   k=6 0.77 around its global 0.93. Trust the exact-fit buckets'
   *shape*; treat the margin-fit buckets as upper bounds on the
-  gradient until those arms re-run with distribution emission (the
-  d15 fork re-run queues exactly that for the 4B).
+  gradient until those arms re-run with distribution emission (landed
+  for the fork's JevBench arm as `fork_4b-d15-v1`; the suite arms
+  remain queued).
 - n=18/n=15 at k=5/k=6 — the k=5/k=6 buckets are small-sample fits and
   inherit the in-sample caveat above; the k=4 bucket (n=87) is the
   only well-populated one.

@@ -503,10 +503,16 @@ scoring drift against every published row is zero by construction.
 | **engine** (`relational-v1` via `/v1/decide`) | 231 | 0.3766 | 0.4011 | 0.402 | 0.890 | **2.0 ms** | done, det 231/231 |
 | **jev_native bridge** (Jev-Style-0.8B-v3 Q4_K_M verdict slot) | 231 | 0.6494 | 0.6378 | **0.080** | **0.425** | 6.72 s | done, det 231/231 |
 | **vtx** (VTX-JEV-3 LF2 via vendor `JevClient`) | 231 | 0.4113 | 0.4318 | 0.126 | 0.684 | **7.9 ms** | done, det 231/231 |
-| **fork_4b** (tree mode, D16 config, fork-default T — **fedora anchor**, 2026-10-02) | 231 | **0.7662** | **0.7571** | — ¹ | — ¹ | 2.28 s | done, det 231/231 (labels) |
+| **fork_4b** (tree mode, D16 config, fork-default T — **fedora anchor**, 2026-10-02) | 231 | **0.7662** | **0.7571** | 0.070 ¹ | 0.305 ¹ | 2.28 s | done, det 231/231 (labels) |
 
-¹ Label-only mapping (the tree ships the winner's mass, D15) — no
-calibration row is computable. The first run of this arm (this NAS box,
+¹ ECE/Brier come from the decision-identical build-`d15` arm
+(`fork_4b-d15-v1`, same host/build/split, predictions verified equal on
+all 231 items): the anchor's own tree mode ships the winner's mass only
+(label-only mapping, D15), but the `d15` rebuild emits full per-choice
+distributions, and its raw-board ECE 0.070 / Brier 0.305 are the fork's
+calibration of record. Exact d15 refit on those distributions: T 1.313,
+ECE 0.070 → 0.048 in-sample (`calibration/fork_4b-d15-v1.json`). The
+first run of this arm (this NAS box,
 2026-09-30: 0.6667 / macro 0.6541, p50 15.5 s through a co-tenant
 storm) is superseded by the clean-host anchor; the 23-task delta
 exceeds the strands retrain-noise bar and is recorded as an unresolved
@@ -1245,3 +1251,37 @@ hash is a changed artifact and invalidates the row (D14).
   D16 tiers unchanged (tier boundaries were set by cost, not this
   ranking). Nothing in flight: the #78 queue resumes with Winnow-E4B
   and the vtx permutation replay (runner work first).
+
+- **2026-10-03 (fork_4b-d15-v1 exact d15 calibration — Board A fork
+  ECE/Brier filled; fedora queue complete)** — the queue's last
+  deliverable. The build-`d15` arm (`fork_4b-d15-v1`, fedora
+  i5-13600K, -t 14, 2026-10-02) records full per-choice `probs` for
+  all 231 JevBench items — the distribution emission CALIBRATION.md
+  located on 2026-09-28 landed in the fork build and ran — so the
+  fork's Board A calibration cells are sourced from native
+  distributions instead of reading "—": **ECE 0.070, Brier 0.305**
+  (harness summary 0.0696 / 0.30460). The arm is decision-identical to
+  the anchor: predictions verified equal programmatically 231/231,
+  accuracy/macro identical at 0.7662 / 0.7571. The exact d15 refit on
+  those distributions ships `calibration/fork_4b-d15-v1.json`:
+  **T 1.313212, ECE 0.0696 → 0.0484** (categorical-NLL reverse-softmax
+  fit, in-sample, n = 231) — the first artifact fitted on the public
+  split rather than the internal 120-item suite. One fitter defect
+  found and fixed en route: score-class items carry integer ordinal
+  labels (`expected` 0–3) while the fork's probs keys are strings, so
+  18 unnormalized rows read as always-wrong — the first fit took the
+  margin path (T 2.377, ECE-before inflated to 0.118); cross-checking
+  ECE-before against the harness's own 0.0696 caught it, `str()`
+  normalization restored the exact path (ordinal family fit 0.050 vs
+  the corrupted 200.000). The fitter now loads `run_jevbench.py` arm
+  dirs directly (`--tasks` label join, skip-and-continue on missing
+  arms, real source suite stamped into the artifact); all seven prior
+  artifacts re-ran byte-identically (REGEN-CLEAN). Honesty anchors
+  unchanged: this segment's latencies are .contaminated (storm
+  window, load 10–16 during the arms) and t08 stays the threads row of
+  record. Queue state: `fedora_queue_20261002.log` ended QUEUE
+  COMPLETE with the process exited; `params__long` landed via the
+  follower (rc=0, 2026-10-03 00:00:05) after the main queue's long arm
+  died rc=2 — #32/#53 stay closed as recorded above; r10
+  (stock-letters parity) and r11 (Winnow quant bake-off) remain
+  chained and integrate on landing.

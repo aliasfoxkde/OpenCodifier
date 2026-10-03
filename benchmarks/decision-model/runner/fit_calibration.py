@@ -57,6 +57,10 @@ read the ece_after values as generalization claims.
 Usage:
     python3 runner/fit_calibration.py --results-dir <runs dir> \
         --out-dir ../results/calibration
+    # with a run_jevbench.py arm dir in ARMS, also pass the dataset:
+    python3 runner/fit_calibration.py --results-dir <runs dir> \
+        --out-dir ../results/calibration \
+        --tasks "$REF/datasets/public/easy.jsonl,$REF/datasets/public/hard.jsonl,$REF/datasets/public/original.jsonl"
 """
 
 from __future__ import annotations
@@ -85,7 +89,54 @@ ARMS: dict[str, str] = {
     "llama__MiMo-V2.6-Distill-Qwen-9B-Q3_K_S.json": "mimo-v2.6-9b-q3_k_s",
     "llama__jebadiah-4b-v2-Q8_0.json": "jebadiah-4b-v2-q8_0",
     "llama__jebadiah-9b-v2-Q8_0.json": "jebadiah-9b-v2-q8_0",
+    # run_jevbench.py arm dir (results.jsonl rows + --tasks label join).
+    "jevbench/fork_4b-d15-v1": "fork_4b-d15-v1",
 }
+
+
+def jevbench_items(arm_dir: Path, tasks: str) -> list[dict]:
+    """Load a run_jevbench.py arm dir into the fitter's single-item schema.
+
+    The d15 fork rows carry the full per-choice softmax (`probs`) but not
+    the ground-truth label, so labels are joined by task id from the
+    harness dataset — the same pinned jsonl set run_jevbench.py consumed.
+    `expected` must be one of the row's `probs` keys for every valid row:
+    that is what lets the exact d15 fit path engage; the winner-vs-rest
+    fields (prob/pred/answer) stay the margin-fit observations either way.
+    Score-class items carry integer ordinal levels while the fork's
+    readout labels them as strings ("0".."3"), so the label is normalized
+    into the probs key space — without this, every score row reads as
+    wrong and both fit paths are fitted on corrupted labels.
+    """
+    by_id: dict[str, str] = {}
+    for part in tasks.split(","):
+        for line in Path(part.strip()).read_text().splitlines():
+            if line.strip():
+                row = json.loads(line)
+                by_id[row["id"]] = row["expected"]
+    items: list[dict] = []
+    for line in (arm_dir / "results.jsonl").read_text().splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if not (row.get("ok") and row.get("valid")):
+            continue
+        answer = by_id.get(row["task_id"])
+        probs = row.get("probs")
+        if answer is None or not isinstance(probs, dict) or not probs:
+            continue
+        answer = str(answer)
+        items.append({
+            "id": row["task_id"],
+            "prob": max(float(v) for v in probs.values()),
+            "pred": str(row.get("predicted")),
+            "answer": answer,
+            "class": row.get("family"),
+            "probs": probs,
+        })
+    if not items:
+        raise SystemExit(f"no valid joined items in {arm_dir}")
+    return items
 
 
 def observations(run: dict) -> list[tuple[float, int, str]]:
@@ -243,8 +294,17 @@ def raw_ece(observations: list[tuple[float, int]]) -> float:
     return expected_calibration_error(observations, temperature=1.0)
 
 
-def build_artifact(name: str, run: dict, run_path: Path) -> dict:
-    """Assemble a `CalibrationArtifact`-shaped dict for one arm."""
+def build_artifact(
+    name: str, run: dict, run_path: Path,
+    source_suite: str = "benchmarks/decision-model suite (seed 20260926, 120 items)",
+) -> dict:
+    """Assemble a `CalibrationArtifact`-shaped dict for one arm.
+
+    `source_suite` names the observation set in the shipped provenance
+    string — run-JSON arms come from the internal 120-item suite, while
+    run_jevbench.py arm dirs are fitted on the external public split and
+    must not inherit the internal description.
+    """
     items = observations(run)
     pairs = [(probability, correct) for probability, correct, _ in items]
     dists = full_observations(run)
@@ -312,8 +372,8 @@ def build_artifact(name: str, run: dict, run_path: Path) -> dict:
                 "ece_before": round(ece_before, 6),
                 "ece_after": round(ece_after, 6),
                 "source": (
-                    "benchmarks/decision-model suite (seed 20260926, 120 items, "
-                    f"single-run arm {run_path.name}, model {source}); {method}"
+                    f"{source_suite}, "
+                    f"single-run arm {run_path.name}, model {source}; {method}"
                 ),
             },
         },
@@ -332,16 +392,32 @@ def main() -> None:
     )
     parser.add_argument("--results-dir", type=Path, required=True, help="directory of run JSONs")
     parser.add_argument("--out-dir", type=Path, required=True, help="artifact output directory")
+    parser.add_argument("--tasks", type=str, default=None,
+                        help="comma-separated harness dataset jsonl files "
+                             "(needed for run_jevbench.py arm dirs)")
     args = parser.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     rows: list[tuple[str, float, float, float, float]] = []
     for run_name, artifact_name in ARMS.items():
         run_path = args.results_dir / run_name
-        if not run_path.is_file():
-            raise SystemExit(f"missing run JSON: {run_path}")
-        run = json.loads(run_path.read_text())
-        fitted = build_artifact(artifact_name, run, run_path)
+        source_suite = "benchmarks/decision-model suite (seed 20260926, 120 items)"
+        if run_path.is_dir():
+            if not args.tasks:
+                raise SystemExit(f"--tasks required for arm dir: {run_path}")
+            run = {"single": jevbench_items(run_path, args.tasks)}
+            source_suite = ("JevBench public split (231 items, fstandhartinger/"
+                            "jevbench MIT, labels joined from the pinned dataset)")
+        elif run_path.is_file():
+            run = json.loads(run_path.read_text())
+        else:
+            # Skip rather than abort: arms are fitted from whatever runs
+            # are present, and a missing input must not take down the
+            # refit of an arm that did land. The skip is printed, not
+            # silent, and no artifact is touched for it.
+            print(f"{artifact_name}: SKIPPED (missing run JSON/dir: {run_path})")
+            continue
+        fitted = build_artifact(artifact_name, run, run_path, source_suite)
         out_path = args.out_dir / f"{artifact_name}.json"
         # An artifact ships only if the fit does not worsen the headline
         # calibration diagnostic. NLL (the fit objective) improves on any
