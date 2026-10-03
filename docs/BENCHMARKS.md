@@ -246,6 +246,8 @@ arm — sampled decode, never comparable to decision rows.
 | llama__gemma-3-4b-it.json | 0.95 / 0.85 / 0.45 | 0.750 | 0.236 | 3039.7ms | yes |
 | llama__glm5.1-distill.json | 0.40 / 0.15 / 0.20 | 0.250 | 0.285 | 2194.4ms | yes |
 | llama__granite-4.0-350m-q4_k_m.json | 0.30 / 0.50 / 0.23 | 0.342 | 0.239 | 422.8ms | yes |
+| llama__jebadiah-4b-v2-Q8_0.json | 1.00 / 0.90 / 0.50 | 0.800 | 0.051 | 2722.9ms | yes |
+| llama__jebadiah-9b-v2-Q8_0.json | 1.00 / 0.95 / 0.55 | 0.833 | 0.075 | 5626.3ms | yes |
 | llama__qwen0.5b.json | 0.60 / 0.33 / 0.25 | 0.392 | 0.218 | 694.8ms | yes |
 | llama__qwen1.5b.json | 0.90 / 0.45 / 0.40 | 0.583 | 0.191 | 1247.8ms | yes |
 | llama__qwen3b.json | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2575.2ms | yes |
@@ -263,10 +265,10 @@ bridge above (0.6494).
 What the board established (full findings catalog in REPORT.md):
 
 - **The relational ceiling.** Every model arm ≤ 4B sits at or below 0.50
-  on relational composition; only the 9B MiMo MoE crosses it (0.525) at
-  verifier-tier latency — and the engine's relational solver proves its
-  way to **0.950 at 1.3 ms**, four orders of magnitude below the first
-  model that crossed it.
+  on relational composition; only the 9B class crosses it — the MiMo MoE
+  (0.525) and, above it, jebadiah-9b-v2 (0.55, the highest model arm) —
+  and the engine's relational solver proves its way to **0.950 at 1.3 ms**,
+  four orders of magnitude below the first model that crossed it.
 - **Quantization is mostly free until it isn't.** Q3_K_S ↔ Q8_0 is
   within noise on 2B/4B; the collapses are sharp (int8 embedding rung,
   IQ2_XXS), not gradual.
