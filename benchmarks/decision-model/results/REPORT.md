@@ -1651,3 +1651,27 @@ hash is a changed artifact and invalidates the row (D14).
     lane, and their quality numbers are not reproducible from any
     GGUF derivative. Ecosystem context for position: Jev, Laya,
     Kev-9B, DiffusionGemma-Jev round out the family-A/B spread.
+- **2026-10-04 (r18/r18b — infrastructure, no board change)** — a research
+  sweep (RESEARCH.md §10) hypothesized the bench binaries lacked AVX-VNNI;
+  r18 built a fresh native binary on fedora (`build-stock-r18`) to test it.
+  The premise was FALSE — a verification artifact: `objdump` had been run on
+  the `llama-server` wrapper, but in this build layout the quant kernels live
+  in `libggml-cpu.so`, which carries 357–393 `vpdpbusd` sites in every build
+  (stock 357, fork 393, r18 357). VNNI was always engaged; corrected in
+  RESEARCH.md §10.1 the same day. r18's lasting outputs, all measured:
+  - **Thread sweep** (E2B-QAT Q4_0, `-fa on`, pp400/n1, 3 reps):
+    `-t 12` prefill 229.6 ± 7.8 t/s vs `-t 6` 203.0 ± 3.8 (**+13.1%**);
+    decode tg1 21.8 vs 20.6 t/s — irrelevant to single-token readout. The
+    runner's hardcoded `-t 12` is validated by measurement; no published
+    13600K sweep existed before this one.
+  - **Cross-build determinism** (r18b: `build-stock` vs `build-stock-r18`,
+    independent builds, same commit and seed): **120/120 identical
+    predictions, max cross-build probability delta 0.000000000**, identical
+    accuracy (0.808) and ECE (0.102). Decision outputs are build-stable —
+    the letters lane's bit-reproducibility contract holds across compilers.
+  - **Latency is NOT build-stable**: p50 460.2 ms (r18 build) vs 422.9 ms
+    (stock) on bit-identical outputs (+8.8%). Pin the binary for latency
+    comparability across days; the board's cross-day latency caveat gains a
+    mechanism candidate (codegen, not scheduling).
+  - Board unchanged (no new arms); calibration artifacts unaffected — ECE
+    bit-identical across builds, so no drift refit is triggered.
