@@ -1102,13 +1102,16 @@ privileged stack.
   abstention pass-through, and the full breaker lifecycle with
   unique bodies (5 failures → open → 30 s → half-open → 3 successes
   → closed; provider restart does not reset it). Full record +
-  findings F-1..F-4 in `docs/INTEGRATION_AMORTYX.md` §13: F-1
-  (response-side `opencodifier` extension stripped by the router's
-  re-serialization — the one open code gap) and F-2 (intermittent
-  silent 404s during restart churn, proven not-the-router,
-  environmental) are open on the Amortyx side; F-3 (exact-match
+  findings F-1..F-4 in `docs/INTEGRATION_AMORTYX.md` §13. Both code
+  gaps found by the validation were fixed, deployed, and re-verified
+  the same day: request-side `response_format` ingress (Amortyx
+  `38daffa9`) and response-side extension passthrough (`d182a126` —
+  through-router responses now carry
+  `opencodifier: {outcome, calibrated_confidence}`). F-3 (exact-match
   cache serves 200s during outages — vary bodies in drills) and F-4
-  (doc drift, fixed) recorded.
+  (doc drift, fixed) recorded; F-2 (intermittent silent 404s during
+  restart churn, proven not-the-router) remains open as
+  environmental.
 
 Acceptance: every INTEGRATIONS.md claim mechanically checkable (route
 exists in `routes.rs`, tool registered in `opencodifier-mcp`, flag in
