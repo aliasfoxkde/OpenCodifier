@@ -242,6 +242,20 @@ Any MCP-capable host works the same way: a stdio command that speaks
 MCP. There is no daemon to babysit — the engine answers in-process,
 and the zero-ML stack answers in microseconds.
 
+Shipped registration (2026-10-04), the harness this repo is developed
+under: an `opencodifier` entry in `backend-fixed/.claude/mcp.json`
+pointing at the release binary
+(`/nas/Temp/repos/OpenCodifier/target/release/opencodifier mcp serve
+--focus-budget 512` — absolute path to a foreign-repo binary is that
+manifest's established pattern), applied to the live registry with
+`python3 scripts/harnessctl.py repair` and proven with
+`harnessctl doctor`, which runs a real MCP initialize handshake
+against the configured command — the same discipline that caught the
+amortyx entry sitting registered-but-dead. A repo-local `/decide` skill
+(`.claude/skills/decide/`) exercises the HTTP surface with a real
+triage payload and is the worked example for agents that prefer the
+service over the tool.
+
 ### 3.2 Using the tools from an agent
 
 Decisions are machine-actionable: an agent asks "which of these
@@ -354,32 +368,7 @@ The CI questions that are actually decisions, with their IR shapes:
 | Retry, bisect, or block on a failed job? | `choice` | exact rule over the failure signature → cache → lexical match against the known-flaky corpus → decision model; `abstain` → page a human |
 | Is this test flaky or broken? | `boolean` | historical signature rules → lexical similarity to prior flake reports → model rung for the tail |
 | Is this benchmark delta a regression or noise? | `score`/`boolean` | threshold rules on the measured distribution → calibration-aware gate (§73: probability ≠ confidence) |
-| Which model tier should this AI-pipeline step use? | `choice` | the Amortyx §8.1 pattern, generalized: eligibility upstream, ranking here |
-
-Two properties make it pipeline-native rather than a vendor call: the
-service is local-first (no keys, no egress, works on air-gapped
-self-hosted runners), and most requests never reach a model — the
-deterministic rungs answer in microseconds, with the trace as the
-audit trail for why the gate did what it did.
-
-Honest limits: a decision runtime is **not** a workflow engine — it
-answers typed questions inside your orchestrator, it does not
-orchestrate. And its accuracy is a function of state quality: raw log
-spew gives the lexical rung nothing to match, and it abstains (the
-correct behavior) unless the pipeline extracts structure — job names,
-labels, error classes, metrics — into the state. The wins are largest
-where CI already produces structured-ish state, which is exactly where
-regex-and-keyword heuristics are silently wrong today.
-
-### 7.1 Where this fits a pipeline (and where it does not)
-
-The CI questions that are actually decisions, with their IR shapes:
-
-| Pipeline question | IR | What decides it, cheapest-first |
-|---|---|---|
-| Retry, bisect, or block on a failed job? | `choice` | exact rule over the failure signature → cache → lexical match against the known-flaky corpus → decision model; `abstain` → page a human |
-| Is this test flaky or broken? | `boolean` | historical signature rules → lexical similarity to prior flake reports → model rung for the tail |
-| Is this benchmark delta a regression or noise? | `score`/`boolean` | threshold rules on the measured distribution → calibration-aware gate (§73: probability ≠ confidence) |
+| Ship this release or hold it? | `choice` | acceptance-rule match over the release checklist state → lexical match against prior release verdicts → `abstain` = hold for human sign-off (fail closed where the risk profile says so) |
 | Which model tier should this AI-pipeline step use? | `choice` | the Amortyx §8.1 pattern, generalized: eligibility upstream, ranking here |
 
 Two properties make it pipeline-native rather than a vendor call: the
