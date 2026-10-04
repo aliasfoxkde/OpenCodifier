@@ -666,6 +666,11 @@ async fn chat_completions_decides_a_strict_schema_request() {
     assert_eq!(body["model"], "opencodifier-decision");
     assert!(body["id"].as_str().unwrap().starts_with("chatcmpl-"));
     assert!(body["created"].as_u64().unwrap() > 0);
+    // Zeroed on purpose: the decision ran on the deterministic engine, so no
+    // model tokens were consumed. OpenAI-shape gateways decode the field.
+    assert_eq!(body["usage"]["prompt_tokens"], 0);
+    assert_eq!(body["usage"]["completion_tokens"], 0);
+    assert_eq!(body["usage"]["total_tokens"], 0);
     let choice = &body["choices"][0];
     assert_eq!(choice["finish_reason"], "stop");
     assert_eq!(choice["message"]["role"], "assistant");
