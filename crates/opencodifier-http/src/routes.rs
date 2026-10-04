@@ -190,6 +190,14 @@ async fn chat_completions(
             "message": { "role": "assistant", "content": content.to_string() },
             "finish_reason": "stop",
         }],
+        // The decision ran on the deterministic engine: no model tokens were
+        // consumed, and the zeroed accounting says so honestly. OpenAI-shape
+        // clients (and gateways that decode the envelope) require the field.
+        "usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        },
         "opencodifier": {
             "outcome": response.outcome(),
             "calibrated_confidence": response.confidence().calibrated_confidence,
