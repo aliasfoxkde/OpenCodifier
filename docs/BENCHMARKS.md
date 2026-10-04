@@ -268,10 +268,12 @@ arm — sampled decode, never comparable to decision rows.
 | llama__qwen3b.json | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2575.2ms | yes |
 | parity__jebadiah-4b-v2-letters.json ⁴ | 0.98 / 1.00 / 0.53 | 0.833 | 0.052 | 1973.8ms | yes; parity 0.908 |
 | parity__jebadiah-9b-v2-letters.json ⁴ | 0.08 / 0.03 / 0.33 | 0.142 | 0.501 | 2869.0ms | yes; parity 0.150 |
+| stock__e2b-noqat-q4_0-letters.json ⁹ | 0.21 / 0.71 / 0.30 | 0.350 | 0.435 | 472.4ms | **no** (Δp 1.000); 11 invalid dists |
 | stock__e2b-noqat-q4ks-letters.json ⁸ | 0.21 / 0.85 / 0.40 | 0.433 | 0.411 | 479.8ms | **no** (Δp 0.676); 9 invalid dists |
 | stock__e2b-noqat-udq4kxl-letters.json ⁸ | 0.23 / 0.72 / 0.33 | 0.375 | 0.461 | 523.9ms | **no** (Δp 0.645); 9 invalid dists |
 | stock__e2bqat-official-q4_0-letters.json ⁸ | 0.97 / 1.00 / 0.45 | 0.808 | 0.102 | 422.9ms | yes (Δp 0.020) |
 | stock__e2bqat-udq2kxl-letters.json ⁸ | 0.57 / 0.53 / 0.35 | 0.483 | 0.170 | 426.5ms | **no** (Δp 0.502) |
+| stock__e4bqat-official-q4_0-letters.json ⁹ | 0.90 / 1.00 / 0.50 | 0.558 | 0.169 | 883.8ms | yes (Δp 0.026); 29 invalid dists |
 | stock__gemma-4-e2b-qat-letters.json ⁷ | 0.93 / 1.00 / 0.38 | 0.767 | 0.137 | 454.1ms | yes (Δp 0.020) |
 | stock__gemma-4-e4b-it-letters.json ⁷ | 0.64 / 1.00 / 0.45 | 0.367 | 0.304 | 1052.4ms | **no** (Δp 0.247); 41 invalid dists |
 | stock__gemma-4-e4b-qat-letters.json ⁷ | 0.54 / 0.88 / 0.50 | 0.400 | 0.281 | 977.0ms | **no** (Δp 1.000); 33 invalid dists |
@@ -401,6 +403,30 @@ flip — though note 2-bit-QAT still outscores non-QAT-4-bit. Net: the
 new small-model operating point is the official-weights Q4_0
 (0.808 at 423 ms p50), pending the per-class routing and calibration
 levers (footnote 7 discussion) on top.
+
+⁹ r16 QAT-format rescue test + matched-format control (2026-10-04,
+fedora i5-13600K, stock build, letters readout, -t 12, quiet windows,
+load 0.2–11.5; both artifacts ready-made release downloads —
+lmstudio-community gemma-4-E4B-it-QAT-Q4_0 (native-format Q4_0,
+4.80 GiB) and unsloth gemma-4-E2B-it Q4_0 (non-QAT weights, 2.83
+GiB)). **The r13 E4B-qat collapse was part format, part arch.** At
+its native Q4_0 the E4B-QAT recovers 0.400 → 0.558 (+15.8 pp; 29
+invalid dists vs 33; determinism now clean, Δp 0.026) — the
+format-mismatch hypothesis holds for the collapsed portion — but it
+still trails E2B-QAT Q4_0's 0.808 by ~25 pp and keeps the class's
+invalid-distribution problem: an arch-level deficit remains that no
+primary source explains (unsloth's own KLD data predicts the
+opposite ordering — REPORT.md r16 has the reconciliation). **The
+matched-format QAT A/B lands at +45.8 pp**: non-QAT E2B Q4_0 scores
+0.350 / ECE 0.435 with a full determinism flip (Δp ≈ 1.0) and 11
+invalid distributions against official-QAT Q4_0's 0.808 — QAT at
+matched format is worth more than the r15 K-quant A/B's +39.2 pp,
+and non-QAT E2B at 4 bits is both inaccurate and unstable. Primary-
+source context from the same day: Q4_0 is only the *secondary* QAT
+target for the E-series (mobile int2/int4 + int8 is primary, tech
+report Table 3), and llama.cpp promotes the tied per-layer-embedding
+(PLE, ~46 % of E2B params) to Q6_K — which is why the official Q4_0
+file outsizes unsloth's dynamic mix.
 
 What the board established (full findings catalog in REPORT.md):
 

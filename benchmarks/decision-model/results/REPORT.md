@@ -1473,3 +1473,73 @@ hash is a changed artifact and invalidates the row (D14).
     relational solver, post-hoc calibration) now apply on top of a
     stronger base. Queue chain r13→r14→r15 closed; runner unmodified
     (all arms on the existing letters lane, stock build).
+
+- **2026-10-04 (r16 QAT-format rescue test + matched-format control —
+  2 new Board B arms)** — r15 left two open questions: (a) was the
+  r13 E4B-qat collapse (0.400 at unsloth UD-Q4_K_XL, 33 malformed
+  distributions, Δp 1.000) a quant-format mismatch — Google QAT
+  targets plain Q4_0, not K-quant dynamic mixes — or arch-level; and
+  (b) how big is the QAT effect at *matched* format. Two arms, both
+  ready-made release downloads, stock letters lane (fedora
+  i5-13600K, -t 12, load windows 0.2–11.5, same suite sha as r15):
+
+  - **e4bqat-official-q4_0** — lmstudio-community
+    gemma-4-E4B-it-QAT-Q4_0.gguf (native-format Q4_0 of the official
+    QAT release, 4.80 GiB): **0.558 / ECE 0.169 / p50 884 ms; 29/120
+    invalid dists; replay-clean (Δp 0.026)**; by class 0.90 lex /
+    1.00 meta / 0.50 rel.
+  - **e2b-noqat-q4_0** — unsloth gemma-4-E2B-it Q4_0 (non-QAT
+    weights, 2.83 GiB), the matched-format control: **0.350 / ECE
+    0.435 / p50 472 ms; 11/120 invalid dists; determinism FLIP
+    (Δp ≈ 1.0)**; by class 0.21 / 0.71 / 0.30.
+
+  Findings:
+
+  - **The E4B verdict is two-part.** The rescue is real but partial:
+    0.400 → 0.558 (+15.8 pp) at the native format, with emission
+    hygiene improving (33 → 29 invalid) and determinism restored
+    (Δp 1.000 → 0.026). Format mismatch therefore explains the r13
+    collapse's *instability*, but E4B-QAT at its best measured
+    configuration still trails E2B-QAT Q4_0 by ~25 pp with the
+    worst invalid-distribution rate in the family — an arch-level
+    deficit remains.
+  - **Primary-source research (same day) finds no published
+    explanation for that deficit — and one direct contradiction.**
+    The gemma-4 tech report (arXiv:2607.02770v2 §2.5) states QAT
+    targets mobile int2/int4+int8 (E-series ship it) *and* Q4_0;
+    Q4_0 is the secondary ecosystem export for E2B/E4B. Unsloth
+    publishes the *opposite* ordering to ours — their UD-Q4_K_XL
+    beats naive Q4_0 (98.16 vs 89.29 top-1, KLD vs BF16-QAT) and
+    they state "q4_0 to degrade accuracy despite being bigger" —
+    on byte-identical-class files (LM Studio's Q4_0 is within 300 B
+    of Google's official GGUF = their naive baseline). Our lane
+    measures 0.808 (Q4_0) > 0.767 (UD). Reconciliation: their metric
+    is token-level KLD/top-1 vs BF16; ours is exact-distribution
+    decision accuracy under a constrained readout — the orderings
+    genuinely differ by metric. Their own E4B-vs-E2B KLD data
+    (0.00121 vs 0.00173 mean) predicts E4B should be *better*
+    calibrated, the reverse of our measured collapse — so the E4B
+    deficit is not scale fidelity either. llama.cpp's gemma-4 PLE
+    implementation was verified correct in source (issue #22243
+    closed as a false alarm); the file-size mystery is solved
+    (llama.cpp promotes the tied per-layer-embedding table, ~46 % of
+    E2B params, to Q6_K; unsloth drops it). Full notes:
+    the E4B lane closes as "arch-level, cause unpublished" — the
+    remaining candidates (larger PLE table, 42-layer geometry,
+    different KV-share) are structural, not runtime bugs in our
+    config (no speculative decoding, CPU path, rc=0).
+  - **Matched-format QAT A/B: +45.8 pp, and stability comes only
+    from QAT.** Non-QAT E2B at Q4_0 is worse than the r15 non-QAT
+    K-quant arms (0.350 vs 0.375/0.433) and is the second arm ever
+    to flip determinism completely (Δp ≈ 1.0, after r13's E4B-qat
+    and r11b's requants). Combined with r15: at identical format
+    QAT is worth +45.8 pp (Q4_0) and +39.2 pp (UD-Q4_K_XL); the
+    "QAT-lossless" property is the entire viability case for 4-bit
+    gemma on this lane, and non-QAT small gemma needs ≥ 8 bits
+    (unsloth's own recommendation, now corroborated twice).
+  - Board action: operating point unchanged (E2B-QAT Q4_0, 0.808 /
+    423 ms / clean). The E4B rescue lane is closed with findings;
+    E4B-class gemma is not a deployment candidate under this
+    readout. Calibration artifacts fitted for both arms
+    (gemma-4-e4b-qat-q4_0, gemma-4-e2b-noqat-q4_0) under the
+    standard ECE-gate rule.

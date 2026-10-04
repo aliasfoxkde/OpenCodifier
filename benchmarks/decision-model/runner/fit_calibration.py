@@ -94,9 +94,13 @@ ARMS: dict[str, str] = {
     # Stock letters-lane operating points (run_stock.py passes-schema;
     # the loader below reads the identity pass). The official-weights
     # Q4_0 is the small-model operating point as of r15; the unsloth
-    # UD-Q4_K_XL QAT arm is kept as its direct predecessor.
+    # UD-Q4_K_XL QAT arm is kept as its direct predecessor. The r16
+    # arms bracket it: the E4B-QAT native-format rescue (partial) and
+    # the matched-format non-QAT control (+45.8 pp QAT effect).
     "stock__e2bqat-official-q4_0-letters.json": "gemma-4-e2b-qat-q4_0",
     "stock__gemma-4-e2b-qat-letters.json": "gemma-4-e2b-qat-ud-q4_k_xl",
+    "stock__e4bqat-official-q4_0-letters.json": "gemma-4-e4b-qat-q4_0",
+    "stock__e2b-noqat-q4_0-letters.json": "gemma-4-e2b-noqat-q4_0",
 }
 
 
