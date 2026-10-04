@@ -360,16 +360,24 @@ served by `opencodifier.service`.
   surprising during outage drills — breaker tests must use unique
   bodies (finding F-3).
 
-**Findings (open, Amortyx-side unless noted).**
+**Findings (status as of 2026-10-04).**
 
-- **F-1 — response-side extension stripped.** The router's OpenAI
-  adapter decodes the provider envelope into `NormalizedResponse` and
-  re-serializes, dropping the `opencodifier` extension
-  (`outcome`, `calibrated_confidence`). Direct responses carry it.
-  Scoped fix: an extension bag on `NormalizedResponse` through
-  adapter decode → normalized→chat projection → cache semantics
-  (4 crates). Until then, clients needing the typed outcome must call
-  OpenCodifier direct or read the native `/v1/decide` surface.
+- **F-1 — response-side extension stripped. — RESOLVED (same day).**
+  Observed: the router's OpenAI adapter decoded the provider envelope
+  into `NormalizedResponse` and re-serialized, dropping the
+  `opencodifier` extension (`outcome`, `calibrated_confidence`);
+  direct responses carried it. Fix: Amortyx `d182a126` —
+  `NormalizedResponse` gains an extension bag (payload, never routing
+  state: no effect on request identity, dedup, or cache identity; a
+  colliding name is dropped), the `openai_compatible` adapter
+  captures non-standard envelope fields through a flatten catch-all
+  filtered against the OpenAI-standard set, and the live + cached
+  chat projections re-emit the bag at the envelope top level.
+  Deployed and re-verified on this host: through-router responses now
+  carry `opencodifier: {outcome, calibrated_confidence}`, including
+  the abstention envelope. Branch
+  `feat/forward-client-response-format`: `38daffa9` request side,
+  `d182a126` response side.
 - **F-2 — intermittent silent empty-404 windows (environmental,
   unresolved).** During high-frequency service restart churn, some
   loopback requests to *both* `:8177` and `:8787` received empty
@@ -391,6 +399,8 @@ served by `opencodifier.service`.
   no served engine id matches; corrected to the real id and the
   exact-match behavior documented.
 
-Fix-forward note: F-1 is the only code gap on the integration path;
-the request-side half (F: `response_format` ingress) is already
-landed as `38daffa9`.
+Fix-forward note: both code gaps on the integration path are closed
+and deployed — request-side `response_format` ingress (`38daffa9`)
+and response-side extension passthrough (`d182a126`). F-2
+(environmental) is the only open item, and it is not attributable to
+either service.
