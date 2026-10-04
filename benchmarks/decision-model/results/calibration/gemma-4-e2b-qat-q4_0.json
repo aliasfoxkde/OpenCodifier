@@ -1,0 +1,16 @@
+{
+  "format_version": 1,
+  "scheme": "temperature",
+  "model_id": "gemma-4-e2b-qat-q4_0",
+  "calibration_version": 1,
+  "default_temperature": 1.413082,
+  "temperatures": {
+    "choice": 1.413082
+  },
+  "fit": {
+    "items": 120,
+    "ece_before": 0.101583,
+    "ece_after": 0.085618,
+    "source": "benchmarks/decision-model suite (seed 20260926, 120 items), single-run arm stock__e2bqat-official-q4_0-letters.json, model gguf/gemma-4-E2B-it-QAT-Q4_0.gguf; exact full-distribution reverse-softmax fit (d15), in-sample"
+  }
+}

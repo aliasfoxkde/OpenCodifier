@@ -11,6 +11,6 @@
     "items": 120,
     "ece_before": 0.073635,
     "ece_after": 0.057591,
-    "source": "benchmarks/decision-model suite (seed 20260926, 120 items, single-run arm llama__Qwen3.5-4B-UD-Q4_K_XL.json, model Qwen3.5-4B-UD-Q4_K_XL.gguf); winner-vs-rest margin fit, in-sample"
+    "source": "benchmarks/decision-model suite (seed 20260926, 120 items), single-run arm llama__Qwen3.5-4B-UD-Q4_K_XL.json, model Qwen3.5-4B-UD-Q4_K_XL.gguf; winner-vs-rest margin fit, in-sample"
   }
 }
