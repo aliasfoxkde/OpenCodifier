@@ -41,6 +41,12 @@ Two boards, two axes, never mixed:
   relational composition), byte-locked, used to tier models for the
   runtime. Internal context, not comparable to Board A.
 
+A machine-readable copy of every table below (plus the fork params A/B
+from `results/REPORT.md`) lives at
+`benchmarks/decision-model/results/board.csv` — regenerate it with
+`python3 benchmarks/decision-model/runner/board_csv.py` after editing
+any board table, so the CSV never drifts from this page.
+
 ## Board A — JevBench public split (shared axis)
 
 Method of record: `JEVBENCH.md` — official harness
@@ -195,7 +201,7 @@ routing is part of its contract, not error.
 | fast | Qwen3.5-0.8B (q4_0) | 0.650 | 0.074 | 0.35 | 613 ms | 537 MiB |
 | zero-ML floor (engine default) | relational-v1 over lexical | 0.683 | 0.094 | **0.950** | **1.3 ms** | 0 MiB |
 
-### Complete board (55 runs, 2026-09-25 → 2026-09-30)
+### Complete board (68 runs, 2026-09-25 → 2026-10-03)
 
 Columns: accuracy (metadata / lexical / relational), overall accuracy,
 ECE, single-decision p50, run-twice determinism. `(chat screen)` rows
@@ -262,6 +268,7 @@ arm — sampled decode, never comparable to decision rows.
 | llama__qwen3b.json | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2575.2ms | yes |
 | parity__jebadiah-4b-v2-letters.json ⁴ | 0.98 / 1.00 / 0.53 | 0.833 | 0.052 | 1973.8ms | yes; parity 0.908 |
 | parity__jebadiah-9b-v2-letters.json ⁴ | 0.08 / 0.03 / 0.33 | 0.142 | 0.501 | 2869.0ms | yes; parity 0.150 |
+| stock__kev-4b-letters.json ⁶ | 1.00 / 0.95 / 0.53 | 0.617 | 0.151 | 1378.2ms | yes (Δp 0.000); 25 invalid dists |
 | stock__winnow-e4b-letters.json | 1.00 / 0.97 / 0.55 | 0.842 | 0.109 | 2171.3ms | yes (Δp 0.017) |
 | stock__winnow-e4b-letters-Q4_K_S.json ⁵ | 1.00 / 1.00 / 0.55 | 0.825 | 0.101 | 951.4ms | yes (Δp 0.041); 3 invalid dists |
 | stock__winnow-e4b-letters-Q4_K_M.json ⁵ | 0.97 / 1.00 / 0.57 | 0.817 | 0.083 | 973.3ms | **no** (Δp 0.998); 4 invalid dists |
@@ -312,6 +319,25 @@ gate, and from-Q8_0 requants should stay K-quant ≥ 4-bit. The ECE
 column is computed on surviving distributions only, so it tracks
 distribution validity, not calibration quality (IQ3_M's 0.082 sits
 next to a det flip and 5 invalid dists).
+
+⁶ r12 TypeSafeAI-ecosystem arms (2026-10-03, fedora, stock build,
+letters readout, -t 12). **Kev-4B Q4_K_M** (row above): well under the
+Winnow-E4B family on this suite (0.617 vs 0.842) with the worst
+distribution health of any passing arm (25/120 invalid dists) — its
+published strength is JevBench macro (73.71, published row above), a
+different axis. Replay-clean (Δp 0.000). The other three candidates
+did not yield letters arms: **NeoHorse-Jev-4B Q4_K_M is unloadable**
+in the stock build (`wrong number of tensors; expected 728, got 426`
+— foreign/newer arch export); **Julia-1 Q8_0 (168 MB, ~160M params)
+loads as a `laya`-arch decision model but the context is pooling-only
+— logits are refused, so the letters lane cannot drive it** (probe:
+`--pooling none` still 500 "the current context does not support
+logits computation"); **Qyvos ships safetensors + a Python `julia`
+package, no GGUF**. Follow-up lanes, in preference order: Julia-1 via
+its official ONNX export (the natural `InferenceBackend` arm for
+`opencodifier-runtime`, parity cases included), a laya-GGUF endpoint
+lane, NeoHorse under a newer llama.cpp, and a `julia`-package adapter
+for Qyvos.
 
 What the board established (full findings catalog in REPORT.md):
 

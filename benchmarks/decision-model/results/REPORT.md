@@ -505,6 +505,29 @@ full caveat and the resource trace (28,218 CPU-s over 6,923 s wall).
 Accuracy and determinism are load-independent (deterministic tree math;
 replay delta 0.0).
 
+### Fork params A/B: context, threads, prompt diet (2026-10-01 → 10-03)
+
+All arms run the rebuilt parallel-decision binary (`ad129b0`),
+Qwen3.5-4B-UD-Q4_K_XL, decision-seqs 24, tree mode, 200-task suite
+unless noted; values are lifted verbatim from the revision entries
+(the arms were tabulated here after the fact). Every arm's own
+double-replay was clean (`predictions_match`, max-prob delta 0.0).
+Headline: **quality is invariant to threads and context** — t08, t16,
+ctx4k, and ctx16k are float-identical (0.800 / ECE 0.0736, per-class
+identical) — while **latency is monotone in context** and the prompt
+diet is dominated (collapse is monotone in diet depth and hits
+`metadata_match` first).
+
+| arm | threads / ctx | suite | acc | ECE | p50 | load window | status |
+|---|---|---|---|---|---|---|---|
+| t08 | 8t / 8k | 200-task | 0.800 | 0.0736 | 7630 ms | quiet | row of record for 8k threads |
+| ctx4k | 12t / 4k | 200-task | 0.800 | 0.0736 | 4833 ms | quiet | cheapest verified configuration |
+| ctx16k | 12t / 16k | 200-task | 0.800 | 0.0736 | 8040 ms | quiet | latency monotone in context |
+| t16 | 16t / 8k | 200-task | 0.800 | 0.0736 | 19.2 s | 48→78 (storm) | quality of record; speed NOT of record |
+| diet200 | 12t / 8k | 200-task | 0.633 | 0.1203 | 15855 ms | 45.6→23.8 | dominated — do not ship |
+| diet100 | — | 200-task | 0.508 | 0.1487 | 7.5 s | 18.5→17.1 (clean) | dominated — do not ship |
+| params__long | 14t / 8192 | 120-item long suite | 0.7667 | 0.0825 | 46.7 s | 14.5→17.3 (clean) | long-suite arm of record (#32); prefill-bound (~46.5 s of 46.7 s) |
+
 ## External anchor: JevBench public split (Phase 17)
 
 
@@ -1358,3 +1381,24 @@ hash is a changed artifact and invalidates the row (D14).
   flipped, including the default pick Q4_K_M; (3) per-quant ECE tracks
   distribution validity here, not calibration quality. r11b queue
   process confirmed exited; queue chain r10→r11b closed.
+- **2026-10-03 (r12 TypeSafeAI-ecosystem arms: 1 of 4 measured)** — the
+  user-named candidates (Kev-4B, NeoHorse-Jev-4B, Julia-1, Qyvos) ran
+  the letters lane where the format allowed. **Kev-4B Q4_K_M measured**:
+  0.617 (meta 1.00 / lex 0.95 / rel 0.525), ECE 0.151, p50 1378.2 ms,
+  25/120 invalid distributions (worst of any passing arm), replay-clean
+  (Δp 0.000) — Board B row + footnote 6. Placement: well under
+  Winnow-E4B (0.842) on this suite; its published strength is the
+  JevBench axis (73.71 macro). The other three are format/arch
+  findings, not runs: **NeoHorse-Jev-4B Q4_K_M is unloadable** in the
+  stock build (`expected 728 tensors, got 426` — foreign/newer arch
+  export); **Julia-1 Q8_0** (168 MB ≈ 160M params) **loads as a
+  `laya`-arch decision model whose context is pooling-only** — logits
+  refused even with `--pooling none`, so the letters lane cannot drive
+  it; **Qyvos ships safetensors + a Python `julia` package (Bend-language
+  router), no GGUF**. Follow-up lanes, in preference order: Julia-1 via
+  its official ONNX export (parity cases + accuracy metrics included —
+  the natural `InferenceBackend` arm for `opencodifier-runtime`), a
+  laya-GGUF endpoint lane, NeoHorse under a newer llama.cpp, a
+  `julia`-package adapter for Qyvos. Fleet note: an unrelated sibling
+  CUDA llama-server (port 8080) shares fedora; it does not contend with
+  CPU arms.
