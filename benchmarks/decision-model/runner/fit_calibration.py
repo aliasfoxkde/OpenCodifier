@@ -91,6 +91,12 @@ ARMS: dict[str, str] = {
     "llama__jebadiah-9b-v2-Q8_0.json": "jebadiah-9b-v2-q8_0",
     # run_jevbench.py arm dir (results.jsonl rows + --tasks label join).
     "jevbench/fork_4b-d15-v1": "fork_4b-d15-v1",
+    # Stock letters-lane operating points (run_stock.py passes-schema;
+    # the loader below reads the identity pass). The official-weights
+    # Q4_0 is the small-model operating point as of r15; the unsloth
+    # UD-Q4_K_XL QAT arm is kept as its direct predecessor.
+    "stock__e2bqat-official-q4_0-letters.json": "gemma-4-e2b-qat-q4_0",
+    "stock__gemma-4-e2b-qat-letters.json": "gemma-4-e2b-qat-ud-q4_k_xl",
 }
 
 
@@ -410,6 +416,15 @@ def main() -> None:
                             "jevbench MIT, labels joined from the pinned dataset)")
         elif run_path.is_file():
             run = json.loads(run_path.read_text())
+            if "single" not in run and "passes" in run:
+                # run_stock.py lane: the identity pass ("0") is the
+                # single-run of record — permutations and the determinism
+                # replay are sibling keys, and rows without a prediction
+                # are excluded exactly like metrics() excludes them.
+                run = {
+                    **run,
+                    "single": [r for r in run["passes"]["0"] if r["pred"] is not None],
+                }
         else:
             # Skip rather than abort: arms are fitted from whatever runs
             # are present, and a missing input must not take down the
