@@ -1437,3 +1437,39 @@ hash is a changed artifact and invalidates the row (D14).
     from "bigger" to "right arch + clean emission + QAT". Queue chain
     r12→r13→r14 closed (r13 QUEUE COMPLETE 08:05:35; r14
     self-serialized behind it, done 08:20:20).
+- **2026-10-04 (r15 gemma-4-E2B 4-bit landscape: official-weights vs
+  unsloth, and the matched-quant QAT A/B — 4 new Board B arms)** —
+  user-directed: measure the "official Q4_K_M" and the smallest 4-bit
+  unsloth quant, testing the suspicion that unsloth quants beat
+  official. Provenance finding first: **no official Google GGUF
+  export exists** (with a valid HF token the weights repo shows
+  safetensors only; every `-GGUF` repo name 404s — "Repository not
+  found", an auth-independent 404). The official-weights arm is
+  therefore lmstudio-community's **plain Q4_0 of the official QAT
+  release**. All four arms ran the stock letters lane (fedora
+  i5-13600K, -t 12, quiet windows, load 0.5–11.5). Findings:
+  - **Official-weights Q4_0 wins the 4-bit class outright**:
+    0.808 / ECE 0.102 / p50 423 ms / 0 invalid dists / replay-clean
+    (Δp 0.020) vs the r13 unsloth UD-Q4_K_XL arm's 0.767 / 0.137 /
+    454 ms — +4.1 pp, better calibrated, faster. The suspicion
+    ("unsloth beats official") is **refuted** on this lane. Caveat:
+    the lmstudio file is 3.12 GiB vs unsloth's 2.44 GiB (the dynamic
+    mix compresses harder), so the gap is bits-plus-recipe, not
+    recipe alone.
+  - **Matched-quant QAT A/B — QAT is carrying everything**: unsloth
+    UD-Q4_K_XL on non-QAT weights scores **0.375** (vs 0.767 QAT at
+    the identical quant), breaks determinism (Δp 0.645), and emits
+    9 malformed distributions. Non-QAT Q4_K_S: 0.433, Δp 0.676,
+    9 invalid. The QAT checkpoint's "QAT-lossless" property is the
+    single reason the 4-bit gemma arms work on this lane.
+  - **Sub-4-bit floor holds for QAT weights**: UD-Q2_K_XL 0.483 with
+    a determinism flip (Δp 0.502), zero invalid dists — better than
+    any non-QAT 4-bit arm (QAT > bits, up to a point) but far under
+    the 4-bit QAT arms; the operator floor (4-bit K-or-legacy or
+    higher) is confirmed on QAT checkpoints too.
+  - Board action: the small-model operating point moves to the
+    official-weights Q4_0 arm (0.808 / 423 ms / clean). The r13
+    footnote-7 non-training levers (per-class routing to the
+    relational solver, post-hoc calibration) now apply on top of a
+    stronger base. Queue chain r13→r14→r15 closed; runner unmodified
+    (all arms on the existing letters lane, stock build).
