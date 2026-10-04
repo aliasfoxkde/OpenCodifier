@@ -382,30 +382,75 @@ def metrics(rows: list[dict]) -> dict:
 
 
 def compare_fork(rows: list[dict], fork_path: Path) -> dict:
-    """Winner agreement and distribution deltas against fork decision rows."""
+    """Winner agreement and distribution deltas against fork decision rows.
+
+    Winner-level agreement needs only `pred` on both sides. The
+    distribution deltas (mean L1, max prob delta) are computed only over
+    rows where BOTH sides carry full `probs` — the fork's margin-era
+    rows carry the winner probability only, and those rows still answer
+    the parity question."""
     fork = json.loads(fork_path.read_text())
     by_id = {r["id"]: r for r in fork["single"]}
-    agree = l1 = 0
+    agree = 0
     max_delta = 0.0
     l1s = []
     compared = 0
+    dist_compared = 0
     for r in rows:
         f = by_id.get(r["id"])
-        if f is None or r["pred"] is None or "probs" not in r or "probs" not in f:
+        if f is None or r["pred"] is None:
             continue
         compared += 1
         agree += 1 if r["pred"] == f["pred"] else 0
-        keys = set(r["probs"]) | set(f["probs"])
-        l1s.append(sum(abs(r["probs"].get(k, 0.0) - f["probs"].get(k, 0.0)) for k in keys))
-        max_delta = max(max_delta, abs(r["prob"] - f["prob"]))
+        if "probs" in r and "probs" in f:
+            dist_compared += 1
+            keys = set(r["probs"]) | set(f["probs"])
+            l1s.append(sum(abs(r["probs"].get(k, 0.0) - f["probs"].get(k, 0.0)) for k in keys))
+            max_delta = max(max_delta, abs(r["prob"] - f["prob"]))
     if not compared:
         return {"compared": 0}
-    return {
+    if dist_compared == compared:
+        mode = "winner+distribution"
+    elif dist_compared:
+        mode = "winner+partial-distribution"
+    else:
+        mode = "winner-only"
+    out: dict = {
         "compared": compared,
+        "mode": mode,
         "winner_agreement": agree / compared,
-        "mean_l1": sum(l1s) / len(l1s),
-        "max_prob_delta": max_delta,
     }
+    if l1s:
+        out["mean_l1"] = sum(l1s) / len(l1s)
+        out["max_prob_delta"] = max_delta
+    return out
+
+
+def recompare(args: argparse.Namespace) -> int:
+    """Recompute parity_vs_fork on an existing stock result (post-hoc).
+
+    For results written before the compare join accepted winner-only
+    fork rows: loads the recorded passes, reruns compare_fork against
+    --compare-fork, and rewrites the JSON in place. No server, no
+    re-measurement."""
+    if args.compare_fork is None:
+        print("--recompare requires --compare-fork", file=sys.stderr)
+        return 2
+    result = json.loads(args.recompare.read_text())
+    result["parity_vs_fork"] = compare_fork(result["passes"]["0"], args.compare_fork)
+    result["parity_vs_fork"]["fork_result"] = str(args.compare_fork)
+    args.recompare.write_text(json.dumps(result, sort_keys=True, indent=1) + "\n")
+    pv = result["parity_vs_fork"]
+    m = result["metrics"]
+    if "winner_agreement" in pv:
+        print(
+            f"recompare: compared={pv['compared']} ({pv['mode']}) "
+            f"parity={pv['winner_agreement']:.3f} acc={m['accuracy']:.3f}",
+            flush=True,
+        )
+    else:
+        print("recompare: compared=0 — no rows joined; check id spaces", flush=True)
+    return 0
 
 
 def self_check() -> int:
@@ -428,13 +473,13 @@ def self_check() -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--llama-dir", type=Path, required=True)
+    ap.add_argument("--llama-dir", type=Path, default=None)
     ap.add_argument("--build-dir", default="build-stock")
-    ap.add_argument("--models-dir", type=Path, required=True)
-    ap.add_argument("--model", required=True)
+    ap.add_argument("--models-dir", type=Path, default=None)
+    ap.add_argument("--model", default=None)
     ap.add_argument("--suite", type=Path, default=Path(__file__).parent.parent / "suite" / "suite.json")
-    ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--readout", choices=["letters", "paths"], required=True)
+    ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument("--readout", choices=["letters", "paths"], default=None)
     ap.add_argument("--port", type=int, default=8391)
     ap.add_argument("--threads", type=int, default=12)
     ap.add_argument("--ctx", type=int, default=8192)
@@ -446,11 +491,22 @@ def main() -> int:
     ap.add_argument("--compare-fork", type=Path, default=None,
                     help="run_llama.py decision result to diff the paths "
                     "readout against (parity lane)")
+    ap.add_argument("--recompare", type=Path, default=None,
+                    help="existing stock result JSON: recompute its "
+                    "parity_vs_fork against --compare-fork and rewrite it "
+                    "(post-hoc, no server)")
     ap.add_argument("--self-check", action="store_true")
     ap.add_argument("--timeout", type=float, default=600.0)
     args = ap.parse_args()
     if args.self_check:
         return self_check()
+    if args.recompare is not None:
+        return recompare(args)
+    missing = [n for n, v in (("--llama-dir", args.llama_dir), ("--models-dir", args.models_dir),
+                              ("--model", args.model), ("--out", args.out),
+                              ("--readout", args.readout)) if v is None]
+    if missing:
+        ap.error(f"{', '.join(missing)} are required unless --self-check or --recompare")
 
     load_start = load_now()
     suite = json.loads(args.suite.read_text())
@@ -564,7 +620,13 @@ def main() -> int:
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, sort_keys=True, indent=1) + "\n")
     m = result["metrics"]
-    extra = f" parity={result['parity_vs_fork']['winner_agreement']:.3f}" if "parity_vs_fork" in result else ""
+    pv = result.get("parity_vs_fork")
+    if pv is None:
+        extra = ""
+    elif "winner_agreement" in pv:
+        extra = f" parity={pv['winner_agreement']:.3f} ({pv['mode']})"
+    else:
+        extra = " parity=unavailable (no rows joined)"
     print(
         f"acc={m['accuracy']:.3f} ece={m['ece']:.3f} "
         f"per_class={ {k: round(v, 3) for k, v in m['accuracy_by_class'].items()} } "

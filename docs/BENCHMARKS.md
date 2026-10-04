@@ -260,6 +260,8 @@ arm — sampled decode, never comparable to decision rows.
 | llama__qwen0.5b.json | 0.60 / 0.33 / 0.25 | 0.392 | 0.218 | 694.8ms | yes |
 | llama__qwen1.5b.json | 0.90 / 0.45 / 0.40 | 0.583 | 0.191 | 1247.8ms | yes |
 | llama__qwen3b.json | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2575.2ms | yes |
+| parity__jebadiah-4b-v2-letters.json ⁴ | 0.98 / 1.00 / 0.53 | 0.833 | 0.052 | 1973.8ms | yes; parity 0.908 |
+| parity__jebadiah-9b-v2-letters.json ⁴ | 0.08 / 0.03 / 0.33 | 0.142 | 0.501 | 2869.0ms | yes; parity 0.150 |
 | stock__winnow-e4b-letters.json | 1.00 / 0.97 / 0.55 | 0.842 | 0.109 | 2171.3ms | yes (Δp 0.017) |
 | vtx__VTX-JEV-3-fp32.json | 0.20 / 0.33 / 0.42 | 0.317 | 0.099 | 0.8ms | yes |
 | vtx__VTX-JEV-3-lf2.json | 0.17 / 0.25 / 0.30 | 0.242 | 0.136 | 1.1ms | yes |
@@ -277,6 +279,17 @@ bridge above (0.6494).
 near-one-hot native distributions (peaked decision-slot logits). This is
 determinism evidence across builds and means the D15 refits are purely
 distribution-fidelity work, as with the `d15` JevBench arm above.
+⁴ Stock-build letters-parity rows (r10, 2026-10-03): the same artifacts
+as the fork tree arms, read through the stock llama.cpp build's
+constrained-letter readout (-t 12, quiet window, load 5.0–10.4).
+`parity` is winner agreement against the fork decision arm (120/120
+joined, winner-only — the fork rows carry winner probability only).
+The 4B row **beats** its fork-tree arm (0.833 vs 0.800 at the same
+artifact size); the 9B row collapses to chance (120/120 valid,
+confidently wrong) while its fork-tree arm holds 0.833 — the 9B's
+board advantage is a property of the fork's tree readout, not the
+artifact alone. Confound note: build, readout, and threads changed
+together (stock+letters+12t vs fork+tree+14t).
 
 What the board established (full findings catalog in REPORT.md):
 

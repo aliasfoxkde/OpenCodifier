@@ -1285,3 +1285,42 @@ hash is a changed artifact and invalidates the row (D14).
   died rc=2 — #32/#53 stay closed as recorded above; r10
   (stock-letters parity) and r11 (Winnow quant bake-off) remain
   chained and integrate on landing.
+
+- **2026-10-03 (r10 letters parity — stock-vs-fork cross-build lane;
+  r11 relaunched as r11b)** — both parity arms ran on the stock build
+  (llama.cpp-stock, constrained-letters readout, fedora i5-13600K,
+  -t 12, quiet window, load 5.0–10.4 — these latencies are usable, and
+  t08 remains the threads row of record for the fork lane) and rc=1'd
+  on a runner bug, not a measurement failure: `compare_fork` required
+  `probs` on the fork side, but the jebadiah fork rows carry winner
+  probability only — 0 rows joined, then the summary line KeyError'd
+  after the JSON was written (hence rc=1 with complete files).
+  `run_stock.py` fixed (winner-only join mode, guarded summary, new
+  `--recompare` post-hoc mode) and both results recomputed in place —
+  no re-measurement:
+  - **jebadiah-4b-v2 Q8_0, stock letters**: **0.833 / ECE 0.052 /
+    p50 1.97 s** vs the fork tree arm's 0.800 / 0.051 / 2.72 s —
+    **winner agreement 0.908** (120/120 joined). The fork is not
+    load-bearing at 4B: plain letters readout is a better operating
+    point on the same artifact (+3.3 pp). Confound recorded: build,
+    readout, and threads changed together (stock+letters+12t vs
+    fork+tree+14t); isolating the readout alone needs a fork-letters
+    arm (r9's letters quants ran fork-build — cross-check queued).
+  - **jebadiah-9b-v2 Q8_0, stock letters**: **0.142 / ECE 0.501 /
+    p50 2.87 s** — **winner agreement 0.150** with the fork tree's
+    0.833. All 120 rows valid and confidently wrong (determinism
+    clean, max prob delta 0.0): the constrained letters readout
+    collapses on the 9B. The 9B's board advantage is therefore a
+    property of the fork's tree readout, not the artifact alone —
+    "relational needs the right 9B" sharpens into "needs the right
+    9B, read through the fork's tree mode".
+  - r11 (Winnow-E4B quant bake-off) failed 6/6 before any measurement:
+    the queue passed `--mmproj` to `llama-quantize` (no such flag —
+    usage dump) and omitted `--allow-requantize` (required from a Q8_0
+    source). Relaunched as **r11b** (new follower script: six points,
+    same letters lane, tower stays F16; Q4_K_M requant verified
+    5.0G/28 s before its arm started). Board B rows added
+    (BENCHMARKS.md `parity__*` + footnote 4). Composite re-scoring of
+    the letters lanes deferred until the composite has a scripted
+    scorer (currently hand-derived; the Spd/Res normalizations are not
+    in code).
