@@ -201,7 +201,7 @@ routing is part of its contract, not error.
 | fast | Qwen3.5-0.8B (q4_0) | 0.650 | 0.074 | 0.35 | 613 ms | 537 MiB |
 | zero-ML floor (engine default) | relational-v1 over lexical | 0.683 | 0.094 | **0.950** | **1.3 ms** | 0 MiB |
 
-### Complete board (74 runs, 2026-09-25 → 2026-10-04)
+### Complete board (78 runs, 2026-09-25 → 2026-10-04)
 
 Columns: accuracy (metadata / lexical / relational), overall accuracy,
 ECE, single-decision p50, run-twice determinism. `(chat screen)` rows
@@ -268,6 +268,10 @@ arm — sampled decode, never comparable to decision rows.
 | llama__qwen3b.json | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2575.2ms | yes |
 | parity__jebadiah-4b-v2-letters.json ⁴ | 0.98 / 1.00 / 0.53 | 0.833 | 0.052 | 1973.8ms | yes; parity 0.908 |
 | parity__jebadiah-9b-v2-letters.json ⁴ | 0.08 / 0.03 / 0.33 | 0.142 | 0.501 | 2869.0ms | yes; parity 0.150 |
+| stock__e2b-noqat-q4ks-letters.json ⁸ | 0.21 / 0.85 / 0.40 | 0.433 | 0.411 | 479.8ms | **no** (Δp 0.676); 9 invalid dists |
+| stock__e2b-noqat-udq4kxl-letters.json ⁸ | 0.23 / 0.72 / 0.33 | 0.375 | 0.461 | 523.9ms | **no** (Δp 0.645); 9 invalid dists |
+| stock__e2bqat-official-q4_0-letters.json ⁸ | 0.97 / 1.00 / 0.45 | 0.808 | 0.102 | 422.9ms | yes (Δp 0.020) |
+| stock__e2bqat-udq2kxl-letters.json ⁸ | 0.57 / 0.53 / 0.35 | 0.483 | 0.170 | 426.5ms | **no** (Δp 0.502) |
 | stock__gemma-4-e2b-qat-letters.json ⁷ | 0.93 / 1.00 / 0.38 | 0.767 | 0.137 | 454.1ms | yes (Δp 0.020) |
 | stock__gemma-4-e4b-it-letters.json ⁷ | 0.64 / 1.00 / 0.45 | 0.367 | 0.304 | 1052.4ms | **no** (Δp 0.247); 41 invalid dists |
 | stock__gemma-4-e4b-qat-letters.json ⁷ | 0.54 / 0.88 / 0.50 | 0.400 | 0.281 | 977.0ms | **no** (Δp 1.000); 33 invalid dists |
@@ -371,6 +375,32 @@ strength without calibrated decision quality. **NeoHorse-1-4B base,
 untuned: 0.583 with perfectly clean emission** (0 invalid, Δp 0.000)
 — beats both tuned Winnow-12B arms. Under this readout, decision
 quality is not monotone in parameters.
+
+⁸ r15 gemma-4-E2B 4-bit landscape (2026-10-04, fedora i5-13600K,
+stock build, letters readout, -t 12, quiet windows, load 0.5–11.5;
+all artifacts ready-made release downloads). Provenance first: **no
+official Google GGUF export exists** (probed 2026-10-04 with a valid
+token: the weights repo ships safetensors only, every `-GGUF` repo
+name 404s), so the "official" arm is lmstudio-community's **plain
+Q4_0 of the official QAT release** — official weights, community
+quantizer. Findings: **the official-weights Q4_0 beats unsloth's
+dynamic mix of the same QAT checkpoint** — 0.808 / ECE 0.102 /
+p50 423 ms vs the r13 UD-Q4_K_XL arm's 0.767 / 0.137 / 454 ms
+(+4.1 pp, better calibration, faster, both perfectly clean and
+replay-clean). Caveat: the lmstudio file is larger (3.12 vs 2.44 GiB
+— unsloth's dynamic mix compresses harder), so part of the gap is
+bits, not just recipe. **QAT is carrying the number**: at the
+matched UD-Q4_K_XL quant, QAT 0.767 vs non-QAT **0.375** — a 39 pp
+collapse, and the non-QAT arms also break determinism (Δp 0.645) and
+emit 9 malformed distributions. The unsloth non-QAT Q4_K_S arm fails
+the same way (0.433, Δp 0.676, 9 invalid). The "QAT-lossless" naming
+is load-bearing: on this lane, QAT is what makes a 4-bit quant work
+at all. **The operator quant floor holds even for QAT weights**:
+unsloth's sub-4-bit UD-Q2_K_XL manages only 0.483 with a determinism
+flip — though note 2-bit-QAT still outscores non-QAT-4-bit. Net: the
+new small-model operating point is the official-weights Q4_0
+(0.808 at 423 ms p50), pending the per-class routing and calibration
+levers (footnote 7 discussion) on top.
 
 What the board established (full findings catalog in REPORT.md):
 
