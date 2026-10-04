@@ -1402,3 +1402,38 @@ hash is a changed artifact and invalidates the row (D14).
   `julia`-package adapter for Qyvos. Fleet note: an unrelated sibling
   CUDA llama-server (port 8080) shares fedora; it does not contend with
   CPU arms.
+- **2026-10-04 (r13 gemma-4n + Winnow-12B bake-off; r14 NeoHorse base
+  alternative — 6 new Board B arms)** — all arms ran the stock letters
+  lane (fedora i5-13600K, -t 12; load gate < 20 two-sample, per-run
+  load recorded, windows 4.2–18.7). Every artifact a third-party
+  release download, no requants. Board rows + footnote 7. Headlines:
+  - **gemma-4-E2B-qat (unsloth UD-Q4_K_XL, 2.5 GB) is the new
+    small-model operating point**: 0.767 / ECE 0.137 / p50 454 ms /
+    0 invalid distributions / replay-clean (Δp 0.020). Below
+    Winnow-E4B Q8_0 (0.842) but 4.8× faster — and the size class of
+    the VIVERE transfer target (#88), which now has a measured
+    baseline on this lane.
+  - **gemma-4 E4B collapses** — it 0.367 (41/120 invalid dists, det
+    flip Δp 0.247), qat 0.400 (33 invalid, Δp 1.000). Same family,
+    twice the parameters of the E2B, worse: the failure mode is
+    corrupted distribution *emission* under the constrained readout
+    (jebadiah-9b-v2 collapsed to confident wrongness; the E4B arms
+    emit malformed distributions). QAT did not rescue it.
+  - **Winnow-12B inverts its own family**: Q4_K_M 0.542 / Q8_0 0.350
+    (board-worst ECE 0.445) vs Winnow-E4B's 0.842. The 12B arms do
+    cross the relational ceiling (0.65 / 0.62) yet lose overall —
+    compositional strength without calibrated decision quality.
+    Provenance caveat: the two quants come from different publishers
+    (Piotr1215 Q4_K_M, EldanRing Q8_0), so part of the Q8 < Q4 gap
+    may be publisher divergence rather than quantization.
+  - **NeoHorse-1-4B base (TokenRhythm), untuned: 0.583 with perfectly
+    clean emission** (0 invalid, Δp 0.000) — beats both tuned
+    Winnow-12B arms. The Jev-tuned NeoHorse-Jev-4B stays unloadable
+    (footnote 6); the base model measures fine, closing the
+    GGUF half of that follow-up lane (the newer-llama.cpp retry for
+    the Jev-tuned artifact remains open).
+  - Board implication: under this readout, decision quality is not
+    monotone in parameters — the operating-point conversation moves
+    from "bigger" to "right arch + clean emission + QAT". Queue chain
+    r12→r13→r14 closed (r13 QUEUE COMPLETE 08:05:35; r14
+    self-serialized behind it, done 08:20:20).
