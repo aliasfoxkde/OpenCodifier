@@ -201,7 +201,7 @@ routing is part of its contract, not error.
 | fast | Qwen3.5-0.8B (q4_0) | 0.650 | 0.074 | 0.35 | 613 ms | 537 MiB |
 | zero-ML floor (engine default) | relational-v1 over lexical | 0.683 | 0.094 | **0.950** | **1.3 ms** | 0 MiB |
 
-### Complete board (68 runs, 2026-09-25 → 2026-10-03)
+### Complete board (74 runs, 2026-09-25 → 2026-10-04)
 
 Columns: accuracy (metadata / lexical / relational), overall accuracy,
 ECE, single-decision p50, run-twice determinism. `(chat screen)` rows
@@ -268,7 +268,13 @@ arm — sampled decode, never comparable to decision rows.
 | llama__qwen3b.json | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2575.2ms | yes |
 | parity__jebadiah-4b-v2-letters.json ⁴ | 0.98 / 1.00 / 0.53 | 0.833 | 0.052 | 1973.8ms | yes; parity 0.908 |
 | parity__jebadiah-9b-v2-letters.json ⁴ | 0.08 / 0.03 / 0.33 | 0.142 | 0.501 | 2869.0ms | yes; parity 0.150 |
+| stock__gemma-4-e2b-qat-letters.json ⁷ | 0.93 / 1.00 / 0.38 | 0.767 | 0.137 | 454.1ms | yes (Δp 0.020) |
+| stock__gemma-4-e4b-it-letters.json ⁷ | 0.64 / 1.00 / 0.45 | 0.367 | 0.304 | 1052.4ms | **no** (Δp 0.247); 41 invalid dists |
+| stock__gemma-4-e4b-qat-letters.json ⁷ | 0.54 / 0.88 / 0.50 | 0.400 | 0.281 | 977.0ms | **no** (Δp 1.000); 33 invalid dists |
 | stock__kev-4b-letters.json ⁶ | 1.00 / 0.95 / 0.53 | 0.617 | 0.151 | 1378.2ms | yes (Δp 0.000); 25 invalid dists |
+| stock__neohorse-1-4b-alt-letters.json ⁷ | 0.80 / 0.65 / 0.30 | 0.583 | 0.195 | 1102.1ms | yes (Δp 0.000) |
+| stock__winnow-12b-q4km-letters.json ⁷ | 0.42 / 0.81 / 0.65 | 0.542 | 0.284 | 2569.2ms | yes (Δp 0.000); 13 invalid dists |
+| stock__winnow-12b-q8-letters.json ⁷ | 0.20 / 0.23 / 0.62 | 0.350 | 0.445 | 4741.7ms | yes (Δp 0.000); 1 invalid dist |
 | stock__winnow-e4b-letters.json | 1.00 / 0.97 / 0.55 | 0.842 | 0.109 | 2171.3ms | yes (Δp 0.017) |
 | stock__winnow-e4b-letters-Q4_K_S.json ⁵ | 1.00 / 1.00 / 0.55 | 0.825 | 0.101 | 951.4ms | yes (Δp 0.041); 3 invalid dists |
 | stock__winnow-e4b-letters-Q4_K_M.json ⁵ | 0.97 / 1.00 / 0.57 | 0.817 | 0.083 | 973.3ms | **no** (Δp 0.998); 4 invalid dists |
@@ -338,6 +344,33 @@ its official ONNX export (the natural `InferenceBackend` arm for
 `opencodifier-runtime`, parity cases included), a laya-GGUF endpoint
 lane, NeoHorse under a newer llama.cpp, and a `julia`-package adapter
 for Qyvos.
+
+⁷ r13/r14 bake-off arms (2026-10-04, fedora i5-13600K, stock build,
+letters readout, -t 12; load gate < 20 two-sample with per-run load
+recorded — windows 4.2–18.7, so treat per-arm latencies as
+quiet-window-relative, not absolute). All six artifacts are
+third-party release downloads, no requants: Winnow-12B Q4_K_M
+(Piotr1215) and Q8_0 (EldanRing — a different publisher's quant, so
+part of the Q8 < Q4 gap may be publisher divergence rather than
+quantization), gemma-4 E4B-it / E4B-qat / E2B-qat (unsloth
+UD-Q4_K_XL), NeoHorse-1-4B Q4_K_M (TokenRhythm — the **base** model,
+not the unloadable Jev-tuned 4B of footnote 6). Findings: **gemma-4
+E2B-qat is the new small-model operating point** — 0.767 at 454 ms
+p50, zero invalid distributions, replay-clean (Δp 0.020): below
+Winnow-E4B Q8_0's 0.842 but 4.8× faster, and the size class of the
+VIVERE transfer target. **The gemma-4 E4B arms collapse** (it 0.367,
+qat 0.400) with 41/33-of-120 invalid distributions and determinism
+flips (Δp 0.247 / 1.000) — same family, twice the parameters, worse;
+the failure mode is corrupted distribution *emission* under the
+constrained readout (jebadiah-9b's collapse was confident wrongness;
+this is malformed output), and QAT did not rescue it. **Winnow-12B
+inverts its own family** — Q4_K_M 0.542 / Q8_0 0.350 with the
+board-worst ECE (0.445) vs Winnow-E4B's 0.842; the 12B arms do cross
+the relational ceiling (0.65 / 0.62) yet lose overall: compositional
+strength without calibrated decision quality. **NeoHorse-1-4B base,
+untuned: 0.583 with perfectly clean emission** (0 invalid, Δp 0.000)
+— beats both tuned Winnow-12B arms. Under this readout, decision
+quality is not monotone in parameters.
 
 What the board established (full findings catalog in REPORT.md):
 
