@@ -763,3 +763,216 @@ certificate, no cardinality invariance, no rotation invariance.
      §9-distill-program task). Gemma-4's stock tower is SigLIP-family
      so the lineage fits; embedding spaces do not transfer zero-shot.
 
+---
+
+## §10 — Performance & accuracy methods sweep (2026-10-04)
+
+Three parallel research sweeps, each source-verified (agent reports persisted at
+`/nas/Temp/work/oc-model-eval/runs/research-{llamacpp-cpu-perf,selective-conformal,
+jointhead-cascade}-20261004.md` — 98 / 7 / 56 tool calls respectively). Scope:
+(a) CPU inference performance for the prefill-dominated letters lane, (b)
+selective prediction / conformal / calibration for the confidence gate (verified
+against our local `policy.rs` / `confidence.rs` / `calibration.rs` integration
+surface), (c) family-A joint-head + cascade/routing code references. Only the
+load-bearing findings are recorded here; the work-dir reports carry the full
+detail with per-claim sources.
+
+### §10.1 Verified local defect: AVX-VNNI never compiled into the bench binaries
+
+Checked on fedora 2026-10-04: `build-stock/bin/llama-server` and the
+parallel-decision fork `build-pd/bin/llama-server` contain **zero `vpdpbusd`
+(AVX-VNNI) instructions**, while both checkouts' sources (Oct 2026) carry the
+VNNI kernel path (`ggml/src/ggml-cpu/arch/x86/quants.c`,
+`repack.cpp`). Cause: the trees were configured with `GGML_NATIVE=ON` **on the
+NAS (Zen2 — no VNNI at all)** and the binaries shipped to fedora, baking Zen2
+ISA into `-march=native`. Every quantized matmul (Q4_0/Q4_K/Q8_0 prefill inner
+loops) on the 13600K therefore runs the `maddubs` fallback. Upstream measured
+cost: **+32% pp512** on i5-13420H when VNNI engages (PR #25346, Qwen2.5-0.5B
+Q4_0), +9.1% pp2048 on 9950X3D (PR #27851); fp32 path unaffected. Fix: rebuild
+natively on fedora (`GGML_CPU_ALL_VARIANTS=ON` + backend-DL is the portable
+alternative; `alderlake` is the correct prebuilt variant). r18 queue launched
+2026-10-04 to verify (fresh `build-stock-r18`, banner proof, thread sweep, two
+parity arms of the E2B-QAT Q4_0 operating point).
+
+### §10.2 Thread count: the runner's `-t 12` overrides llama.cpp's own hybrid default
+
+`common/common.cpp` skips E-cores ("efficiency cores harm lockstep threading")
+and HT siblings ("hyperthreading isn't useful for linear algebra") → the
+13600K's llama.cpp default is **-t 6** (6 P-cores, no HT, no E); our runner
+hardcodes 12. Upstream measured: P-core 3.8× E-core single-thread prefill (PR
+#23309); SMT oversubscription 3.6× decode regression (#19110/#19260); +3.8%
+pp64 from 8→16 threads while tg16 *drops* 8.3% (llama-bench README table). No
+published -t sweep for a 13600K exists — r18's sweep (`-t 6,12 -p 400 -n 1`
+micro bench + a `-t 6` parity arm) closes that gap on our hardware. Note:
+pinning is NOT automatic (default = inherited affinity); `--cpu-mask` +
+`--cpu-strict 1` exist but #26997 reports a no-op case — verify before relying.
+
+### §10.3 Do-not-do list (each verified against source, not folklore)
+
+- **Speculative decoding: never enable.** At single-token readout
+  `n_draft_max` computes to 0 (no drafts accepted), yet the drafter still
+  prefills the prompt unconditionally every batch (upstream TODO
+  `TAG_SPEC_AVOID_DRAFT_REEVAL`) — a second full forward pass that buys
+  nothing. Worse: draft-model speculation **diverges from vanilla under
+  temperature=0/top_k=1 on quantized targets** (open issue #25618) —
+  disqualifying for a bit-reproducible decision runtime. Unsloth's MTP
+  numbers are decode-only GPU figures; no prompt-processing data anywhere.
+- **KV-cache quantization is not a speed tool on CPU.** pp flat within noise
+  (#20969); with CPU flash-attn, quantized KV takes the `one_chunk` fallback
+  and is **5.0× slower** at 8k ctx (#26948). Accuracy on constrained
+  short answers collapses without rotation (AIME25: Q4_0 2.0% → 21.7% with
+  rotation, #21038). Legitimate only for KV capacity (raising `-c`).
+  Correction to our earlier note: #21332 is a merged revert PR — on current
+  master the SWA cache *is* quantized; there is no f16/f32 SWA special case.
+- **`-b`/`-ub` tuning is a no-op for our prompt length** (200–400 tok = one
+  ubatch); the only CPU sweep shows pp *halving* above ub 512 (#18725).
+- **OpenBLAS: 3× worse** on pp (#25565, libgomp spinlock contention).
+  `--defrag-thold` deprecated. AVX512 (fused off on 13th-gen desktop) and
+  AMX (absent on consumer Raptor Lake) are non-options.
+- **`--cache-reuse N`** (non-contiguous KV chunk relocation — the mechanism
+  that fits our permutation suite, same tokens different order) is
+  mechanism-verified but **gain-unmeasured** upstream, and **blocked for
+  gemma** (iSWA caches are not shiftable) — a dense-model lever only.
+- `--no-mmap` is gone: `-lm/--load-mode mmap+mlock` is the
+  memory-pressure fix (latency variance under co-tenant PSI storms, not
+  throughput).
+
+### §10.4 Certified thresholds for the gate (grounds §9.3 item 3)
+
+Verified against our integration surface: new artifacts slot in as
+`CalibrationArtifact` `scheme` variants (existing version-tagged cache keys
+auto-invalidate); `ConfidencePolicy::{verify_below, abstain_below,
+min_confidence}` are the bands; `ProofAwareCalibration` is precedent for
+pre-calibration signals.
+
+- **Split-conformal abstention (highest fit):** score items `s_i = 1 −
+  p̂(correct_i)` (or any fixed scorer), `k = (n+1) − floor(α(n+1))` in exact
+  integer arithmetic, accept iff `score ≤ s_{k−1}` — marginal accepted-accuracy
+  ≥ 1−α, distribution-free. Rust artifact: `{scores, k, qhat, scorer_id,
+  alpha}` — serializable, hashable. Edge case NumPy gets wrong: `k > n` ⟹
+  `q̂ = +∞` (always abstain), not an error. **Critical correction:** our 3
+  permutations are exchangeable at the *question-cluster* level only — the
+  calibration count is 120 clusters (351 pooled with JevBench), not 360 rows,
+  or the +1/(n+1) slack quietly overstates the guarantee by ~√3. JevBench is
+  validation-only, never in the quantile (cross-suite = the shift case,
+  arXiv:2006.09462). Per-`question_class` conformalization is the right
+  granularity (key already exists) with the `n ≥ 30`-per-class guard.
+- **Chow's rule** as the derived default (reject iff `max_k p_k < 1 − ε`,
+  ε = cost ratio): one interpretable knob for arms too small to
+  conformalize; needs calibrated posteriors to be optimal → composes with
+  temperature (arXiv:2405.05160; 0/1 reduction is our derivation).
+- **Margin ≡ MSP at K=2** (`MSP = (1+margin)/2` — identical risk-coverage
+  curves; computing both is redundant). They diverge only at K ≥ 3, where
+  margin is invariant to tail mass and entropy is not — exactly our
+  Choice/Score arms, where **no paper answers the scorer question** (verified
+  negative: Galil et al. evaluate only MSP/MC-dropout/temperature) → capture
+  margin + entropy + MSP in the trace and let per-arm calibration select
+  empirically. Under coexisting shifts margins beat MSP/entropy (arXiv:2405.05160).
+- **Conformal risk control** for expected-error framing (matches "abstention
+  is a successful outcome" better than miscoverage): the official `get_lhat`
+  is nine lines (arXiv:2208.02814).
+- **Geifman SGR** gives the PAC form our gate actually poses ("accepted
+  error ≤ r* w.p. 1−δ") — needs a ~40-line regularized incomplete beta
+  (Lentz), shared with rational-cascade tuning. Must surface infeasible
+  (r*, δ, data) triples as hard artifact errors, never empty accepts.
+- **Energy-based OOD has a hard boundary:** `MSP = E + f_max`, so energy is
+  exactly what softmax discards — computed on a *normalized* distribution it
+  is **identically zero for every input**. Usable only on raw-logit rungs
+  (decision-model, BM25-as-heuristic), computed **before** our calibration
+  seam (which normalizes in log-prob space and would destroy it).
+- **Calibration: keep temperature, add Platt (Laplace-smoothed targets), do
+  NOT add isotonic** — sklearn's own threshold is ~1000 samples; we have
+  360–591. Newton temperature fits need a multi-restart + NLL-improvement
+  guard (the "convexity" claim is not provable for K>2).
+- **Framing correction to §1:** Gatekeeper (arXiv:2502.19335) is a
+  fine-tuning loss (misclassified → uniform), with no public code and no
+  guarantee — its value is the calibration-target insight, not inference
+  math. The only cascade paper with public code is rational cascades
+  (arXiv:2501.09345 → `mzelling/rational-llm-cascades`); early-abstention
+  cascades (arXiv:2502.09054) have none (constraint removable via
+  `φ_i = ξ_i + softplus(δ_i)` if we port it).
+
+Port order (from the sweep): score capture → conformal → Chow → CRC → SGR →
+energy → joint cascade tuning.
+
+### §10.5 Family-A execution path: Kai-0.6B-ONNX contract (grounds #92)
+
+Source-verified from `onnx-community/Decision-2.0-Kai-0.6B-ONNX` (conversion
+scripts + fixtures) and `vllm-sr/Decision-2.0-Kai-0.6B` (runtime package):
+
+- **Graph I/O:** `input_ids [B,L]`, `attention_mask`, `answer_pos [B]`,
+  `option_pos [B,K]` → **one fp32 `logits [B,K]`** — a single forward pass
+  scores all K candidates (no KV cache in the fused graph; positions built
+  in-graph). This is the family-A shape our candidate-conditioned model
+  crate mirrors.
+- **The head is 5 matrices of 1024×256 (~1.05M params, 4.21 MB):** bilinear
+  `(key(c)·query(q))/√256` + `scalar(gelu(candidate_mlp(c)+query_mlp(q)))` —
+  a 40-line Rust f64 test oracle for the ONNX path.
+- **Quantization is MatMulNBits block-32** (8-bit decoder, 4-bit embeddings,
+  fp32 activations) — a built-in `com.microsoft` contrib op stock `ort`
+  loads with default features; not dynamic int8. Ops are standard
+  (LayerNormalization/Gelu/GatherND/Range…); no hybrid conv/recurrent ops
+  (plain Qwen3 — F25's slow arch is not present here). ort-crate loading
+  itself is untested — first task of the arm. Local corroboration: our
+  gte-modernbert MatMulNBits b32 arm already ran through the eval harness
+  (815.7 ms/item @ max_len 256, 4 threads) — **cap Kai prompt length well
+  below its 8192 budget and measure before assuming the rung is affordable.**
+- **Free parity target:** `conversion/fixtures` + their measured deltas (q8
+  vs fp32 export: max prob diff 0.017, 0 argmax flips) — quantization is not
+  the accuracy risk; latency is.
+- **`score_bias.json` is a fully specified, model-free calibration recipe:**
+  per-level additive logit offsets fitted by float64 Newton on held-out rows
+  minimizing `−log softmax(z+b)` with stratum weights `n^−0.5`, mean-zero
+  shift — a direct port into our `Calibration` seam targeting Score-rung ECE.
+- **`shared_ctx.py` shared-prefix prefill** (prefix capped at the shortest
+  candidate position, suffix re-based per question) is the mechanism behind
+  their 4.9 ms/question median — the multi-question latency lever if the
+  rung is adopted.
+- Provenance note: Kai's weights are a uniform 6-checkpoint soup
+  (`m6-mxcx-soup`) — model-averaging as a training-time ensemble, relevant
+  to #88's distill recipe.
+
+### §10.6 Clef head internals + routing mechanisms (grounds B6)
+
+- **clef-flash `JointSchemaHead`** (source read): six 4096→1024 projections,
+  type embedding per question kind (noul/choice/score), 2 evidence-routing
+  cross-attention layers, residual scorer over `[field, option, field·option,
+  |field−option|]` — and a **lexical prior fused inside the head** (scaled
+  cosine of the option's raw embedding rows vs the question vector) with a
+  learned sigmoid residual gate. Our "cheapest mechanism first" instinct,
+  trained in as a prior. Not portable (244 MB head, 19 GB vision backbone);
+  **no training code public** — no RLCD-for-calibrated-decisions
+  implementation exists anywhere (facebookresearch/RLCD is text alignment,
+  archived). Their score answers use raw expected value with **no** fitted
+  bias (contrast Kai's Newton offsets).
+- **RouteLLM's threshold calibration is the pattern D25 wants:**
+  `threshold = quantile(1 − strong_model_pct)` of the router-score
+  distribution — operating points derived from the distribution instead of
+  hand constants, making "accept-rate p @ accuracy a" a first-class reported
+  number. FrugalGPT adds per-link gates (`accept iff score > 1 − thres`,
+  deterministic by construction).
+- **JEV-as-a-Judge (arXiv:2609.26550)** is the closest published analogue of
+  our ladder: label-probability judge, threshold frozen in advance,
+  accept-or-escalate; reported +0.9 points over the strong model at 41% of
+  its cost, live-test replicated. Stated failure modes: style-adversarial
+  inputs and reference-free prose — the classes to watch in our own
+  abstention audits. Semantic-entropy uncertainty (Nature 2024,
+  `jlko/semantic_uncertainty`) needs k samples per item — wrong trade at
+  our budget, skip.
+- clef-evals is API-only (no joint-head code) but ships
+  `published_reference.json` (Clef/Clef-flash/Jev/Laya across 5 suites,
+  median latencies) usable as cross-model reporting context.
+
+### §10.7 Priority addendum (2026-10-04) — merges with §9.3
+
+1. **r18 VNNI rebuild + thread sweep** (running) — if the +32% holds
+   end-to-end, every letters-lane latency number in the board re-bases;
+   re-measure one operating-point arm per model family on the new binary.
+2. **Conformal gate port** (§10.4) — supersedes §9.3 item 3 with concrete
+   algorithms and the cluster-level-n correction; port order above.
+3. **Kai-0.6B-ONNX arm** (#92) — contract verified in §10.5; ort-crate
+   smoke test first, prompt-length-capped latency measurement second,
+   parity fixtures as the accuracy gate.
+4. **`score_bias` Newton fit** into the Calibration seam (Score-rung ECE).
+5. **Quantile-derived thresholds** for LadderPolicy/D25 overrides (§10.6).
+6. All §9.3 items retain their ordering beneath these.
