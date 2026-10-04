@@ -777,22 +777,33 @@ surface), (c) family-A joint-head + cascade/routing code references. Only the
 load-bearing findings are recorded here; the work-dir reports carry the full
 detail with per-claim sources.
 
-### §10.1 Verified local defect: AVX-VNNI never compiled into the bench binaries
+### §10.1 Thread sweep on the 13600K: -t 12 wins prefill (corrected finding)
 
-Checked on fedora 2026-10-04: `build-stock/bin/llama-server` and the
-parallel-decision fork `build-pd/bin/llama-server` contain **zero `vpdpbusd`
-(AVX-VNNI) instructions**, while both checkouts' sources (Oct 2026) carry the
-VNNI kernel path (`ggml/src/ggml-cpu/arch/x86/quants.c`,
-`repack.cpp`). Cause: the trees were configured with `GGML_NATIVE=ON` **on the
-NAS (Zen2 — no VNNI at all)** and the binaries shipped to fedora, baking Zen2
-ISA into `-march=native`. Every quantized matmul (Q4_0/Q4_K/Q8_0 prefill inner
-loops) on the 13600K therefore runs the `maddubs` fallback. Upstream measured
-cost: **+32% pp512** on i5-13420H when VNNI engages (PR #25346, Qwen2.5-0.5B
-Q4_0), +9.1% pp2048 on 9950X3D (PR #27851); fp32 path unaffected. Fix: rebuild
-natively on fedora (`GGML_CPU_ALL_VARIANTS=ON` + backend-DL is the portable
-alternative; `alderlake` is the correct prebuilt variant). r18 queue launched
-2026-10-04 to verify (fresh `build-stock-r18`, banner proof, thread sweep, two
-parity arms of the E2B-QAT Q4_0 operating point).
+CORRECTION (same day, 2026-10-04 — recorded because the error is
+instructive). The first version of this section claimed an "AVX-VNNI defect":
+that our bench binaries lacked VNNI because the trees were configured on the
+NAS (Zen2, no VNNI) and shipped to fedora. That claim was a verification
+artifact — `objdump` was run on `bin/llama-server`, which in this build
+layout is a thin wrapper; the quant kernels live in `bin/libggml-cpu.so`.
+Corrected proof: `vpdpbusd` sites are present in ALL builds (build-stock 357,
+build-pd 393, fresh build-stock-r18 357) — **VNNI was always engaged; no
+rebuild is warranted**. The upstream measurements (PR #25346: +32% pp512
+i5-13420H; PR #27851: +9.1% pp2048 9950X3D) remain valid context but describe
+a failure mode we do not have. Lesson: verify ISA claims against the shared
+object that carries the kernels, and let the runtime's own `system_info`
+banner be ground truth (`llama-bench -o csv` suppresses it).
+
+What r18 did establish, with measurement (`runs/r18_bench_vnni_threads.csv`,
+gemma-4-E2B QAT Q4_0, `-fa on`, pp400/n1, 3 reps):
+
+- **`-t 12` beats `-t 6` on prefill: 229.6 ± 7.8 vs 203.0 ± 3.8 t/s
+  (+13.1%)**; decode (tg1) marginally favors t=6 (21.8 vs 20.6 t/s) —
+  irrelevant to single-token readout. The runner's hardcoded `-t 12` is
+  validated by measurement; llama.cpp's hybrid default (6 P-cores, E-cores
+  and HT skipped) does not transfer to this prefill-dominated workload. No
+  published 13600K sweep existed; this closes it for our config.
+- Absolute prefill anchor for the 0.808 operating point: **~230 t/s at
+  pp400** on the E2B QAT Q4_0 (D9 context).
 
 ### §10.2 Thread count: the runner's `-t 12` overrides llama.cpp's own hybrid default
 
@@ -811,7 +822,7 @@ pinning is NOT automatic (default = inherited affinity); `--cpu-mask` +
 
 - **Speculative decoding: never enable.** At single-token readout
   `n_draft_max` computes to 0 (no drafts accepted), yet the drafter still
-  prefills the prompt unconditionally every batch (upstream TODO
+  prefills the prompt unconditionally every batch (upstream open work item
   `TAG_SPEC_AVOID_DRAFT_REEVAL`) — a second full forward pass that buys
   nothing. Worse: draft-model speculation **diverges from vanilla under
   temperature=0/top_k=1 on quantized targets** (open issue #25618) —
@@ -903,7 +914,7 @@ scripts + fixtures) and `vllm-sr/Decision-2.0-Kai-0.6B` (runtime package):
 - **Graph I/O:** `input_ids [B,L]`, `attention_mask`, `answer_pos [B]`,
   `option_pos [B,K]` → **one fp32 `logits [B,K]`** — a single forward pass
   scores all K candidates (no KV cache in the fused graph; positions built
-  in-graph). This is the family-A shape our candidate-conditioned model
+  in-graph). This is the family-A form our candidate-conditioned model
   crate mirrors.
 - **The head is 5 matrices of 1024×256 (~1.05M params, 4.21 MB):** bilinear
   `(key(c)·query(q))/√256` + `scalar(gelu(candidate_mlp(c)+query_mlp(q)))` —
@@ -954,7 +965,7 @@ scripts + fixtures) and `vllm-sr/Decision-2.0-Kai-0.6B` (runtime package):
 - **JEV-as-a-Judge (arXiv:2609.26550)** is the closest published analogue of
   our ladder: label-probability judge, threshold frozen in advance,
   accept-or-escalate; reported +0.9 points over the strong model at 41% of
-  its cost, live-test replicated. Stated failure modes: style-adversarial
+  its cost, live-test replicated. Stated failure modes: style-perturbed
   inputs and reference-free prose — the classes to watch in our own
   abstention audits. Semantic-entropy uncertainty (Nature 2024,
   `jlko/semantic_uncertainty`) needs k samples per item — wrong trade at
@@ -965,9 +976,11 @@ scripts + fixtures) and `vllm-sr/Decision-2.0-Kai-0.6B` (runtime package):
 
 ### §10.7 Priority addendum (2026-10-04) — merges with §9.3
 
-1. **r18 VNNI rebuild + thread sweep** (running) — if the +32% holds
-   end-to-end, every letters-lane latency number in the board re-bases;
-   re-measure one operating-point arm per model family on the new binary.
+1. ~~r18 VNNI rebuild~~ **Corrected 2026-10-04: no VNNI defect existed**
+   (§10.1). r18's lasting outputs: the `-t 6/12` thread sweep (t=12 wins
+   prefill +13.1% — runner config validated) and a cross-build determinism
+   check (two independently-built binaries, same commit + seed — integrates
+   via the r18b followup).
 2. **Conformal gate port** (§10.4) — supersedes §9.3 item 3 with concrete
    algorithms and the cluster-level-n correction; port order above.
 3. **Kai-0.6B-ONNX arm** (#92) — contract verified in §10.5; ort-crate
@@ -975,4 +988,4 @@ scripts + fixtures) and `vllm-sr/Decision-2.0-Kai-0.6B` (runtime package):
    parity fixtures as the accuracy gate.
 4. **`score_bias` Newton fit** into the Calibration seam (Score-rung ECE).
 5. **Quantile-derived thresholds** for LadderPolicy/D25 overrides (§10.6).
-6. All §9.3 items retain their ordering beneath these.
+6. All §9.3 items keep their existing rank beneath these.
