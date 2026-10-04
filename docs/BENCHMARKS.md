@@ -268,6 +268,7 @@ arm — sampled decode, never comparable to decision rows.
 | llama__qwen3b.json | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2575.2ms | yes |
 | parity__jebadiah-4b-v2-letters.json ⁴ | 0.98 / 1.00 / 0.53 | 0.833 | 0.052 | 1973.8ms | yes; parity 0.908 |
 | parity__jebadiah-9b-v2-letters.json ⁴ | 0.08 / 0.03 / 0.33 | 0.142 | 0.501 | 2869.0ms | yes; parity 0.150 |
+| stock__clef-flash-q4_k_m-letters.json ¹⁰ | 0.00 / — / 0.33 | 0.008 | 0.529 | 1690.4ms | yes (Δp 0.000); 115 invalid dists |
 | stock__e2b-noqat-q4_0-letters.json ⁹ | 0.21 / 0.71 / 0.30 | 0.350 | 0.435 | 472.4ms | **no** (Δp 1.000); 11 invalid dists |
 | stock__e2b-noqat-q4ks-letters.json ⁸ | 0.21 / 0.85 / 0.40 | 0.433 | 0.411 | 479.8ms | **no** (Δp 0.676); 9 invalid dists |
 | stock__e2b-noqat-udq4kxl-letters.json ⁸ | 0.23 / 0.72 / 0.33 | 0.375 | 0.461 | 523.9ms | **no** (Δp 0.645); 9 invalid dists |
@@ -279,6 +280,7 @@ arm — sampled decode, never comparable to decision rows.
 | stock__gemma-4-e4b-qat-letters.json ⁷ | 0.54 / 0.88 / 0.50 | 0.400 | 0.281 | 977.0ms | **no** (Δp 1.000); 33 invalid dists |
 | stock__kev-4b-letters.json ⁶ | 1.00 / 0.95 / 0.53 | 0.617 | 0.151 | 1378.2ms | yes (Δp 0.000); 25 invalid dists |
 | stock__neohorse-1-4b-alt-letters.json ⁷ | 0.80 / 0.65 / 0.30 | 0.583 | 0.195 | 1102.1ms | yes (Δp 0.000) |
+| stock__qwen35-4b-noqat-q4_0-letters.json ¹⁰ | 0.12 / 0.05 / 0.10 | 0.092 | 0.567 | 965.6ms | yes (Δp 0.000) |
 | stock__winnow-12b-q4km-letters.json ⁷ | 0.42 / 0.81 / 0.65 | 0.542 | 0.284 | 2569.2ms | yes (Δp 0.000); 13 invalid dists |
 | stock__winnow-12b-q8-letters.json ⁷ | 0.20 / 0.23 / 0.62 | 0.350 | 0.445 | 4741.7ms | yes (Δp 0.000); 1 invalid dist |
 | stock__winnow-e4b-letters.json | 1.00 / 0.97 / 0.55 | 0.842 | 0.109 | 2171.3ms | yes (Δp 0.017) |
@@ -288,6 +290,8 @@ arm — sampled decode, never comparable to decision rows.
 | stock__winnow-e4b-letters-IQ4_XS.json ⁵ | 0.78 / 0.80 / 0.50 | 0.692 | 0.196 | 1202.6ms | **no** (Δp 0.473) |
 | stock__winnow-e4b-letters-IQ3_M.json ⁵ | 0.90 / 0.97 / 0.23 | 0.658 | 0.082 | 1564.4ms | **no** (Δp 0.984); 5 invalid dists |
 | stock__winnow-e4b-letters-Q3_K_S.json ⁵ | 0.81 / 0.92 / 0.40 | 0.408 | 0.124 | 1315.9ms | **no** (Δp 0.997); 41 invalid dists |
+| stock__yoozlabs-qwen35-08b-qat-q4_0-letters.json ¹⁰ | 0.72 / 0.76 / 0.40 | 0.608 | 0.061 | 178.3ms | yes (Δp 0.000); 3 invalid dists |
+| stock__yoozlabs-qwen35-4b-qat-q4_0-letters.json ¹⁰ | 0.65 / 0.62 / 0.35 | 0.542 | 0.237 | 910.4ms | yes (Δp 0.000) |
 | vtx__VTX-JEV-3-fp32.json | 0.20 / 0.33 / 0.42 | 0.317 | 0.099 | 0.8ms | yes |
 | vtx__VTX-JEV-3-lf2.json | 0.17 / 0.25 / 0.30 | 0.242 | 0.136 | 1.1ms | yes |
 
@@ -427,6 +431,37 @@ target for the E-series (mobile int2/int4 + int8 is primary, tech
 report Table 3), and llama.cpp promotes the tied per-layer-embedding
 (PLE, ~46 % of E2B params) to Q6_K — which is why the official Q4_0
 file outsizes unsloth's dynamic mix.
+
+¹⁰ r17 second-family QAT A/B + clef-flash backbone (2026-10-04,
+fedora i5-13600K, stock build, letters readout, -t 12, quiet
+windows, load 0.2–9.0; all artifacts ready-made release downloads —
+YoozLabs Qwen3.5 QAT Q4_0s are third-party QAT with unverified
+provenance, the 4B control is unsloth's non-QAT Q4_0, clef-flash is
+bartowski's Q4_K_M of Cloudflare's release). **QAT rescues legacy
+Q4_0 in a second family — but does not beat the family's own
+K-quants.** Matched-format on 4B: QAT 0.542 vs non-QAT **0.092** —
++45.0 pp, the same magnitude as gemma-E2B's +45.8 pp, yet both sit
+far under the same family's non-QAT K-quants (Q3_K_S / UD-Q4_K_XL
+0.800): for Qwen3.5, legacy Q4_0 is a dead end at 4 B with or
+without QAT, and the operating point stays K-quant. At 0.8 B the
+sign flips: QAT **regresses** accuracy (0.608 vs the board's
+non-QAT q4_0 0.650) while improving calibration (ECE 0.061 vs
+0.074) and p50 (178 ms vs 613 ms — cross-day caveat: the non-QAT
+arm was measured Sep 26 on an earlier stock build). **The non-QAT
+4B Q4_0 collapse is confident wrongness, not emission corruption**:
+0 invalid distributions, perfectly replay-stable (Δp 0.000),
+ECE 0.567 — well-formed distributions pointing at wrong answers
+(the jebadiah-9b failure mode), unlike gemma's malformed-emission
+collapses. All four r17 arms replay-clean (Δp 0.000). **clef-flash
+Q4_K_M is emission-broken on the stock readout** — 115/120 invalid
+distributions, 5 valid predictions total, 0.008 — and the row
+carries a hard caveat: bartowski's GGUF is **backbone-only**
+(Cloudflare's `joint_head.safetensors` is a separate custom-arch
+file llama.cpp cannot execute), so this row measures the
+post-trained Qwen3.5-9B backbone under constrained decoding and
+does NOT reproduce Cloudflare's published Clef numbers. A template
+A/B (`--template` runner flag lane) is the follow-up before any
+conclusion about the backbone itself.
 
 What the board established (full findings catalog in REPORT.md):
 

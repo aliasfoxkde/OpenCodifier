@@ -1,0 +1,16 @@
+{
+  "format_version": 1,
+  "scheme": "temperature",
+  "model_id": "qwen3.5-4b-qat-q4_0",
+  "calibration_version": 1,
+  "default_temperature": 5.302737,
+  "temperatures": {
+    "choice": 5.302737
+  },
+  "fit": {
+    "items": 120,
+    "ece_before": 0.237401,
+    "ece_after": 0.183521,
+    "source": "benchmarks/decision-model suite (seed 20260926, 120 items), single-run arm stock__yoozlabs-qwen35-4b-qat-q4_0-letters.json, model gguf/qwen35-4b-qat-Q4_0.gguf; exact full-distribution reverse-softmax fit (d15), in-sample"
+  }
+}

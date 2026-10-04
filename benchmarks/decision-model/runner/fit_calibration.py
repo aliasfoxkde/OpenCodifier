@@ -96,11 +96,19 @@ ARMS: dict[str, str] = {
     # Q4_0 is the small-model operating point as of r15; the unsloth
     # UD-Q4_K_XL QAT arm is kept as its direct predecessor. The r16
     # arms bracket it: the E4B-QAT native-format rescue (partial) and
-    # the matched-format non-QAT control (+45.8 pp QAT effect).
+    # the matched-format non-QAT control (+45.8 pp QAT effect). The
+    # r17 arms extend the matched-format A/B to a second family
+    # (Qwen3.5, YoozLabs third-party QAT). clef-flash-q4_k_m is
+    # deliberately absent: 115/120 invalid distributions leave 5
+    # valid rows — a temperature fit on those would be noise, so no
+    # artifact ships for the emission-broken backbone arm.
     "stock__e2bqat-official-q4_0-letters.json": "gemma-4-e2b-qat-q4_0",
     "stock__gemma-4-e2b-qat-letters.json": "gemma-4-e2b-qat-ud-q4_k_xl",
     "stock__e4bqat-official-q4_0-letters.json": "gemma-4-e4b-qat-q4_0",
     "stock__e2b-noqat-q4_0-letters.json": "gemma-4-e2b-noqat-q4_0",
+    "stock__yoozlabs-qwen35-08b-qat-q4_0-letters.json": "qwen3.5-0.8b-qat-q4_0",
+    "stock__yoozlabs-qwen35-4b-qat-q4_0-letters.json": "qwen3.5-4b-qat-q4_0",
+    "stock__qwen35-4b-noqat-q4_0-letters.json": "qwen3.5-4b-noqat-q4_0",
 }
 
 

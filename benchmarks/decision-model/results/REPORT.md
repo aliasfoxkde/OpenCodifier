@@ -1543,3 +1543,111 @@ hash is a changed artifact and invalidates the row (D14).
     readout. Calibration artifacts fitted for both arms
     (gemma-4-e4b-qat-q4_0, gemma-4-e2b-noqat-q4_0) under the
     standard ECE-gate rule.
+
+- **2026-10-04 (r17 second-family QAT A/B + clef-flash backbone —
+  4 new Board B arms)** — user-directed follow-up testing whether
+  the r15/r16 QAT findings generalize beyond gemma. Four arms, all
+  ready-made release downloads, stock letters lane (fedora
+  i5-13600K, -t 12, load windows 0.2–9.0, same suite sha):
+
+  - **yoozlabs-qwen35-08b-qat-q4_0** (0.47 GiB): **0.608 / ECE
+    0.061 / p50 178 ms; 3/120 invalid; Δp 0.000**; 0.72 / 0.76 /
+    0.40 by class.
+  - **yoozlabs-qwen35-4b-qat-q4_0** (2.37 GiB): **0.542 / ECE
+    0.237 / p50 910 ms; 0 invalid; Δp 0.000**; 0.65 / 0.62 / 0.35.
+  - **qwen35-4b-noqat-q4_0** (unsloth non-QAT control, 2.41 GiB):
+    **0.092 / ECE 0.567 / p50 966 ms; 0 invalid; Δp 0.000**;
+    0.12 / 0.05 / 0.10.
+  - **clef-flash-q4_k_m** (bartowski, 5.44 GiB): **0.008 / ECE
+    0.529 / p50 1690 ms; 115/120 invalid; Δp 0.000**; 5 valid
+    predictions total.
+
+  Findings:
+
+  - **"QAT rescues legacy Q4_0" generalizes; "QAT is the best
+    4-bit path" does not.** Matched-format on Qwen3.5-4B: +45.0 pp
+    (0.092 → 0.542) — the same magnitude as gemma-E2B's +45.8 pp —
+    but the family's non-QAT K-quants score 0.800 untouched.
+    Qwen3.5-4B at legacy Q4_0 is a dead end with or without QAT;
+    the Qwen operating point stays K-quant. Gemma's best 4-bit arm
+    happens to be QAT+Q4_0 (0.808); Qwen's is plain K-quant (0.800)
+    — QAT is format repair, not a universal upgrade.
+  - **The 0.8B sign flip**: YoozLabs QAT *regresses* accuracy vs
+    the board's non-QAT q4_0 arm (0.608 vs 0.650) while improving
+    ECE (0.061 vs 0.074) and p50 (178 vs 613 ms; cross-day caveat —
+    the non-QAT arm was measured Sep 26 on an earlier stock build).
+    At a size where the format was never broken, QAT buys speed and
+    calibration at a small accuracy cost. Provenance caveat: the
+    YoozLabs QAT checkpoints are third-party with unverified
+    training provenance; the acc delta is within the range where
+    recipe differences (not QAT per se) could explain it.
+  - **Failure-mode taxonomy sharpens**: the non-QAT 4B Q4_0
+    collapse emits *well-formed, deterministic, confidently wrong*
+    distributions (0 invalid, Δp 0.000, ECE 0.567) — the
+    jebadiah-9b confident-wrongness mode — whereas gemma's
+    non-QAT 4-bit arms corrupt emission itself (malformed dists +
+    det flips). Quantization damage has at least two distinct
+    signatures on this lane, and only one of them is visible to an
+    invalid-distribution counter.
+  - **clef-flash: emission-broken, backbone-only, no conclusions.**
+    115/120 malformed distributions is the same
+    corrupted-emission signature as the gemma E4B arms — but the
+    row cannot be read as a Clef result: the joint schema head is
+    not in the GGUF (llama.cpp has no such compute graph), so this
+    measures Cloudflare's post-trained Qwen3.5-9B backbone under a
+    readout it was never tuned for (its default template opens a
+    `<think>` block). Follow-up: the `--template` runner-flag lane
+    before drawing any inference about the backbone. No calibration
+    artifact ships (5 valid rows cannot fit a temperature).
+  - Board action: no operating-point change — Qwen stays K-quant
+    (4B UD-Q4_K_XL 0.800 / 0.8B q4_0 0.650); gemma's small-model
+    point stays official-QAT Q4_0 (0.808). Calibration artifacts
+    shipped for two arms (qwen3.5-0.8b-qat-q4_0 T=1.072,
+    qwen3.5-4b-qat-q4_0 T=5.303); the fitter refused the non-QAT
+    control outright (T=inf — temperature cannot repair ECE 0.567
+    confident-wrongness), and clef-flash is deliberately
+    artifact-free (5 valid rows).
+
+- **Decision-model landscape (2026-10-04 research record, user-
+  directed)** — the "decision model" category now has two
+  architecture families plus outliers, verified by repo probes
+  (file inventories) and primary pages:
+
+  - **Family A — joint-head, prefill-only scoring** (backbone +
+    separate head; one logit per allowed option, softmax per
+    question; non-autoregressive, no text generation):
+    Cloudflare **Clef** (frozen Qwen3.8-27B + rank-256 LoRA +
+    `joint_head.safetensors`, 0.24 GiB) and **Clef-flash** (frozen
+    Qwen3.5-9B + vision encoder + `joint_head`, 0.23 GiB; 38.8 ms
+    median latency on their GPUs), and **vllm-sr Decision-2.0-Kai-
+    0.6B** (Qwen3-0.6B-Base backbone + `decision_head.safetensors`).
+    This is the same shape as our candidate-conditioned
+    `opencodifier-model` rung — two independent validations of the
+    design. Their training recipes read like our rules doc: Brier
+    loss for calibration, RLCD with partial credit for adjacent
+    ordinal choices (relevant to our score kind), and synthetic
+    permutations of field orders/prompts/schema structures (our
+    readout permutations). Their APIs are Jev/SystemOne-compatible
+    (`state` + `questions{choice|noul|score, criteria}`; noul =
+    our boolean) — inside our Jev adapter's surface.
+  - **Family B — constrained autoregressive decoding** (what our
+    letters lane measures; Jev-style verdict slots / letter
+    grammars). Every GGUF arm on Board B is family B. **A GGUF
+    cannot express family A**: the joint head is a custom compute
+    graph (Clef's own HF repo only loads via its
+    `joint_schema_model.py`), so community GGUFs are backbone-only
+    — the r17 clef-flash row demonstrates what that yields (0.008,
+    115/120 invalid). Family-A arms belong to the
+    `InferenceBackend` code lane (the Kai-0.6B-ONNX export with its
+    parity fixtures is the ready-made candidate), not llama.cpp.
+  - **Outliers**: SupersonicLabs **Julia-1** — mmBERT-small
+    *encoder*, 0.54 GiB, pooling-only (llama.cpp loads it as
+    laya-arch); a candidate for the ONNX arm, not the letters lane.
+    Contrastive-LM **CLM-v0.1-8B** — `.pt` checkpoint only, no
+    GGUF/ONNX release; skipped under the no-local-conversions rule.
+  - Published-number caveat: Cloudflare's Decision Index latencies
+    (38.8–209 ms) are their GPU serving stack with the full
+    joint-head model; they are not comparable to our CPU letters
+    lane, and their quality numbers are not reproducible from any
+    GGUF derivative. Ecosystem context for position: Jev, Laya,
+    Kev-9B, DiffusionGemma-Jev round out the family-A/B spread.
