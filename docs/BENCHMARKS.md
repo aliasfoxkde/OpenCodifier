@@ -263,6 +263,12 @@ arm — sampled decode, never comparable to decision rows.
 | parity__jebadiah-4b-v2-letters.json ⁴ | 0.98 / 1.00 / 0.53 | 0.833 | 0.052 | 1973.8ms | yes; parity 0.908 |
 | parity__jebadiah-9b-v2-letters.json ⁴ | 0.08 / 0.03 / 0.33 | 0.142 | 0.501 | 2869.0ms | yes; parity 0.150 |
 | stock__winnow-e4b-letters.json | 1.00 / 0.97 / 0.55 | 0.842 | 0.109 | 2171.3ms | yes (Δp 0.017) |
+| stock__winnow-e4b-letters-Q4_K_S.json ⁵ | 1.00 / 1.00 / 0.55 | 0.825 | 0.101 | 951.4ms | yes (Δp 0.041); 3 invalid dists |
+| stock__winnow-e4b-letters-Q4_K_M.json ⁵ | 0.97 / 1.00 / 0.57 | 0.817 | 0.083 | 973.3ms | **no** (Δp 0.998); 4 invalid dists |
+| stock__winnow-e4b-letters-Q4_0.json ⁵ | 0.97 / 1.00 / 0.56 | 0.717 | 0.115 | 896.8ms | yes (Δp 0.025); 16 invalid dists |
+| stock__winnow-e4b-letters-IQ4_XS.json ⁵ | 0.78 / 0.80 / 0.50 | 0.692 | 0.196 | 1202.6ms | **no** (Δp 0.473) |
+| stock__winnow-e4b-letters-IQ3_M.json ⁵ | 0.90 / 0.97 / 0.23 | 0.658 | 0.082 | 1564.4ms | **no** (Δp 0.984); 5 invalid dists |
+| stock__winnow-e4b-letters-Q3_K_S.json ⁵ | 0.81 / 0.92 / 0.40 | 0.408 | 0.124 | 1315.9ms | **no** (Δp 0.997); 41 invalid dists |
 | vtx__VTX-JEV-3-fp32.json | 0.20 / 0.33 / 0.42 | 0.317 | 0.099 | 0.8ms | yes |
 | vtx__VTX-JEV-3-lf2.json | 0.17 / 0.25 / 0.30 | 0.242 | 0.136 | 1.1ms | yes |
 
@@ -290,6 +296,22 @@ confidently wrong) while its fork-tree arm holds 0.833 — the 9B's
 board advantage is a property of the fork's tree readout, not the
 artifact alone. Confound note: build, readout, and threads changed
 together (stock+letters+12t vs fork+tree+14t).
+⁵ Requant ladder (r11b, 2026-10-03, fedora i5-13600K, stock build,
+letters readout, -t 12): all six quants cut from the **Q8_0 release
+artifact** with `--allow-requantize` — a requant, not a from-F16 quant.
+Findings: Q4_K_S is the operating point (0.825, 2.3× faster than the
+Q8_0 row above, −1.7 pp); K-quant requants hold accuracy down to 4-bit
+and then cliff hard (Q3_K_S 0.408 with 41/120 malformed distributions);
+legacy Q4_0 and the i-quants collapse under requant (Q4_0 0.717 with 16
+invalid dists, IQ4_XS 0.692 with per-class breakdown damage, IQ3_M
+0.658). This is a *provenance* rule, not a quant-size law: the 9B's
+Q3_K_S — cut from F16 — holds 0.817 (row above). Determinism: 4 of 6
+requants flip predictions between identical replays, **including the
+default pick Q4_K_M** — a per-quant determinism replay must be a ship
+gate, and from-Q8_0 requants should stay K-quant ≥ 4-bit. The ECE
+column is computed on surviving distributions only, so it tracks
+distribution validity, not calibration quality (IQ3_M's 0.082 sits
+next to a det flip and 5 invalid dists).
 
 What the board established (full findings catalog in REPORT.md):
 
@@ -307,7 +329,12 @@ What the board established (full findings catalog in REPORT.md):
   that the composite prices correctly: Qwen3.5-4B UD-IQ3_XXS ran
   15.7 s vs 4.9 s for UD-Q4_K_XL — 3.2× slower for −0.8 pp. 3-bit
   arms in future sweeps (r11) are confirmatory measurements of this
-  rule, not pick candidates.
+  rule, not pick candidates — **r11b confirmed it** (Winnow-E4B Q3_K_S
+  requant 0.408, footnote 5) and sharpened it with a provenance rule:
+  requants from an already-quantized source must stay K-quant ≥ 4-bit
+  (legacy Q4_0 and i-quants collapse under requant), and every
+  deployment quant passes a determinism replay before ship (4 of 6
+  requants flipped, including Q4_K_M).
 - **Raw winner probabilities are overconfident everywhere** (ECE
   0.048–0.626) — calibration artifacts are fitted per tier (D15) before
   any confidence is exposed.

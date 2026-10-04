@@ -326,6 +326,24 @@ across sizes.
 **2-bit cliff**: at 4B, 0.617; at 2B, 0.383–0.450. Nothing at or below
 2 bits is shippable for decision quality, whatever its size.
 
+**Winnow-E4B requant ladder (2026-10-03, r11b).** Six quants cut from
+the Q8_0 release artifact with `--allow-requantize` (requant, not
+from-F16), letters lane, stock build, -t 12: Q4_K_M 0.817 / 973 ms /
+det-FLIP (Δp 0.998), Q4_K_S **0.825 / 951 ms / det-clean** — the
+operating point at 2.3× the Q8_0 speed for −1.7 pp — Q4_0 0.717 with
+16 invalid distributions, IQ4_XS 0.692 / ECE 0.196 / det-FLIP (0.473),
+IQ3_M 0.658 / det-FLIP (0.984), Q3_K_S **0.408 with 41/120 malformed
+distributions** and det-FLIP (0.997). The ladder is a provenance
+result, not a size law: the K-quants hold to 4-bit then cliff, while
+legacy Q4_0 and the i-quants collapse *at the same bit widths* that
+hold when cut from F16 (the 9B's F16-sourced Q3_K_S: 0.817). Rule:
+from-Q8_0 requants stay K-quant ≥ 4-bit; i-quants get quantized
+from F16 only. Second rule: **determinism replay per quant before
+ship** — 4 of 6 requants flipped predictions between identical
+replays, including the deployment default Q4_K_M; only Q4_K_S and
+Q4_0 were replay-clean. The per-quant ECE numbers ride on surviving
+distributions and therefore track validity, not calibration quality.
+
 **Ternary / sub-1-bit packing (2026-09-28 extension).** Bonsai-4B — a
 546 MiB (~1.1 bpw) ternary-class 4B — scores **0.650**, the best
 accuracy-per-byte on the board by a wide margin (matches the 537 MiB
@@ -1324,3 +1342,19 @@ hash is a changed artifact and invalidates the row (D14).
     the letters lanes deferred until the composite has a scripted
     scorer (currently hand-derived; the Spd/Res normalizations are not
     in code).
+- **2026-10-03 (r11b requant bake-off)** — 6 new Board B arms: the
+  repaired r11 landed all six Winnow-E4B requant
+  points (`--allow-requantize` from the Q8_0 artifact, tower stays
+  F16). Q4_K_S is the operating point (0.825 / ECE 0.101 / p50
+  951.4 ms, det-clean) at 2.3× the Q8_0 speed; Q4_K_M 0.817 but
+  det-FLIP (Δp 0.998); Q4_0 0.717 (16 invalid dists); IQ4_XS 0.692
+  (det-FLIP 0.473); IQ3_M 0.658 (det-FLIP 0.984); Q3_K_S collapses to
+  0.408 with 41/120 malformed distributions (det-FLIP 0.997). Three
+  findings (recorded in REPORT §Quant ladders and
+  BENCHMARKS footnote 5): (1) the requant collapse is *provenance*, not
+  bit-width — K-quants hold to 4-bit, i-quants/legacy Q4_0 do not,
+  against the 9B's F16-sourced Q3_K_S holding 0.817 at the same width;
+  (2) determinism replay must gate every deployment quant — 4 of 6
+  flipped, including the default pick Q4_K_M; (3) per-quant ECE tracks
+  distribution validity here, not calibration quality. r11b queue
+  process confirmed exited; queue chain r10→r11b closed.
