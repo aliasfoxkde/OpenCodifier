@@ -155,13 +155,32 @@ at 0.792), the engine owns latency — no single artifact owns all three.
 
 Plan, in dependency order:
 
-1. **Dataset merge.** Inventory + license-audit the trainable corpora:
-   SargeDev/jev-distill-corpus-v3 (Apache-2.0, JEV-27B's corpus), the
-   120-item suite + `suite_long` (ours, Apache-2.0), the fork arms'
-   prompt/response logs (ours), and any jebadiah training corpus only
-   if its license permits. Merge = dedupe (exact + near-dup on
-   question id), normalize to the IR request/response shape, and pin
-   the merged artifact (SHA-256, source window) per §5.
+1. **Dataset merge — DONE (2026-10-05, pinned).** `runner/merge_distill_corpus.py`
+   produced `merged-v1` on the compute host
+   (`~/oc-model-eval/corpora/merged-v1.jsonl`, SHA-256
+   `03706a9a850d84fe3bc6cf750d78665c2406dcbb16c67f0d79e78a108d612cbf`):
+   149,600 records — 148,160 noul + 2,040 choice + 2,400 score; splits
+   train 149,360 / suite 120 / suite_holdout 120; zero contamination
+   hits against either eval suite, zero parse skips. Sources:
+   - **`LocalLLaMA/typed-decisions`** (Apache-2.0, 1,200 train rows) —
+     the decisive find: rows are already in the IR request shape
+     (`state` JSON + `questions` `{name: {type: choice|noul|score,
+     instructions, criteria}}` + `gold` carrying per-option
+     **probabilities**, confidence, and a scalar `noul` score) — native
+     soft labels, emitted verbatim, zero-loss. Also disclosed (with
+     HelpSteer2) as jebadiah-4b-v2's own training data, which both
+     explains that arm's decision formatting and gives the distill the
+     same training distribution as a board arm.
+   - **`SargeDev/jev-distill-corpus`** (Apache-2.0, 148,160 rows) —
+     relevance noul; normalized to IR noul with fixed criteria; hard
+     label from `label_binary`, teacher values (`label_32b`, `jev`)
+     carried raw — no probability transform invented at merge time.
+   - Suites emitted tagged as eval surfaces, never deduped away.
+   License rulings: `nvidia/HelpSteer2` (CC-BY-4.0, disclosed jebadiah
+   source) **excluded** — Apache-2.0-only rule. Open items for merge-v2:
+   near-dup detection (v1 is exact-only, stated in the manifest), the
+   fork arms' prompt/response logs as a fourth source, and
+   `suite_long` (eval material — would ride in tagged, not as train).
 2. **Quantization floor first (r11, in flight).** Winnow-E4B Q4_K_M /
    Q4_K_S / Q4_0 / IQ4_XS / IQ3_M / Q3_K_S, letters readout, scored by
    the same composite as every arm. The quant curve tells the distill
