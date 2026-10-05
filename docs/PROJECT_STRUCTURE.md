@@ -37,6 +37,7 @@ opencodifier/
 ├── benchmarks/              # per-release criterion baselines (first committed: D9, 2026-10-01)
 │   ├── baselines/criterion/ # engine + http d9-baseline estimates (committed from B1 on)
 │   └── decision-model/      # Phase 13 model-pick benchmark: byte-locked suite, arms, results
+├── site/                    # static marketing page (Cloudflare Pages direct-upload; no build)
 └── docs/                    # PLANNING.md (founding), PLAN.md (live plan), …
 ```
 
