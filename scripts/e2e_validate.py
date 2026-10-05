@@ -69,7 +69,7 @@ def get(base: str, path: str, timeout: float = 10.0):
                 return r.status, json.loads(body)
             except json.JSONDecodeError:
                 return r.status, body
-    except urllib.error.HTTPError:
+    except urllib.error.HTTPError as e:
         return e.code, {}  # metadata endpoints answer errors with a code
 
 
