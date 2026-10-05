@@ -223,7 +223,10 @@ class Session:
     # -- rendering --------------------------------------------------------
 
     def render_text(self, turn: int) -> str:
-        lines = [f"Session S-{self.session_id:03d} turn {turn:03d} incident board"]
+        # Sentences split on '.' only (facts.rs) — the header is
+        # period-terminated so it can never merge with the first fact
+        # sentence, which would silently drop that fact from extraction.
+        lines = [f"Session S-{self.session_id:03d} turn {turn:03d} incident board."]
         lines.extend(depends_sentence(d, o) for d, o in self.dep_added)
         lines.extend(restores_sentence(l, e) for l, e in self.restores_added)
         lines.extend(sentence(e, s) for e, s in sorted(self.health.items()))
@@ -336,9 +339,12 @@ def pad_context(text: str, target_bytes: int, rng: random.Random,
         if not pool:
             raise SystemExit(f"{item_id}: distractor pool {name} emptied by "
                              f"disjointness filter (forbidden: {sorted(forbidden_words)})")
-    filler = list(text)
+    # The original context rides as ONE unbroken block (a substring of the
+    # padded text); distractor sentences are appended, then the block list
+    # is shuffled. Shuffling the context's own characters would destroy it.
+    parts = [text]
     n = 0
-    while sum(len(s) + 1 for s in filler) < target_bytes:
+    while sum(len(s) + 1 for s in parts) < target_bytes:
         n += 1
         template = templates[n % len(templates)]
         a = fillers_a[rng.randrange(len(fillers_a))]
@@ -348,9 +354,9 @@ def pad_context(text: str, target_bytes: int, rng: random.Random,
         if words & forbidden_words:
             raise SystemExit(
                 f"{item_id}: distractor vocabulary collides: {words & forbidden_words}")
-        filler.append(sentence_text)
-    rng.shuffle(filler)
-    return "\n".join(filler) + "\n"
+        parts.append(sentence_text)
+    rng.shuffle(parts)
+    return "\n".join(parts) + "\n"
 
 
 def build_tiers() -> dict:
