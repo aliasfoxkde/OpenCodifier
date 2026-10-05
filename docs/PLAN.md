@@ -818,9 +818,13 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   `mcp serve`; `runtime::handle` assembles lexical-primary +
   model-rung; `ladders/README.md` "The model rung"; default build
   stays dependency-identical and refuses `--llama` with
-  `cli.model_rung_unavailable`). D26 acceptance (in-process blended
-  ≥ 0.80 @ ≤ 1 s on the locked suite through the real engine) pending
-  the live-server run. The embedding rung's margin
+  `cli.model_rung_unavailable`). **D26 acceptance MET (2026-10-05,
+  live run)**: locked suite through `opencodifier serve --ladder
+  ladders/fusion-v1.json --llama …` against the pd-fork `38de7eb`
+  `llama-server` — blended **0.842 ≥ 0.80** at **117.2 ms mean ≤ 1 s**
+  (p50 0.54 ms; 37/120 items escalate; replay bit-exact; board row
+  `engine__rung-qate2b-q4_0-fusion.json`, BENCHMARKS.md footnote ¹⁴).
+  The embedding rung's margin
   gate is measured (`results/embed-margin-study.md`: margin ≥ 0.0183 →
   coverage 0.208 at acc 0.880, monotone to 1.000 at 0.0283), closing
   CALIBRATION finding 3. (8) ✅ resource accounting: `runner/resources.py`

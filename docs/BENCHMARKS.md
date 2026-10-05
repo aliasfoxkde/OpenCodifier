@@ -201,7 +201,7 @@ routing is part of its contract, not error.
 | fast | Qwen3.5-0.8B (q4_0) | 0.650 | 0.074 | 0.35 | 613 ms | 537 MiB |
 | zero-ML floor (engine default) | relational-v1 over lexical | 0.683 | 0.094 | **0.950** | **1.3 ms** | 0 MiB |
 
-### Complete board (110 runs, 2026-09-25 → 2026-10-05)
+### Complete board (111 runs, 2026-09-25 → 2026-10-05)
 
 Columns: accuracy (metadata / lexical / relational), overall accuracy,
 ECE, single-decision p50, run-twice determinism. `(chat screen)` rows
@@ -220,6 +220,7 @@ arm — sampled decode, never comparable to decision rows.
 | engine__lexical__long__focused.json ¹ | 0.88 / 0.23 / 0.95 | 0.683 | 0.094 | 9.2ms | yes |
 | engine__lexical__long__full.json ¹ | 0.88 / 0.23 / 0.95 | 0.683 | 0.094 | 6.7ms | yes |
 | engine__relational-v1.json | 0.88 / 0.23 / 0.95 | 0.683 | 0.094 | 1.3ms | yes |
+| engine__rung-qate2b-q4_0-fusion.json ¹⁴ | 0.88 / 0.78 / 0.88 | **0.842** | 0.098 | 0.54ms | yes (Δp 0.000) |
 | k2chat__K2-Horizon-1B-Q4_K_M.json (chat screen) | 0.88 / 0.80 / 0.50 | 0.725 | — | 1499.1ms | n/a (sampled) |
 | k2chat__K2-Horizon-4B-Q4_K_M.json (chat screen) | 1.00 / 0.93 / 0.17 | 0.700 | — | 4878.9ms | n/a (sampled) |
 | k2chat__K2-Horizon-7B-Q4_K_M.json (chat screen) | 1.00 / 0.95 / 0.45 | 0.800 | — | 9052.1ms | n/a (sampled) |
@@ -608,6 +609,28 @@ as bits drop: 0.063 → 0.022 → 0.140). Speed p50: Q4_K_M 492.8, Q3_K_M
 578.6, IQ3_XXS 599.2 ms. The control QAT-Q4_0 arm stays the operating
 point.
 
+¹⁴ D26 acceptance run (2026-10-05, fedora, live `llama-server`
+build-pd `38de7eb` + the real engine): the locked 120-item suite
+driven through `opencodifier serve --ladder ladders/fusion-v1.json
+--llama ... --llama-model-id 'pd-fork-38de7eb|gemma4-e2b-it-qat-q4_0|tree-v2'`
+— the shipped B5 wire-through, not a post-hoc blend. **Criterion met**:
+blended 0.842 ≥ 0.80 at **117.2 ms mean** ≤ 1 s (p50 0.54 ms, p95
+459 ms), replay bit-exact (Δp 0.000). 37/120 items escalate to the
+model rung (their p50 443 ms ≈ the standalone letters arm's 422.9 ms);
+the rest decide at the lexical rung. Every row ends `accept` — the
+model rung's distributions are confident enough that the D27
+cross-rung escalation converts all `Verify`/`Abstain` outcomes into
+model decisions. Versus the F23 simulation (0.867 @ 753 ms simulated
+mean): the real gates trade ~2.5 pp accuracy for a 6.4× faster mean —
+the fusion margins were fitted on the letters readout, and the tree
+readout's confidence shape differs. Per-class (meta/lex/rel):
+0.875 / 0.775 / 0.875 — the model rung rescues the metadata class
+(0.23 standalone lexical → 0.88) at a small lexical-class cost
+(0.88 → 0.78: lexical-correct-but-low-margin items escalate and the
+model misses some). Composite uses the F23 convention (mean-based
+Spd); on p50 alone the row would score 1.00 because 69 % of items
+never touch the model rung.
+
 What the board established (full findings catalog in REPORT.md):
 
 - **The relational ceiling.** Every model arm ≤ 4B sits at or below 0.50
@@ -765,6 +788,7 @@ instrument that decides whether a rung earns traffic.
 | VTX-JEV-3 lf2 (static embedding) | 0.242 | 0.136 | 0.106 | 0.99 | 1.00 | **59.5** | no |
 | jebadiah-4b-v2 **Q3_K_S** | 0.792 | 0.087 | 0.705 | 0.15 | 0.50 | **48.7** | no |
 | Suite ladder (simulated fusion, F23) | 0.867 | — | —¹ | 0.28 | —¹ | **47.4**¹ | no |
+| OpenCodifier ladder (measured, D26) | 0.842 | 0.098 | 0.744 | 0.48 | 0.41 | **58.1**¹ | no |
 | jebadiah-4b-v2 Q8_0 | 0.800 | 0.051 | 0.749 | 0.14 | 0.34 | **46.5** | no |
 | Qwen3.5-4B UD-Q4_K_XL (tree readout) | 0.800 | 0.074 | 0.726 | 0.08 | 0.43 | **45.9** | no |
 | Winnow-E4B (letters, stock llama.cpp) | 0.842 | 0.109 | 0.733 | 0.17 | 0.23 | **43.8** | **yes** (mmproj BF16) |
