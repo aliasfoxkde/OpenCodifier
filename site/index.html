@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenCodifier — decisions, not paragraphs</title>
+<meta name="description" content="Local-first decision runtime. Typed decisions with calibrated confidence, on hardware you already own. No API keys. No cloud.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip-link" href="#numbers">Skip to content</a>
+
+<div class="bg-mesh" aria-hidden="true"></div>
+
+<nav class="nav">
+  <a class="brand" href="#top">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#g)"/>
+      <path d="M7 12l3.2 3.2L17 8.6" stroke="#04120f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <defs><linearGradient id="g" x1="2" y1="2" x2="22" y2="22"><stop stop-color="#5eead4"/><stop offset="1" stop-color="#34d399"/></linearGradient></defs>
+    </svg>
+    opencodifier
+  </a>
+  <div class="nav-links">
+    <a href="#numbers">Numbers</a>
+    <a href="#ladder">How it works</a>
+    <a href="#calibration">Calibration</a>
+    <a href="#integrity">Integrity</a>
+    <a href="#roadmap">Roadmap</a>
+    <a href="#faq">FAQ</a>
+  </div>
+  <a class="btn btn-small" href="#build">Start building</a>
+</nav>
+
+<header class="hero" id="top">
+  <div class="hero-badges">
+    <span class="pill">Apache-2.0</span>
+    <span class="pill">local-first</span>
+    <span class="pill">no API keys</span>
+    <span class="pill">CPU-only</span>
+  </div>
+  <h1>Decisions,<br><span class="grad">not paragraphs.</span></h1>
+  <p class="hero-sub">
+    OpenCodifier turns unstructured state into typed, machine-actionable decisions —
+    choice, boolean, score — with <strong>calibrated confidence</strong> and honest abstention,
+    on hardware you already own. A large language model is the expensive last resort here,
+    not the default.
+  </p>
+  <div class="hero-ctas">
+    <a class="btn" href="#numbers">See the measured numbers</a>
+    <a class="btn btn-ghost" href="#ladder">How the ladder works</a>
+  </div>
+
+  <div class="stat-strip">
+    <div class="stat">
+      <div class="stat-num"><span class="count" data-target="2.0" data-decimals="1">0</span>&nbsp;ms</div>
+      <div class="stat-label">engine p50 per decision<br>JevBench public split, CPU-only</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num"><span class="count" data-target="76.6" data-decimals="1">0</span>%</div>
+      <div class="stat-label">best published <em>open</em> decision model<br>on the 231-item public split</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">$<span class="count" data-target="0" data-decimals="0">0</span></div>
+      <div class="stat-label">marginal cost per decision<br>local, offline, self-hosted</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num"><span class="count" data-target="231" data-decimals="0">0</span>/231</div>
+      <div class="stat-label">deterministic replay — every item,<br>every time, bit-for-bit</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num"><span class="count" data-target="0.070" data-decimals="3">0</span></div>
+      <div class="stat-label">calibration error (ECE)<br>of our model rung on the split</div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ============ NUMBERS ============ -->
+<section id="numbers" class="section">
+  <div class="kicker">The numbers</div>
+  <h2>Every figure on this page is a measured run<br>with committed artifacts.</h2>
+  <p class="lede">
+    Benchmarked on the JevBench public split — 231 items, run by the benchmark's own harness,
+    scored by their rules, on a fanless-cheap CPU box. No cherry-picking, no training on the test set,
+    and an adversarial audit of our own benchmark generator (see <a href="#integrity">Integrity</a>).
+  </p>
+
+  <div class="chart-card reveal">
+    <div class="chart-tabs" role="tablist" aria-label="Chart metric">
+      <button class="tab active" data-metric="acc" role="tab" aria-selected="true">Accuracy</button>
+      <button class="tab" data-metric="lat" role="tab" aria-selected="false">Latency (p50)</button>
+      <button class="tab" data-metric="size" role="tab" aria-selected="false">What has to load</button>
+    </div>
+
+    <div class="chart" id="chart" aria-live="polite"></div>
+    <div class="chart-note" id="chart-note"></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card reveal">
+      <h3>Where we win today</h3>
+      <ul class="checks">
+        <li><strong>Speed.</strong> The deterministic engine decides in a median of <strong>2.0 ms</strong> per item —
+          roughly <strong>300× faster</strong> than a raw 4B LLM prompted for the same answers (651 ms), and the
+          full escalation stack still medians under 150 ms because most items never reach the model.</li>
+        <li><strong>Cost.</strong> Marginal cost is <strong>$0</strong>. It runs on the machines you have —
+          CPU-only, offline, no accounts, no metered API.</li>
+        <li><strong>Open accuracy leadership.</strong> Our 4B-class model rung scores <strong>76.6%</strong> on the
+          public split — ahead of every purpose-built open model published on it (Kev-4B 73.7, Jev-Style-2B 73.6,
+          decider-2b 71.0, Laya 58.4).</li>
+        <li><strong>Determinism.</strong> 231/231 bit-identical replay — predictions <em>and</em> probability
+          vectors. Same input, same answer, forever, or it's a bug we track.</li>
+        <li><strong>Trustworthy confidence.</strong> ECE 0.070 on the split, with abstention and verify outcomes
+          instead of confident nonsense.</li>
+      </ul>
+    </div>
+    <div class="card card-honest reveal">
+      <h3>Claims we refuse to make</h3>
+      <ul class="crosses">
+        <li><strong>"Beats hosted Jev on accuracy."</strong> It doesn't — yet. Hosted Jev scores 86.6% on the split;
+          our best rung is 76.6%. We beat it on latency, cost, privacy and determinism, and our full-system
+          ladder re-run is queued. When we pass it, you'll see the run artifacts, not a vibe.</li>
+        <li><strong>One accuracy number for every benchmark.</strong> Our gate scores 93.3% on our internal audited
+          suite and 89.2% on its held-out twin — and 76.6% on JevBench. Different suites, different numbers.
+          One number per benchmark, always labeled, always with its source.</li>
+        <li><strong>"Confident" because softmax said so.</strong> Raw probability ≠ calibrated confidence.
+          Ours is fitted per rung, versioned into every cache key, and audited.</li>
+      </ul>
+      <p class="fineprint">Sensitivity warning from the field: the same model can score 0.77 on one benchmark and
+        ~0.0-scaled intel on another. We publish the divergence table in
+        <code>docs/RESEARCH.md §14</code> so nobody — including us — can hide behind a cherry-picked suite.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ LADDER ============ -->
+<section id="ladder" class="section">
+  <div class="kicker">How it works</div>
+  <h2>The escalation ladder: cheap mechanisms decide,<br>the model pays only for the hard stuff.</h2>
+  <p class="lede">
+    A decision cascades down the rungs until one of them is <em>confident enough to accept</em> —
+    and stops there. Click a rung. Then run the three real scenarios below; the latencies shown are
+    from the actual measurement runs.
+  </p>
+
+  <div class="ladder-wrap reveal">
+    <div class="ladder" id="ladder"></div>
+    <div class="ladder-detail card" id="ladder-detail" aria-live="polite"></div>
+  </div>
+
+  <div class="scenario-row">
+    <button class="scenario" data-scenario="proof">
+      <span class="sc-tag">scenario 1</span>
+      <strong>"replicas must be 2; prod-03 runs 2"</strong>
+      <span class="sc-sub">a question with one provable answer</span>
+    </button>
+    <button class="scenario" data-scenario="lexical">
+      <span class="sc-tag">scenario 2</span>
+      <strong>"route this invoice-dispute ticket"</strong>
+      <span class="sc-sub">a clear lexical match over candidates</span>
+    </button>
+    <button class="scenario" data-scenario="hard">
+      <span class="sc-tag">scenario 3</span>
+      <strong>"which degraded service do we restart first?"</strong>
+      <span class="sc-sub">genuinely hard — worth model money</span>
+    </button>
+    <div class="scenario-output card" id="scenario-output" aria-live="polite">
+      Pick a scenario to watch a request ride the ladder.
+    </div>
+  </div>
+</section>
+
+<!-- ============ CALIBRATION ============ -->
+<section id="calibration" class="section">
+  <div class="kicker">Calibration</div>
+  <h2>Confidence you can automate against.</h2>
+  <p class="lede">
+    Raw softmax output is not calibrated confidence — so OpenCodifier never exposes it raw.
+    Confidence is multi-dimensional (top probability, margin, entropy, out-of-distribution evidence,
+    verifier agreement), fitted per rung, and versioned into every cache key. When confidence is low,
+    the runtime <strong>abstains or escalates</strong> — and abstention is a successful outcome, never an error.
+  </p>
+  <div class="grid-3">
+    <div class="card reveal">
+      <div class="big-stat">0.070</div>
+      <h3>ECE, model rung</h3>
+      <p>Expected calibration error on the 231-item public split — fitted with per-cardinality temperature
+        buckets, because confidence on a 4-way board is a different animal than on a 20-way one.</p>
+    </div>
+    <div class="card reveal">
+      <div class="big-stat">0.103</div>
+      <h3>ECE, full ladder</h3>
+      <p>The fusion gate on the held-out twin of our internal suite — 120 items the gate never saw,
+        from a generator it never saw, hardened by an adversarial audit first.</p>
+    </div>
+    <div class="card reveal">
+      <div class="big-stat">3</div>
+      <h3>outcomes, not one</h3>
+      <p>Accept (with calibrated confidence), verify (send it to the gated verifier), or abstain.
+        Never silently discard a candidate on weak evidence, never fake a confident answer.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INTEGRITY ============ -->
+<section id="integrity" class="section">
+  <div class="kicker">Integrity</div>
+  <h2>We audit our own benchmarks. Adversarially.</h2>
+  <p class="lede">
+    Before publishing a headline number, we released a tool whose only job is to <em>disprove us</em>:
+    it re-derives every answer from the raw question text, hunts for keyword leaks, checks that the
+    held-out suite is truly disjoint, re-runs the generator and demands byte-identical output, and
+    proves no external dataset ever touches the pipeline.
+  </p>
+  <div class="grid-2">
+    <div class="card reveal">
+      <ul class="checks">
+        <li><strong>Zero hardcoded question/answer pairs.</strong> Every answer is re-derived from the question
+          text by an independent reader.</li>
+        <li><strong>Zero dataset inflation.</strong> Holdout and main suites share no items and no contexts;
+          distinct seeds, versioned and byte-locked.</li>
+        <li><strong>Payload honesty.</strong> The runner's wire payloads contain the question and the candidates —
+          never the answer. Verified by reading the payload construction, not by trusting the README.</li>
+        <li><strong>Training contamination checks.</strong> The failure mode that inflates fine-tuned competitors'
+          headline numbers (training on the benchmark's own split) is exactly what the audit hunts for —
+          in our own suites, before we quote them.</li>
+      </ul>
+    </div>
+    <div class="card reveal">
+      <h3>Why this matters commercially</h3>
+      <p>The alternatives market is young and loud: dozens of projects landed within two weeks, several won
+        on the only benchmark they chose, and at least one headline number comes from a model fine-tuned on
+        the benchmark's own training split.</p>
+      <p>In that market, <strong>auditable numbers are the moat</strong>. Every run on this page replays
+        bit-for-bit from committed artifacts, and every claim links to its measurement. Steal our benchmarks
+        and try to beat us — that's the point of publishing them.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BUILD ============ -->
+<section id="build" class="section">
+  <div class="kicker">Build with it</div>
+  <h2>A runtime, not a chatbot.</h2>
+  <p class="lede">
+    A Rust workspace with a canonical typed decision IR. Machine-readable decisions in,
+    machine-readable decisions out — over HTTP, MCP, CLI, or WASM.
+  </p>
+  <div class="grid-2">
+    <div class="card reveal">
+      <h3>Interfaces</h3>
+      <ul class="checks">
+        <li><strong>HTTP /v1 API</strong> — localhost by default; exposure to the network is an explicit flag, never a default.</li>
+        <li><strong>MCP server</strong> — plug decisions into agent toolchains as a native tool.</li>
+        <li><strong>CLI</strong> — <code>opencodifier decide</code> for scripts and pipelines.</li>
+        <li><strong>WASM</strong> — the core compiles for the browser; the deterministic stack runs client-side.</li>
+        <li><strong>Useful with zero models.</strong> The base binary decides with rules, filters and lexical
+          scoring — no ML artifacts required. Add the model rung only if your workload earns it.</li>
+      </ul>
+    </div>
+    <div class="card reveal">
+      <h3>Design rules we don't break</h3>
+      <ul class="checks">
+        <li>Deterministic-first: code gates run before any AI output is accepted.</li>
+        <li>The cheapest reliable mechanism wins — never a bigger model when a cheaper rung is confident.</li>
+        <li>Verification is confidence-gated: never two classifiers on every request.</li>
+        <li>Sync core, no async runtime in the decision engine; heavyweight deps confined to one crate each.</li>
+        <li>All input is hostile: input text can never modify policy, thresholds, or graph structure.</li>
+        <li>Explainability = a deterministic execution trace. Never chain-of-thought.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ROADMAP ============ -->
+<section id="roadmap" class="section">
+  <div class="kicker">Roadmap</div>
+  <h2>Where this goes next.</h2>
+  <div class="timeline">
+    <div class="tl-item reveal"><div class="tl-dot done"></div>
+      <div><strong>Adversarial benchmark audit</strong> — shipped. Independent re-derivation of every suite
+        answer; hardened holdout re-measured.</div></div>
+    <div class="tl-item reveal"><div class="tl-dot done"></div>
+      <div><strong>Held-out validation</strong> — shipped. Full-system ladder: 0.892 out-of-sample with zero
+        gate drift, +9.2 pp over the previous gate on identical hardware.</div></div>
+    <div class="tl-item reveal"><div class="tl-dot"></div>
+      <div><strong>Full-system JevBench re-run</strong> — the fusion gate on the official public split,
+        run by the benchmark's own harness.</div></div>
+    <div class="tl-item reveal"><div class="tl-dot"></div>
+      <div><strong>Official third-party board submission</strong> — 1,500-decision self-hosted run,
+        artifacts published, independently checkable.</div></div>
+    <div class="tl-item reveal"><div class="tl-dot"></div>
+      <div><strong>Smaller, faster model rung</strong> — distilling our findings into a compact model
+        targeting the same accuracy at a fraction of the compute.</div></div>
+    <div class="tl-item reveal"><div class="tl-dot"></div>
+      <div><strong>Sub-100 ms ONNX encoder rungs</strong> — a middle rung between lexical and the 4B
+        model, CPU-only.</div></div>
+    <div class="tl-item reveal"><div class="tl-dot"></div>
+      <div><strong>Release engineering</strong> — binaries for Linux, macOS, Windows, ARM and WASM,
+        with release attestation like everything else we ship.</div></div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section id="faq" class="section">
+  <div class="kicker">FAQ</div>
+  <h2>Questions people actually ask.</h2>
+  <div class="faq-list">
+    <details class="reveal">
+      <summary>Is this a chatbot or an LLM wrapper?</summary>
+      <p>No. It's a decision runtime. It produces typed, machine-readable decisions (choice / boolean / score)
+        with calibrated confidence. LLMs appear only as an optional, expensive, last-resort rung — the
+        architecture works with zero models installed.</p>
+    </details>
+    <details class="reveal">
+      <summary>Does it beat Jev?</summary>
+      <p>On latency, cost, privacy, and determinism: yes, by wide margins — 2.0 ms vs hundreds of ms, $0 marginal
+        vs metered API, fully local vs hosted. On raw accuracy against hosted Jev: not yet — 76.6% vs 86.6% on the
+        public split. We publish both numbers because the divergence is the honest state of the field, and the
+        full-system re-run is on the roadmap.</p>
+    </details>
+    <details class="reveal">
+      <summary>What hardware does it need?</summary>
+      <p>The deterministic stack runs on anything — a laptop CPU, a router, a browser tab (WASM). The 4B model
+        rung runs CPU-only on a desktop-class machine; most requests never reach it because cheaper rungs
+        decide first.</p>
+    </details>
+    <details class="reveal">
+      <summary>Why not just call a big LLM?</summary>
+      <p>Because most software decisions are small and repetitive: route this ticket, flag this message, pick
+        this severity. Paying a frontier model to generate a sentence you immediately parse back into an
+        if-statement is the wrong shape — slow, expensive, non-deterministic, and uncalibrated. (The category's
+        popularity proves the point; our numbers prove the margins.)</p>
+    </details>
+    <details class="reveal">
+      <summary>Can I trust the accuracy claims?</summary>
+      <p>Every number links to a committed run with deterministic replay (bit-identical predictions and
+        probability vectors), an adversarial audit of the benchmark generator, and a held-out suite the
+        system was never fitted on. The audit tool ships in the repo — run it against us.</p>
+    </details>
+    <details class="reveal">
+      <summary>What's the license? Can I self-host?</summary>
+      <p>Apache-2.0. Self-hosting is the default posture — local, offline, no telemetry, no accounts, no API
+        keys. That's not a paid tier restriction; it's the product.</p>
+    </details>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="foot-brand">opencodifier</div>
+  <p>
+    Every figure on this page traces to a committed, deterministic benchmark run —
+    sources: <code>docs/BENCHMARKS.md</code>,
+    <code>benchmarks/decision-model/results/REPORT.md</code>,
+    <code>docs/RESEARCH.md §14</code>.
+    Latencies are CPU-only on consumer desktop hardware unless noted.
+    External model rows are the numbers published by their authors
+    on the JevBench public split.
+  </p>
+  <p class="foot-links">Apache-2.0 · local-first · no telemetry · built as a Rust workspace</p>
+</footer>
+
+<script src="site.js"></script>
+</body>
+</html>
