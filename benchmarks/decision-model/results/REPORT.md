@@ -858,6 +858,28 @@ trusted to route.
   not a D15 fit. It is the comparability bridge's suite-side anchor:
   the same interface that scores 0.6494 on JevBench scores 0.8083 at
   home.
+- **F27 — D26 closes: the shipped ladder + model rung blend lands
+  0.842 @ 117 ms mean on the locked suite, measured through the real
+  engine.** The B5 wire-through (`serve --ladder ladders/fusion-v1.json
+  --llama --llama-model-id 'pd-fork-38de7eb|gemma4-e2b-it-qat-q4_0|tree-v2'`)
+  took the full 120-item suite twice against a live build-pd
+  `llama-server`: blended **0.842** (criterion ≥ 0.80) at **117.2 ms
+  mean** (criterion ≤ 1 s; p50 0.54 ms, p95 459 ms), replay bit-exact
+  (Δp 0.000), every row `accept` — the model rung's tree-readout
+  distributions are confident enough that D27 cross-rung escalation
+  converts all `Verify`/`Abstain` outcomes into model decisions.
+  37/120 items escalate (their p50 443 ms ≈ the standalone letters
+  arm's 422.9 ms — same weights, same host); 69 % of traffic never
+  touches the model rung. The blend's shape: the model rung rescues
+  the metadata class (0.23 lexical-standalone → 0.88 blended) at a
+  small lexical-class cost (0.88 → 0.78 — lexical-correct-but-low-
+  margin items escalate and the model misses some). Versus the F23
+  simulation (0.867 @ 753 ms): the real gates trade ~2.5 pp accuracy
+  for a 6.4× faster mean — fusion-v1's margins were fitted on the
+  letters readout's confidence shape, and the tree readout's shape
+  differs; a tree-shaped margin refit is the obvious next lever
+  (D15 artifact, per-rung calibration seam). Board row
+  `engine__rung-qate2b-q4_0-fusion.json`; BENCHMARKS.md footnote ¹⁴.
 
 ## Threats to validity
 

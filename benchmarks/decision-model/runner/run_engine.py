@@ -140,13 +140,37 @@ def main() -> int:
         "most this many estimated tokens (the A/B arm for PLANNING §45 "
         "focused extraction)",
     )
+    ap.add_argument("--ladder", type=Path, default=None, help="pass --ladder to `serve`")
+    ap.add_argument(
+        "--llama", default=None, help="pass --llama to `serve` (model rung URL)"
+    )
+    ap.add_argument(
+        "--llama-model-id",
+        default=None,
+        help="pass --llama-model-id to `serve` (required with --llama)",
+    )
+    ap.add_argument(
+        "--llama-timeout-ms",
+        type=int,
+        default=None,
+        help="pass --llama-timeout-ms to `serve`",
+    )
     args = ap.parse_args()
+
+    if args.llama is not None and args.llama_model_id is None:
+        ap.error("--llama requires --llama-model-id")
 
     suite = json.loads(args.suite.read_text())
     args.out.parent.mkdir(parents=True, exist_ok=True)
     cmd = [str(args.binary), "serve", "--bind", f"127.0.0.1:{args.port}"]
     if args.focus_budget is not None:
         cmd += ["--focus-budget", str(args.focus_budget)]
+    if args.ladder is not None:
+        cmd += ["--ladder", str(args.ladder)]
+    if args.llama is not None:
+        cmd += ["--llama", args.llama, "--llama-model-id", args.llama_model_id]
+        if args.llama_timeout_ms is not None:
+            cmd += ["--llama-timeout-ms", str(args.llama_timeout_ms)]
     with open(args.out.with_suffix(".server.log"), "wb") as log:
         proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
     monitor = ResourceMonitor()
