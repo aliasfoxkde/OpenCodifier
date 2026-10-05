@@ -6,6 +6,10 @@ must reproduce those bytes exactly; verify with:
 
     python3 suite/generate_suite.py /tmp/suite.json && cmp suite/suite.json /tmp/suite.json
 
+`--holdout` writes the out-of-sample companion (suite_holdout.json,
+byte-locked the same way): a different seed for the generative classes
+and the disjoint half of the class-B authoring table.
+
 Every item is a Choice question in the OpenCodifier IR shape: a context, a
 question, 4-6 candidates with id + description, and exactly one correct
 candidate id. Ground truth holds by construction, not by annotation.
@@ -34,6 +38,18 @@ from pathlib import Path
 
 SEED = 20260926
 SUITE_VERSION = 1
+
+# The held-out companion suite (suite_holdout.json): same generator, same
+# class shapes and balance — different draws. The gate refit (F28) was
+# fitted on suite v1, so v1 numbers are in-sample and this suite carries
+# the out-of-sample claim. Class B is hand-authored (a seed cannot make
+# new utterances), so the table carries a second, disjoint pool of 40
+# phrasings below; --holdout selects it and re-seeds the generative
+# classes. Default invocation must reproduce suite.json byte-for-byte.
+HOLDOUT_SEED = 20261005
+HOLDOUT_SUITE_VERSION = 2
+B_POOL_MAIN = slice(0, 40)
+B_POOL_HOLDOUT = slice(40, 80)
 
 INSTRUCTIONS = (
     "You are choosing from a fixed list of options. Read the context and "
@@ -183,6 +199,47 @@ _B_SCENARIOS = [
     ("security", "We want two-step verification forced for all admins."),
     ("security", "An API key was pasted into a public ticket by mistake."),
     ("security", "Sessions stay open forever after a laptop is stolen."),
+    # --- held-out pool (rows 41-80; disjoint phrasings, same domains) ---
+    ("billing", "The trial converted and charged us without any notice."),
+    ("billing", "Our coupon code applied the wrong discount at checkout."),
+    ("billing", "We were charged in the wrong currency for this cycle."),
+    ("billing", "The bank declined the renewal but the account was suspended anyway."),
+    ("technical", "Push notifications arrive hours late on Android."),
+    ("technical", "The CSV import silently drops rows with commas in names."),
+    ("technical", "Video calls drop within five minutes on the desktop client."),
+    ("technical", "Saved views reset themselves after every logout."),
+    ("shipping", "Two boxes arrived but the label said three were sent."),
+    ("shipping", "The delivery driver never attempted pickup and marked it failed."),
+    ("shipping", "Customs is holding our parcel and we need paperwork."),
+    ("shipping", "The return label printed blank and the drop-off was refused."),
+    ("account", "Two coworkers share one login and we need separate profiles."),
+    ("account", "I lost access to the admin console after the domain change."),
+    ("account", "Our service account was locked out overnight."),
+    ("account", "Permissions changed by themselves and someone can now delete projects."),
+    ("feature", "Please let us tag conversations with custom labels."),
+    ("feature", "Can the calendar sync both ways with our Exchange server?"),
+    ("feature", "We would love template presets for new boards."),
+    ("feature", "Add a queue view that shows only my assigned items."),
+    ("compliance", "Regulators require us to prove where backups are stored."),
+    ("compliance", "We need consent records attached to every marketing send."),
+    ("compliance", "Our DPO asked for your sub-processor list."),
+    ("compliance", "Policy says PII may not leave the EU even for support."),
+    ("performance", "Page loads degrade past fifty concurrent editors."),
+    ("performance", "The mobile client drains battery within an hour of use."),
+    ("performance", "Import throughput fell by half after the last release."),
+    ("performance", "Autocomplete requests time out during peak hours."),
+    ("integration", "Our CRM records stop syncing after a couple of hours."),
+    ("integration", "The Slack notifications fire twice for every event."),
+    ("integration", "OAuth tokens expire silently and break our automation."),
+    ("integration", "Your SAML metadata endpoint returns an expired certificate."),
+    ("onboarding", "The sample project confuses new users more than it helps."),
+    ("onboarding", "Admins have no walkthrough for configuring the first workspace."),
+    ("onboarding", "Invited users land on a blank dashboard with no guidance."),
+    ("onboarding", "Trial teams never discover the project templates."),
+    ("security", "We detected sign-in attempts using tokens stolen from our own staff."),
+    ("security", "Enable alerts whenever a service key is rotated."),
+    ("security", "A former contractor may still have an active session."),
+    ("security", "Brute-force attempts on our login page are not being throttled."),
 ]
 
 # domain -> label -> description (no lexical overlap with utterances)
@@ -252,12 +309,13 @@ _B_DESCRIPTIONS = {
 _B_QUESTION = "Which team should handle this message?"
 
 
-def _gen_class_b(count: int) -> list[dict]:
+def _gen_class_b(pool: slice) -> list[dict]:
     items = []
+    scenarios = _B_SCENARIOS[pool]
     domains = sorted({s[0] for s in _B_SCENARIOS})
     d_idx = {d: i for i, d in enumerate(domains)}
-    assert len(_B_SCENARIOS) >= count, "authoring table too small for suite"
-    for n, (domain, utterance) in enumerate(_B_SCENARIOS[:count]):
+    assert len(scenarios) == 40, "class B pool must carry 40 rows"
+    for n, (domain, utterance) in enumerate(scenarios):
         labels = list(_B_DESCRIPTIONS[domain])
         # Fixed structural rotation of the option order per item.
         rot = (n * 2 + len(utterance)) % len(labels)
@@ -390,11 +448,15 @@ def _gen_class_c(rng: random.Random, count: int) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def build_suite() -> dict:
-    rng = random.Random(SEED)
+def build_suite(
+    seed: int = SEED,
+    b_pool: slice = B_POOL_MAIN,
+    suite_version: int = SUITE_VERSION,
+) -> dict:
+    rng = random.Random(seed)
     items: list[dict] = []
     items += _gen_class_a(rng, 40)[:40]
-    items += _gen_class_b(40)
+    items += _gen_class_b(b_pool)
     items += _gen_class_c(rng, 40)[:40]
     # Validate: unique ids, answers present in candidates, balanced classes.
     ids = [i["id"] for i in items]
@@ -408,16 +470,28 @@ def build_suite() -> dict:
         classes[it["class"]] = classes.get(it["class"], 0) + 1
     assert all(v == 40 for v in classes.values()), f"unbalanced classes: {classes}"
     return {
-        "suite_version": SUITE_VERSION,
-        "seed": SEED,
+        "suite_version": suite_version,
+        "seed": seed,
         "instructions": INSTRUCTIONS,
         "items": items,
     }
 
 
 def main() -> int:
-    out = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).parent / "suite.json"
-    suite = build_suite()
+    argv = sys.argv[1:]
+    holdout = "--holdout" in argv
+    argv = [a for a in argv if a != "--holdout"]
+    if holdout:
+        out = (
+            Path(argv[0]) if argv
+            else Path(__file__).parent / "suite_holdout.json"
+        )
+        suite = build_suite(
+            seed=HOLDOUT_SEED, b_pool=B_POOL_HOLDOUT, suite_version=HOLDOUT_SUITE_VERSION
+        )
+    else:
+        out = Path(argv[0]) if argv else Path(__file__).parent / "suite.json"
+        suite = build_suite()
     out.write_text(json.dumps(suite, sort_keys=True, indent=1) + "\n", encoding="utf-8")
     classes = {}
     for it in suite["items"]:
