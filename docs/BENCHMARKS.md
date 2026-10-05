@@ -201,7 +201,7 @@ routing is part of its contract, not error.
 | fast | Qwen3.5-0.8B (q4_0) | 0.650 | 0.074 | 0.35 | 613 ms | 537 MiB |
 | zero-ML floor (engine default) | relational-v1 over lexical | 0.683 | 0.094 | **0.950** | **1.3 ms** | 0 MiB |
 
-### Complete board (107 runs, 2026-09-25 → 2026-10-05)
+### Complete board (110 runs, 2026-09-25 → 2026-10-05)
 
 Columns: accuracy (metadata / lexical / relational), overall accuracy,
 ECE, single-decision p50, run-twice determinism. `(chat screen)` rows
@@ -293,6 +293,9 @@ arm — sampled decode, never comparable to decision rows.
 | stock__e2b-noqat-udq8kxl-letters.json ¹¹ | 0.97 / 0.24 / 0.45 | 0.492 | 0.362 | 1045.6ms | yes (Δp 0.094); 10 invalid dists |
 | stock__e2bqat-official-q4_0-letters.json ⁸ | 0.97 / 1.00 / 0.45 | 0.808 | 0.102 | 422.9ms | yes (Δp 0.020) |
 | stock__e2bqat-r18b-crossbuild-letters.json ¹¹ | 1.00 / 0.98 / 0.45 | 0.808 | 0.102 | 460.2ms | yes (Δp 0.020) |
+| stock__e2bqat-suiteimx-iq3xxs-letters.json ¹³ | 1.00 / 0.95 / 0.425 | 0.792 | 0.058 | 599.2ms | yes (Δp 0.140) |
+| stock__e2bqat-suiteimx-q3km-letters.json ¹³ | 1.00 / 0.875 / 0.425 | 0.767 | 0.107 | 578.6ms | yes (Δp 0.022) |
+| stock__e2bqat-suiteimx-q4km-letters.json ¹³ | 1.00 / 0.975 / 0.45 | 0.808 | 0.112 | 492.8ms | yes (Δp 0.063) |
 | stock__e2bqat-udq2kxl-letters.json ⁸ | 0.57 / 0.53 / 0.35 | 0.483 | 0.170 | 426.5ms | **no** (Δp 0.502) |
 | stock__e4bqat-official-q4_0-letters.json ⁹ | 0.90 / 1.00 / 0.50 | 0.558 | 0.169 | 883.8ms | yes (Δp 0.026); 29 invalid dists |
 | stock__gemma-4-e2b-qat-letters.json ⁷ | 0.93 / 1.00 / 0.38 | 0.767 | 0.137 | 454.1ms | yes (Δp 0.020) |
@@ -583,6 +586,27 @@ carries determinism with it, the third independent replication that
 replay stability rides with training quality. Speed: pp400/tg t/s —
 230M 2183/149, 350M 1514–1777/107–121, 8B-A1B 177–187/24–25,
 Muse-1B 389/27, distills 169–210/15–18.
+
+¹³ r21a suite-imatrix requant ladder (2026-10-05, fedora, stock build
+`1537a0a`, letters readout, -t 12). The official QAT-Q4_0 checkpoint
+requantized with an imatrix fitted on the decision suite's own rendered
+prompts (120 items × 3 permutations, `Answer: X` closers) — the exact
+distribution the readout runs on, the matched-corpus control §12.3
+asked for (`--allow-requantize`, the supported from-Q4_0 direction).
+**Null at the operating point**: suite-imx Q4_K_M ties the control
+digit-for-digit on accuracy and every per-class accuracy
+(0.808 / 0.975 / 1.00 / 0.45) while costing +17 % p50 (492.8 vs
+422.9 ms) and +0.010 ECE — the QAT checkpoint's decision capability is
+already pinned by the training-time recipe; no inference-side
+importance reweighting adds to it, reaffirming §12's headline from the
+matched-corpus side. Below the operating point the ladder degrades
+normally, with one inversion: Q3_K_M (0.767) lands *under* IQ3_XXS
+(0.792) — the coarser grid survives requant better than the middle K
+rung, one measurement, unreplicated. All three arms replay clean
+(predictions and valid rows match; Δp is numeric drift only, growing
+as bits drop: 0.063 → 0.022 → 0.140). Speed p50: Q4_K_M 492.8, Q3_K_M
+578.6, IQ3_XXS 599.2 ms. The control QAT-Q4_0 arm stays the operating
+point.
 
 What the board established (full findings catalog in REPORT.md):
 

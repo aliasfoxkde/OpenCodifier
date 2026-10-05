@@ -1201,6 +1201,24 @@ matters for distill artifacts, the calibration corpus must be drawn from
 the decision suite's distribution — a testable follow-up (requant the
 QAT checkpoint with a suite-derived imatrix).
 
+**Resolved (r21a, 2026-10-05): the matched-corpus control is also a
+null.** Requants of the official QAT-Q4_0 checkpoint with an imatrix
+fitted on the suite's own rendered prompts (120 items × 3 perms,
+answer closers included): Q4_K_M ties the control digit-for-digit on
+accuracy *and* every per-class accuracy (0.808 / lex 0.975 / meta 1.00
+/ rel 0.45) at +17 % p50 and +0.010 ECE; Q3_K_M 0.767 and IQ3_XXS
+0.792 land below the control, non-monotonically (the 2.5-bit grid beat
+the 5.5-bit one — one measurement, unreplicated). Combined with the
+r19 UD null this closes the imatrix question for the decision readout
+at both corpus extremes, generic and exactly-matched: **importance
+reweighting is not a lever on a QAT checkpoint** — the training-time
+recipe pins the readout, and inference-side representation changes
+neither add to nor rescue it. For VIVERE data-collection the
+conclusion stands but sharpens: spend on the training recipe and the
+corpus, not on PTQ side-recipes. The one imatrix case still open sits
+on *distill* (non-QAT) weights, where §12.6.1's 0.683 Gemini distill
+at plain Q4_K_M is the natural test subject.
+
 ### §12.4 Speed side (unchanged by the accuracy collapse)
 
 Prefill t/s is flat 190–230 from 2.7 to 6 bpw (compute-bound at 5B
@@ -1332,11 +1350,13 @@ Candidate paths above 0.808, ranked by measured evidence:
    would plausibly hold ~0.84 at ~400-500 ms — the most direct route
    to a faster-better point. The r16/r19 lesson applies: QAT must be
    in the training loop, not post-hoc.
-2. **Suite-derived imatrix (r21a, running).** §12.3's testable
-   follow-up: if a decision-distribution imatrix holds 0.808 through
-   requant and extends below 4 bits, the same trick transfers to
-   Winnow and future distills. Generic-corpus imatrix already
-   falsified (r19 UD null); this is the matched-corpus control.
+2. **Suite-derived imatrix — resolved null (r21a, 2026-10-05, §12.3).**
+   The matched-corpus control did not hold 0.808 through requant: the
+   Q4_K_M requant tied the control exactly, lower rungs degraded
+   non-monotonically, and every arm cost more latency than the Q4_0
+   original. The trick does not transfer to Winnow or future distills
+   *as a PTQ step on a QAT checkpoint*; the open form is an imatrix
+   requant of a *distill* (non-QAT) artifact, if one is ever needed.
 3. **Own-teacher distill of the E2B base.** The third-party Gemini
    distill reached 0.683 with someone else's recipe and no access to
    our suite (§12.6.1). Distilling from a teacher *on suite-shaped
