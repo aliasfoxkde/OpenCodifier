@@ -1385,3 +1385,153 @@ the model is unsure. Raw-capability work lands as new board rows; the
 ladder converts whichever arm is best into *outcomes* beyond that
 arm's standalone score.
 
+## §13 — Deep-research round: readout-floor mechanics, the Jebadiah v2 replication, cascade attack surface (2026-10-05)
+
+Research round run while CI held the floor; four fronts (readout
+floor, QAT recipe, new arms, cascade literature). Everything below is
+documented-before-use: no arm has been re-run on these findings yet.
+
+### §13.1 The readout floor is an upstream logprobs-reporting behavior — and the bypass is known
+
+An upstream llama.cpp issue (filed 2026-02-17: "`-l 2742-100` does not
+have any effect on reported logprobs") confirms, independently of our
+r20 protocol, that **reported logprobs do not reflect logit_bias** —
+a deviation from OpenAI API semantics. Mechanism, corroborated across
+sources: llama.cpp captures the reported probs vector from the raw
+logits; grammar constraints (GBNF, whether via `--grammar` or
+`response_format: json_schema` on the chat endpoint) act as masks in
+the sampler chain *after* raw-logit computation (rejection-sampling
+order), so they change which token is *sampled* but not which
+logprobs are *reported*. Known-adjacent bugs: garbled logprobs
+(#11561, 2025-01), grammar/prompt-interaction reports through 2026.
+
+Consequences for the letters protocol:
+
+- The floor's mechanical form is now explained: under `logit_bias`
+  the reported top-20 is the *raw* top-20; when letter mass sits below
+  the raw horizon the renormalized letter distribution is built from
+  whatever letters happen to appear — a distorted readout, exactly the
+  §12.6 observation.
+- Grammar/json_schema constraints would buy **format compliance**
+  (every sampled token is a letter) but *not* calibrated
+  distributions. Useful, not sufficient.
+- The robust bypass is the one Jebadiah ships as its standard readout
+  (§13.2): **raw `/completion` with a self-rendered prompt** — the
+  server's chat template is never invoked, the thinking structure is
+  never entered (pre-fill/close it in the rendered prompt), and label
+  logprobs are read at the answer position. This is the untested fix
+  for the template-locked LFM2.5 arm (§12.6's `enable_thinking` was
+  silently unsupported by LiquidAI's template; `--reasoning-budget 0`
+  is parsed by our fork but untested on this model). Feeds #93: the
+  runner needs a `--raw-prompt`/`--template` lane, not just a grammar
+  flag.
+- Cheap settling probe (r22 candidate, one item, minutes): three
+  request shapes on one below-floor arm — bias+top20 (current
+  protocol), no-bias top20 (raw truth), json_schema+logprobs — and
+  inspect which tokens each reports. This pins whether reported
+  probs are sampler-independent on our fork build.
+
+### §13.2 Jebadiah v2: an independent replication of this campaign, with recipe conclusions
+
+The `frontier-infra` org (non-profit, Texas) ships **Jebadiah** —
+"open System One decision model": typed questions (choice / noul
+[yes-no] / score), a probability per option from **one forward pass,
+nothing generated**. Same problem shape as OpenCodifier's IR and the
+D26 model rung; their v2 cards (2026-09-26..29) are the closest
+public replication of this program found to date.
+
+Recipe conclusions that transfer to #88:
+
+- **v2 switched base checkpoints**: v0/v1 fine-tuned the Qwen3.5
+  `-Base` checkpoints; v2 is merged bf16 on the **chat** checkpoints
+  (thinking off), same data otherwise. Their words: "Training on the
+  chat checkpoint was worth more than every data change we tried:
+  synthetic pools, a stronger teacher's labels, human-labelled
+  yes/no." Checkpoint choice dominated data composition — #88 should
+  distill from the chat checkpoint, not base.
+- **Public Apache-2.0 training pool**: `frontier-infra/jebadiah-synth-v2`
+  — 14,714 synthetic typed-decision questions across 24 families,
+  teacher-labelled. A ready-made seed for #88's dataset merge; the 24
+  families are also a checklist against our suite's family coverage.
+- **Independent quant-stability table for a decision model** (260
+  held-out items vs merged bf16): Q8_0 changes 4/260 answers (max Δp
+  0.053), Q5_K_M 21/260 (0.119), Q4_K_M 24/260 (**0.355**); bf16 vs
+  the training run itself drifts 1/260. **Score questions are ~2×
+  more fragile than choice** (13–14 of the flips). Cross-check
+  against r21a: our Q4_K_M requant of the *QAT* checkpoint moved
+  accuracy zero and Δp ≤ 0.063 — roughly 6–10× more stable than
+  their full-FT (non-QAT) weights at the same nominal rate. Both
+  facts support §12.3: importance reweighting is a lever on non-QAT
+  weights; QAT checkpoints carry their own quant robustness. And the
+  score/noul class is the fragile one on both sides — our suite's
+  rel/meta classes deserve the same suspicion.
+- **Readout**: option-label logprobs at the answer position from
+  `/completion`, renormalized over labels, then per-route fitted
+  temperatures (choice 1.1167, noul 1.3319, score 0.8312,
+  `temperatures.json`). Same math as our letters protocol; they keep
+  temperature at the serving layer, ours lives in the engine's
+  Calibration seam — same idea, cleaner layering on our side.
+- **Calibration does not transfer** (their own warning, mirrors our
+  ECE gate): on held-out HelpSteer2-like traffic the fitted score
+  temperature wants 1.26, not 0.83 — "refit on your own labels."
+  Validates calibrating on the deployment distribution per rung
+  rather than trusting any shipped temperature.
+- **The top-20 logprob cap is industry-wide**: LM Studio and AINode
+  both cap at 20; on 77-option Banking77 questions the top pick
+  survived but probabilities moved up to 0.16 past the cap, and they
+  refuse >20-option questions outright. Our
+  renormalize-over-available-letters choice is a valid variant, but
+  per-option probabilities beyond ~20 candidates are not trustworthy
+  on any stack.
+- **Board context**: Decision Index 0.2.1 (67 open models,
+  maintainer-validated runs) puts Jeb-27B #5 at 54.67. On JevBench's
+  231 public items: 27B 0.866 (= Jev 1.13.0), 9B v2 0.818, 4B v2
+  0.758. Not comparable to our suite (different items), but #78's
+  jebadiah-4b-v2 arm is live and now has family context — the arm
+  measures it on *our* suite. Their GGUF agreement numbers cover only
+  the official repo files; mradermacher's community quants are
+  explicitly not validated builds (download official for the arm).
+  llama.cpp ≥ v0.5.0 needed for the `qwen35` arch; our fork
+  (2026-09-29) qualifies.
+
+### §13.3 strands-2B located: an ONNX artifact, not a GGUF arm
+
+#78's "strands-2B" resolves to `onnx-community/strands-decider-2B-hobson-v19-ONNX`
+— a decision model shipped as ONNX. That places it in #92's ONNX-rung
+line (Kai-0.6B-ONNX, Julia-1), not the GGUF bake-off; no official
+GGUF surfaced. #78 scope adjusted accordingly.
+
+### §13.4 Gemma 3n QAT: checkpoints are public, the recipe is not
+
+Google released the int4 QAT **checkpoints** (TorchAO-produced) for
+Gemma 3 / 3n but has **not** open-sourced the training code that
+produced them — no `google-ai-edge` repo carries the recipe. What is
+public: TorchAO's reproducible quantization recipes
+(pytorch.org, 2025-09-19) and Unsloth's QAT lane (~70 % PTQ-loss
+recovery claim). Therefore §12.7's candidate 1 (Winnow QAT-in-loop)
+means **building our own fake-quant + LoRA loop on TorchAO**
+(fake-quantized int4 in forward *and* backward during a short
+fine-tune; QA-LoRA/LoftQ family), not lifting Google's recipe. Open
+feasibility question: CPU-only fedora training throughput for a 4B
+fake-quant loop; the T5500 V100s remain the burst option.
+
+### §13.5 Cascade attack surface: confidence gates are adversarially steerable
+
+Forced Deferral Attack (arXiv:2606.15308, 2026-05): an adversarial
+input that *suppresses the weak model's confidence* forces a
+confidence-gated cascade to escalate — cost inflation and routing
+manipulation without touching any policy file. Companion result:
+"When Efficiency Backfires: Cascading LLMs Trigger Cascade Failure
+under Adversarial Attack" (arXiv:2605.17288). The binding rule
+"input text never modifies policy/thresholds" does not cover this:
+FDA manipulates the *confidence the gate reads*, which is exactly the
+quantity D27's escalation consumes. Mitigations worth recording for
+any multi-tenant deployment (low severity for local-first single-user
+posture): abstention/escalation-rate monitoring (an FDA shows as a
+rate spike), per-source rate limiting, and treating model-rung
+escalations as a metered resource. Also noted in passing: conformal
+risk-controlled routing ("Conformal Arbitrage") and
+cost-expectation gating (CascadeDebate: execute iff
+E[cost|execute] < E[cost|refuse]) as calibration-adjacent routing
+literature for the standing watch-list.
+
