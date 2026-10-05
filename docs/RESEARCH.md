@@ -241,6 +241,37 @@ Source: `huggingface.co/SupersonicLabs/Julia-1-ONNX` (read 2026-10-01).
 - "Strict encoding is enabled by default" — schema-strict request
   encoding mirrors `unsupported_generation_field` posture.
 
+**Verified 2026-10-05 (#92): the full encoding contract is reproduced.**
+The ONNX repo's own `parity.py` points at
+`julia.data.sequence(tokenizer, row, 1024, 256, strict=True)` in the
+parent checkpoint repo; that function, reimplemented with plain
+`tokenizers` + numpy (no torch), reproduces the published parity exactly:
+
+- Sequence: `[CLS] head[:budget] [SEP] ([MASK] " "+opt[:48])* [SEP]
+  state[:room] [SEP]` — CLS/SEP/MASK are `<bos>`(2)/`<eos>`(1)/`<mask>`(4);
+  head is plain text `"{type} question: {question}"` (the qtype rides BOTH
+  on that text prefix and on the int input — there is no qtype marker
+  token); head budget 256 with `max(8, ·)` floor; `max_length` 1024;
+  state raw-encoded, no leading space, room = `max_length − len − 1`.
+- Graph inputs: `marker_pos` = 0-indexed positions of each option's
+  `[MASK]`, `marker_mask` all-true over K options, `qtype` int
+  `{choice: 0, score: 1, noul: 2}` (embedding table size 3).
+- Reproduction: **100/100 prediction match, max |Δlogit| 7.82013e-05**
+  vs their published `parity-cpu.json` 7.82012939453125e-05 — exact.
+
+**Viability on the JevBench public 231** (zero-shot probe, criteria
+rendered `"label: desc"`, noul as `[no, yes]`): **acc 0.4416, macro
+0.4190, Brier 0.888, ECE 0.3915, p50 40.9 ms** CPU (ORT 1.30,
+`runs/onnx-julia1-jevbench-v1/` on the eval host). Above the engine-only
+row (0.3766) and vtx (0.4113), far below the bridge (0.6494), Laya's
+published 58.4 %, and Julia's own original-runtime numbers (73.15 %
+typed decisions) — our zero-shot rendering is unvalidated against
+theirs, so read it as a floor, not a model verdict. Decision recorded
+for #92: **not competitive as a standalone arm, and ECE 0.39 disqualifies
+it as a gate candidate**; the exact encoding contract above is the
+durable artifact (it is the Laya-family runtime-input convention,
+working reference for any marker-encoder rung we build or import).
+
 ### 6.5 Strands Decider 2B (hobson v19) — the head-to-head reference
 
 Sources: `strandsagents.com/blog/introducing-strands-decider/`,
