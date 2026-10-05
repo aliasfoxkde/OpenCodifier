@@ -1,0 +1,4 @@
+# Generated fixtures — regenerable from the seeded generators and pinned
+# by `--check` byte-locks, not by committing 3–82 MB of JSON.
+session_plan.json
+longctx_tiers.json
