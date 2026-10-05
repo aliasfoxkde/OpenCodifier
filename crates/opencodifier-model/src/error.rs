@@ -56,6 +56,28 @@ pub enum ModelError {
         /// Which part of the contract was violated.
         reason: String,
     },
+
+    /// A request rendered to more tokens than the Kai-0.6B-ONNX rung's
+    /// input budget. The upstream contract refuses over-budget input
+    /// (`max_length_exceeded`) and never truncates, so neither does this
+    /// one: a truncated prompt would move every option pointer.
+    #[error("prompt is {tokens} tokens, above the {max_tokens} token budget for `{id}`")]
+    PromptTooLong {
+        /// The request identifier carried into the message.
+        id: String,
+        /// How many tokens the rendered prompt actually needs.
+        tokens: usize,
+        /// The rung's token budget.
+        max_tokens: usize,
+    },
+
+    /// A tokenizer asset could not be loaded, or produced an encoding the
+    /// contract cannot use (an empty option segment, an unknown symbol).
+    #[error("tokenizer failed: {reason}")]
+    Tokenizer {
+        /// What the tokenizer refused, and why.
+        reason: String,
+    },
 }
 
 impl ModelError {
@@ -66,6 +88,8 @@ impl ModelError {
             Self::Sha256Mismatch { .. } => "model.sha256_mismatch",
             Self::UnreadableArtifact { .. } => "model.unreadable_artifact",
             Self::ContractViolation { .. } => "model.contract_violation",
+            Self::PromptTooLong { .. } => "model.prompt_too_long",
+            Self::Tokenizer { .. } => "model.tokenizer",
         }
     }
 }
@@ -90,6 +114,8 @@ mod tests {
                 reason: "not found".into(),
             },
             ModelError::ContractViolation { reason: "rank 3".into() },
+            ModelError::PromptTooLong { id: "q".into(), tokens: 9_000, max_tokens: 8_192 },
+            ModelError::Tokenizer { reason: "no vocab".into() },
         ];
         let codes: Vec<&str> = errors.iter().map(ModelError::code).collect();
         assert!(codes.iter().all(|code| code.starts_with("model.")), "{codes:?}");

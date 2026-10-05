@@ -13,5 +13,19 @@ categories = ["science", "api-bindings"]
 [lints]
 workspace = true
 
+[features]
+# The ONNX path, reinstated for the Kai-0.6B-ONNX decision rung
+# (task #92, 2026-10-05). D2's pin is kept exactly: `ort = 2.0.0-rc.13`,
+# `default-features = false`, so nothing is downloaded at build time and
+# the graph loads only where an ONNX Runtime shared library is
+# installed. D2's re-entry condition is honored: the bindings compile
+# down to `api-21` (ORT >= 1.21), not ort's default `api-27`, which no
+# available dylib satisfies — measured in D2. `runtime-onnx-dynamic` is
+# D2's `load-dynamic` packaging for distros that point at a system
+# dylib. The default build stays ML-free.
+onnx = ["dep:ort"]
+runtime-onnx-dynamic = ["onnx", "ort/load-dynamic"]
+
 [dependencies]
 thiserror.workspace = true
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray", "api-21"], optional = true }

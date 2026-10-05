@@ -146,6 +146,8 @@ re-ordering, candidate narrowing subset-safety. Fixtures under
 | *(default)* | core, engine, schema | serde, thiserror, sha2 — nothing heavy |
 | `onnx` | opencodifier-runtime | ort rc.13 (D2) |
 | `runtime-onnx-dynamic` | opencodifier-runtime | ort `load-dynamic` |
+| `llamacpp` | opencodifier-model | ureq (HTTP client only, D26) |
+| `tokenizers` | opencodifier-model | `tokenizers` 0.22 + `fancy-regex` (Kai reference encoder, D33) |
 | `http` | opencodifier-http | axum 0.9, tokio |
 | `mcp` | opencodifier-mcp | rmcp 2.2 (D1) |
 | `cli` | opencodifier-cli | clap v4 |
@@ -153,6 +155,11 @@ re-ordering, candidate narrowing subset-safety. Fixtures under
 
 No crate may enable another crate's heavyweight feature transitively;
 the default build of the whole workspace stays ML-free and runtime-free.
+
+*Dated 2026-10-05 (task #92): the `llamacpp` and `tokenizers` rows were
+added for the model rungs — D26's llama.cpp client and D33's Kai
+contract. `onnx` is reinstated for the Kai rung under the D2 pin, see
+D33.*
 
 ## D12 — HTTP surface: axum 0.8, `/v1` prefix
 
@@ -1209,3 +1216,52 @@ ecosystem (and Fastino's GLiDE demo) convention is a
 - **Revisit condition**: if a rung's measured tail ever exceeds the
   ceiling, the ceiling moves again — to the measured tail, not to a
   round number.
+
+## D33 — The Kai-0.6B-ONNX decision rung: contract in `opencodifier-model`, transport behind the reinstated `onnx` feature (2026-10-05)
+
+- **What shipped**: the Kai-0.6B-ONNX rung (task #92) as two pieces.
+  `opencodifier-model::kai` is the *contract* — exact prompt rendering
+  (`decision2-segmented-options-global-query-v1`), tokenization, pointer
+  computation with in-pipeline assertions, the fitted 5-level score
+  bias, and `f64` softmax. It is **feature-free** and verified against a
+  frozen, trimmed upstream parity fixture
+  (`kai/fixtures/kai-reference-trimmed.json`, 3 of the 11 recorded
+  cases, with provenance). `opencodifier-runtime::kai::KaiOnnxBackend`
+  is the *transport*: the four named graph inputs, integral-valued `f32`
+  index tensors, and raw logits — no softmax (D7), no calibration.
+- **`onnx` is reinstated under the D2 pin, not re-decided.** D2's pin is
+  kept exactly: `ort = "=2.0.0-rc.13"`, `default-features = false`,
+  features `["std", "ndarray", "api-21"]` (`std` is required — ort's
+  rc.13 needs `ndarray/std`; `api-21` is D2's own re-entry condition,
+  compiling the bindings below ort's default `api-27`, which no
+  available dylib satisfies). D2's two measured FAIL legs still stand as recorded:
+  the api-27 dylib gap and the cross-implementation softmax
+  bit-identity. The second is now irrelevant *by construction* — the
+  rung never computes softmax inside the graph, so there is no
+  cross-implementation float to disagree. The first is a deployment
+  constraint, handled by `runtime-onnx-dynamic` (system dylib) exactly
+  as D2 prescribed. A **graph execution against real weights has not
+  been run on this host** — the feature compiles, is lint-clean, and is
+  unproven end-to-end until the compute-host parity run.
+- **The contract differs from the §10.5 summary; the fixture won.**
+  Three deltas, each verified against the upstream runtime's own
+  fixture, not inferred: (1) **no truncation** — a prompt over
+  `max_input_tokens` (8192) is refused (`max_length_exceeded` upstream,
+  `model.prompt_too_long` here); truncating would silently move every
+  pointer. (2) **no `len(state_ids)` base offset** — pointers are
+  absolute token indices into the whole prompt, the option segment's
+  last token; the state-relative base belonged to the Strands packer
+  (§6.5's model), a different model. (3) **temperature is 1 for every
+  kind** — there is no per-kind temperature table; the only fitted
+  correction is the 5-level score bias.
+- **`tokenizers` is a new heavyweight dep for `opencodifier-model`,
+  feature-gated.** The reference HF encoder only loads behind it
+  (`0.22` line, `fancy-regex` backend — pure Rust, no C dependency).
+  The feature-free path carries a built-in byte-level BPE oracle over
+  the fixture's merge closure, and a test asserts the two encoders
+  agree on every frozen segment, so the default build reproduces the
+  fixture without the dependency.
+- **Revisit condition**: any change to the served artifact, its
+  `prompt_version`, or the bias table changes `MODEL_ID` and invalidates
+  cached decisions (D6); the fixture test must be re-frozen against the
+  new upstream fixture in the same commit.
