@@ -137,11 +137,29 @@ class EngineAdapter:
     price_input_per_m = 0.0
     price_output_per_m = 0.0
 
-    def __init__(self, binary: Path, port: int, timeout_s: float, log_path: Path | None = None):
+    def __init__(
+        self,
+        binary: Path,
+        port: int,
+        timeout_s: float,
+        log_path: Path | None = None,
+        ladder: Path | None = None,
+        llama: str | None = None,
+        llama_model_id: str | None = None,
+        llama_timeout_ms: int | None = None,
+    ):
         self.binary = binary
         self.port = port
         self.timeout_s = timeout_s
         self.log_path = log_path
+        # Ladder / model-rung wiring mirrors run_engine.py's flags: the
+        # request policy the adapter sends is overridden per kind by the
+        # ladder's `per_kind` gates (D25), so a fusion ladder and a plain
+        # engine arm share one payload contract.
+        self.ladder = ladder.resolve() if ladder is not None else None
+        self.llama = llama
+        self.llama_model_id = llama_model_id
+        self.llama_timeout_ms = llama_timeout_ms
         self.proc = None
         self.warnings: list[str] = []
 
@@ -151,8 +169,17 @@ class EngineAdapter:
         # Server output is evidence: if the serve process dies mid-run the
         # harness stop rule fires and the reason must be on disk.
         sink = open(self.log_path, "wb") if self.log_path else subprocess.DEVNULL
+        cmd = [str(self.binary), "serve", "--bind", f"127.0.0.1:{self.port}"]
+        if self.ladder is not None:
+            # Absolute path: the serve child's cwd is wherever the runner
+            # was launched, and a relative ladder silently resolves there.
+            cmd += ["--ladder", str(self.ladder)]
+        if self.llama is not None:
+            cmd += ["--llama", self.llama, "--llama-model-id", self.llama_model_id]
+            if self.llama_timeout_ms is not None:
+                cmd += ["--llama-timeout-ms", str(self.llama_timeout_ms)]
         self.proc = subprocess.Popen(
-            [str(self.binary), "serve", "--bind", f"127.0.0.1:{self.port}"],
+            cmd,
             stdout=sink,
             stderr=subprocess.STDOUT,
         )
@@ -225,7 +252,12 @@ class EngineAdapter:
                             "max_questions": 32,
                             "max_candidates": 256,
                             "max_graph_nodes": 128,
-                            "max_execution_time": {"secs": 10, "nanos": 0},
+                            # The adapter's own deadline, not the harness's:
+                            # a 15 KB long-policy state over a 5-candidate
+                            # tree prefill takes >20 s on the rung, and a
+                            # 10 s limit turned that into engine.timeout
+                            # 500s (three in a row trips their stop rule).
+                            "max_execution_time": {"secs": 120, "nanos": 0},
                             "max_retrieval_results": 64,
                         },
                     },
@@ -236,7 +268,16 @@ class EngineAdapter:
         latency = time.perf_counter() - started
         ans = resp["answers"][0]
         outcome = resp.get("outcome")
-        raw = {"request": question, "answer": ans, "outcome": outcome}
+        # Trace + metrics are response-level: which rung decided is the
+        # routing evidence a fusion arm exists to produce. The native
+        # projection ships both verbatim (trace_version + node entries).
+        raw = {
+            "request": question,
+            "answer": ans,
+            "outcome": outcome,
+            "trace": resp.get("trace"),
+            "metrics": resp.get("metrics"),
+        }
         if outcome not in ("accept", "verify"):
             # Abstention is a successful engine outcome and an incorrect
             # JevBench answer; no guess is manufactured to dodge it. Status
@@ -541,7 +582,28 @@ def main() -> int:
     ap.add_argument("--timeout", type=float, default=600.0)
     ap.add_argument("--no-replay", action="store_true")
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--ladder", type=Path, default=None, help="pass --ladder to `serve` (engine arm)")
+    ap.add_argument(
+        "--llama",
+        default=None,
+        help="pass --llama to `serve` (model rung URL; engine arm)",
+    )
+    ap.add_argument(
+        "--llama-model-id",
+        default=None,
+        help="pass --llama-model-id to `serve` (required with --llama)",
+    )
+    ap.add_argument(
+        "--llama-timeout-ms",
+        type=int,
+        default=None,
+        help="pass --llama-timeout-ms to `serve`",
+    )
     args = ap.parse_args()
+    if args.llama is not None and args.llama_model_id is None:
+        ap.error("--llama requires --llama-model-id")
+    if (args.ladder is not None or args.llama is not None) and args.arm != "engine":
+        ap.error("--ladder/--llama only apply to the engine arm")
 
     Runner, DecisionResult, Ledger, dataset_hash, load_jsonl, summarize = _load_harness(args.ref)
 
@@ -554,7 +616,14 @@ def main() -> int:
 
     if args.arm == "engine":
         adapter = EngineAdapter(
-            args.binary, args.port, args.timeout, log_path=args.out_dir / "server.log"
+            args.binary,
+            args.port,
+            args.timeout,
+            log_path=args.out_dir / "server.log",
+            ladder=args.ladder,
+            llama=args.llama,
+            llama_model_id=args.llama_model_id,
+            llama_timeout_ms=args.llama_timeout_ms,
         )
     elif args.arm == "fork_4b":
         adapter = ForkAdapter(args.port, args.instructions, args.timeout)
@@ -625,6 +694,18 @@ def main() -> int:
         "harness": {"repo": "fstandhartinger/jevbench", "commit": harness_commit(args.ref),
                     "license": "MIT", "method": "docs/METHOD-v1.4.md (public split)"},
         "dataset_sha256": dataset_hash(tasks),
+        **(
+            {
+                "serve": {
+                    "ladder": str(adapter.ladder),
+                    "ladder_sha256": hashlib.sha256(adapter.ladder.read_bytes()).hexdigest(),
+                    "llama": adapter.llama,
+                    "llama_model_id": adapter.llama_model_id,
+                }
+                if adapter.ladder is not None
+                else {}
+            }
+        ),
         "n_tasks": len(tasks),
         "model_files": model_files,
         "mapping_notes": {
