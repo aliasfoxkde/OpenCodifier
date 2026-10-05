@@ -728,29 +728,37 @@ What the board established (full findings catalog in REPORT.md):
 
 ### Held-out suite: the fusion-v2 gate out of sample (2026-10-05, F29)
 
-`suite_holdout.json` (committed byte-locked, seed 20261005, class B from
-a disjoint 40-row authoring pool, zero context overlap with the locked
-suite) exists because the F28 gate was fitted on the suite it is scored
-on. Same stack, same fedora host, same run as ¹⁵ — all four arms replay
-bit-exact:
+`suite_holdout.json` (committed byte-locked, seed 20261005, version 3,
+class B from a disjoint 40-row authoring pool — the one class a seed
+cannot refresh — zero id/context overlap with the locked suite) exists
+because the F28 gate was fitted on the suite it is scored on. After the
+integrity audit (F30) found seven class-B items keyword-leakable
+(answer pickable by word overlap alone), the holdout's six affected
+utterances were reworded to break the surface hooks before any of
+these runs — the suite v2 first measured was replaced by v3 *harder*,
+never easier. Same stack, same fedora host, same run as ¹⁵ — all four
+arms replay bit-exact:
 
 | run | acc (meta/lex/rel) | acc | ECE | p50 | determinism |
 |---|---|---|---|---|---|
-| engine__holdout-lexical.json | 0.83 / 0.50 / 0.90 | 0.742 | 0.141 | 0.7ms | yes |
-| tree__e2bqat-q4_0-holdout.json | 1.00 / 0.78 / 0.45 | 0.742 | 0.176 | 611.2ms | yes |
-| engine__holdout-fusion-v1.json | 0.85 / 0.73 / 0.88 | 0.817 | 0.131 | 0.7ms | yes |
-| **engine__holdout-fusion-v2.json** | 1.00 / 0.78 / 0.88 | **0.883** | 0.109 | 129.9ms | yes |
+| engine__holdout-lexical.json | 0.83 / 0.38 / 0.90 | 0.700 | 0.107 | 0.4ms | yes |
+| tree__e2bqat-q4_0-holdout.json | 1.00 / 0.80 / 0.45 | 0.750 | 0.169 | 634.8ms | yes |
+| engine__holdout-fusion-v1.json | 0.85 / 0.68 / 0.88 | 0.800 | 0.096 | 0.8ms | yes |
+| **engine__holdout-fusion-v2.json** | 1.00 / 0.80 / 0.88 | **0.892** | 0.103 | 136.7ms | yes |
 
-Escalations: lexical 0, tree (no gate) —, fusion-v1 38/120,
+Escalations: lexical 0, tree (no gate) —, fusion-v1 42/120,
 fusion-v2 60/120 (2 flagged `verify`). **The refit's advantage survives
-the transfer: +6.6 pp over v1 out-of-sample** (in-sample it was +9.1).
-The in-sample 0.933 discounts to 0.883 — inside the predicted ~0.90
-band — and the swept holdout optimum band is 0.55–0.58, **containing
-the shipped 0.56 with zero drift**; the margin axis stays flat. The
-baseline shift is real (the new class-B phrasings are much easier for
-BM25: lexical class 0.50 vs 0.225 on v1), so this is a genuine transfer
-test. Deployment note: at 60/120 escalations the holdout p50 crosses
-into rung territory — p50 "mostly-lexical" behavior is
+the transfer undiminished: +9.2 pp over v1 out-of-sample** (in-sample
+it was +9.1). The in-sample 0.933 discounts to 0.892 — inside the
+predicted ~0.90 band — and the swept holdout optimum plateau is
+**0.56–0.59, containing the shipped 0.56 with zero drift**; the margin
+axis stays flat. The hardening itself did real work: lexical-only fell
+0.742 → 0.700 once the keyword hooks were removed (class B is the
+hardest for BM25 here: 0.375 vs 0.225 on v1), and the v2 > v1 gap
+*widened* — with weaker lexical evidence the confidence gate hands
+more items to the model rung, which is exactly the division of labor
+F28 fitted. Deployment note: at 60/120 escalations the holdout p50
+crosses into rung territory — p50 "mostly-lexical" behavior is
 suite-dependent; refit the gate per deployment traffic.
 
 ### r19 E2B quant-ladder speed reference (2026-10-05)

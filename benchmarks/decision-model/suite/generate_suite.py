@@ -47,7 +47,7 @@ SUITE_VERSION = 1
 # phrasings below; --holdout selects it and re-seeds the generative
 # classes. Default invocation must reproduce suite.json byte-for-byte.
 HOLDOUT_SEED = 20261005
-HOLDOUT_SUITE_VERSION = 2
+HOLDOUT_SUITE_VERSION = 3
 B_POOL_MAIN = slice(0, 40)
 B_POOL_HOLDOUT = slice(40, 80)
 
@@ -101,7 +101,7 @@ _A_DOMAINS = [
 _A_NAMES = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"]
 
 
-def _gen_class_a(rng: random.Random, count: int) -> list[dict]:
+def _gen_class_a(rng: random.Random, count: int, id_prefix: str = "") -> list[dict]:
     items = []
     # Round per-domain up and truncate to count so all classes balance.
     per_domain = count // len(_A_DOMAINS) + 1
@@ -140,7 +140,7 @@ def _gen_class_a(rng: random.Random, count: int) -> list[dict]:
             ]
             items.append(
                 {
-                    "id": f"A-{d_idx:02d}{k:02d}",
+                    "id": f"{id_prefix}A-{d_idx:02d}{k:02d}",
                     "class": "metadata_match",
                     "context": "\n".join(lines),
                     "question": dom["question"],
@@ -209,24 +209,24 @@ _B_SCENARIOS = [
     ("technical", "Video calls drop within five minutes on the desktop client."),
     ("technical", "Saved views reset themselves after every logout."),
     ("shipping", "Two boxes arrived but the label said three were sent."),
-    ("shipping", "The delivery driver never attempted pickup and marked it failed."),
+    ("shipping", "The driver marked our package as delivered but it never came."),
     ("shipping", "Customs is holding our parcel and we need paperwork."),
     ("shipping", "The return label printed blank and the drop-off was refused."),
-    ("account", "Two coworkers share one login and we need separate profiles."),
+    ("account", "Two teammates share one sign-in and we need separate seats."),
     ("account", "I lost access to the admin console after the domain change."),
     ("account", "Our service account was locked out overnight."),
-    ("account", "Permissions changed by themselves and someone can now delete projects."),
+    ("account", "Access rights changed by themselves and anyone can now delete projects."),
     ("feature", "Please let us tag conversations with custom labels."),
     ("feature", "Can the calendar sync both ways with our Exchange server?"),
-    ("feature", "We would love template presets for new boards."),
+    ("feature", "We would love template presets for our boards."),
     ("feature", "Add a queue view that shows only my assigned items."),
     ("compliance", "Regulators require us to prove where backups are stored."),
     ("compliance", "We need consent records attached to every marketing send."),
     ("compliance", "Our DPO asked for your sub-processor list."),
-    ("compliance", "Policy says PII may not leave the EU even for support."),
+    ("compliance", "Under GDPR, PII may not leave the EU even for support."),
     ("performance", "Page loads degrade past fifty concurrent editors."),
     ("performance", "The mobile client drains battery within an hour of use."),
-    ("performance", "Import throughput fell by half after the last release."),
+    ("performance", "Import speed fell by half after the last release."),
     ("performance", "Autocomplete requests time out during peak hours."),
     ("integration", "Our CRM records stop syncing after a couple of hours."),
     ("integration", "The Slack notifications fire twice for every event."),
@@ -309,7 +309,7 @@ _B_DESCRIPTIONS = {
 _B_QUESTION = "Which team should handle this message?"
 
 
-def _gen_class_b(pool: slice) -> list[dict]:
+def _gen_class_b(pool: slice, id_prefix: str = "") -> list[dict]:
     items = []
     scenarios = _B_SCENARIOS[pool]
     domains = sorted({s[0] for s in _B_SCENARIOS})
@@ -322,7 +322,7 @@ def _gen_class_b(pool: slice) -> list[dict]:
         ordered = labels[rot:] + labels[:rot]
         items.append(
             {
-                "id": f"B-{d_idx[domain]:02d}{n:02d}",
+                "id": f"{id_prefix}B-{d_idx[domain]:02d}{n:02d}",
                 "class": "lexical_semantic",
                 "context": utterance,
                 "question": _B_QUESTION,
@@ -346,7 +346,7 @@ _C_QUESTIONS = {
 }
 
 
-def _gen_class_c(rng: random.Random, count: int) -> list[dict]:
+def _gen_class_c(rng: random.Random, count: int, id_prefix: str = "") -> list[dict]:
     items = []
     # One extra per family absorbs counting-tie redraws; truncated to count.
     per_family = count // 3 + 1
@@ -371,7 +371,7 @@ def _gen_class_c(rng: random.Random, count: int) -> list[dict]:
             cands = rng.sample(names, 4)
         items.append(
             {
-                "id": f"C-00{k:02d}",
+                "id": f"{id_prefix}C-00{k:02d}",
                 "class": "relational_compositional",
                 "context": " ".join(lines),
                 "question": _C_QUESTIONS["chain"],
@@ -401,7 +401,7 @@ def _gen_class_c(rng: random.Random, count: int) -> list[dict]:
         rng.shuffle(lines)
         items.append(
             {
-                "id": f"C-01{k:02d}",
+                "id": f"{id_prefix}C-01{k:02d}",
                 "class": "relational_compositional",
                 "context": " ".join(lines),
                 "question": _C_QUESTIONS["count"],
@@ -426,7 +426,7 @@ def _gen_class_c(rng: random.Random, count: int) -> list[dict]:
         rng.shuffle(lines)
         items.append(
             {
-                "id": f"C-02{k:02d}",
+                "id": f"{id_prefix}C-02{k:02d}",
                 "class": "relational_compositional",
                 "context": " ".join(lines),
                 "question": _C_QUESTIONS["order"],
@@ -452,12 +452,13 @@ def build_suite(
     seed: int = SEED,
     b_pool: slice = B_POOL_MAIN,
     suite_version: int = SUITE_VERSION,
+    id_prefix: str = "",
 ) -> dict:
     rng = random.Random(seed)
     items: list[dict] = []
-    items += _gen_class_a(rng, 40)[:40]
-    items += _gen_class_b(b_pool)
-    items += _gen_class_c(rng, 40)[:40]
+    items += _gen_class_a(rng, 40, id_prefix)[:40]
+    items += _gen_class_b(b_pool, id_prefix)
+    items += _gen_class_c(rng, 40, id_prefix)[:40]
     # Validate: unique ids, answers present in candidates, balanced classes.
     ids = [i["id"] for i in items]
     assert len(ids) == len(set(ids)), "duplicate item ids"
@@ -487,7 +488,8 @@ def main() -> int:
             else Path(__file__).parent / "suite_holdout.json"
         )
         suite = build_suite(
-            seed=HOLDOUT_SEED, b_pool=B_POOL_HOLDOUT, suite_version=HOLDOUT_SUITE_VERSION
+            seed=HOLDOUT_SEED, b_pool=B_POOL_HOLDOUT,
+            suite_version=HOLDOUT_SUITE_VERSION, id_prefix="h",
         )
     else:
         out = Path(argv[0]) if argv else Path(__file__).parent / "suite.json"

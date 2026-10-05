@@ -918,33 +918,75 @@ trusted to route.
   `runs/engine__relational-v1-margins.json`. Board rows
   `engine__rung-qate2b-q4_0-fusion-v2.json` +
   `tree__e2bqat-q4_0-collect.json`; BENCHMARKS.md footnote ¹⁵.
-- **F29 — the F28 gate holds out of sample: 0.883 held-out vs v1's
-  0.817, and the threshold generalizes with zero drift.** Suite v2
+- **F29 — the F28 gate holds out of sample: 0.892 held-out vs v1's
+  0.800, and the advantage transfers undiminished (+9.2 pp OOS vs +9.1
+  in-sample) with zero threshold drift.** Suite v3
   (`suite_holdout.json`, seed 20261005, byte-locked; class B drawn from
   a second disjoint 40-row pool of the authoring table — the one class
-  a seed cannot refresh — zero context overlap with v1, 40/40/40
-  balance). Four arms on the same fedora host, same stack as F28, all
-  replay bit-exact: lexical-only **0.742** (the new class-B phrasings
-  are far easier for BM25 — lex class 0.50 vs 0.225 on v1 — a real
-  distribution shift, so this is a genuine transfer test, not a
-  re-measurement), model rung alone **0.742** (meta 1.00 / lex 0.775 /
-  rel 0.45 — the F28 division-of-labor shape replicates),
-  fusion-v1 **0.817** @ 139.7 ms mean (38 escalations), fusion-v2
-  **0.883** @ 305.5 ms mean (60 escalations, 2 flagged `verify`).
-  The in-sample 0.933 discounted to **0.883 held-out** — inside the
-  predicted ~0.90 band — and the v2 > v1 ordering (+6.6 pp) holds.
-  Threshold drift: swept on holdout rows, the optimum band is
-  **0.55–0.58 — the shipped 0.56 sits at the holdout optimum**; the
-  margin axis stays flat. One deployment-shape honesty note: at ~60/120
-  escalations the holdout p50 crosses into rung territory (129.9 ms)
-  — on distributions where the lexical rung is less confident the
-  ladder shifts work to the model; p50 "mostly-lexical" behavior is
-  suite-dependent, which is precisely what per-deployment gate refits
+  a seed cannot refresh — zero id/context overlap with v1, 40/40/40
+  balance; see F30 for the pre-measurement hardening). Four arms on the
+  same fedora host, same stack as F28, all replay bit-exact:
+  lexical-only **0.700** (class B is hardest for BM25 here — lex class
+  0.375 vs 0.225 on v1 — so this is a genuine transfer test, not a
+  re-measurement), model rung alone **0.750** (meta 1.00 / lex 0.80 /
+  rel 0.45 — the F28 division-of-labor shape replicates), fusion-v1
+  **0.800** @ 169.4 ms mean (42 escalations), fusion-v2 **0.892** @
+  321.8 ms mean (60 escalations, 2 flagged `verify`; p50 136.7 ms).
+  The in-sample 0.933 discounted to **0.892 held-out** — inside the
+  predicted ~0.90 band — while the v2 > v1 gap held at +9.2 pp: the
+  refit's edge does not depend on seeing the suite. Threshold drift:
+  swept on holdout rows, the optimum plateau is **0.56–0.59 — the
+  shipped 0.56 sits inside it**; the margin axis stays flat. The
+  hardening itself did real work: lexical-only fell 0.742 → 0.700 when
+  the keyword hooks were removed, and the v2 − v1 gap *widened* from
+  +6.6 (first, leaky, holdout measurement) to +9.2 — weaker lexical
+  evidence sends more items to the rung that is actually better on
+  class B, which is the exact behavior the gate was fitted to produce.
+  Deployment note: at 60/120 escalations the holdout p50 crosses into
+  rung territory — p50 "mostly-lexical" behavior is suite-dependent,
+  which is precisely what per-deployment gate refits
   (`tree_margin_refit.py`) are for. The marketable claim is now
-  two-sided: **0.933 in-sample / 0.883 held-out, both above v1's
-  0.842 / 0.817 under the identical stack and host**. Runs:
+  two-sided: **0.933 in-sample / 0.892 held-out, both above v1's 0.842
+  / 0.800 under the identical stack and host**. Runs:
   `engine__holdout-{lexical,fusion-v1,fusion-v2}.json`,
-  `tree__e2bqat-q4_0-holdout.json`; BENCHMARKS.md "Held-out suite".
+  `tree__e2bqat-q4_0-holdout.json` (suite sha `6e9b6e0f…`);
+  BENCHMARKS.md "Held-out suite".
+- **F30 — suite integrity audit: every answer is either structurally
+  re-derivable or a verified human tag, and nothing external enters
+  the benchmark.** Response to a direct reviewer question ("did we
+  hardcode Q/A pairs or include datasets to inflate numbers?").
+  `runner/audit_suite.py` is the committed adversarial reader of
+  `suite/generate_suite.py`: it re-derives every class-A answer by
+  parsing the context's constraint lines and checking the unique
+  satisfier, re-derives every class-C answer from the rendered edges
+  (chain root = failing node in a dependency edge; count = unique
+  healthy max; order = node with no predecessor) — 80/80 exact on both
+  suites — and for class B (human-labeled by construction) enforces
+  the structural claims: answer among candidates, 40/40/40 balance,
+  and a keyword-leak test (no item may be solvable by word-overlap
+  scoring alone). Findings and dispositions: **one v1 item (B-0533)
+  is keyword-leakable** — disclosed and accepted; v1 is frozen under
+  113 committed runs and the leak is a 1.25% difficulty discount, not
+  a scoring-path effect (the lexical arm scores 0.225 on v1 class B —
+  if pairs were authored to match the scorer, that number would be
+  near 1.0); **six holdout items were leakable** and were reworded
+  (labels unchanged) *before* the F29 numbers above were measured —
+  the fix can only make the suite harder; **a cross-suite id
+  collision** (position-derived ids shared by v1 and the holdout) was
+  fixed by namespacing holdout ids `h*` with a suite-version bump —
+  contexts were always disjoint; ids now are too. The audit also
+  verifies main/holdout disjointness (ids AND contexts), byte-lock
+  regeneration of both suites, stdlib-only provenance (no imports
+  beyond json/random/sys/pathlib, no network, no dataset files under
+  `suite/`), and — checked separately in the runners — that outgoing
+  payloads carry context/question/candidates only; suite answers
+  appear solely in stored result rows and scoring. The letters suite
+  (`suite_long.json`) inherits all of this: it is mechanically derived
+  from the audited `suite.json` (same seed, `derived_from` embedded,
+  gold answers unchanged, contexts padded with vocabulary-disjoint
+  distractors). JevBench is upstream's own 231-item split, unmodified
+  — that independence is the point. Command:
+  `python3 runner/audit_suite.py` (exit 0 = pass).
 
 ## Threats to validity
 
@@ -992,9 +1034,10 @@ trusted to route.
     0.933 headline carries a gate-selection component: per-half refits
     never beat fixed-0.56 held-out and the threshold is the modal fit,
     but the honest out-of-sample expectation is ~0.90 on suites of this
-    size. MEASURED (F29, suite_holdout.json): held-out 0.883 vs v1's
-    0.817, threshold band 0.55–0.58 containing the shipped 0.56 — the
-    discount is real (~5 pp) but the refit's advantage survives.
+    size. MEASURED (F29, suite_holdout.json v3): held-out 0.892 vs v1's
+    0.800, optimum plateau 0.56–0.59 containing the shipped 0.56 — the
+    discount is real (~4 pp) but the refit's advantage survives
+    undiminished (+9.2 pp OOS vs +9.1 in-sample).
 14. **Host provenance starts 2026-10-05.** Run JSONs now stamp
     `config.host`; earlier rows carry no host field and the board mixes
     NAS-era rows (co-tenant load) with idle-fedora rows. Accuracy rows
