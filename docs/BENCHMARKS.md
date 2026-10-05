@@ -201,7 +201,7 @@ routing is part of its contract, not error.
 | fast | Qwen3.5-0.8B (q4_0) | 0.650 | 0.074 | 0.35 | 613 ms | 537 MiB |
 | zero-ML floor (engine default) | relational-v1 over lexical | 0.683 | 0.094 | **0.950** | **1.3 ms** | 0 MiB |
 
-### Complete board (78 runs, 2026-09-25 → 2026-10-04)
+### Complete board (96 runs, 2026-09-25 → 2026-10-05)
 
 Columns: accuracy (metadata / lexical / relational), overall accuracy,
 ECE, single-decision p50, run-twice determinism. `(chat screen)` rows
@@ -269,10 +269,28 @@ arm — sampled decode, never comparable to decision rows.
 | parity__jebadiah-4b-v2-letters.json ⁴ | 0.98 / 1.00 / 0.53 | 0.833 | 0.052 | 1973.8ms | yes; parity 0.908 |
 | parity__jebadiah-9b-v2-letters.json ⁴ | 0.08 / 0.03 / 0.33 | 0.142 | 0.501 | 2869.0ms | yes; parity 0.150 |
 | stock__clef-flash-q4_k_m-letters.json ¹⁰ | 0.00 / — / 0.33 | 0.008 | 0.529 | 1690.4ms | yes (Δp 0.000); 115 invalid dists |
+| stock__e2b-noqat-bf16-letters.json ¹¹ | 1.00 / 0.24 / 0.45 | 0.500 | 0.355 | 889.3ms | yes (Δp 0.023); 10 invalid dists |
+| stock__e2b-noqat-iq4nl-letters.json ¹¹ | 0.91 / 0.15 / 0.43 | 0.442 | 0.363 | 569.2ms | **no** (Δp 0.342); 7 invalid dists |
+| stock__e2b-noqat-iq4xs-letters.json ¹¹ | 0.91 / 0.21 / 0.35 | 0.450 | 0.376 | 675.9ms | **no** (Δp 1.000); 7 invalid dists |
+| stock__e2b-noqat-q3km-letters.json ¹¹ | 0.74 / 0.48 / 0.30 | 0.500 | 0.375 | 657.5ms | **no** (Δp 1.000); 1 invalid dist |
+| stock__e2b-noqat-q3ks-letters.json ¹¹ | 0.97 / 0.41 / 0.40 | 0.550 | 0.226 | 610.9ms | **no** (Δp 0.484); 6 invalid dists |
 | stock__e2b-noqat-q4_0-letters.json ⁹ | 0.21 / 0.71 / 0.30 | 0.350 | 0.435 | 472.4ms | **no** (Δp 1.000); 11 invalid dists |
+| stock__e2b-noqat-q4_1-letters.json ¹¹ | 0.97 / 0.26 / 0.45 | 0.475 | 0.362 | 817.6ms | **no** (Δp 1.000); 11 invalid dists |
+| stock__e2b-noqat-q4km-letters.json ¹¹ | 0.88 / 0.11 / 0.45 | 0.425 | 0.414 | 671.9ms | **no** (Δp 1.000); 10 invalid dists |
 | stock__e2b-noqat-q4ks-letters.json ⁸ | 0.21 / 0.85 / 0.40 | 0.433 | 0.411 | 479.8ms | **no** (Δp 0.676); 9 invalid dists |
+| stock__e2b-noqat-q5km-letters.json ¹¹ | 0.94 / 0.23 / 0.43 | 0.483 | 0.378 | 627.1ms | **no** (Δp 0.928); 6 invalid dists |
+| stock__e2b-noqat-q5ks-letters.json ¹¹ | 0.97 / 0.25 / 0.43 | 0.500 | 0.376 | 589.1ms | **no** (Δp 1.000); 6 invalid dists |
+| stock__e2b-noqat-q6k-letters.json ¹¹ | 1.00 / 0.28 / 0.48 | 0.525 | 0.355 | 656.9ms | **no** (Δp 1.000); 8 invalid dists |
+| stock__e2b-noqat-q8_0-letters.json ¹¹ | 0.94 / 0.24 / 0.43 | 0.475 | 0.379 | 1100.2ms | yes (Δp 0.054); 10 invalid dists |
+| stock__e2b-noqat-udiq2m-letters.json ¹¹ | 0.65 / 0.66 / 0.36 | 0.392 | 0.340 | 585.4ms | **no** (Δp 1.000); 37 invalid dists |
+| stock__e2b-noqat-udiq3xxs-letters.json ¹¹ | 0.41 / 0.21 / 0.38 | 0.300 | 0.490 | 639.9ms | **no** (Δp 0.665); 9 invalid dists |
+| stock__e2b-noqat-udq3kxl-letters.json ¹¹ | 0.78 / 0.27 / 0.28 | 0.433 | 0.418 | 589.4ms | **no** (Δp 0.484); 3 invalid dists |
 | stock__e2b-noqat-udq4kxl-letters.json ⁸ | 0.23 / 0.72 / 0.33 | 0.375 | 0.461 | 523.9ms | **no** (Δp 0.645); 9 invalid dists |
+| stock__e2b-noqat-udq5kxl-letters.json ¹¹ | 0.94 / 0.38 / 0.45 | 0.517 | 0.358 | 637.9ms | **no** (Δp 0.873); 11 invalid dists |
+| stock__e2b-noqat-udq6kxl-letters.json ¹¹ | 1.00 / 0.21 / 0.45 | 0.475 | 0.379 | 677.6ms | **no** (Δp 1.000); 11 invalid dists |
+| stock__e2b-noqat-udq8kxl-letters.json ¹¹ | 0.97 / 0.24 / 0.45 | 0.492 | 0.362 | 1045.6ms | yes (Δp 0.094); 10 invalid dists |
 | stock__e2bqat-official-q4_0-letters.json ⁸ | 0.97 / 1.00 / 0.45 | 0.808 | 0.102 | 422.9ms | yes (Δp 0.020) |
+| stock__e2bqat-r18b-crossbuild-letters.json ¹¹ | 1.00 / 0.98 / 0.45 | 0.808 | 0.102 | 460.2ms | yes (Δp 0.020) |
 | stock__e2bqat-udq2kxl-letters.json ⁸ | 0.57 / 0.53 / 0.35 | 0.483 | 0.170 | 426.5ms | **no** (Δp 0.502) |
 | stock__e4bqat-official-q4_0-letters.json ⁹ | 0.90 / 1.00 / 0.50 | 0.558 | 0.169 | 883.8ms | yes (Δp 0.026); 29 invalid dists |
 | stock__gemma-4-e2b-qat-letters.json ⁷ | 0.93 / 1.00 / 0.38 | 0.767 | 0.137 | 454.1ms | yes (Δp 0.020) |
@@ -292,6 +310,9 @@ arm — sampled decode, never comparable to decision rows.
 | stock__winnow-e4b-letters-Q3_K_S.json ⁵ | 0.81 / 0.92 / 0.40 | 0.408 | 0.124 | 1315.9ms | **no** (Δp 0.997); 41 invalid dists |
 | stock__yoozlabs-qwen35-08b-qat-q4_0-letters.json ¹⁰ | 0.72 / 0.76 / 0.40 | 0.608 | 0.061 | 178.3ms | yes (Δp 0.000); 3 invalid dists |
 | stock__yoozlabs-qwen35-4b-qat-q4_0-letters.json ¹⁰ | 0.65 / 0.62 / 0.35 | 0.542 | 0.237 | 910.4ms | yes (Δp 0.000) |
+| torch__e2bqat-mobile-bf16-letters.json ¹¹ | 1.00 / 0.95 / 0.45 | 0.800 | 0.102 | 7490.2ms | yes (Δp 0.000) |
+| torch__tiny1b-bfloat16-letters.json ¹¹ | 0.20 / 0.35 / 0.35 | 0.300 | 0.205 | 1585.5ms | yes (Δp 0.000) |
+| torch__tiny1b-fp32-letters.json ¹¹ | 0.13 / 0.28 / 0.20 | 0.200 | 0.307 | 660.5ms | yes (Δp 0.000) |
 | vtx__VTX-JEV-3-fp32.json | 0.20 / 0.33 / 0.42 | 0.317 | 0.099 | 0.8ms | yes |
 | vtx__VTX-JEV-3-lf2.json | 0.17 / 0.25 / 0.30 | 0.242 | 0.136 | 1.1ms | yes |
 
@@ -463,6 +484,65 @@ does NOT reproduce Cloudflare's published Clef numbers. A template
 A/B (`--template` runner flag lane) is the follow-up before any
 conclusion about the backbone itself.
 
+¹¹ r19 full E2B quantization ladder + mobile mixed-precision QAT +
+safetensors-vs-GGUF format A/B start (2026-10-04/05, fedora i5-13600K,
+stock build `1537a0a`, letters readout, -t 12, load gate < 20 — the
+ladder ran against a co-tenant link storm whose waits stretched to
+hours and several windows sat at load 130–290; accuracy is
+load-insensitive by construction (temperature 0, single-token readout)
+but per-arm latencies are quiet-window-relative). All artifacts
+ready-made release downloads: 17 rungs of the gemma-4-E2B-it non-QAT
+ladder (2.7→16 bpw, plain K-quants, i-quants, unsloth UD-* dynamic
+mixes, BF16), the official Google QAT export's Q4_0 (r15/r16 rows),
+and Google's **mixed-precision QAT mobile export** (lm_head 2-bit /
+early-MLP 4-bit / late-MLP 2-bit / attn 4-bit / PLE 8-bit, ~2.5 average
+bits) run through transformers 5.17 on the torch lane
+(`--permutations 1`, headline metrics from pass 0 as always). Findings:
+
+- **The non-QAT ladder is flat — the base model is the ceiling, not
+  the bits.** All 17 rungs score 0.300–0.550 (mean ≈ 0.47) and BF16
+  itself is 0.500: no format or bit-width buys decision-readout
+  accuracy on this model, and the spread across the whole ladder fits
+  inside the ±0.1 band 60–120 items expect. ECE is uniformly bad
+  (0.226–0.490). The r15 "QAT is carrying the number" finding
+  generalizes: below QAT, nothing is carrying anything.
+- **The matched-format QAT delta (+45.8 pp, r16) stands as the single
+  largest measured effect on the board**, and the ladder is its
+  denominator: every one of the 17 rungs sits in quantization noise;
+  the only move that escaped it is training-time.
+- **QAT's own cutoff is placement-shaped, not bit-shaped.** Pure 2-bit
+  QAT fails (UD-Q2_K_XL 0.483, determinism flip), while the mobile
+  mixed-precision export — 2/4/2/4/8 by tensor class, ~2.5 average
+  bits — holds **0.800, ECE 0.102, zero invalid distributions, Δp
+  0.000**. Where the bits go matters more than how many on average.
+  Its 7.49 s p50 is the per-forward Python dequant cost of the torch
+  lane, not an arch property; a GGUF packing of this layout is the
+  obvious follow-up.
+- **UD (imatrix) dynamic mixes buy nothing here.** At matched nominal
+  size the UD arms sit at-or-below their K-quant counterparts
+  (UD-Q3_K_XL 0.433 vs Q3_K_M 0.500; UD-Q6_K_XL 0.475 vs Q6_K 0.525;
+  UD-IQ2_M 0.392 with 37/120 invalid dists — the ladder's worst), with
+  the two exceptions (UD-Q5_K_XL 0.517, UD-Q8_K_XL 0.492) inside
+  noise. Whatever corpus the imatrix was fitted on, it is not this
+  readout's distribution.
+- **Determinism is a training property, not a quant property.** 14 of
+  17 ladder rungs flip predictions between identical replays (Δp up to
+  1.000); the three clean ones are BF16, Q8_0, UD-Q8_K_XL. Counting
+  the r15/r16 4-bit arms, 17 of 20 non-QAT quants flip while every
+  QAT arm above 2 bits replays clean.
+- **Crossbuild reproducibility**: the official-QAT Q4_0 arm re-run on
+  a second independent llama.cpp build (r18b crossbuild) reproduces
+  accuracy exactly (0.808 / ECE 0.102; p50 423 → 460 ms) — the readout
+  is build-stable even where per-quant determinism is not.
+- **Format A/B is open, torch side in**: the tiny 0.8B weights score
+  0.200 (fp32) / 0.300 (bf16) through transformers on the same suite —
+  both far under any board arm of comparable size. The GGUF side is
+  pending r20c: the first two attempts died on a build-`1537a0a`
+  server bug — `--chat-template-file` appears in `--help` but is
+  rejected at parse (`error: invalid argument`); the arms re-run
+  without the override (embedded templates boot fine, verified
+  health-200).
+
 What the board established (full findings catalog in REPORT.md):
 
 - **The relational ceiling.** Every model arm ≤ 4B sits at or below 0.50
@@ -525,6 +605,44 @@ What the board established (full findings catalog in REPORT.md):
   (prefill-bound) and 2.6× the memory (F25). ONNX stays the product's
   model-rung format for portability; the decision arm stays on
   llama.cpp.
+
+### r19 E2B quant-ladder speed reference (2026-10-05)
+
+`llama-bench` pp400 (single-shot prompt processing over a 400-token
+prompt, -t 12, -fa on, r 3, build `1537a0a`, quiet window) against the
+footnote-11 letters arms. Prefill is compute-bound at this model size,
+so t/s is nearly flat from 2.7 to 6 bpw — the accuracy column is what
+separates rungs, and it (unlike every pre-r19 expectation) does not
+separate them.
+
+| quant | acc | p50 | pp400 t/s |
+|---|---:|---:|---:|
+| BF16 | 0.500 | 889ms | 63.7 |
+| UD-IQ2_M (2.7 bpw) | 0.392 | 585ms | 194.4 |
+| UD-IQ3_XXS | 0.300 | 640ms | 199.3 |
+| Q3_K_S | 0.550 | 611ms | 190.1 |
+| Q3_K_M | 0.500 | 658ms | 204.3 |
+| UD-Q3_K_XL | 0.433 | 589ms | 206.7 |
+| IQ4_XS | 0.450 | 676ms | 187.8 |
+| IQ4_NL | 0.442 | 569ms | 231.3 |
+| Q4_0 | 0.350 | 472ms | 225.5 |
+| **QAT-Q4_0** | **0.808** | **423ms** | **230.8** |
+| Q4_1 | 0.475 | 818ms | 118.2 |
+| Q4_K_M | 0.425 | 672ms | 217.4 |
+| Q5_K_S | 0.500 | 589ms | 197.4 |
+| Q5_K_M | 0.483 | 627ms | 195.4 |
+| UD-Q5_K_XL | 0.517 | 638ms | 193.8 |
+| Q6_K | 0.525 | 657ms | 190.7 |
+| UD-Q6_K_XL | 0.475 | 678ms | 164.3 |
+| Q8_0 | 0.475 | 1100ms | 114.2 |
+| UD-Q8_K_XL | 0.492 | 1046ms | 111.6 |
+| QAT mobile mixed (torch bf16) | 0.800 | 7490ms | — (no bench) |
+
+The official-weights QAT-Q4_0 is simultaneously the most accurate and
+the fastest full-size row — sub-4-bit QAT costs nothing on either axis
+the ladder measures, which is why it is the small-model operating
+point. The tiny 0.8B arms benched at 147.8 (f16) and 701.5 t/s
+(Q4_K_M).
 
 ## Composite deployment score
 

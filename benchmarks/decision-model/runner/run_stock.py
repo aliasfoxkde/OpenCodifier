@@ -497,6 +497,11 @@ def main() -> int:
                     "(post-hoc, no server)")
     ap.add_argument("--self-check", action="store_true")
     ap.add_argument("--timeout", type=float, default=600.0)
+    ap.add_argument("--server-arg", action="append", default=None,
+                    help="extra llama-server CLI argument appended verbatim "
+                         "to the spawn command (repeatable, e.g. "
+                         "--server-arg=--chat-template-file=/path/x.jinja); "
+                         "absent leaves the spawn byte-identical")
     args = ap.parse_args()
     if args.self_check:
         return self_check()
@@ -525,6 +530,8 @@ def main() -> int:
         "--parallel", "1",
         "-ngl", str(args.ngl),
     ]
+    if args.server_arg:
+        cmd.extend(args.server_arg)
     print("spawn:", " ".join(cmd), flush=True)
     with open(args.out.with_suffix(".server.log"), "wb") as log:
         proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
