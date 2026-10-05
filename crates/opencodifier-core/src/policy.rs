@@ -367,7 +367,13 @@ impl Default for Limits {
             max_questions: 32,
             max_candidates: 256,
             max_graph_nodes: 128,
-            max_execution_time: Duration::from_secs(10),
+            // 120 s: the model rung's measured CPU tail, not a guess — a
+            // 15 KB long-policy state over a 5-candidate parallel readout
+            // takes ~22 s, so the earlier 10 s ceiling turned long-document
+            // escalations into `schema.limit_exceeded` rejections (found by
+            // the JevBench ladder runs, 2026-10-05). Still a hard ceiling:
+            // a request may declare anything at or under it, never above.
+            max_execution_time: Duration::from_secs(120),
             max_retrieval_results: 64,
         }
     }
@@ -446,6 +452,6 @@ mod tests {
         let limits = Limits::default();
         assert_eq!(limits.max_questions, 32);
         assert_eq!(limits.max_candidates, 256);
-        assert_eq!(limits.max_execution_time, Duration::from_secs(10));
+        assert_eq!(limits.max_execution_time, Duration::from_secs(120));
     }
 }

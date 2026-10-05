@@ -1184,3 +1184,28 @@ ecosystem (and Fastino's GLiDE demo) convention is a
   `x-opencodifier-format: jev` (HTTP), `opencodifier decide --format
   jev` (CLI), `Jev` adapter in-process (library). This is documented as
   the integration path in `INTEGRATIONS.md` §2.4, not a workaround.
+
+## D32 — The request execution ceiling follows the rung's measured tail: 10 s → 120 s (2026-10-05)
+
+- **What changed**: `Limits::default().max_execution_time` (the IR's
+  per-request wall-clock ceiling and the schema's validation reference)
+  is 120 s, not 10 s. A request may declare any deadline at or under
+  the ceiling and never above it; the engine still runs at
+  `min(request, server config)`, so nothing about enforcement moves.
+- **Why**: the ceiling was calibrated before the model rung existed.
+  Its measured CPU tail — a 15 KB long-policy state over a
+  5-candidate parallel readout — is ~22 s, so every long-document
+  escalation died as `schema.limit_exceeded: 120 > 10` before any
+  model token was scored. Found by the JevBench full-system runs
+  (task #105): the proofs-only ladder aborted twice on exactly this
+  (first as `engine.timeout` under the old adapter's 10 s payload,
+  then as a hard rejection when the adapter declared more than the
+  IR allowed).
+- **What it is not**: not a loosening of enforcement. The hostile-
+  input posture is unchanged — the ceiling is still finite, still
+  validated at the wire, still min-ed with the server's own config.
+  D9 per-stage performance budgets are unaffected (they measure
+  engine stages, not request deadlines).
+- **Revisit condition**: if a rung's measured tail ever exceeds the
+  ceiling, the ceiling moves again — to the measured tail, not to a
+  round number.
