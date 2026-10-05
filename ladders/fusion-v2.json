@@ -1,0 +1,32 @@
+{
+  "id": "fusion-v2",
+  "per_kind": {
+    "rule": {
+      "min_confidence": 1.0,
+      "verify_below": 0.95,
+      "abstain_below": 0.5,
+      "risk": "low"
+    },
+    "choice": {
+      "min_confidence": 0.56,
+      "verify_below": 0.0,
+      "abstain_below": 0.0,
+      "risk": "low",
+      "min_margin": 0.0
+    },
+    "boolean": {
+      "min_confidence": 0.56,
+      "verify_below": 0.0,
+      "abstain_below": 0.0,
+      "risk": "low",
+      "min_margin": 0.0
+    },
+    "score": {
+      "min_confidence": 0.56,
+      "verify_below": 0.0,
+      "abstain_below": 0.0,
+      "risk": "low",
+      "min_margin": 0.0
+    }
+  }
+}

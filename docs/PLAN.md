@@ -824,6 +824,16 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   `llama-server` — blended **0.842 ≥ 0.80** at **117.2 ms mean ≤ 1 s**
   (p50 0.54 ms; 37/120 items escalate; replay bit-exact; board row
   `engine__rung-qate2b-q4_0-fusion.json`, BENCHMARKS.md footnote ¹⁴).
+  **F28 gate refit landed (2026-10-05)**: contract-faithful tree
+  collection (`runner/collect_tree.py`) showed the model rung alone at
+  **0.758** under the engine's served shape (letters-era 0.808 does not
+  transfer); the offline sweep (`runner/tree_margin_refit.py`) found
+  the margin axis flat on lexical confidences — shipped
+  `ladders/fusion-v2.json` (accept at confidence ≥ 0.56, margin 0.0) —
+  engine-validated at **0.933 @ 259.8 ms** mean (56/120 escalations,
+  replay bit-exact, in-sample; held-out estimate ~0.90), board row
+  `engine__rung-qate2b-q4_0-fusion-v2.json`, footnote ¹⁵; run JSONs now
+  stamp `config.host` provenance.
   The embedding rung's margin
   gate is measured (`results/embed-margin-study.md`: margin ≥ 0.0183 →
   coverage 0.208 at acc 0.880, monotone to 1.000 at 0.0283), closing

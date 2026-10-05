@@ -284,8 +284,13 @@ def enrich(runs_dir: Path, csv_path: Path) -> int:
         except (OSError, json.JSONDecodeError):
             continue
         metrics = data.get("metrics", {})
-        if metrics.get("mean_ms") and not row["mean_ms"]:
-            row["mean_ms"] = str(round(metrics["mean_ms"]))
+        # Engine arms nest latency under metrics.latency (run_engine.py);
+        # model arms carry a flat mean_ms.
+        mean = metrics.get("mean_ms")
+        if mean is None and isinstance(metrics.get("latency"), dict):
+            mean = metrics["latency"].get("mean_ms")
+        if mean and not row["mean_ms"]:
+            row["mean_ms"] = str(round(mean))
         if metrics.get("n") and not row["n"]:
             row["n"] = str(metrics["n"])
         added += 1

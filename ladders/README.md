@@ -78,6 +78,35 @@ F24, rung calibration precedes enabling a ladder by default; until the
 per-domain artifacts land, ladders ship opt-in exactly like the
 disabled §19 gates.
 
+### `fusion-v2.json` — the confidence-gated refit (F28, measured)
+
+The tree-shaped refit of `fusion-v1`'s classifier gate, fitted with
+`benchmarks/decision-model/runner/tree_margin_refit.py` on measured
+per-rung rows (lexical arm with full distributions; the model rung
+collected under the engine's exact payload contract):
+
+- `choice` / `boolean` / `score` rungs — accept on the winner's
+  **confidence** at **0.56**, `min_margin 0.0`. The sweep showed the
+  margin axis is flat on lexical/BM25 confidences (accuracy identical
+  across margin floors 0.00–0.11): v1's 0.0183 floor was measured on
+  embedding-cosine margins in the letters shape and did no work in the
+  served shape. The confidence axis is the discriminator; 0.56 is the
+  full-suite optimum, the modal per-half fit, and mid-plateau (0.933
+  holds over 0.55–0.58).
+- `rule` rung — unchanged from v1.
+
+Measured through the real engine on the locked suite (120 items,
+`engine__rung-qate2b-q4_0-fusion-v2.json`): blended **0.933** at
+**259.8 ms** mean (p50 0.94 ms), 56 model-rung escalations, replay
+bit-exact — vs v1's 0.842 @ 117.2 ms (37 escalations). Zero lexical
+accept is wrong at this gate; all residual error is model-rung error on
+escalated items, 2 of which fall below the gate themselves and are
+honestly flagged `verify` instead of `accept` (v1's `min_confidence 0.0`
+masked this distinction). Caveat carried in the report: the 0.933 is
+in-sample (the gate was fitted on the same 120 items); per-half
+refitting never beat fixed-0.56 out-of-sample, and a conservative
+held-out estimate is ~0.90.
+
 ### `proofs-only-v1.json` — the maximal-caution posture
 
 Only exact proofs are accepted outright; every classifier decision
