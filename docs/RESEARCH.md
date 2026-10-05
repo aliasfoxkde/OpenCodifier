@@ -1535,3 +1535,194 @@ cost-expectation gating (CascadeDebate: execute iff
 E[cost|execute] < E[cost|refuse]) as calibration-adjacent routing
 literature for the standing watch-list.
 
+## §14 — The public board: leaderboards, the alternatives press, and the dominance question (2026-10-05)
+
+Operator-directed sweep: five "open Jev alternatives" articles plus
+three benchmark surfaces — all eight URLs fetched and read in full on
+2026-10-05 (none missing; the Hugging Face Space
+`benchmarkheaven/JevBench` renders as an app shell only, its data
+lives on the benchmarkheaven site). Trigger: the operator's question —
+can OpenCodifier officially top the public benchmarks on **all**
+metrics (accuracy, error rate, latency, speed, cost) without a large
+LLM underneath?
+
+### §14.1 The evaluation landscape is four surfaces, not one
+
+| surface | scale | who runs it | headline rows |
+|---|---|---|---|
+| JevBench public 231 (`../JEVBENCH.md`) | 231 items | upstream authors' harness | hosted Jev 86.6 % / JEV-27B 88.70 (family-macro) / **fork_4b (ours) 76.62** / Kev-4B 73.71 / Laya 55.8–58.4 |
+| Benchmark Heaven "JevBench v1.6.0" | 1,500 decisions self-hosted / 600 hosted; 92 systems | third party, author-submitted | Quyet-1.0-Large Cap 81.7 (31B decoder), Jev Cap 76.5 (Intel 62.4), best ≤4B Cap 65.4 |
+| jabr classifier benchmark | 49 tasks / 869 cases | third party | Jev **0.966** vs best open **0.704** (Von); GLiNER2 0.698; Laya 0.583 |
+| jevbench.xyz | first-party run archive | JevBench itself | Banking77 80.3 % (19.7 % err); phishing recall 85.7 → 98.4 from one prompt change |
+
+Cross-surface divergence is itself the finding. Laya: own README
+0.766 (fine-tuned **on the benchmark's own training split** —
+in-sample), 0.583 on jabr, 46.6 on Fastino's 17-domain eval, Intel
+0.3–5.5 on Benchmark Heaven, 55.8–58.4 published on the 231. Kev-4B:
+73.71 family-macro on the 231, Intel 19.5 on Benchmark Heaven (their
+note: an older Qwen3-4B variant). Every system wins on a suite it
+chose — pinggy's own conclusion — so no number is portable and the
+only cross-suite currency is a composite. The board's official
+composite is a **harmonic mean** over Intelligence / Calibration /
+Speed / Cost (25:25:25:25, adjustable) — harmonic means punish the
+weakest axis hardest.
+
+### §14.2 The Benchmark Heaven board map (92 systems)
+
+Structure: Capability Score = mean(Intelligence, Calibration);
+eligibility for the Jev-class table = cost ≤ 2× Jev (≤ $0.065/1k) and
+median latency ≤ 2× Jev (≤ 1.23 s) — 63/92 qualify.
+
+- **The top of the board is large-model territory.** #1 Cap
+  Quyet-1.0-Large (81.7) runs an undisclosed decoder over
+  Gemma-4-31B; #2 deck-31B (frozen Gemma-4-31B-it FP8); #3 is Jev
+  itself (76.5). The best fully-≤4B row is Plumb-4B at Cap 65.4
+  (Intel 43.0). Beating the board *without a large LLM* therefore
+  means beating the 31B class on composite — that is the open
+  position.
+- Intelligence inside the Jev-class table: ~59 tops the ≤12B class
+  (Winnow-12B Q8), ~43 the ≤4B class. Calibration tops at 90.6 (Jev).
+  Reranker rows (bge-reranker, mxbai, GTE, zerank) score Intel 0–16
+  but Calib 73–88 — **the Calib column pays for abstention-aware
+  posture even at near-zero intelligence**; our calibrated
+  verify/abstain machinery monetizes directly on their metric.
+- Cost and latency correlate weakly (their Spearman ρ = 0.18,
+  n = 92): fast-and-cheap is genuinely unclaimed territory on the
+  board.
+- Submissions are author-reported (repo/model-card links; costs
+  marked \* are estimated) — self-attestation. jevbench.xyz marks its
+  own first-party runs "carries no evidence tier … artifacts
+  published in full" — the protocol-honesty language our REPORT.md
+  already practices; our provenance discipline (F30 audit, byte-lock,
+  determinism columns) is differentiating currency on a
+  self-attested board.
+
+Where we would land today (no cross-suite mapping assumed):
+eligibility is trivial (local CPU; fusion p50 0.94 ms in-suite /
+136.7 ms held-out vs the 1.23 s cap; marginal cost $0). Speed and
+cost: at/near the floor of anything on the board — the fastest board
+p50 is 0.18 s, and no row is both local and sub-second. Calibration:
+measured ECE 0.070 (fork_4b, 231) / 0.103 (fusion-v2, held-out suite)
+with abstention sits in board-top company. Intelligence on THEIR
+suite: unknown — the binding constraint, and the harmonic mean
+punishes it hardest. On the one third-party split we have run (231):
+fork_4b 0.7662 is above every published ≤4B row we know (Kev-4B
+73.71, decider-2b 71.0, Jev-Style-2B 73.6) and below the
+9B/27B/hosted class (Open-Jev-9B 77.13, hosted Jev 87.18, JEV-27B
+88.70).
+
+### §14.3 The dominance question, answered
+
+**Top-of-composite: plausible. Top-of-every-axis including accuracy
+over the hosted 27B class: not currently evidenced — the two goals
+differ by exactly the Intelligence axis.**
+
+- **Already won, today, on the board's own terms: cost and speed.**
+  Local-zero-cost and sub-150 ms p50 through the fusion gate vs a
+  0.18 s board-best — orders of magnitude, not margins. Error rate on
+  the 231: fork_4b 23.4 % vs Kev-4B 26.3 % / decider-2b 29 % —
+  best-in-class ≤4B; the hosted tier sits at ~13 %.
+- **The path runs through measurements we already queued.** #105
+  (fusion-v2 on the 231) is the single highest-value number left:
+  F29's +9.2 pp held-out lift, transferred at even half strength,
+  puts the full system near 0.81–0.82 on the 231 — past every open
+  ≤9B row, still short of hosted Jev. The official self-hosted
+  submission (1,500 decisions, their protocol) then buys the real
+  Intel/Calib read and tells us whether #88 (own distill) + #92
+  (ONNX rungs) + the §10.4 conformal gate can close on the 31B class.
+- **The "unique approach, no large LLM" thesis is the only unclaimed
+  position on the board**: the current #1 has a 31B underneath;
+  nobody combines local-free + sub-second + calibrated abstention +
+  ≤4B-class accuracy. That combination is what the composite rewards
+  (three of its four axes).
+- **Caveats.** (i) Suite sensitivity (§14.1) means "top of the
+  benchmarks" must be claimed per-benchmark with artifacts, never as
+  a universal number. (ii) jabr is the OOD gate the field flunks
+  (0.966 vs 0.704) — our abstention posture should be *presented*
+  there, where automation-share-at-error-budget is the honest metric
+  a ladder wins. (iii) The board is self-attested; independent
+  replication (their harness, our artifacts) is the credibility
+  moat, the same way the 231 split's author-harness runs are ours.
+
+### §14.4 Transferable insights, per source
+
+1. **pinggy** (survey + M3 Pro hands-on): the jabr failure-mode map —
+   Von collapses to one mode on unfamiliar domains, GLiNER2
+   over-triggers on keywords (the failure class our F30 leak test
+   audits for), Laya compresses rating scales. Laya's candid README:
+   base checkpoints near chance zero-shot (0.362/0.342 vs 0.318
+   random) and the 0.766 headline is trained on the evaluated
+   benchmark's own split — the in-sample contamination pattern F30
+   exists to catch; also weak on large option sets (Banking77 0.425
+   vs Jev 0.870) from a fixed per-option token budget — our
+   candidate-conditioned parallel slots have no such cap, and a
+   large-candidate-set robustness claim is testable with the D9
+   256-candidate bench. NanoJev: a 0.6B purpose-trained model beats
+   Jev 128/128 vs 56/128 **inside its training domain** (ViZDoom) and
+   fails outside — the domain-distill thesis behind #88, plus
+   evidence that "beats Jev at one thing" is a publicly holdable
+   position. jevlike's **shuffled-context control** (pair each menu
+   with the wrong context) is a cheap label-free OOD probe worth
+   adding to suite reporting. And: stars ≠ quality (Von, 546 stars,
+   leads the open field on jabr over 19.3k-star Laya).
+2. **Kev's evaluation discipline** (pinggy/datacamp): automation
+   share at a fixed error budget as a first-class published metric
+   (Kev-9B 0.45–0.57 vs Jev 0.70 at 5 %) — directly computable from
+   our gate-coverage rows; adopt in BENCHMARKS.md beside ECE. Their
+   held-out-new-sources split (0.822 vs Jev 0.857) is the same move
+   as our F29.
+3. **SemIf** (pinggy/datacamp): direct option-logit readout is 5.21×
+   faster than JSON generation; reusing one long state across 21
+   criteria lifts 2.33 → 20.03 decisions/s — third-party replication
+   of the single-pass readout and shared-prefill levers (Kai's
+   `shared_ctx.py`, §10.5, same shape).
+4. **apidog**: mini-jev's 6,750-observation paired test — JSON
+   generation 0.909 vs letter-logit 0.907 (CI [−1.44, +1.04]) — the
+   readout mode costs no accuracy at ~4× latency: independent
+   replication of the F26 verdict-slot thesis with published CIs.
+   Jev pricing ($0.042/M input tokens, output free, 70–500 ms) is
+   the cost bar; their closing line — local wins privacy, not cost,
+   "once GPU time is counted" — is precisely the claim our ladder
+   rebuts: ~1 ms CPU gate decisions amortize to ~free.
+5. **scriptbyai**: Cloudflare ships Clef/Clef-flash (27B/9B,
+   Apache-2.0) — the hosted-tier Intel ceiling we do not chase;
+   Kev-27B 0.889 on its New Sources set (80 GB-GPU class).
+   **jevos-v3** (CPU-only single native binary, no Python, 80.8 % on
+   999 hand-written yes/no) is our closest philosophical competitor
+   and is *not* on the Benchmark Heaven board — watch item + possible
+   231 arm.
+6. **geeky-gadgets**: 20–30 projects in under two weeks; "cascade
+   modeling — lightweight models for simple tasks, reasoning models
+   for complex ones" is now mainstream advice: the ladder's thesis,
+   independently arrived at. Decider's 32k context — context length
+   is a board-visible axis.
+7. **benchmarkheaven**: the board structure itself (§14.2) — the
+   eligibility line, the harmonic composite, the weak cost/latency
+   correlation, and rerankers earning Calib points with zero Intel.
+8. **jevbench.xyz**: protocol sensitivity as a published finding
+   (one prompt change moved recall 85.7 → 98.4, "same model, same
+   rows") — grounds D15's refit-on-change discipline and §7.2's
+   template-contract doctrine; also offers private evaluation
+   (register interest, no data upload) — a possible official-number
+   path that does not require publishing artifacts.
+
+### §14.5 Actionable deltas + watch-list (merges under §9.3/§10.7/§13)
+
+1. **#105 reframed**: the fusion-v2 231 re-run is the
+   pre-submission measurement for the dominance program.
+2. **NEW #107 — benchmark-dominance program**: official Benchmark
+   Heaven self-hosted submission (1,500 decisions, their protocol,
+   artifacts published); jabr run if the harness is public; add an
+   automation-share-at-5 %-error column to BENCHMARKS.md rows;
+   large-candidate-set (77-label-class) robustness probe via the D9
+   256-candidate bench; shuffled-context OOD probe in suite
+   reporting.
+3. Watch: jevos-v3 (CPU-binary posture twin; candidate 231 arm); Von
+   (jabr open-field leader, 395M ModernBERT — same family as our
+   model2vec/vtx line); Clef-flash (Apache-2.0 9B, possible rung
+   candidate); CLM-35B (§6.6, ~Oct 6–10); Fastino GLiNER2.5-Decide
+   arms (§9.3-7 unchanged).
+4. Reporting rule: whenever an external number is quoted in
+   marketing material, carry the §14.1 divergence table with it —
+   one number per surface, never a universal claim.
+
