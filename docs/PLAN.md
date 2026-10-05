@@ -1055,6 +1055,38 @@ in between. Ordered so each step's output feeds the next.
   no-run/no-signing caveat in release notes. Registry publication
   (crates.io/Homebrew/winget) is an outward action awaiting explicit
   user go — never automatic.
+- **18j (§58) — the release path is a recipe, not a remembered sequence
+  (2026-10-05).** Three pieces, all locally exercised end to end at
+  v0.4.0 (commit 55b5029e6c1a): a **build matrix** (`just
+  release-preflight` / `release-build <target>` / `release-matrix`) over
+  `x86_64-unknown-linux-gnu` (host `cc`), `x86_64-unknown-linux-musl`
+  (`cc` + `musl-gcc`, produces `static-pie linked` — the linkage claim
+  in the attestation is checked, not assumed), and
+  `aarch64-unknown-linux-gnu` (`cargo-zigbuild` + `zig`); a target whose
+  toolchain is absent fails naming the missing tool (validated by
+  stripping each one out of `PATH` — rustc, cargo, `cc`, `musl-gcc`,
+  `zig`) and the matrix never narrows silently; builds are `--locked`,
+  staged to `dist/v<version>-<target>/` (gitignored), and attested. An
+  **attestation generator** (`scripts/generate_attestation.py`, schema
+  `opencodifier.attestation/1`): sha256 + bytes + target + `file` magic
+  + git commit + tree state + rustc/cargo + `Cargo.lock` sha256 +
+  workspace-tree sha256 + feature flags + build command + UTC timestamp,
+  fixed key order re-checked after serialization, every digest computed
+  from two agreeing reads, the declared triple cross-checked against the
+  artifact's magic, and a written attestation re-verified against its
+  artifact before PASS (`--check` is the consumer half; validated by
+  tamper, wrong-triple, dynamic-claimed-as-musl, and outside-repo
+  refusals). **Release notes** render from the attestations
+  (`just release-notes` over `docs/RELEASE_NOTES_TEMPLATE.md`) —
+  digests, provenance, and reproduction commands are quoted from the
+  attestation, never hand-copied, and the slots a script cannot measure
+  (highlights, gate receipts, per-artifact verification level) stay
+  explicitly human. Measured this session: all three targets built and
+  attested (musl static-pie 6,772,912 B; gnu 6,683,704 B; aarch64
+  4,597,968 B), `just release-verify` 3/3 PASS, and the staged host
+  artifact passed the full e2e suite 30/30. Still open per D24: the
+  cross lanes stay link + `file`-magic only (no qemu, no macOS host),
+  and registry publication waits for an explicit user go.
 - **Coverage close-out — DONE (2026-09-29).** The 18b gap table driven
   to its floor: 203 → 125 `DA`-missed lines by twelve tests across six
   crates (wasm public-boundary success paths, registry decode-refusal
