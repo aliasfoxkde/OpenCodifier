@@ -11,6 +11,7 @@
 //!   engine::Classifier  ◄── EmbeddingClassifier (any EmbeddingBackend)
 //!                       ◄── CandidateConditionedModel (any InferenceBackend)
 //!                       ◄── LlamaDecisionClassifier (llama.cpp fork, D26)
+//!                       ◄── kai contract + KaiOnnxBackend (task #92)
 //!   model::ModelManifest ── pins artifact bytes (SHA-256, D14)
 //!   runtime::InferenceBackend / EmbeddingBackend
 //! ```
@@ -32,6 +33,12 @@
 //!   required, math renormalized in Rust. The HTTP client lives behind
 //!   the `llamacpp` feature (see the [`llamacpp`] module); the
 //!   classifier itself is transport-agnostic and always compiled.
+//! * The [`kai`] contract module — the Kai-0.6B-ONNX decision rung
+//!   (task #92): exact prompt rendering, pointer computation with
+//!   in-pipeline assertions, the fitted score bias, and `f64` softmax,
+//!   all feature-free and verified against a frozen upstream parity
+//!   fixture. The ONNX transport itself lives in
+//!   `opencodifier_runtime::kai`, behind the `onnx` feature.
 //!
 //! # Example
 //!
@@ -66,12 +73,21 @@
 pub mod decision;
 pub mod embedding;
 pub mod error;
+pub mod kai;
 pub mod llamacpp;
 pub mod manifest;
 
 pub use decision::{CANDIDATES_INPUT, CONTEXT_INPUT, CandidateConditionedModel, LOGITS_OUTPUT};
 pub use embedding::EmbeddingClassifier;
 pub use error::ModelError;
+#[cfg(feature = "tokenizers")]
+pub use kai::HfTokenizer;
+pub use kai::{
+    BpeTokenizer, FIXTURE, FIXTURE_TOKENIZER, KaiBatch, KaiEncoding, KaiKind, KaiOption,
+    KaiPayload, KaiQuestion, KaiSegments, KaiTokenizer, MAX_CANDIDATES, MAX_INPUT_TOKENS,
+    MAX_SCORE_LEVELS, MIN_CANDIDATES, PAD_ID, PROMPT_VERSION, SCORE_BIAS, apply_score_bias,
+    canonical_json, probabilities, score_batch, score_bias, softmax,
+};
 #[cfg(feature = "llamacpp")]
 pub use llamacpp::UreqTransport;
 pub use llamacpp::{
