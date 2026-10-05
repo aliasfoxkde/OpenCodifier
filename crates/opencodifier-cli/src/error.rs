@@ -63,6 +63,11 @@ pub const CODE_INVALID_GRAPH_JSON: &str = "cli.invalid_graph_json";
 /// not the ladder wire shape, or rejected by the engine's validation.
 pub const CODE_INVALID_LADDER: &str = "cli.invalid_ladder";
 
+/// Stable code reported when the `--llama` decision rung cannot attach:
+/// the binary was built without the `llamacpp` feature, or the flag trio
+/// arrived incoherent past argument parsing.
+pub const CODE_MODEL_RUNG_UNAVAILABLE: &str = "cli.model_rung_unavailable";
+
 /// Stable code reported when `--bind` is not a valid socket address.
 pub const CODE_INVALID_BIND: &str = "cli.invalid_bind";
 

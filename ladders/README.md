@@ -22,6 +22,35 @@ A non-empty profile decorates the cache identity with
 ladder) never replay across profiles. The profile `id` is the
 discriminator — bump it when a profile's gates or artifacts change.
 
+## The model rung
+
+The escalation tail is a running llama-server serving the
+`parallel-decision` fork's `POST /v1/decision` readout (DECISIONS.md
+D26), attached with `--llama`:
+
+```bash
+opencodifier serve --ladder ladders/fusion-v1.json \
+    --llama http://127.0.0.1:8080 \
+    --llama-model-id 'pd-fork-ad129b0|qwen3.5-2b-q4_k_m|tree-v2'
+```
+
+The primary rungs stay cheap: exact proofs accept outright, and a
+classifier decision must clear its rung's gate before it is trusted.
+Only a non-accepting outcome (`Verify` *or* `Abstain`) fires the llama
+rung, whose own distribution is gated exactly like any other rung's —
+one classifier per accepted question, never two (D27). The model id is
+the cache-key discriminator for the served weights; changing it re-keys
+every cached decision, exactly like a model swap. Per-request timeouts
+default to 30 s and move with `--llama-timeout-ms` (the board's CPU p50
+for a 2B arm is ~1.7 s; 9B tails run longer).
+
+`--llama` requires a build with `--features llamacpp` (it adds the
+`ureq` dependency); a default build refuses the flag with
+`cli.model_rung_unavailable` instead of silently ignoring it. The
+deterministic-first contract is unchanged: without `--llama` the base
+binary is useful with no model files anywhere on the machine, and with
+it the model is fired only by the gate.
+
 ## Shipped profiles
 
 ### `fusion-v1.json` — the measured escalation profile

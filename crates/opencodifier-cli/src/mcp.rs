@@ -1,17 +1,16 @@
 //! `opencodifier mcp`: the Model Context Protocol surface over stdio.
 //!
 //! The tools run on the same assembled engine as `serve` —
-//! [`EngineHandle::lexical`] over the default pipeline or a `--graph`
-//! replacement — so the CLI, HTTP, and MCP interfaces cannot drift apart on
+//! [`opencodifier_engine::EngineHandle::lexical`] over the default pipeline or a `--graph`
+//! replacement, plus the same optional ladder and llama.cpp model rung —
+//! so the CLI, HTTP, and MCP interfaces cannot drift apart on
 //! what a decision is. The transport is the process's own stdin/stdout:
 //! there is no socket, and therefore nothing to bind, refuse, or expose.
 
 use std::path::Path;
 use std::sync::Arc;
 
-use opencodifier_engine::EngineHandle;
-
-use crate::args::{McpArgs, McpSubcommand};
+use crate::args::{LlamaRungArgs, McpArgs, McpSubcommand};
 use crate::error::{CODE_MCP_SESSION_FAILED, CODE_RUNTIME_FAILED, CliError};
 use crate::runtime;
 
@@ -23,8 +22,8 @@ use crate::runtime;
 /// [`CliError::engine`] when the runtime or the MCP session itself fails.
 pub(crate) fn run(args: &McpArgs) -> Result<(), CliError> {
     match &args.command {
-        McpSubcommand::Serve { graph, focus_budget, ladder } => {
-            serve(graph.as_deref(), *focus_budget, ladder.as_deref())
+        McpSubcommand::Serve { graph, focus_budget, ladder, llama } => {
+            serve(graph.as_deref(), *focus_budget, ladder.as_deref(), llama)
         }
     }
 }
@@ -40,9 +39,10 @@ fn serve(
     graph_path: Option<&Path>,
     focus_budget: Option<usize>,
     ladder_path: Option<&Path>,
+    llama: &LlamaRungArgs,
 ) -> Result<(), CliError> {
     let handle =
-        EngineHandle::lexical(runtime::engine_config(graph_path, focus_budget, ladder_path)?)?;
+        runtime::handle(graph_path, focus_budget, ladder_path, runtime::model_rung(llama)?)?;
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|error| CliError::engine(CODE_RUNTIME_FAILED, error.to_string()))?;
     runtime
