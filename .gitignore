@@ -3,6 +3,11 @@
 # wasm-pack output (§57): rebuilt by `just check-wasm`, never committed
 /crates/opencodifier-wasm/pkg
 
+# Release staging (`just release-matrix`, `just release-notes`): matrix
+# artifacts, their attestations, and the rendered release notes. Uploads ride
+# the GitForge release; this tree is regenerated, never committed.
+/dist
+
 # Coverage output
 /coverage
 *.profraw

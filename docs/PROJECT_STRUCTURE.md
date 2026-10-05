@@ -19,6 +19,15 @@ opencodifier/
 ├── infrastructure/
 │   └── docker/ci-rust.Dockerfile  # runner-local CI image recipe (`just ci-image`)
 │
+├── scripts/                 # single-purpose validation + release tooling
+│   ├── e2e_validate.py          # release-binary e2e over the real wire (PLAN 18d)
+│   ├── coverage_floor.py        # lcov DA-basis floor assertion (CI coverage lane)
+│   ├── generate_attestation.py  # verified per-artifact build attestation (schema opencodifier.attestation/1)
+│   └── generate_release_notes.py# renders notes from attestations + docs/RELEASE_NOTES_TEMPLATE.md
+│
+├── dist/                    # release staging (gitignored): matrix artifacts,
+│                            # attestations, rendered notes (`just release-matrix`)
+│
 ├── crates/
 │   ├── opencodifier-core/      # canonical decision IR (done)
 │   ├── opencodifier-schema/    # native/OpenAI/Anthropic/Jev adapters (done)
@@ -39,6 +48,9 @@ opencodifier/
 │   └── decision-model/      # Phase 13 model-pick benchmark: byte-locked suite, arms, results
 ├── site/                    # static marketing page (Cloudflare Pages direct-upload; no build)
 └── docs/                    # PLANNING.md (founding), PLAN.md (live plan), …
+                             #   RELEASE_NOTES_TEMPLATE.md is the release-notes
+                             #   skeleton; `just release-notes` fills its
+                             #   mechanical slots from the dist/ attestations
 ```
 
 ## Dependency direction (binding)
