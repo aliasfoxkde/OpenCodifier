@@ -808,7 +808,19 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   gate overrides resolved at the existing confidence gate
   (`opencodifier-engine/src/ladder.rs`), identity-decorated cache keys,
   byte-identical when empty; thresholds become config once per-domain
-  calibration exists (opt-in ship posture). The embedding rung's margin
+  calibration exists (opt-in ship posture). **Model rung wired
+  (2026-10-05, D26/D27)**: `LlamaDecisionClassifier`
+  (`opencodifier-model`, `llamacpp` feature — ureq loopback client over
+  the fork's `POST /v1/decision`, Rust-side softmax, no synthesized
+  probability) + cross-rung escalation tail (`with_rungs`, fired only
+  by the gate, `|rungs-v1@…` cache re-key) + CLI surfacing
+  (`--llama/--llama-model-id/--llama-timeout-ms` on `decide`, `serve`,
+  `mcp serve`; `runtime::handle` assembles lexical-primary +
+  model-rung; `ladders/README.md` "The model rung"; default build
+  stays dependency-identical and refuses `--llama` with
+  `cli.model_rung_unavailable`). D26 acceptance (in-process blended
+  ≥ 0.80 @ ≤ 1 s on the locked suite through the real engine) pending
+  the live-server run. The embedding rung's margin
   gate is measured (`results/embed-margin-study.md`: margin ≥ 0.0183 →
   coverage 0.208 at acc 0.880, monotone to 1.000 at 0.0283), closing
   CALIBRATION finding 3. (8) ✅ resource accounting: `runner/resources.py`

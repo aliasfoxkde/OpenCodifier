@@ -25,6 +25,12 @@ serde.workspace = true
 serde_json.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
+[features]
+# The llama.cpp decision rung (D26): pulls `ureq` into
+# `opencodifier-model`. Without it the default build is
+# dependency-identical and `--llama` is refused at runtime.
+llamacpp = ["opencodifier-model/llamacpp"]
+
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"

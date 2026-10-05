@@ -58,14 +58,16 @@ fn assemble(args: &ServeArgs) -> Result<(SocketAddr, ServerConfig, EngineHandle)
         ));
     }
 
-    let config =
-        runtime::engine_config(args.graph.as_deref(), args.focus_budget, args.ladder.as_deref())?;
-
     if let Some(path) = &args.policy {
         report_policy_limitation(path)?;
     }
 
-    let handle = EngineHandle::lexical(config)?;
+    let handle = runtime::handle(
+        args.graph.as_deref(),
+        args.focus_budget,
+        args.ladder.as_deref(),
+        runtime::model_rung(&args.llama)?,
+    )?;
     let server = ServerConfig::with_remote(bind, args.allow_remote)
         .map_err(|error| CliError::input(error.code(), error.to_string()))?;
     Ok((bind, server, handle))
@@ -116,6 +118,7 @@ mod tests {
             graph: None,
             focus_budget: None,
             ladder: None,
+            llama: crate::args::LlamaRungArgs::default(),
             policy,
         }
     }
