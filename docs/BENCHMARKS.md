@@ -201,7 +201,7 @@ routing is part of its contract, not error.
 | fast | Qwen3.5-0.8B (q4_0) | 0.650 | 0.074 | 0.35 | 613 ms | 537 MiB |
 | zero-ML floor (engine default) | relational-v1 over lexical | 0.683 | 0.094 | **0.950** | **1.3 ms** | 0 MiB |
 
-### Complete board (111 runs, 2026-09-25 → 2026-10-05)
+### Complete board (113 runs, 2026-09-25 → 2026-10-05)
 
 Columns: accuracy (metadata / lexical / relational), overall accuracy,
 ECE, single-decision p50, run-twice determinism. `(chat screen)` rows
@@ -221,6 +221,7 @@ arm — sampled decode, never comparable to decision rows.
 | engine__lexical__long__full.json ¹ | 0.88 / 0.23 / 0.95 | 0.683 | 0.094 | 6.7ms | yes |
 | engine__relational-v1.json | 0.88 / 0.23 / 0.95 | 0.683 | 0.094 | 1.3ms | yes |
 | engine__rung-qate2b-q4_0-fusion.json ¹⁴ | 0.88 / 0.78 / 0.88 | **0.842** | 0.098 | 0.54ms | yes (Δp 0.000) |
+| engine__rung-qate2b-q4_0-fusion-v2.json ¹⁵ | 1.00 / 0.93 / 0.88 | **0.933** | 0.092 | 0.94ms | yes (Δp 0.000) |
 | k2chat__K2-Horizon-1B-Q4_K_M.json (chat screen) | 0.88 / 0.80 / 0.50 | 0.725 | — | 1499.1ms | n/a (sampled) |
 | k2chat__K2-Horizon-4B-Q4_K_M.json (chat screen) | 1.00 / 0.93 / 0.17 | 0.700 | — | 4878.9ms | n/a (sampled) |
 | k2chat__K2-Horizon-7B-Q4_K_M.json (chat screen) | 1.00 / 0.95 / 0.45 | 0.800 | — | 9052.1ms | n/a (sampled) |
@@ -328,6 +329,7 @@ arm — sampled decode, never comparable to decision rows.
 | torch__e2bqat-mobile-bf16-letters.json ¹¹ | 1.00 / 0.95 / 0.45 | 0.800 | 0.102 | 7490.2ms | yes (Δp 0.000) |
 | torch__tiny1b-bfloat16-letters.json ¹¹ | 0.20 / 0.35 / 0.35 | 0.300 | 0.205 | 1585.5ms | yes (Δp 0.000) |
 | torch__tiny1b-fp32-letters.json ¹¹ | 0.13 / 0.28 / 0.20 | 0.200 | 0.307 | 660.5ms | yes (Δp 0.000) |
+| tree__e2bqat-q4_0-collect.json ¹⁵ | 1.00 / 0.93 / 0.35 | 0.758 | 0.139 | 503.5ms | yes (Δp 0.000) |
 | vtx__VTX-JEV-3-fp32.json | 0.20 / 0.33 / 0.42 | 0.317 | 0.099 | 0.8ms | yes |
 | vtx__VTX-JEV-3-lf2.json | 0.17 / 0.25 / 0.30 | 0.242 | 0.136 | 1.1ms | yes |
 
@@ -631,6 +633,36 @@ model misses some). Composite uses the F23 convention (mean-based
 Spd); on p50 alone the row would score 1.00 because 69 % of items
 never touch the model rung.
 
+¹⁵ F28 gate refit (2026-10-05, fedora, same stack as ¹⁴ — this is the
+first fully same-host ladder comparison on the board). Two runs:
+`tree__e2bqat-q4_0-collect.json` is the model rung alone, collected
+under the engine's exact payload contract (`mode: "tree"`, the rung's
+own default instructions, candidate ids) for all 120 items — it lands
+**0.758**, not the letters arm's 0.808: the letters-era readout numbers
+do not transfer to the served shape (per-class meta/lex/rel
+1.00 / 0.93 / 0.35 — the rung is near-perfect on lexical semantics and
+poor on relational composition, exactly the division of labor the
+solver/rung split wants). `tree_margin_refit.py` then swept the
+classifier gate on measured per-rung rows: the margin axis is **flat**
+on lexical/BM25 confidences (accuracy identical across margin floors
+0.00–0.11) — v1's 0.0183 floor was fitted on embedding-cosine margins
+in the letters shape and did no work in the served shape. Shipped
+`ladders/fusion-v2.json`: accept at winner-confidence ≥ 0.56, margin
+floor 0.0. Validated through the real engine: blended **0.933** @
+**259.8 ms** mean (p50 0.94 ms, p95 1210 ms), 56/120 model-rung
+escalations, replay bit-exact — +9.1 pp over v1 at 2.2× mean, still
+3.8× under the 1 s budget, and 6.6 pp over the F23 simulation's 0.867.
+No lexical accept is wrong at this gate; every residual error is a
+model-rung error on an escalated item, 2 of which fall below the gate
+and are flagged `verify` (v1's `min_confidence 0.0` masked this).
+Honesty note: the 0.933 is **in-sample** (gate fitted on the scored
+suite); per-half refitting never beat fixed-0.56 held-out (max Δ
++0.000) and a conservative out-of-sample estimate is ~0.90 — above v1
+either way. Run JSONs now stamp `config.host` (this run: `fedora`);
+earlier rows carry no host field and mix NAS-era and fedora-era
+latencies — cross-era speed comparisons on this board carry that
+caveat until a same-host sweep.
+
 What the board established (full findings catalog in REPORT.md):
 
 - **The relational ceiling.** Every model arm ≤ 4B sits at or below 0.50
@@ -788,6 +820,7 @@ instrument that decides whether a rung earns traffic.
 | VTX-JEV-3 lf2 (static embedding) | 0.242 | 0.136 | 0.106 | 0.99 | 1.00 | **59.5** | no |
 | jebadiah-4b-v2 **Q3_K_S** | 0.792 | 0.087 | 0.705 | 0.15 | 0.50 | **48.7** | no |
 | Suite ladder (simulated fusion, F23) | 0.867 | — | —¹ | 0.28 | —¹ | **47.4**¹ | no |
+| OpenCodifier ladder v2 (measured, F28) | 0.933 | 0.092 | 0.841 | 0.40 | 0.41 | **60.0**¹ | no |
 | OpenCodifier ladder (measured, D26) | 0.842 | 0.098 | 0.744 | 0.48 | 0.41 | **58.1**¹ | no |
 | jebadiah-4b-v2 Q8_0 | 0.800 | 0.051 | 0.749 | 0.14 | 0.34 | **46.5** | no |
 | Qwen3.5-4B UD-Q4_K_XL (tree readout) | 0.800 | 0.074 | 0.726 | 0.08 | 0.43 | **45.9** | no |

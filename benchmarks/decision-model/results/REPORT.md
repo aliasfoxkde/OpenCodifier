@@ -880,6 +880,44 @@ trusted to route.
   differs; a tree-shaped margin refit is the obvious next lever
   (D15 artifact, per-rung calibration seam). Board row
   `engine__rung-qate2b-q4_0-fusion.json`; BENCHMARKS.md footnote ¹⁴.
+- **F28 — the tree-shaped gate refit lands 0.933 @ 260 ms through the
+  real engine, beating every arm and every simulated blend on the
+  board.** The F27 next-lever executed end to end. (1) *Contract-faithful
+  collection*: `collect_tree.py` gathers the model rung's tree
+  distributions for all 120 items under the engine rung's exact payload
+  (DEFAULT_INSTRUCTIONS, candidate ids, `mode: "tree"`) — the standalone
+  rung lands **0.758**, not the letters arm's 0.808: letters-era
+  readout numbers do not transfer to the served shape (meta/lex/rel =
+  1.00 / 0.93 / 0.35; the rung is near-perfect on lexical semantics,
+  poor on relational — precisely the division of labor the solver/rung
+  split assumes). (2) *The refit*: margins captured per item for the
+  lexical arm (the IR always ships the full distribution;
+  `run_engine.py` now stores it) and swept against the tree rows —
+  **the margin axis is flat on lexical/BM25 confidences** (accuracy
+  identical across margin floors 0.00–0.11), so fusion-v1's 0.0183
+  floor — measured on embedding-cosine margins in the letters shape —
+  was doing no work in the served shape; the confidence axis is the
+  discriminator. Shipped `ladders/fusion-v2.json`: accept at
+  winner-confidence ≥ 0.56 (full-suite optimum, modal per-half fit,
+  mid-plateau — 0.933 holds over 0.55–0.58), margin 0.0. (3) *Engine
+  validation*: `engine__rung-qate2b-q4_0-fusion-v2.json` — blended
+  **0.933** @ **259.8 ms** mean (p50 0.94 ms, p95 1210 ms), 56/120
+  escalations, replay bit-exact (Δp 0.000), first run stamped with the
+  new `config.host` provenance field. The offline sweep predicted the
+  engine exactly (0.933 / 242 ms sim vs 0.933 / 260 ms served). Zero
+  lexical accepts are wrong at the gate; every residual error is a
+  model-rung error on an escalated item, 2 of which fall below the
+  0.56 gate and are honestly flagged `verify` (v1's `min_confidence
+  0.0` masked this distinction). Honest caveat: 0.933 is **in-sample**
+  — the gate was fitted on the scored suite. Per-half refits
+  (400 trials) never beat fixed-0.56 held-out (max Δ +0.000) and
+  select 0.54–0.56 in 68 % of trials; conservative out-of-sample
+  estimate ~0.90, above v1's 0.842 either way. Instrument artifacts:
+  `runner/collect_tree.py`, `runner/tree_margin_refit.py`,
+  `runs/tree__e2bqat-q4_0-collect.json`,
+  `runs/engine__relational-v1-margins.json`. Board rows
+  `engine__rung-qate2b-q4_0-fusion-v2.json` +
+  `tree__e2bqat-q4_0-collect.json`; BENCHMARKS.md footnote ¹⁵.
 
 ## Threats to validity
 
@@ -923,6 +961,17 @@ trusted to route.
     nodes only — 46 attention-path MatMuls stay fp32 and the embedding
     Gather is untouched — so the 226 MB q4 arm is not a whole-graph
     4-bit result, and its numbers say nothing about fully-int4 encoders.
+13. **The F28 gate is fitted on the scored suite (in-sample).** The
+    0.933 headline carries a gate-selection component: per-half refits
+    never beat fixed-0.56 held-out and the threshold is the modal fit,
+    but the honest out-of-sample expectation is ~0.90 on suites of this
+    size. A held-out suite is the clean instrument (D16's discipline).
+14. **Host provenance starts 2026-10-05.** Run JSONs now stamp
+    `config.host`; earlier rows carry no host field and the board mixes
+    NAS-era rows (co-tenant load) with idle-fedora rows. Accuracy rows
+    are host-independent (deterministic readouts); cross-era speed
+    comparisons are not — the fusion-v1-vs-v2 ladder comparison (¹⁴ vs
+    ¹⁵) is fully same-host (fedora), the first clean one for ladders.
 
 ## Reproduction
 

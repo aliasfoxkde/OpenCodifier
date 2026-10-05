@@ -87,9 +87,22 @@ def decide(port: int, suite: dict, it: dict) -> dict:
     resp = post(f"http://127.0.0.1:{port}/v1/decide", payload)
     wall_ms = (time.monotonic() - t0) * 1000.0
     ans = resp["answers"][0]
+    # The IR ships the full per-candidate distribution on every Choice
+    # answer; keep it (sorted desc) plus the top-2 margin so ladder-gate
+    # refits can fit on real margins instead of winner prob alone.
+    dist = sorted(
+        (
+            {"key": e["key"], "probability": float(e["probability"])}
+            for e in ans["distribution"]["entries"]
+        ),
+        key=lambda e: -e["probability"],
+    )
+    margin = dist[0]["probability"] - dist[1]["probability"] if len(dist) > 1 else 1.0
     return {
         "choice": ans["choice"],
         "prob": ans["confidence"],
+        "dist": dist,
+        "margin": margin,
         "outcome": resp.get("outcome"),
         "wall_ms": wall_ms,
     }
@@ -106,6 +119,8 @@ def run_once(port: int, suite: dict) -> list[dict]:
                 "answer": it["answer"],
                 "pred": r["choice"],
                 "prob": r["prob"],
+                "dist": r["dist"],
+                "margin": r["margin"],
                 "outcome": r["outcome"],
                 "wall_ms": r["wall_ms"],
             }
@@ -213,6 +228,9 @@ def main() -> int:
         # solver composes to `relational-v1|builtin-lexical-v1`), so the
         # run JSON can never mislabel the deciding stack.
         "arm": f"engine__{model_id}",
+        # Speed rows are only comparable within a host (the board mixes
+        # hosts across eras); stamp provenance so every run self-describes.
+        "config": {"host": socket.gethostname()},
         "model": {"name": f"{model_id} (no ML)"},
         "suite_sha256": hashlib.sha256(args.suite.read_bytes()).hexdigest(),
         "single": rows,
