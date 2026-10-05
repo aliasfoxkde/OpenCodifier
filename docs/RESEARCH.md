@@ -336,6 +336,66 @@ fleet (robots/simulation) — context only.
   Server surface: `POST /v1/systemone`, loopback bind, no auth —
   same endpoint vocabulary the Jev bridge already targets.
 
+- **Verified locally (2026-10-05, contract + corpus).** The full
+  upstream contract was extracted from their own `prompting.py` /
+  `infer.py` / `data.py` and reproduced with plain `tokenizers` +
+  numpy against the shipped q8 ONNX:
+  - **Rendering**: `<state>\n{content}\n</state>\n` +
+    `<question type="{kind}">` with headers ("Decide whether the
+    statement is true of the state." / "Select exactly one option." /
+    "Rate the state against the ordered levels below (lowest first)."),
+    numbered one-line options `N. name — desc` (em-dash, desc
+    space-collapsed), `<answer>` tail; JSON state via
+    `json.dumps(indent=2, sort_keys=False)`; no BOS; `pad_token_id`
+    248044.
+  - **Packing**: question-first reserve `min(len(q), 0.75·4096)`;
+    question front-truncated with offsets AND pointer indices shifted
+    by the cut; state budget `4096 − reserve`.
+  - **Readout**: `option_pos` = LAST token index of each option's
+    char-span **plus `len(state_ids)`**; `answer_pos` = L−1; logits
+    divided by per-kind temperature (noul 0.9107, choice 0.7342,
+    score 1.3278) then softmax.
+  - **Fixture parity**: 11 recorded cases, worst Δprob 0.0255, zero
+    argmax flips — inside their published q8 tolerance band
+    (0.016–0.026). Full-pipeline e2e (own render → own tokenize → own
+    index math → graph): same 0.0255 / 0.
+  - **JevBench 231 probe (corrected run, `runs/strands2b-jevbench-v1/`)**:
+    **acc 0.7273, macro 0.7266, Brier 0.3449, ECE 0.0628**, p50 4.71 s
+    under host load (~2.8 s unloaded, ORT CPU) — against their
+    published 0.723 / Brier 0.342–0.349 / ECE 0.050: **reproduced**.
+    ECE 0.063 passes where Julia-1's 0.39 failed; latency makes this
+    an escalation/verifier rung candidate, never a per-request decider
+    (the deterministic engine serves the same split at 5.3 ms p50).
+    Family shape: extraction/fact/intent/ordinal/tool_selection 1.0,
+    temporal_numeric 0.20, long_policy 0.32, probability 0.40 — the
+    long-context and numeric families are where the 2B torso gives out.
+  - **Token distribution over the 231** (recorded `prompt_tokens`,
+    first datapoint for adaptive context allocation): p50 143, mean
+    661, p95 2717, max 3936 against the 4096 ceiling; 82.3 % of items
+    fit under 1024 tokens, 3.5 % exceed 3072. Per-question-type p50s
+    are indistinguishable (143/213/137); per-family p50s span 101
+    (extraction) to 2642 (long_policy, multi_hop) — the allocation
+    signal is the deterministic question class, not the wire type.
+    A static 4096 window buys the tail at ~28× the median cost on
+    every fused forward pass.
+  - **The v1 probe incident (0.2251, documented per request)**: the
+    first run passed question-relative `option_pos` without the
+    `len(state_ids)` base, so the pointer head read hidden states
+    inside the state text — **0.2251 accuracy, below chance, at mean
+    top-prob 0.558**: pointer readouts fail non-gracefully, producing
+    confident nonsense, not errors. A second latent bug
+    (truncated-question pointers not shifted by the cut) was fixed in
+    the same pass. Neither was caught by anything until the number
+    itself was flagged as weird; the fix is four-layer validation
+    (graph invocation → tokenization → span math → composition),
+    in-pipeline pointer assertions (count == options, base ≤ p < L,
+    strictly increasing), and the standing rule: sub-chance accuracy
+    is a bug alarm, never a model verdict. Codified in the harness
+    rules (backend-fixed `.claude/rules/quality.md`, 2026-10-05).
+    Broken runs archived as `results.wrongbase.jsonl` next to the
+    corrected artifacts; the corrected run reproduces the published
+    row.
+
 ### 6.6 Actionable deltas for the B-series
 
 1. **B5 model rung** — the board now has two CPU-feasible ONNX-native
@@ -1530,7 +1590,17 @@ Recipe conclusions that transfer to #88:
 #78's "strands-2B" resolves to `onnx-community/strands-decider-2B-hobson-v19-ONNX`
 — a decision model shipped as ONNX. That places it in #92's ONNX-rung
 line (Kai-0.6B-ONNX, Julia-1), not the GGUF bake-off; no official
-GGUF surfaced. #78 scope adjusted accordingly.
+GGUF surfaced. #78 scope adjusted accordingly. **Resolution
+(2026-10-05)**: contract verified and corpus-run — §6.5 "Verified
+locally" holds the numbers (0.7273 / ECE 0.0628, published row
+reproduced; fixture parity 0.0255 / 0 flips) and the v1 pointer-base
+incident write-up. Verdict for #92: the strands ONNX backend is the
+one arm whose calibration clears a gate, and its `InferenceBackend`
+trait fit is clean (fused q8 graph, `input_ids`/`attention_mask`/
+`answer_pos`/`option_pos` → logits `[B,K]`, temperature + softmax in
+Rust f64 above the line per D7); CPU latency (~2.8 s p50) caps it at
+escalation/verifier duty. Build is justified; the portability win
+(pure Rust + `ort`, no llama.cpp) is the reason, speed is not.
 
 ### §13.4 Gemma 3n QAT: checkpoints are public, the recipe is not
 
