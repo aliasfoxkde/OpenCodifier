@@ -1602,7 +1602,34 @@ Rust f64 above the line per D7); CPU latency (~2.8 s p50) caps it at
 escalation/verifier duty. Build is justified; the portability win
 (pure Rust + `ort`, no llama.cpp) is the reason, speed is not.
 
-### §13.4 Gemma 3n QAT: checkpoints are public, the recipe is not
+### §13.4 r78: the 9B letters collapse is readout transfer, not the model
+
+The r10 letters-parity anomaly (9B at 0.142, below the 0.25 chance
+floor) closed with a three-probe diagnosis on the same stock build and
+artifact: (1) raw completion is coherent — weights fine; (2) chat-mode
+empty completions were *our probe's* bug — the model emits thinking
+tokens that llama.cpp routes to `reasoning_content`, so `content` is
+empty at small `max_tokens`; with `enable_thinking: false` the sanity
+exchange is clean; (3) free-form answering in the model's trained
+option-label format scores **0.858** (metadata 1.00 / lexical 0.975 /
+relational 0.600), deterministic, 1/120 unparseable — while the
+letters interface on the identical artifact stays at 0.142. The
+letters arm's distributions were well-formed but content-free:
+constrained-letter logits renormalize into position-flavored noise
+(permutation analysis: zero content-following; by-position accuracy
+0.00–0.33). The 4B tolerates letters (0.833/0.850) — interface
+tolerance is per-model, not a family property. Board rows + footnote
+¹⁶ in `docs/BENCHMARKS.md` carry the numbers; procedural rule (Model-
+Import Parity Discipline, backend-fixed quality.md): a below-chance
+constrained-readout arm on a competent base is a readout bug alarm —
+the discriminating test is a free-form readout probe, run before any
+"broken model" verdict. Also resolved here: llama.cpp's
+`reasoning_content` split must be checked in any probe that reads
+`message.content` from a thinking-capable model — an empty visible
+completion is ambiguous between "refusal/EOS" and "all budget consumed
+by reasoning".
+
+### §13.5 Gemma 3n QAT: checkpoints are public, the recipe is not
 
 Google released the int4 QAT **checkpoints** (TorchAO-produced) for
 Gemma 3 / 3n but has **not** open-sourced the training code that
@@ -1616,7 +1643,7 @@ fine-tune; QA-LoRA/LoftQ family), not lifting Google's recipe. Open
 feasibility question: CPU-only fedora training throughput for a 4B
 fake-quant loop; the T5500 V100s remain the burst option.
 
-### §13.5 Cascade attack surface: confidence gates are adversarially steerable
+### §13.6 Cascade attack surface: confidence gates are adversarially steerable
 
 Forced Deferral Attack (arXiv:2606.15308, 2026-05): an adversarial
 input that *suppresses the weak model's confidence* forces a
