@@ -105,10 +105,12 @@ honestly flagged `verify` instead of `accept` (v1's `min_confidence 0.0`
 masked this distinction). Caveat carried in the report: the 0.933 is
 in-sample (the gate was fitted on the same 120 items); per-half
 refitting never beat fixed-0.56 out-of-sample, and a conservative
-held-out estimate is ~0.90. **Measured held-out (F29, `suite_holdout.json`,
-120 fully disjoint items): 0.883 vs v1's 0.817 under the identical stack
-and host, and the holdout's own optimum gate band is 0.55–0.58 — the
-shipped 0.56 sits at the holdout optimum with zero drift.**
+held-out estimate is ~0.90. **Measured held-out (F29,
+`suite_holdout.json` v3, 120 fully disjoint items, audit-hardened —
+see REPORT.md F30): 0.892 vs v1's 0.800 under the identical stack and
+host (+9.2 pp, undiminished from the in-sample +9.1), and the
+holdout's own optimum gate plateau is 0.56–0.59 — the shipped 0.56
+sits inside it with zero drift.**
 
 ### `proofs-only-v1.json` — the maximal-caution posture
 

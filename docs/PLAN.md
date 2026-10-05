@@ -834,15 +834,22 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   replay bit-exact, in-sample; held-out estimate ~0.90), board row
   `engine__rung-qate2b-q4_0-fusion-v2.json`, footnote ¹⁵; run JSONs now
   stamp `config.host` provenance. **F29 held-out validation (2026-10-05,
-  `suite_holdout.json`, 120 disjoint items)**: fusion-v2 **0.883** vs
-  fusion-v1 **0.817** under the identical stack and host — the refit
-  advantage transfers out-of-sample (+6.6 pp) and the honest discount
-  from the in-sample 0.933 lands inside the predicted ~0.90 band; the
-  holdout's own optimum gate band is **0.55–0.58**, containing the
-  shipped 0.56 with zero drift (margin axis flat on holdout too);
-  holdout class-B phrasings are markedly easier for BM25 (lexical-only
-  0.50 vs 0.225 on v1) — genuine distribution shift, and the gate holds
-  across it. Board rows `engine__holdout-*`, REPORT.md F29 entry,
+  `suite_holdout.json` v3, 120 disjoint items)**: fusion-v2 **0.892** vs
+  fusion-v1 **0.800** under the identical stack and host — the refit
+  advantage transfers out-of-sample undiminished (+9.2 pp vs +9.1
+  in-sample) and the honest discount from the in-sample 0.933 lands
+  inside the predicted ~0.90 band; the holdout's own optimum gate
+  plateau is **0.56–0.59**, containing the shipped 0.56 with zero drift
+  (margin axis flat on holdout too); lexical-only fell to 0.700 once
+  the audit-hardened class B lost its keyword hooks — a genuine
+  transfer test. **F30 integrity audit (same day)**:
+  `runner/audit_suite.py` re-derives every class-A/C answer from its
+  own context (80/80 exact on both suites), enforces class-B
+  structural validity + a keyword-leak test, checks main/holdout
+  disjointness, byte-lock, and stdlib-only provenance; one v1 leak
+  disclosed (frozen suite), six holdout leaks reworded before any F29
+  measurement, cross-suite id collision fixed (`h*` namespacing).
+  Board rows `engine__holdout-*`, REPORT.md F29/F30 entries,
   BENCHMARKS.md held-out section.
   The embedding rung's margin
   gate is measured (`results/embed-margin-study.md`: margin ≥ 0.0183 →
