@@ -918,6 +918,33 @@ trusted to route.
   `runs/engine__relational-v1-margins.json`. Board rows
   `engine__rung-qate2b-q4_0-fusion-v2.json` +
   `tree__e2bqat-q4_0-collect.json`; BENCHMARKS.md footnote ¹⁵.
+- **F29 — the F28 gate holds out of sample: 0.883 held-out vs v1's
+  0.817, and the threshold generalizes with zero drift.** Suite v2
+  (`suite_holdout.json`, seed 20261005, byte-locked; class B drawn from
+  a second disjoint 40-row pool of the authoring table — the one class
+  a seed cannot refresh — zero context overlap with v1, 40/40/40
+  balance). Four arms on the same fedora host, same stack as F28, all
+  replay bit-exact: lexical-only **0.742** (the new class-B phrasings
+  are far easier for BM25 — lex class 0.50 vs 0.225 on v1 — a real
+  distribution shift, so this is a genuine transfer test, not a
+  re-measurement), model rung alone **0.742** (meta 1.00 / lex 0.775 /
+  rel 0.45 — the F28 division-of-labor shape replicates),
+  fusion-v1 **0.817** @ 139.7 ms mean (38 escalations), fusion-v2
+  **0.883** @ 305.5 ms mean (60 escalations, 2 flagged `verify`).
+  The in-sample 0.933 discounted to **0.883 held-out** — inside the
+  predicted ~0.90 band — and the v2 > v1 ordering (+6.6 pp) holds.
+  Threshold drift: swept on holdout rows, the optimum band is
+  **0.55–0.58 — the shipped 0.56 sits at the holdout optimum**; the
+  margin axis stays flat. One deployment-shape honesty note: at ~60/120
+  escalations the holdout p50 crosses into rung territory (129.9 ms)
+  — on distributions where the lexical rung is less confident the
+  ladder shifts work to the model; p50 "mostly-lexical" behavior is
+  suite-dependent, which is precisely what per-deployment gate refits
+  (`tree_margin_refit.py`) are for. The marketable claim is now
+  two-sided: **0.933 in-sample / 0.883 held-out, both above v1's
+  0.842 / 0.817 under the identical stack and host**. Runs:
+  `engine__holdout-{lexical,fusion-v1,fusion-v2}.json`,
+  `tree__e2bqat-q4_0-holdout.json`; BENCHMARKS.md "Held-out suite".
 
 ## Threats to validity
 
@@ -965,7 +992,9 @@ trusted to route.
     0.933 headline carries a gate-selection component: per-half refits
     never beat fixed-0.56 held-out and the threshold is the modal fit,
     but the honest out-of-sample expectation is ~0.90 on suites of this
-    size. A held-out suite is the clean instrument (D16's discipline).
+    size. MEASURED (F29, suite_holdout.json): held-out 0.883 vs v1's
+    0.817, threshold band 0.55–0.58 containing the shipped 0.56 — the
+    discount is real (~5 pp) but the refit's advantage survives.
 14. **Host provenance starts 2026-10-05.** Run JSONs now stamp
     `config.host`; earlier rows carry no host field and the board mixes
     NAS-era rows (co-tenant load) with idle-fedora rows. Accuracy rows
