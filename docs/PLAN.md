@@ -437,6 +437,17 @@ with measurement, not opinion.
   `[0, 43)`, prism-ml-fork-only (REPORT F19). On-CPU ternary viability
   in this build is 4B-and-below; backlog #35 (Vulkan A/B) now owns the
   whole ternary ladder.
+  **Scope decision (2026-10-05, operator): the Bonsai arm is dropped
+  from campaign scope, future-scope under #35.** r20b bounded the
+  question instead of running the arm: the PTQ1_0 27B loads on the
+  PrismML fork and answers the probed suite item correctly at p≈0.995
+  (retention-consistent with the vendor's 98.2 % claim, one item), at
+  73.8 s/readout on 12 P-cores — accuracy-plausible but
+  speed-nonviable on CPU even if the full arm confirmed the claim
+  (~10 h of readouts here); only a Vulkan/GPU rung makes the class
+  worth measuring, so #35 stays its sole owner. The AtomicChat
+  abliterate LoRA is unmeasurable on the fork build (`--lora` rejected
+  at parse) — re-evaluate only if #35 reopens the fork.
 
 - **Extension 6 (2026-09-28, embedding-rung bake-off — 47 runs).**
   Backlog #37 executed: the ONNX CPU-speed question answered with a

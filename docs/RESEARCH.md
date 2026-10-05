@@ -1297,6 +1297,71 @@ anecdote-level by construction. Two operational notes: the fork
 inherits the help-listed-but-rejected flag bug class (`--lora` rejected
 at parse — the AtomicChat abliterate LoRA is unmeasurable on this
 build), and F18's 27B CPU extrapolation was ~20× pessimistic for this
-host (74 s/item actual; a full 480-readout arm ≈ 10 h is feasible here
-if the Vulkan ladder #35 stays unprioritized).
+host (74 s/item actual; a full 480-readout arm ≈ 10 h). **Scope
+decision (operator, 2026-10-05): the Bonsai arm is dropped from
+campaign scope — even if the retention claim holds, ~74 s/readout is
+deployment-nonviable on CPU; the class returns only under #35's Vulkan
+rung.**
+
+### §12.7 Operating point: what beats QAT-E2B-Q4_0, and what's next (2026-10-05)
+
+The official QAT Q4_0 export (0.808 / ECE 0.102 / 423 ms p50, board row
+`stock__e2bqat-official-q4_0-letters.json`) is the campaign's reference
+operating point. Four arms beat it on accuracy — every one pays ≥2.3×
+the latency:
+
+| arm | acc | ECE | p50 | note |
+|---|---:|---:|---:|---|
+| **Winnow-E4B (own model)** | **0.842** | 0.109 | 2171 ms | clean replay; the #88 program's product |
+| Winnow-E4B Q4_K_S (requant of Q8_0) | 0.825 | 0.101 | 951 ms | r11b's operating pick |
+| jebadiah-9b-v2 Q8_0 | 0.833 | 0.075 | 5626 ms | 9B class |
+| MiMo-V2.6-Distill-9B Q3_K_S | 0.817 | 0.048 | 14307 ms | best ECE on the board, 34× slower |
+
+**Nothing beats 0.808 inside its ~423 ms class** — the QAT export is
+the Pareto frontier of the small-fast lane, which is why it is the
+escalation target. The one number that beats *every* single-model arm
+is not a model at all: the simulated ladder/cascade (REPORT F23,
+**0.867 @ 753 ms**) — cheap rungs decide the easy majority, the model
+rung sees only what escalates.
+
+Candidate paths above 0.808, ranked by measured evidence:
+
+1. **Winnow lineage (own model, #88).** Already 0.842; the Q4_K_M
+   requant's determinism flip (Δp 0.998) is the known defect, and a
+   QAT-in-loop export (Google's recipe applied to our checkpoint)
+   would plausibly hold ~0.84 at ~400-500 ms — the most direct route
+   to a faster-better point. The r16/r19 lesson applies: QAT must be
+   in the training loop, not post-hoc.
+2. **Suite-derived imatrix (r21a, running).** §12.3's testable
+   follow-up: if a decision-distribution imatrix holds 0.808 through
+   requant and extends below 4 bits, the same trick transfers to
+   Winnow and future distills. Generic-corpus imatrix already
+   falsified (r19 UD null); this is the matched-corpus control.
+3. **Own-teacher distill of the E2B base.** The third-party Gemini
+   distill reached 0.683 with someone else's recipe and no access to
+   our suite (§12.6.1). Distilling from a teacher *on suite-shaped
+   data* targets the readout directly — the VIVERE extraction path;
+   expected to clear 0.683 by a wide margin and contest 0.808 at
+   plain Q4 bit-rates.
+4. **Not a candidate: bigger gemma-QAT.** The official E4B-QAT export
+   underperformed its sibling badly (0.558, 29 invalid dists, board
+   row `stock__e4bqat-official-q4_0`) — the QAT recipe did not
+   transfer across sizes within the family, so "scale up the same
+   QAT artifact" is falsified for now.
+
+Escalation architecture (how the runtime uses the operating point):
+the pipeline contract is cheapest-reliable-rung-first — exact rule →
+cached decision → metadata filter → lexical (0.683 @ 1.3 ms
+relational) → embedding → **the QAT model rung only on escalation** →
+verifier. The model rung is candidate-conditioned and
+confidence-gated; it never runs twice per request (verification is
+gated, D-series rule), and B6 gives `Verify`/`Abstain` outcomes a
+configured next rung. The runtime does not improve raw model
+capability — that is the offline program's job (#88 dataset merge +
+fine-tune, VIVERE extraction/distillation, QAT-in-loop, suite-shaped
+corpora); the runtime's lever is to never pay model cost when a
+cheaper rung can decide confidently, and to abstain or escalate when
+the model is unsure. Raw-capability work lands as new board rows; the
+ladder converts whichever arm is best into *outcomes* beyond that
+arm's standalone score.
 
