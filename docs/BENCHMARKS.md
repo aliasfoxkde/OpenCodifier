@@ -327,6 +327,10 @@ arm — sampled decode, never comparable to decision rows.
 | stock__gemma-4-e2b-qat-letters.json ⁷ | 0.93 / 1.00 / 0.38 | 0.767 | 0.137 | 454.1ms | yes (Δp 0.020) |
 | stock__gemma-4-e4b-it-letters.json ⁷ | 0.64 / 1.00 / 0.45 | 0.367 | 0.304 | 1052.4ms | **no** (Δp 0.247); 41 invalid dists |
 | stock__gemma-4-e4b-qat-letters.json ⁷ | 0.54 / 0.88 / 0.50 | 0.400 | 0.281 | 977.0ms | **no** (Δp 1.000); 33 invalid dists |
+| stock__jebadiah-4b-v2-q3km-letters.json ¹⁶ | 1.00 / 0.98 / 0.58 | 0.850 | 0.064 | 2878.2ms | yes (Δp 0.000) |
+| stock__jebadiah-4b-v2-q8_0-letters.json ¹⁶ | 1.00 / 0.98 / 0.53 | 0.833 | 0.052 | 2200.9ms | yes (Δp 0.000) |
+| stock__jebadiah-9b-v2-q8_0-freeform.json ¹⁶ | 1.00 / 0.98 / 0.60 | 0.858 | — | ≈8300.0ms | yes (10/10 label repeats) |
+| stock__jebadiah-9b-v2-q8_0-letters.json ¹⁶ | 0.03 / 0.08 / 0.33 | 0.142 | 0.501 | 12119.6ms | yes (Δp 0.000) |
 | stock__kev-4b-letters.json ⁶ | 1.00 / 0.95 / 0.53 | 0.617 | 0.151 | 1378.2ms | yes (Δp 0.000); 25 invalid dists |
 | stock__lfm25-230m-q4km-letters.json ¹² | 0.17 / 0.58 / 0.10 | 0.125 | 0.572 | 68.6ms | yes (Δp 0.000); 65 invalid dists |
 | stock__lfm25-350m-q4_0-letters.json ¹² | 0.18 / 0.23 / 0.25 | 0.217 | 0.587 | 88.9ms | yes (Δp 0.000) |
@@ -380,7 +384,9 @@ artifact size); the 9B row collapses to chance (120/120 valid,
 confidently wrong) while its fork-tree arm holds 0.833 — the 9B's
 board advantage is a property of the fork's tree readout, not the
 artifact alone. Confound note: build, readout, and threads changed
-together (stock+letters+12t vs fork+tree+14t).
+together (stock+letters+12t vs fork+tree+14t). Amended by ¹⁶: the
+advantage is not tree-specific — any non-letters readout holds the
+9B's level.
 ⁵ Requant ladder (r11b, 2026-10-03, fedora i5-13600K, stock build,
 letters readout, -t 12): all six quants cut from the **Q8_0 release
 artifact** with `--allow-requantize` — a requant, not a from-F16 quant.
@@ -686,6 +692,34 @@ either way. Run JSONs now stamp `config.host` (this run: `fedora`);
 earlier rows carry no host field and mix NAS-era and fedora-era
 latencies — cross-era speed comparisons on this board carry that
 caveat until a same-host sweep.
+
+¹⁶ r78 readout-transfer arms (2026-10-05, fedora, stock build, -t 12,
+load 11.4–22.9 recorded per run — treat latencies as load-window-
+relative; the 9B letters p50 is ~4× the r10 parity row's 2.9 s mostly
+on sibling load). The three letters rows replicate footnote 4's r10
+result exactly on the current stock build (4B Q8_0 0.833 / ECE 0.052
+and 9B 0.142 / ECE 0.501 both equal their parity rows), and the
+Q3_K_M cut adds 0.850 — quantization is not a factor in the 9B
+collapse. The new `freeform` row is the resolution probe: the SAME 9B
+Q8_0 artifact answering with its trained free-form option labels
+(`enable_thinking: false`, temperature 0, newline stop, no logit
+constraints — no distributions, so its ECE cell is n/a) scores
+**0.858**, per-class 1.00 / 0.98 / 0.60, deterministic on 10/10 label
+repeats, 1/120 unparseable. Diagnosis chain for the 0.142: parser fine
+(120/120 valid dists), temperature fine, weights fine (raw completion
+coherent; free-form near-ceiling), template fine (clean output with
+thinking off); the letters interface itself is off-distribution for
+the 9B — constrained-letter logits renormalize into well-formed but
+content-free distributions (accuracy by answer position 0.00–0.33,
+permutation analysis zero content-following). This amends footnote 4's
+confound conclusion: the 9B's level is NOT tree-readout-specific — any
+non-letters readout holds ~0.83–0.86, and the letters interface is the
+9B-specific failure. Procedural record under the Model-Import Parity
+Discipline: a below-chance constrained-readout arm on a competent base
+is a readout bug alarm, not a model verdict — the free-form readout
+probe is the discriminating test. The freeform row's p50 cell is the
+whole-run mean (per-item walls not recorded); at CPU latency the arm
+is escalation/verifier duty, same posture as strands.
 
 What the board established (full findings catalog in REPORT.md):
 
