@@ -180,6 +180,30 @@ noise — σ ≈ 3.2 tasks of 231 across six retrains of one recipe — and
 therefore treats single-run differences under ~10 tasks as unresolved;
 our fork-arm comparisons inherit that caveat (RESEARCH.md §6.5).
 
+### Full-system arms — engine + rung on the official split (2026-10-05)
+
+Task #105: the whole decision runtime (ladder gates → candidate
+narrowing → BM25 → proof rules → 4B rung through the real engine) on
+the authors' harness, same dataset sha, serial, no-retry
+(`results/jevbench-fullsystem-fedora.md` has the full contract). The
+gate posture is the only difference between the two arms — same rung,
+same weights, same items:
+
+| system | public acc | macro | ECE | p50 | provenance |
+|---|---:|---:|---:|---:|---|
+| fusion-v2 ladder (as-shipped in-domain gate) | 55.8 % (129/231) | 56.2 | 0.335 | 1.2 ms | our run, authors' harness |
+| **proofs-only posture (accept proofs, escalate the rest)** | **68.8 % (159/231)** | 66.2 | 0.171 | 0.58 s | our run, authors' harness |
+
+Read against the anchors above: the as-shipped gate lands below the
+bridge-only anchor (64.9) because it accepts cheap-rung guesses on OOD
+families (engine-kept 68.8 % of items at 0.434 acc; what it escalates
+scores 0.833 — F24 measured outside its tuning domain). The structural
+posture recovers +13.0 pp without touching a weight and reaches the
+post-hoc cascade bound (68.8) a priori; 12 honest abstentions (5.2 pp)
+are scored 0 by the accuracy column. The rung standalone (76.6) and
+hosted Jev (86.6) stay ahead — the binding constraint is calibration
+transfer, not model quality.
+
 ## Board B — our locked suite (the full model board)
 
 Suite: `suite/suite.json`, 120 items, byte-locked (seed 20260926),

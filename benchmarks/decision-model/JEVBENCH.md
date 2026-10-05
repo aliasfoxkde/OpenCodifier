@@ -190,6 +190,16 @@ milliseconds. Acceptance criteria:
 | engine (relational-v1) | 0.3766 | 0.4011 | 0.402 | 0.890 | 2.0 ms | 231/231 | native |
 | **jev_native bridge (0.8B-v3 Q4_K_M)** | **0.6494** | 0.6378 | **0.080** | 0.425 | 6.72 s / 103.8 s | 231/231 (labels + probs) | native |
 | vtx (VTX-JEV-3 LF2, vendor client) | 0.4113 | 0.4318 | 0.126 | 0.684 | 7.9 ms | 231/231 | native |
+| engine + 4B rung, fusion-v2 gate (2026-10-05) | 0.5584 | 0.5622 | 0.335 | 0.734 | 1.2 ms / 0.73 s | 231/231 | native |
+| engine + 4B rung, proofs-only posture (2026-10-05) | **0.6883** | 0.6622 | 0.171 | 0.431 | 0.58 s / 14.0 s | 231/231 | native |
+
+The two full-system rows (task #105, contract and decomposition in
+`results/jevbench-fullsystem-fedora.md`): same 4B rung, same weights —
+the only difference is the gate posture, worth +13.0 pp. The
+in-domain-tuned fusion gate keeps 68.8 % of items at 0.434 accuracy
+while escalating 0.833 to the rung (F24's warning, measured OOD); the
+structural posture ties the post-hoc cascade bound a priori and pays
+for 12 honest abstentions in the accuracy column.
 
 The vtx row (added 2026-09-29): VTX-JEV-3 through its vendor `JevClient`
 with the jev_native rendering — a 20.5 MB 2-bit static table scoring
