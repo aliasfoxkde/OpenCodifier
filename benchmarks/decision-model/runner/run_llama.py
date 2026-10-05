@@ -9,6 +9,17 @@ two arms:
   constrained distribution, nothing is sampled, so scoring is deterministic.
 - chat arm (optional): the same questions as JSON-writing chat completions
   at temperature 0 — the token-by-token baseline the decision arm replaces.
+- raw lane (`--raw-prompt`): the chat questions sent to raw `POST
+  /completion` with a self-rendered prompt — the server's chat template is
+  never invoked. RESEARCH.md §13.1: this is the readout lane for
+  template-locked models (LFM2.5's `enable_thinking` kwarg is silently
+  unsupported by their template, so the chat arm enters thinking and
+  starves the answer) and the settling probe for what reported logprobs
+  actually contain. `--raw-suffix` appends verbatim text after the
+  rendered body (pre-filled/closed thinking blocks, an answer cue);
+  `--raw-top-probs N` records the first generated token's top-N reported
+  distribution in each row; `--raw-grammar FILE` sends a GBNF grammar
+  (format compliance only — reported logprobs stay raw-logit per §13.1).
 - `--skip-decision`: chat-baseline-only run for forks without
   `POST /v1/decision` (e.g. MBZUAI-IFM/llama.cpp `model/K2Horizon`). The
   result carries `"arm": "llama_chat_baseline_only"` and no decision
@@ -233,6 +244,135 @@ def run_chat(
     return out
 
 
+def render_raw_prompt(suite: dict, it: dict, suffix: str) -> str:
+    """Self-rendered prompt for the raw /completion lane.
+
+    Same content as `run_chat`'s messages, flattened — no chat markup, no
+    server template. `suffix` is verbatim caller text (a pre-filled and
+    closed thinking block, an answer cue); the model's own template is
+    never consulted, which is the point of the lane (RESEARCH.md §13.1).
+    """
+    opts = "\n".join(f"- {c['id']}: {c['description']}" for c in it["candidates"])
+    body = (
+        f"{it['context']}\n\n{it['question']}\n\nOptions:\n{opts}\n\n"
+        'Answer with JSON: {"id": "<one option id>"}'
+    )
+    return f"{suite['instructions']}\n\n{body}{suffix}"
+
+
+def run_chat_raw(
+    port: int,
+    suite: dict,
+    items: list[dict],
+    max_tokens: int,
+    timeout: float,
+    suffix: str,
+    top_probs: int,
+    grammar: str | None,
+) -> list[dict]:
+    """Chat questions through raw /completion — the template is bypassed.
+
+    Rows keep the `run_chat` shape (`pred` parsed from generated JSON) plus
+    `top_probs`: the first generated token's reported top-N distribution
+    (`completion_probabilities[0]`), the position where label logprobs are
+    read in the letters protocol.
+    """
+    out = []
+    for it in items:
+        payload: dict = {
+            "prompt": render_raw_prompt(suite, it, suffix),
+            "temperature": 0.0,
+            "n_predict": max_tokens,
+            "cache_prompt": True,
+        }
+        if top_probs:
+            payload["n_probs"] = top_probs
+        if grammar is not None:
+            payload["grammar"] = grammar
+        t0 = time.monotonic()
+        resp = post(f"http://127.0.0.1:{port}/completion", payload, timeout)
+        wall_ms = (time.monotonic() - t0) * 1000.0
+        text = resp.get("content") or ""
+        pred = None
+        try:
+            pred = json.loads(text).get("id")
+        except (json.JSONDecodeError, AttributeError):
+            pred = None
+        row = {
+            "id": it["id"],
+            "class": it["class"],
+            "answer": it["answer"],
+            "pred": pred,
+            "raw": text,
+            "wall_ms": wall_ms,
+        }
+        probs = resp.get("completion_probabilities") or []
+        if top_probs and probs:
+            first = probs[0].get("probs") or []
+            row["top_probs"] = [
+                {
+                    "tok": p.get("tok_str"),
+                    "logprob": p.get("logprob"),
+                    "prob": p.get("prob"),
+                }
+                for p in first[:top_probs]
+            ]
+        out.append(row)
+    return out
+
+
+def run_chat_arm(
+    args: argparse.Namespace, port: int, suite: dict, items: list[dict]
+) -> dict:
+    """One chat-arm pass (raw lane or /v1/chat/completions) + metrics.
+
+    The single call site for all three entry modes (full arm, --chat-only,
+    --skip-decision) so the row schema and metrics dict cannot drift
+    between them.
+    """
+    raw = getattr(args, "raw_prompt", False)
+    grammar_text = None
+    if raw and getattr(args, "raw_grammar", None) is not None:
+        grammar_text = args.raw_grammar.read_text()
+    if raw:
+        rows = run_chat_raw(
+            port,
+            suite,
+            items,
+            args.chat_max_tokens,
+            args.timeout,
+            args.raw_suffix,
+            args.raw_top_probs,
+            grammar_text,
+        )
+    else:
+        rows = run_chat(port, suite, items, args.chat_max_tokens, args.timeout)
+    return {
+        "rows": rows,
+        "metrics": {
+            "accuracy": sum(1 for r in rows if r["pred"] == r["answer"]) / len(rows),
+            "accuracy_by_class": {
+                cls: sum(1 for r in rows if r["class"] == cls and r["pred"] == r["answer"])
+                / sum(1 for r in rows if r["class"] == cls)
+                for cls in sorted({r["class"] for r in rows})
+            },
+            "p50_ms": sorted(r["wall_ms"] for r in rows)[len(rows) // 2],
+            "mean_ms": sum(r["wall_ms"] for r in rows) / len(rows),
+            "max_tokens": args.chat_max_tokens,
+            "mode": "raw_completion" if raw else "chat_completions",
+            **(
+                {
+                    "raw_suffix": args.raw_suffix,
+                    "raw_top_probs": args.raw_top_probs,
+                    "raw_grammar": (args.raw_grammar.name if grammar_text is not None else None),
+                }
+                if raw
+                else {"thinking_disabled": True}
+            ),
+        },
+    }
+
+
 def ece(pairs: list[tuple[float, int]], bins: int = 10) -> tuple[float, list[dict]]:
     binned = [ { "lo": i / bins, "hi": (i + 1) / bins, "n": 0, "conf": 0.0, "acc": 0.0 } for i in range(bins) ]
     for p, ok in pairs:
@@ -321,6 +461,33 @@ def main() -> int:
     )
     ap.add_argument("--chat-max-tokens", type=int, default=512)
     ap.add_argument(
+        "--raw-prompt",
+        action="store_true",
+        help="chat arm via raw POST /completion with a self-rendered "
+        "prompt — the server's chat template is never invoked "
+        "(template-locked models, RESEARCH.md §13.1)",
+    )
+    ap.add_argument(
+        "--raw-suffix",
+        default="",
+        help="verbatim text appended after the rendered body in the raw "
+        "lane (pre-filled/closed thinking block, answer cue)",
+    )
+    ap.add_argument(
+        "--raw-top-probs",
+        type=int,
+        default=0,
+        help="request n_probs=N and record the first generated token's "
+        "reported top-N distribution per row (0 = off)",
+    )
+    ap.add_argument(
+        "--raw-grammar",
+        type=Path,
+        default=None,
+        help="GBNF grammar file sent with the raw request (format "
+        "compliance only; reported logprobs stay raw-logit, §13.1)",
+    )
+    ap.add_argument(
         "--timeout",
         type=float,
         default=600.0,
@@ -361,23 +528,7 @@ def main() -> int:
         wait_health(args.port, proc)
 
         if args.skip_decision:
-            chat_rows = run_chat(args.port, suite, items, args.chat_max_tokens, args.timeout)
-            chat = {
-                "rows": chat_rows,
-                "metrics": {
-                    "accuracy": sum(1 for r in chat_rows if r["pred"] == r["answer"])
-                    / len(chat_rows),
-                    "accuracy_by_class": {
-                        cls: sum(1 for r in chat_rows if r["class"] == cls and r["pred"] == r["answer"])
-                        / sum(1 for r in chat_rows if r["class"] == cls)
-                        for cls in sorted({r["class"] for r in chat_rows})
-                    },
-                    "p50_ms": sorted(r["wall_ms"] for r in chat_rows)[len(chat_rows) // 2],
-                    "mean_ms": sum(r["wall_ms"] for r in chat_rows) / len(chat_rows),
-                    "max_tokens": args.chat_max_tokens,
-                    "thinking_disabled": True,
-                },
-            }
+            chat = run_chat_arm(args, args.port, suite, items)
             result = {
                 "arm": "llama_chat_baseline_only",
                 "llamacpp_branch": args.llamacpp_branch,
@@ -409,23 +560,7 @@ def main() -> int:
         if args.chat_only:
             prior_path = args.out
             prior = json.loads(prior_path.read_text()) if prior_path.exists() else None
-            chat_rows = run_chat(args.port, suite, items, args.chat_max_tokens, args.timeout)
-            chat = {
-                "rows": chat_rows,
-                "metrics": {
-                    "accuracy": sum(1 for r in chat_rows if r["pred"] == r["answer"])
-                    / len(chat_rows),
-                    "accuracy_by_class": {
-                        cls: sum(1 for r in chat_rows if r["class"] == cls and r["pred"] == r["answer"])
-                        / sum(1 for r in chat_rows if r["class"] == cls)
-                        for cls in sorted({r["class"] for r in chat_rows})
-                    },
-                    "p50_ms": sorted(r["wall_ms"] for r in chat_rows)[len(chat_rows) // 2],
-                    "mean_ms": sum(r["wall_ms"] for r in chat_rows) / len(chat_rows),
-                    "max_tokens": args.chat_max_tokens,
-                    "thinking_disabled": True,
-                },
-            }
+            chat = run_chat_arm(args, args.port, suite, items)
             if prior is None:
                 raise RuntimeError("--chat-only requires an existing result file to merge into")
             prior["chat"] = chat
@@ -456,21 +591,7 @@ def main() -> int:
         )
         chat = None
         if not args.skip_chat:
-            chat_rows = run_chat(args.port, suite, items, args.chat_max_tokens, args.timeout)
-            chat = {
-                "rows": chat_rows,
-                "metrics": {
-                    "accuracy": sum(1 for r in chat_rows if r["pred"] == r["answer"])
-                    / len(chat_rows),
-                    "accuracy_by_class": {
-                        cls: sum(1 for r in chat_rows if r["class"] == cls and r["pred"] == r["answer"])
-                        / sum(1 for r in chat_rows if r["class"] == cls)
-                        for cls in sorted({r["class"] for r in chat_rows})
-                    },
-                    "p50_ms": sorted(r["wall_ms"] for r in chat_rows)[len(chat_rows) // 2],
-                    "mean_ms": sum(r["wall_ms"] for r in chat_rows) / len(chat_rows),
-                },
-            }
+            chat = run_chat_arm(args, args.port, suite, items)
 
         result = {
             "arm": "llama_decision",
