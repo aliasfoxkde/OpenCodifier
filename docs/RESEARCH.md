@@ -988,4 +988,242 @@ scripts + fixtures) and `vllm-sr/Decision-2.0-Kai-0.6B` (runtime package):
    parity fixtures as the accuracy gate.
 4. **`score_bias` Newton fit** into the Calibration seam (Score-rung ECE).
 5. **Quantile-derived thresholds** for LadderPolicy/D25 overrides (§10.6).
+
+## §11 — Inference-engine repos: Strata, flash-attention, thecodacus/llama.cpp (2026-10-04)
+
+Trigger: user-directed sweep — "could the code from either of these provide
+insights to enhancing our core system?" Sources read in full: Strata
+README + `docs/HOW_IT_WORKS.md` + `docs/DETAILS.md`; flash-attention
+README; thecodacus/llama.cpp repo metadata + `perf`-branch commit
+history vs upstream `ggml-org/llama.cpp`.
+
+**Headline verdicts: no code from any of the three enters the workspace.
+Strata contributes five practice-level transfers and one external
+validation of our posture; flash-attention has no integration path;
+thecodacus/llama.cpp is a watch-list item for a class of models we don't
+run.**
+
+### §11.1 Niko1221/Strata — practices transfer, code does not
+
+What it is (MIT, engine 0.1.3x, ships a paper + per-engine-version bench
+results): a token-generation inference engine that runs Qwen3.8-Flash-Next
+(125B MoE, 24,576 experts, 10 active/token) on 12-24 GB consumer GPUs by
+tiering the model across the whole PC — GPU holds attention/DeltaNet
+mixers, routers, shared experts, the MTP draft layer, KV, and an adaptive
+hot-expert cache; RAM holds all 24,576 experts pinned (CPU computes misses
+in place, concurrent with GPU work); SSD holds a 28.8 GB n-gram table. MTP
+speculative drafting reaches 2.4-3.2 tokens/pass with byte-identical
+output (big model checks every draft) for 1.6-1.8× speedup.
+
+Every technique that makes Strata work is a *decode-time* technique for a
+generating MoE — expert tiering, KV streaming/quantization, 8K-chunk
+prefill with PCIe overlap, MTP drafting. OpenCodifier emits one decision
+per request from dense gemma-family readouts; none of those apply. What
+transfers is how they run and document the engine:
+
+- **Determinism engineering as a shipped feature (their #152 → #410
+  chain).** Adaptive expert tier + multi-token kernel rounding differences
+  + draft-window grouping + prompt-cache decode-path resumption + PCIe
+  share of missed experts ⇒ the same prompt at temperature 0 could end in
+  a *different, equally good* answer depending on cache/conversation
+  state. Their fix is one opt-out switch per state source
+  (`STRATA_IQ_MT_MIN=1`, `--prompt-cache 0 --adapt-swaps 0
+  --pcie-frac 0`), with a measured repeat-identity rate and per-switch
+  cost ("4 repeats → 1 distinct answer with all three switches; 2
+  distinct without `--pcie-frac 0`; 2 distinct at defaults"). This is the
+  strongest external parallel to our cache-key versioning + identity
+  replay, and it is a **checklist for B5**: llama-server has its own
+  state sources (prompt cache, KV reuse, slot count, batch composition)
+  and our backend-arm protocol should enumerate and pin every one.
+- **Measured acceptance gating for speculative paths.** Prompt-lookup
+  drafting is enabled "only where its measured acceptance and cost say it
+  pays: code edits 6-11% faster, other text unchanged", and `/metrics`
+  exposes `drafts_offered`/`drafts_accepted` per request. Direct design
+  input for **B6**: an escalation link exists in a policy only where its
+  measured agree-rate × cost justifies it, and escalation counters are
+  first-class trace/metrics output, not an afterthought.
+- **Calibrate-keep-if-better, per host** (`--calibrate`: measures
+  candidate engine settings, keeps one only if >3% faster, remembered per
+  PC+model). Adopt as a *bench-selection* pattern for D9 (criterion
+  profiles measured per host class, kept only if the delta clears noise),
+  never as runtime self-modification — our gates are policy, and policy
+  must never adapt at request time.
+- **Structured output = validate, don't constrain.** Their
+  `response_format: json_schema` is "schema prompting followed by server
+  validation, one generation per request, with no hidden retry";
+  violations return 502 with `error.code: structured_output_failed`;
+  streaming buffers until validation passes. Independent confirmation of
+  our `unsupported_generation_field` + abstention + strict `ir.*` error
+  codes posture. Nothing to change; cite it.
+- **Resource-arbitration semantics.** idle-unload / min-free-VRAM gate /
+  `before_load` hook / explicit 503 "the GPU is in use by another
+  program" / 409-while-busy on control endpoints / lazy load on first
+  request. Concrete small candidate for **opencodifier-http**: structured
+  busy/backpressure codes (503 with machine-readable reason, 409 on
+  control ops while a decision is in flight) instead of silent queueing.
+- Same refuse-loudly ethos elsewhere: rope scaling past the trained range
+  refuses `--rope-scaling none` with a 400 rather than silently
+  degrading — matches our no-silent-fallback rule.
+
+### §11.2 Dao-AILab/flash-attention — no integration path
+
+Exact (not approximate) fused attention kernels; the memory saving comes
+from never materializing the attention matrix (IO-aware tiling). OpenCodifier
+computes no attention anywhere: core/engine/schema are sync Rust, and the
+model rung delegates to llama.cpp/ONNX behind `InferenceBackend` (D11).
+flash-attention is a CUDA library; our base posture is CPU-only. If a GPU
+tier is ever added, the benefit arrives *inside* llama.cpp's CUDA/Vulkan
+backends — nothing for us to integrate. Two portable principles, both
+already embodied: (a) exact-but-IO-aware restructuring — avoid
+materializing O(n²) intermediates, the same spirit as the B2/B3
+constant-factor work; (b) determinism is a configurable, testable
+property (their split-K reduction notes) — supports the identity-replay
+stance. **Closed: revisit only if we ever implement our own kernels.**
+
+### §11.3 thecodacus/llama.cpp — inert for our arms; MoE watch item
+
+Fork of `ggml-org/llama.cpp`, default branch `perf`, last push 2026-09-30.
+Commit-level delta vs upstream (verified): a MoE expert cache
+(`--moe-cache-profile` / `--moe-cache-slots`) wired into the qwen4exp
+architecture, an MTP draft head (upstream PR #28243), `--sched-async-cpu`,
+`--cpu-tp`, TurboQuant KV (CUDA; the Metal variant was dropped after an
+upstream backend restructure), a `llama-moe-trace` tool, and one real
+bugfix (`mul_mat_id` sync predicate vs the expert-pack split) — maintained
+by periodic large upstream syncs (677 commits merged at once). Same
+idea-family as Strata (expert cache + speculative drafting) targeting the
+same model family. Our decision arms are dense gemma-family — no MoE, no
+MTP — and our pinned builds (commit 1537a0a, upstream) are untouched by
+any of it. **Watch trigger:** an MoE decision-model candidate would make
+the expert cache relevant to the B5 backend.
+
+Independent evidence for #88 from this ecosystem: Strata's "Coder" release
+(ISTA-DASLab expert-pruned Qwen3.8-Flash-Next, 256 of 512 experts kept,
+91.3% of the full model's SWE-bench Verified, fits 32 GB) — the
+"smaller-but-targeted beats uniformly-small" distill thesis, consistent
+with our r19 finding that capability is bought at training time (QAT Q4_0
+0.808 vs the 0.50 non-QAT ceiling, §12), not by inference-side tricks.
+
+### §11.4 Plan deltas (merges with §9.3 / §10.7)
+
+1. **B6 design inputs (from Strata):** per-link acceptance telemetry
+   (`escalations_offered`/`escalations_accepted` analog of their
+   draft counters) and "enable only where measured acceptance × cost says
+   it pays" as the stated semantics of LadderPolicy overrides.
+2. **B5 backend determinism audit:** enumerate and pin llama-server's
+   state sources (prompt cache, KV reuse, slots, batch composition)
+   before accepting any backend-arm number as identity-replay-clean —
+   Strata's #410 is the cautionary tale.
+3. **New small queue item — opencodifier-http backpressure codes:**
+   structured 503 (busy, machine-readable reason) and 409-on-control-
+   while-in-flight, mirroring the arbitration semantics above.
+4. **#88 evidence addendum:** Coder release (expert-pruned MoE, 91.3%
+   SWE-bench retained) alongside QAT as the two validated
+   capability-per-byte levers.
+5. No source from Strata, flash-attention, or thecodacus/llama.cpp is
+   vendored, ported, or depended on. flash-attention: closed. thecodacus:
+   watch-list. Strata: practices only.
 6. All §9.3 items keep their existing rank beneath these.
+
+## §12 — r19 quantization ladder: where decision capability lives (2026-10-05)
+
+Headline: **on the decision readout, inference-side representation changes
+do nothing and training-side changes do everything.** 17 non-QAT quants of
+gemma-4-E2B-it spanning 2.7→16 bpw score 0.300–0.550 with BF16 itself at
+0.500, ECE uniformly bad (0.226–0.490) — while the QAT arms at the *same*
+bits score 0.767–0.808 (ECE 0.102) and Google's mixed-precision mobile QAT
+at ~2.5 average bits holds 0.800. Board rows in BENCHMARKS.md footnote 11;
+speed reference alongside. Written for the VIVERE rollover: each finding
+below is stated as a training-side conclusion (method → measured readout
+delta), because VIVERE will run the training side itself.
+
+### §12.1 The flat ladder (the null result that anchors everything)
+
+- 17 rungs — plain K-quants (Q3–Q8), legacy (Q4_0/Q4_1), i-quants
+  (IQ2_M…IQ4_NL), unsloth UD-* dynamic imatrix mixes, BF16 — form one
+  statistically indistinguishable band. Spread ≈ ±0.1, which is what
+  60–120 items produce by sampling noise alone.
+- Therefore the earlier per-rung findings (r15 "QAT is carrying the
+  number", r16's +45.8 pp matched-format delta) generalize: **no quant
+  choice matters below the training floor.** Quantization experiments on
+  an untrained-for-task base measure the base, not the quant.
+- Corollary for future arms: a new quant format only demonstrates value
+  on this suite if the base already has decision capability to preserve.
+  This is why the Bonsai-2-27B claim (PTQ ternary, 98.2% FP16 retention)
+  is worth one bounded probe (r20b) but not a full CPU arm — the claim is
+  about *retention on a capable base*, and our suite can test retention
+  only where capability exists.
+
+### §12.2 Training-time effects (the only things that moved the number)
+
+| method | bits | acc | ECE | readout delta |
+|---|---|---:|---:|---|
+| non-QAT BF16 (ceiling reference) | 16 | 0.500 | 0.355 | — |
+| QAT Q4_0 (official export) | 4 | 0.808 | 0.102 | +30.8 pp over the base's own ceiling |
+| QAT UD-Q4_K_XL (unsloth mix of same QAT ckpt) | ~4.5 | 0.767 | 0.137 | +26.7 pp |
+| mobile mixed-precision QAT (2/4/2/4/8 by tensor class) | ~2.5 | 0.800 | 0.102 | +30.0 pp at 1/6 the bits |
+| QAT UD-Q2_K_XL (pure 2-bit) | ~2.5 | 0.483 | 0.170 | back inside the noise band |
+
+Training-side conclusions:
+
+1. **QAT is not a compression technique here — it is the capability
+   transfer itself.** The +30 pp over BF16 means the QAT training pass
+   taught the model the readout better than the base model knows it,
+   while simultaneously cutting bits 4×. For VIVERE: the distill/train
+   stage is where decision-readout fidelity is purchased; a teacher-grade
+   base merely bounds it.
+2. **Bit placement beats bit budget.** Pure 2-bit QAT fails where the
+   same average bits, placed 2/4/2/4/8 across lm_head/MLP/attn/PLE,
+   scores 0.800 with perfect emission. If VIVERE ships small models,
+   per-tensor-class mixed precision is a first-class training decision,
+   not a post-hoc packing choice.
+3. **Emission stability is also trained in.** 14 of 17 non-QAT quants
+   flip predictions between identical replays; every QAT arm above 2 bits
+   replays clean. A determinism replay must gate any shipped artifact
+   (r11b said this for requants; r19 says it is a training property, not
+   a quantizer property).
+4. **Calibration follows the same split**: non-QAT ECE is uniformly bad
+   across all bit-widths; QAT ECE lands at ~0.10 without any calibration
+   fitting. Whatever produces the capability produces calibrated
+   confidence with it.
+
+### §12.3 The UD-imatrix null result
+
+Unsloth's importance-matrix dynamic mixes — the community default for
+"better low-bit quants" — do not beat plain K-quants on the decision
+readout at matched size (§12.1 board rows: UD-Q3_K_XL < Q3_K_M,
+UD-Q6_K_XL < Q6_K, UD-IQ2_M worst-in-ladder). Conclusion for VIVERE
+data-collection: an imatrix fitted on generic text does not represent a
+decision-distribution's importance structure. If importance weighting
+matters for distill artifacts, the calibration corpus must be drawn from
+the decision suite's distribution — a testable follow-up (requant the
+QAT checkpoint with a suite-derived imatrix).
+
+### §12.4 Speed side (unchanged by the accuracy collapse)
+
+Prefill t/s is flat 190–230 from 2.7 to 6 bpw (compute-bound at 5B
+class); Q8/BF16 halve it; the QAT-Q4_0 arm is the fastest full-size row
+(230.8 t/s) *and* the most accurate. The operating point costs nothing
+on either axis. Full table: BENCHMARKS.md "r19 E2B quant-ladder speed
+reference".
+
+### §12.5 Open items this section spawns
+
+1. **Format A/B (safetensors-vs-GGUF)**: torch-lane arms landed (tiny
+   0.8B fp32 0.200 / bf16 0.300); GGUF side pending r20c after the
+   `--chat-template-file` parse bug in build 1537a0a (listed in --help,
+   rejected at runtime; embedded templates verified fine).
+2. **Suite-derived imatrix requant** of the QAT checkpoint (§12.3) —
+   cheap, one arm, directly VIVERE-actionable.
+3. **Third-party teacher-distill arms (r20)**: Gemini-3.1-Pro-reasoning-
+   distill and Opus-distill E2B quants at matched Q4_K_M against the
+   0.425 non-QAT control — the first arms that test whether *someone
+   else's* distillation transfers readout capability, i.e. the VIVERE
+   thesis with teachers we did not choose.
+4. **Bonsai-2-27B probe (r20b)**: retention-claim test on a capable 27B
+   base (§12.1 corollary) — bounded to three one-item readouts on the
+   PrismML fork; the full arm stays with backlog #35's Vulkan ladder.
+5. **MoE + QAD datapoints (r20)**: LFM2.5-8B-A1B (first MoE arm) and
+   LiquidAI's QAD-Q4_0-vs-Q4_0 format-matched pair (quantization-aware
+   distillation = a second vendor replicating §12.2's conclusion by
+   construction).
+
