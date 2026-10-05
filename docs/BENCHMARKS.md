@@ -726,6 +726,33 @@ What the board established (full findings catalog in REPORT.md):
   model-rung format for portability; the decision arm stays on
   llama.cpp.
 
+### Held-out suite: the fusion-v2 gate out of sample (2026-10-05, F29)
+
+`suite_holdout.json` (committed byte-locked, seed 20261005, class B from
+a disjoint 40-row authoring pool, zero context overlap with the locked
+suite) exists because the F28 gate was fitted on the suite it is scored
+on. Same stack, same fedora host, same run as ¹⁵ — all four arms replay
+bit-exact:
+
+| run | acc (meta/lex/rel) | acc | ECE | p50 | determinism |
+|---|---|---|---|---|---|
+| engine__holdout-lexical.json | 0.83 / 0.50 / 0.90 | 0.742 | 0.141 | 0.7ms | yes |
+| tree__e2bqat-q4_0-holdout.json | 1.00 / 0.78 / 0.45 | 0.742 | 0.176 | 611.2ms | yes |
+| engine__holdout-fusion-v1.json | 0.85 / 0.73 / 0.88 | 0.817 | 0.131 | 0.7ms | yes |
+| **engine__holdout-fusion-v2.json** | 1.00 / 0.78 / 0.88 | **0.883** | 0.109 | 129.9ms | yes |
+
+Escalations: lexical 0, tree (no gate) —, fusion-v1 38/120,
+fusion-v2 60/120 (2 flagged `verify`). **The refit's advantage survives
+the transfer: +6.6 pp over v1 out-of-sample** (in-sample it was +9.1).
+The in-sample 0.933 discounts to 0.883 — inside the predicted ~0.90
+band — and the swept holdout optimum band is 0.55–0.58, **containing
+the shipped 0.56 with zero drift**; the margin axis stays flat. The
+baseline shift is real (the new class-B phrasings are much easier for
+BM25: lexical class 0.50 vs 0.225 on v1), so this is a genuine transfer
+test. Deployment note: at 60/120 escalations the holdout p50 crosses
+into rung territory — p50 "mostly-lexical" behavior is
+suite-dependent; refit the gate per deployment traffic.
+
 ### r19 E2B quant-ladder speed reference (2026-10-05)
 
 `llama-bench` pp400 (single-shot prompt processing over a 400-token

@@ -833,7 +833,17 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   engine-validated at **0.933 @ 259.8 ms** mean (56/120 escalations,
   replay bit-exact, in-sample; held-out estimate ~0.90), board row
   `engine__rung-qate2b-q4_0-fusion-v2.json`, footnote ¹⁵; run JSONs now
-  stamp `config.host` provenance.
+  stamp `config.host` provenance. **F29 held-out validation (2026-10-05,
+  `suite_holdout.json`, 120 disjoint items)**: fusion-v2 **0.883** vs
+  fusion-v1 **0.817** under the identical stack and host — the refit
+  advantage transfers out-of-sample (+6.6 pp) and the honest discount
+  from the in-sample 0.933 lands inside the predicted ~0.90 band; the
+  holdout's own optimum gate band is **0.55–0.58**, containing the
+  shipped 0.56 with zero drift (margin axis flat on holdout too);
+  holdout class-B phrasings are markedly easier for BM25 (lexical-only
+  0.50 vs 0.225 on v1) — genuine distribution shift, and the gate holds
+  across it. Board rows `engine__holdout-*`, REPORT.md F29 entry,
+  BENCHMARKS.md held-out section.
   The embedding rung's margin
   gate is measured (`results/embed-margin-study.md`: margin ≥ 0.0183 →
   coverage 0.208 at acc 0.880, monotone to 1.000 at 0.0283), closing
