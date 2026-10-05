@@ -1170,7 +1170,10 @@ Training-side conclusions:
    taught the model the readout better than the base model knows it,
    while simultaneously cutting bits 4×. For VIVERE: the distill/train
    stage is where decision-readout fidelity is purchased; a teacher-grade
-   base merely bounds it.
+   base merely bounds it. (Boundary, resolved same day in §12.6: the
+   transfer needs latent capability in the base to elicit — LiquidAI's
+   quantization-aware *distillation* at 350M replicates nothing, and
+   Google's QAT lift has no 350M-scale analog in our data.)
 2. **Bit placement beats bit budget.** Pure 2-bit QAT fails where the
    same average bits, placed 2/4/2/4/8 across lm_head/MLP/attn/PLE,
    scores 0.800 with perfect emission. If VIVERE ships small models,
@@ -1206,24 +1209,94 @@ class); Q8/BF16 halve it; the QAT-Q4_0 arm is the fastest full-size row
 on either axis. Full table: BENCHMARKS.md "r19 E2B quant-ladder speed
 reference".
 
-### §12.5 Open items this section spawns
+### §12.5 Open items this section spawns (status: resolved same day, §12.6)
 
-1. **Format A/B (safetensors-vs-GGUF)**: torch-lane arms landed (tiny
-   0.8B fp32 0.200 / bf16 0.300); GGUF side pending r20c after the
-   `--chat-template-file` parse bug in build 1537a0a (listed in --help,
-   rejected at runtime; embedded templates verified fine).
+1. **Format A/B (safetensors-vs-GGUF)** — resolved: GGUF side ran
+   without the template override and sits below the readout floor at
+   both precisions (§12.6.3); combined with the torch side
+   (fp32 0.200 / bf16 0.300) the A/B concludes *consistent*: the tiny
+   0.8B base is ≈chance under both engines, and the lanes differ only
+   in how far below chance they can see.
 2. **Suite-derived imatrix requant** of the QAT checkpoint (§12.3) —
-   cheap, one arm, directly VIVERE-actionable.
-3. **Third-party teacher-distill arms (r20)**: Gemini-3.1-Pro-reasoning-
-   distill and Opus-distill E2B quants at matched Q4_K_M against the
-   0.425 non-QAT control — the first arms that test whether *someone
-   else's* distillation transfers readout capability, i.e. the VIVERE
-   thesis with teachers we did not choose.
-4. **Bonsai-2-27B probe (r20b)**: retention-claim test on a capable 27B
-   base (§12.1 corollary) — bounded to three one-item readouts on the
-   PrismML fork; the full arm stays with backlog #35's Vulkan ladder.
-5. **MoE + QAD datapoints (r20)**: LFM2.5-8B-A1B (first MoE arm) and
-   LiquidAI's QAD-Q4_0-vs-Q4_0 format-matched pair (quantization-aware
-   distillation = a second vendor replicating §12.2's conclusion by
-   construction).
+   still open; cheap, one arm, directly VIVERE-actionable.
+3. **Third-party teacher-distill arms** — resolved, and the segment's
+   headline: transfer is real but teacher/recipe-dependent (§12.6.1).
+4. **Bonsai-2-27B probe** — resolved: retention-consistent at one item;
+   `--lora` untestable on the vendor fork; full arm remains with #35
+   (§12.6.4).
+5. **MoE + QAD datapoints** — resolved: QAD is a null at 350M; the MoE
+   arm is template-locked out of the readout rather than incapable
+   (§12.6.2/§12.6.3).
+
+### §12.6 r20 same-day resolutions (2026-10-05)
+
+**§12.6.1 Distillation transfers; recipe quality decides.** Same base
+(gemma-4-E2B), same quant (plain Q4_K_M, no QAT): the Gemini-3.1-Pro
+reasoning distill scores **0.683** — +18.3 pp over the base's own BF16
+ceiling, metadata-match 0.95, ECE 0.212, clean replay (Δp 0.242) — the
+first non-QAT arm above the r19 band. The abliterated-Opus distill of
+the same base scores 0.350 (in-band) with a replay flip (Δp 1.000,
+valid_rows_match false). Training-side conclusions for VIVERE:
+
+- Teacher distillation buys decision-readout capability at 4-bit
+  *without* quantization-aware training — the transfer path and the
+  compression path are separable.
+- Teacher/recipe choice is decisive: one recipe transfers +18 pp, the
+  other (abliterated) lands in-band and destroys replay stability.
+  Abliteration (safety-direction ablation) is a capability hazard, not
+  a neutral edit.
+- Replay determinism rode with the winning distill and flipped with
+  the damaged one — the third independent replication (after r11b
+  requants and r19 QAT arms) that emission stability is a training
+  property.
+
+**§12.6.2 QAD is a null at 350M.** LiquidAI's quantization-aware
+distillation (QAD) Q4_0 vs the plain-Q4_0 control of the same
+LFM2.5-350M: 0.208 vs 0.217, ECE 0.551 vs 0.587 — nothing. The
+r16/r19 QAT lift does **not** generalize as "training for quantization
+elicits capability". Two non-exclusive readings: (a) scale floor —
+the 350M dense base has no latent decision capability to elicit
+(itself at 0.217, and the 230M sibling can't even hold the emission
+format: 65/120 invalid); (b) teacher/task mismatch — QAD's distillation
+corpus is generic text, not decision-shaped. Either way the VIVERE
+rule sharpens: elicitation-style training needs a base above the floor,
+and the training corpus must carry the readout structure.
+
+**§12.6.3 The readout floor (protocol finding).** Four arms recorded
+120/120 invalid distributions: tiny1b f16/Q4_K_M and LFM2.5-8B-A1B
+Q4_K_M/UD. Post-queue raw probes (one item, stock build, same payload
+as the runner) established the mechanism: llama-server applies
+`logit_bias` to the *sample* but computes `top_logprobs` from the
+*unbiased* distribution — the probe's biased sample emitted a letter
+while its reported top-5 held none. So the letters protocol measures
+"letter mass inside the model's natural top-20", and a model below
+that horizon reads as invalid regardless of what the biased argmax
+would say. The four arms sit below the floor for two different
+reasons:
+
+- tiny 0.8B: natural distribution degenerate (torch lane's
+  full-letter-softmax readout puts the same weights at ≈chance) —
+  genuinely at/below chance.
+- LFM2.5-8B-A1B (MoE): logits healthy, but its chat template opens
+  the assistant turn with `<think>` at p≈1.0; `enable_thinking:
+  False` is silently unsupported by LiquidAI's template, so letter
+  mass lands at ≈e⁻¹²⁶. A template-rescued variant could measure the
+  capability behind the format lock, but that changes the prompt
+  contract mid-board — out of protocol scope, noted as an option.
+
+Consequence: "below floor" is a real, reportable measurement — these
+models cannot answer this readout unassisted — but it is not the same
+quantity as a low accuracy on surviving distributions.
+
+**§12.6.4 Bonsai-2-27B probe.** The PrismML fork shallow-clones and
+builds llama-server in 79 s; PTQ1_0 loads where stock 1537a0a refuses.
+One-item probe: first-token top-1 is the correct letter at p≈0.995,
+identical with and without `--reasoning-budget 0` (the flag is inert
+for this model). Retention-consistent with the vendor's 98.2 % claim,
+anecdote-level by construction. Two operational notes: the fork
+inherits the help-listed-but-rejected flag bug class (`--lora` rejected
+at parse — the AtomicChat abliterate LoRA is unmeasurable on this
+build), and F18's 27B CPU extrapolation was ~20× pessimistic for this
+host (74 s/item actual; a full 480-readout arm ≈ 10 h is feasible here
+if the Vulkan ladder #35 stays unprioritized).
 

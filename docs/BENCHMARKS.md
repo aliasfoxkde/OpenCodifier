@@ -201,7 +201,7 @@ routing is part of its contract, not error.
 | fast | Qwen3.5-0.8B (q4_0) | 0.650 | 0.074 | 0.35 | 613 ms | 537 MiB |
 | zero-ML floor (engine default) | relational-v1 over lexical | 0.683 | 0.094 | **0.950** | **1.3 ms** | 0 MiB |
 
-### Complete board (96 runs, 2026-09-25 → 2026-10-05)
+### Complete board (107 runs, 2026-09-25 → 2026-10-05)
 
 Columns: accuracy (metadata / lexical / relational), overall accuracy,
 ECE, single-decision p50, run-twice determinism. `(chat screen)` rows
@@ -269,6 +269,8 @@ arm — sampled decode, never comparable to decision rows.
 | parity__jebadiah-4b-v2-letters.json ⁴ | 0.98 / 1.00 / 0.53 | 0.833 | 0.052 | 1973.8ms | yes; parity 0.908 |
 | parity__jebadiah-9b-v2-letters.json ⁴ | 0.08 / 0.03 / 0.33 | 0.142 | 0.501 | 2869.0ms | yes; parity 0.150 |
 | stock__clef-flash-q4_k_m-letters.json ¹⁰ | 0.00 / — / 0.33 | 0.008 | 0.529 | 1690.4ms | yes (Δp 0.000); 115 invalid dists |
+| stock__e2b-abl-opusdist-q4km-letters.json ¹² | 0.63 / 0.16 / 0.30 | 0.350 | 0.423 | 632.5ms | **no** (Δp 1.000); 4 invalid dists |
+| stock__e2b-gdist-g31pro-q4km-letters.json ¹² | 0.95 / 0.83 / 0.28 | 0.683 | 0.212 | 546.0ms | yes (Δp 0.242) |
 | stock__e2b-noqat-bf16-letters.json ¹¹ | 1.00 / 0.24 / 0.45 | 0.500 | 0.355 | 889.3ms | yes (Δp 0.023); 10 invalid dists |
 | stock__e2b-noqat-iq4nl-letters.json ¹¹ | 0.91 / 0.15 / 0.43 | 0.442 | 0.363 | 569.2ms | **no** (Δp 0.342); 7 invalid dists |
 | stock__e2b-noqat-iq4xs-letters.json ¹¹ | 0.91 / 0.21 / 0.35 | 0.450 | 0.376 | 675.9ms | **no** (Δp 1.000); 7 invalid dists |
@@ -297,8 +299,17 @@ arm — sampled decode, never comparable to decision rows.
 | stock__gemma-4-e4b-it-letters.json ⁷ | 0.64 / 1.00 / 0.45 | 0.367 | 0.304 | 1052.4ms | **no** (Δp 0.247); 41 invalid dists |
 | stock__gemma-4-e4b-qat-letters.json ⁷ | 0.54 / 0.88 / 0.50 | 0.400 | 0.281 | 977.0ms | **no** (Δp 1.000); 33 invalid dists |
 | stock__kev-4b-letters.json ⁶ | 1.00 / 0.95 / 0.53 | 0.617 | 0.151 | 1378.2ms | yes (Δp 0.000); 25 invalid dists |
+| stock__lfm25-230m-q4km-letters.json ¹² | 0.17 / 0.58 / 0.10 | 0.125 | 0.572 | 68.6ms | yes (Δp 0.000); 65 invalid dists |
+| stock__lfm25-350m-q4_0-letters.json ¹² | 0.18 / 0.23 / 0.25 | 0.217 | 0.587 | 88.9ms | yes (Δp 0.000) |
+| stock__lfm25-350m-q4km-letters.json ¹² | 0.25 / 0.05 / 0.20 | 0.167 | 0.631 | 101.9ms | yes (Δp 0.000) |
+| stock__lfm25-350m-qad-q4_0-letters.json ¹² | 0.25 / 0.15 / 0.23 | 0.208 | 0.551 | 86.7ms | yes (Δp 0.000) |
+| stock__lfm25-8ba1b-q4km-letters.json ¹² | — / — / — | 0.000 | — | 791.5ms | yes (Δp 0.000); 120 invalid dists ¹² |
+| stock__lfm25-8ba1b-udq4km-letters.json ¹² | — / — / — | 0.000 | — | 851.8ms | yes (Δp 0.000); 120 invalid dists ¹² |
+| stock__muse-1b-q4km-letters.json ¹² | 0.30 / 0.09 / 0.22 | 0.117 | 0.451 | 212.6ms | yes (Δp 0.140); 42 invalid dists |
 | stock__neohorse-1-4b-alt-letters.json ⁷ | 0.80 / 0.65 / 0.30 | 0.583 | 0.195 | 1102.1ms | yes (Δp 0.000) |
 | stock__qwen35-4b-noqat-q4_0-letters.json ¹⁰ | 0.12 / 0.05 / 0.10 | 0.092 | 0.567 | 965.6ms | yes (Δp 0.000) |
+| stock__tiny1b-f16-letters.json ¹² | — / — / — | 0.000 | — | 240.1ms | yes (Δp 0.000); 120 invalid dists ¹² |
+| stock__tiny1b-q4km-letters.json ¹² | — / — / — | 0.000 | — | 153.5ms | yes (Δp 0.000); 120 invalid dists ¹² |
 | stock__winnow-12b-q4km-letters.json ⁷ | 0.42 / 0.81 / 0.65 | 0.542 | 0.284 | 2569.2ms | yes (Δp 0.000); 13 invalid dists |
 | stock__winnow-12b-q8-letters.json ⁷ | 0.20 / 0.23 / 0.62 | 0.350 | 0.445 | 4741.7ms | yes (Δp 0.000); 1 invalid dist |
 | stock__winnow-e4b-letters.json | 1.00 / 0.97 / 0.55 | 0.842 | 0.109 | 2171.3ms | yes (Δp 0.017) |
@@ -543,6 +554,36 @@ bits) run through transformers 5.17 on the torch lane
   without the override (embedded templates boot fine, verified
   health-200).
 
+¹² r20 batch (2026-10-05, fedora, stock build `1537a0a`, letters
+readout, -t 12; LFM2.5 family, third-party E2B distills, Muse-1B, and
+the tiny-GGUF sweep). **Readout floor**: the four `— / — / —` rows
+(tiny1b f16/Q4_K_M, LFM2.5-8B-A1B Q4_K_M/UD) are 120/120 invalid
+distributions — not zero capability. Post-queue raw probes show
+llama-server applies `logit_bias` to the *sample* but reports
+`top_logprobs` from the *unbiased* distribution, so a model whose
+natural top-20 lacks letter mass records invalid even though the
+biased sample emitted a letter. The four arms sit below that floor
+for two different reasons: the tiny 0.8B's natural distribution is
+degenerate (the torch lane's full-letter-softmax readout puts the
+same weights at 0.200/0.300 ≈ chance — the format A/B concludes
+consistent), while LFM2.5-8B-A1B's logits are healthy but its chat
+template opens with `<think>` at p≈1.0 (`enable_thinking: False` is
+silently unsupported by LiquidAI's template), pushing letter mass to
+≈e⁻¹²⁶. **QAD null**: LiquidAI's quantization-aware-distillation
+350M at Q4_0 scores 0.208 vs the plain-Q4_0 control's 0.217 — the
+r16 QAT delta does not replicate as quantization-aware *distillation*
+at 350M (base too weak to elicit from, or teacher/task mismatch).
+**Third-party distillation transfers**: the Gemini-3.1-Pro-reasoning
+distill of the same E2B base at the same Q4_K_M scores **0.683**
+(+18.3 pp over the base's own BF16 ceiling, metadata-match 0.95,
+ECE 0.212, clean replay) — the first non-QAT arm above the r19 band —
+while the abliterated-Opus distill lands at 0.350 with a replay flip
+(Δp 1.000): teacher/recipe choice is decisive, and the winning distill
+carries determinism with it, the third independent replication that
+replay stability rides with training quality. Speed: pp400/tg t/s —
+230M 2183/149, 350M 1514–1777/107–121, 8B-A1B 177–187/24–25,
+Muse-1B 389/27, distills 169–210/15–18.
+
 What the board established (full findings catalog in REPORT.md):
 
 - **The relational ceiling.** Every model arm ≤ 4B sits at or below 0.50
@@ -643,6 +684,36 @@ the fastest full-size row — sub-4-bit QAT costs nothing on either axis
 the ladder measures, which is why it is the small-model operating
 point. The tiny 0.8B arms benched at 147.8 (f16) and 701.5 t/s
 (Q4_K_M).
+
+### r20b Ternary-Bonsai-2-27B PTQ probe (2026-10-05)
+
+Bounded probe, not a board row (one suite item, three server boots).
+`Ternary-Bonsai-2-27B` is a post-training ternary quant ({−1,0,+1},
+g128, blockwise Hadamard folded into weights, 1.72 bpw true) whose card
+claims 98.2 % of FP16 quality; stock llama.cpp `1537a0a` rejects the
+PTQ1_0 format, so this ran on the vendor fork (`PrismML-Eng/llama.cpp`,
+0.2.0-dev `2459f68`, shallow clone, llama-server built -j8 in 79 s).
+12 threads CPU, 27B ternary, 5.6 GB weights.
+
+| probe | args | wall | first-token top-5 |
+|---|---|---:|---|
+| base | (default) | 73.8s | **A −0.005**, '' −7.0, The −7.37, Answer −8.09, D −8.43 |
+| nothink | `--reasoning-budget 0` | 82.5s | identical to base (flag inert for this model) |
+| lora | `--lora=…abliterate…gguf` | — | server rejects the flag at parse (`error: invalid argument`) |
+
+Readings: (1) the PTQ1_0 artifact loads and produces an extremely
+peaked, letter-first distribution — item A-0000's correct answer is
+position 0, so the probed decision is **correct at p≈0.995**;
+retention-consistent with the vendor claim, but one item is anecdote —
+a full arm (~74 s × 480 readouts ≈ 10 h on this host) stays with the
+Vulkan ladder (#35). (2) `--reasoning-budget 0` does not change the
+computation at temperature 0 — the model is letter-first with or
+without the thinking flag. (3) the fork inherits the
+help-listed-but-rejected flag bug class (same signature as stock's
+`--chat-template-file`): **`--lora` is untestable on this build**, so
+the AtomicChat abliterate-LoRA remains unmeasured. F18's CPU
+extrapolation (~20-25 min/request for 27B) was ~20× pessimistic for
+this host: ternary 1.72-bpw prefill on 12 P-cores runs ~74 s/item.
 
 ## Composite deployment score
 
