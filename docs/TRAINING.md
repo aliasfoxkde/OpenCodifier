@@ -126,6 +126,16 @@ sha256s into `models.manifest.json`, raw JSONs out-of-tree, REPORT/
 BENCHMARKS/PLAN/CHANGELOG updated together, replay determinism, native
 probabilities only.
 
+E0 status (2026-10-05): **blocked on artifact availability**, not on
+code — the fork's `--lora`/`--lora-scaled`/`--lora-init-without-apply`
+flags are present in the `build-pd` server, but no ready-made
+(base, adapter) GGUF pair exists for any small base on the compute
+host (the one local adapter, bonsai2-27b, already failed arch
+validation in r20b and rides a ternary base with collapsed prefill).
+Downloading a 27B base to probe is disproportionate. The probe runs
+when E1 produces our own adapter on the GPU node — E0 executes there
+as the load-back gate.
+
 ## 8. Non-goals
 
 No cloud APIs, no GPU rental by default, no training on non-Apache-2.0
@@ -205,6 +215,24 @@ Plan, in dependency order:
      149,960 noul / 2,400 score, a 33.8× imbalance; near-dup removal
      leaves ~113k unique noul against ~4.4k choice+score — the gap the
      VIVERE extraction lane fills (item 4 below).
+
+   **merged-v2 emitted and pinned (2026-10-05).**
+   `runner/emit_merged_v2.py` applied the policy on the compute host:
+   4,014 uniform clusters deduped (5,569 records dropped; surviving
+   representative = highest `teacher.jev`, tie-break lowest input line
+   — deterministic), 8,957 mixed clusters fully quarantined (38,747
+   rows → `merged-v2.quarantine.jsonl`, each carrying `_quarantine`
+   cluster id + the cluster's label set — the VIVERE re-adjudication
+   pool). Output `merged-v2.jsonl`: **105,284 records**
+   (typed-decisions 1,200 / jev-distill 103,844 / suites 240), question
+   kinds 2,040 choice / 105,644 noul / 2,400 score. Gates green: zero
+   train↔suite state collisions, all 240 suite rows through untouched.
+   Manifest `opencodifier.distill-manifest/2` pins both SHA-256s
+   (`merged-v2.jsonl` `cb6b42cb…2915`, quarantine `289e97c3…d0ee`)
+   with the policy parameters. Cluster identity reconciled exactly with
+   the dupreport: 12,971 = 4,014 uniform + 8,957 mixed;
+   5,569 dropped + 38,747 quarantined + 4,014 representatives = 48,330
+   in-cluster records.
 2. **Quantization floor first (r11, in flight).** Winnow-E4B Q4_K_M /
    Q4_K_S / Q4_0 / IQ4_XS / IQ3_M / Q3_K_S, letters readout, scored by
    the same composite as every arm. The quant curve tells the distill
