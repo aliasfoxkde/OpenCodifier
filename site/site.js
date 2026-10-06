@@ -6,6 +6,13 @@
    source is ever added, switch those assignments to DOM construction. */
 "use strict";
 
+/* Progressive-enhancement contract: the HTML ships fully visible (html.no-js,
+   counters pre-filled with their final values, noscript summaries in the
+   interactive cards). This script opts into effects by flipping to html.js
+   and zeroing the counters so the animation starts honest. */
+document.documentElement.classList.remove("no-js");
+document.documentElement.classList.add("js");
+
 /* ---------- scroll reveal ---------- */
 const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const io = new IntersectionObserver(
@@ -15,6 +22,11 @@ const io = new IntersectionObserver(
 document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
 
 /* ---------- animated counters ---------- */
+if (!prefersReduced) {
+  document.querySelectorAll(".count").forEach((el) => {
+    el.textContent = (0).toFixed(parseInt(el.dataset.decimals || "0", 10));
+  });
+}
 function animateCount(el) {
   const target = parseFloat(el.dataset.target);
   const decimals = parseInt(el.dataset.decimals || "0", 10);
@@ -121,15 +133,37 @@ function renderChart(metric) {
   chartNote.innerHTML = "<strong>" + cfg.title + ".</strong> " + cfg.note;
 }
 
-document.querySelectorAll(".tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach((t) => { t.classList.remove("active"); t.setAttribute("aria-selected", "false"); });
-    tab.classList.add("active");
-    tab.setAttribute("aria-selected", "true");
-    renderChart(tab.dataset.metric);
+/* WAI-ARIA tabs: roving tabindex + arrow keys (APG pattern). activateTab is
+   the single writer of tab state; renderChart stays DOM-only. */
+const tabs = Array.from(document.querySelectorAll(".tab"));
+
+function activateTab(tab) {
+  tabs.forEach((t) => {
+    const active = t === tab;
+    t.classList.toggle("active", active);
+    t.setAttribute("aria-selected", active ? "true" : "false");
+    t.tabIndex = active ? 0 : -1;
+  });
+  document.getElementById("chart-panel").setAttribute("aria-labelledby", tab.id);
+  renderChart(tab.dataset.metric);
+}
+
+tabs.forEach((tab) => {
+  tab.addEventListener("click", () => activateTab(tab));
+  tab.addEventListener("keydown", (e) => {
+    const i = tabs.indexOf(tab);
+    let j = null;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") j = (i + 1) % tabs.length;
+    else if (e.key === "ArrowLeft" || e.key === "ArrowUp") j = (i - 1 + tabs.length) % tabs.length;
+    else if (e.key === "Home") j = 0;
+    else if (e.key === "End") j = tabs.length - 1;
+    if (j === null) return;
+    e.preventDefault();
+    activateTab(tabs[j]);
+    tabs[j].focus();
   });
 });
-renderChart("acc");
+activateTab(tabs[0]);
 
 /* ---------- ladder ---------- */
 const RUNGS = [

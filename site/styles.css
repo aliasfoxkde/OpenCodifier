@@ -5,7 +5,9 @@
   --bg-2: #0a1512;
   --ink: #e7f5f0;
   --ink-dim: #9db8b0;
-  --ink-faint: #6d8a81;
+  /* WCAG 2.1 AAA: 7.92:1 on --bg, 7.45:1 on card composite (7.0 required
+     at this size). #6d8a81 failed both (5.23 / 4.92). */
+  --ink-faint: #88aca3;
   --teal: #5eead4;
   --green: #34d399;
   --amber: #fbbf24;
@@ -33,6 +35,13 @@ body {
 }
 
 ::selection { background: rgba(94, 234, 212, 0.28); }
+
+/* WCAG 2.1 AAA keyboard focus indicator: 2px teal outline, offset so it
+   reads on both page and card backgrounds, never removed. */
+:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
 
 .skip-link {
   position: absolute; left: -9999px; top: 0; z-index: 100;
@@ -225,6 +234,7 @@ body {
 /* ---------- ladder ---------- */
 .ladder-wrap { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 1.1rem; margin-top: 2rem; }
 @media (max-width: 880px) { .ladder-wrap { grid-template-columns: 1fr; } }
+.ladder-wrap noscript { grid-column: 1 / -1; }
 .ladder { display: flex; flex-direction: column; gap: 0.45rem; }
 .rung {
   display: flex; align-items: center; gap: 0.9rem;
@@ -322,9 +332,12 @@ details p { color: var(--ink-dim); font-size: 0.92rem; margin-top: 0.7rem; }
 .footer code { font-size: 0.8em; }
 .foot-links { letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.72rem; }
 
-/* ---------- reveal on scroll ---------- */
-.reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.7s ease, transform 0.7s ease; }
-.reveal.in { opacity: 1; transform: none; }
+/* ---------- reveal on scroll ----------
+   Gated on html.js: without JavaScript everything must be visible —
+   content hidden behind opacity:0 with no script to reveal it is a
+   progressive-enhancement defect, not an animation. */
+html.js .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.7s ease, transform 0.7s ease; }
+html.js .reveal.in { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
-  .reveal { opacity: 1; transform: none; }
+  html.js .reveal { opacity: 1; transform: none; }
 }
