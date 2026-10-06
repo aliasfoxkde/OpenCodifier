@@ -887,6 +887,43 @@ the AtomicChat abliterate-LoRA remains unmeasured. F18's CPU
 extrapolation (~20-25 min/request for 27B) was ~20× pessimistic for
 this host: ternary 1.72-bpw prefill on 12 P-cores runs ~74 s/item.
 
+## Board C — jabr classifier benchmark (third-party OOD gate)
+
+Method of record: public harness `jabr/classifier-benchmark` (CC0),
+locked suites v1 (8 tasks / 78 cases, digest `22342af4e2c6`) and v2
+(49 tasks / 866 cases, digest `f9d74c288565`). This is the OOD gate
+RESEARCH.md §14.1 flags — 49 tasks the system never tuned on, scored
+by the harness's own runner (`bench.run`), self-run tier (same tier as
+every row above: our machine, public harness, artifacts retained).
+
+Our arm is the **zero-ML engine** — the shipped default stack
+(`relational-v1|builtin-lexical-v2`, engine 0.4.0, no learned weights),
+served over `/v1/decide` with the Jev wire adapter
+(`x-opencodifier-format: jev`); the harness speaks the same System One
+question shape natively. Adapter: `bench/backends/opencodifier.py` in
+our harness clone (candidate ids remapped `opt_N` for the IR's id
+charset; score levels keyed `"0".."n-1"` so the sorted-key decode keeps
+level order). 2026-10-06, single pass, no retries, no errors.
+
+| suite | n | micro-acc | macro-acc | errors | latency mean | wall |
+|---|---:|---:|---:|---:|---:|---:|
+| jabr v1 | 78 | 0.346 | 0.351 | 0 | 1.6 ms | 0.2 s |
+| jabr v2 | 866 | 0.400 | 0.401 | 0 | 1.6 ms | 1.4 s |
+
+Context, one surface: jabr's headline is hosted Jev **0.966** macro,
+best open **0.704** (Von); GLiNER2 0.698; Laya 0.583. The zero-ML
+engine's 0.401 is the honest floor of the product as shipped — every
+learned arm above it on the other boards starts from this rung. The
+bright rows are the lexical lane's real signal: recipe_cuisine 0.778,
+travel_policy_violation 0.765 (AUC 0.697), hazmat_shipping (AUC 0.722),
+contract_clause_type 0.588, voice_assistant_intent 0.550; score tasks
+show uniform distributions where BM25 finds no signal (argmax picks
+level 0 — the uninformative-prior decision, honestly reflected in the
+accuracy). Latency is ~200× under the slowest LLM arms on the surface
+and cost is $0, but jabr scores accuracy only — it has no
+cost/speed/calibration columns; the surface carries no universal
+number (§14 rule).
+
 ## Composite deployment score
 
 A single number for "which arm should a deployment pick", combining the

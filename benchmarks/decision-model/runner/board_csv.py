@@ -151,6 +151,8 @@ def classify(header: list[str]) -> str:
         return "jevbench_published_macro"
     if "tier" in header:
         return "tier"
+    if "micro-acc" in header and "macro-acc" in header:
+        return "jabr"
     if "overall" in header:
         return "composite"
     if "arm" in header and "suite" in header:
@@ -225,6 +227,15 @@ def map_table(board: str, section: str, rows: list[list[str]]) -> list[dict[str,
             row["macro"] = frac(r.get("family-macro", ""))
             row["p50_ms"] = to_ms(r.get("p50", ""))
             row["notes"] = "fork-instruction-ab"
+        elif kind == "jabr":
+            row["name"] = r.get("suite", "")
+            row["n"] = r.get("n", "")
+            row["accuracy"] = r.get("micro-acc", "")
+            row["macro"] = r.get("macro-acc", "")
+            row["mean_ms"] = to_ms(r.get("latency mean", ""))
+            row["qualifier"] = f"{r.get('errors', '')} errors" if r.get("errors", "") else ""
+            row["provenance"] = "self-run, public harness (CC0), 2026-10-06"
+            row["notes"] = "jabr-self-run"
         elif kind == "tier":
             row["tier"] = r.get("tier", "")
             row["name"] = drop_footnotes(r.get("pick", "")).strip()

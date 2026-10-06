@@ -188,6 +188,8 @@ Board B — our locked suite (the full model board),r19 E2B quant-ladder speed r
 Board B — our locked suite (the full model board),r20b Ternary-Bonsai-2-27B PTQ probe (2026-10-05),"base | (default) | 73.8s | A −0.005, '' −7.0, The −7.37, Answer −8.09, D −8.43",,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
 Board B — our locked suite (the full model board),r20b Ternary-Bonsai-2-27B PTQ probe (2026-10-05),nothink | `--reasoning-budget 0` | 82.5s | identical to base (flag inert for this model),,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
 Board B — our locked suite (the full model board),r20b Ternary-Bonsai-2-27B PTQ probe (2026-10-05),lora | `--lora=…abliterate…gguf` | — | server rejects the flag at parse (`error: invalid argument`),,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
+Board C — jabr classifier benchmark (third-party OOD gate),,jabr v1,0 errors,78,,0.346,0.351,,,,,,,1.6,,,,,,"self-run, public harness (CC0), 2026-10-06",,,,,,,jabr-self-run
+Board C — jabr classifier benchmark (third-party OOD gate),,jabr v2,0 errors,866,,0.400,0.401,,,,,,,1.6,,,,,,"self-run, public harness (CC0), 2026-10-06",,,,,,,jabr-self-run
 Composite deployment score,,OpenCodifier engine,relational over lexical,,,0.683,,,,,0.094,,,,,,,,,,,0.589,0.97,1.00,80.7,no,composite-score
 Composite deployment score,,VTX-JEV-3 lf2,static embedding,,,0.242,,,,,0.136,,,,,,,,,,,0.106,0.99,1.00,59.5,no,composite-score
 Composite deployment score,,jebadiah-4b-v2 Q3_K_S,,,,0.792,,,,,0.087,,,,,,,,,,,0.705,0.15,0.50,48.7,no,composite-score
@@ -212,5 +214,3 @@ REPORT.md,"Fork params A/B: context, threads, prompt diet (2026-10-01 → 10-03)
 REPORT.md,"Fork params A/B: context, threads, prompt diet (2026-10-01 → 10-03)",diet200,"12t / 8k, 200-task",,,0.633,,,,,0.1203,,15855.0,,,,,,,"45.6→23.8, dominated — do not ship",,,,,,,fork-params-ab
 REPORT.md,"Fork params A/B: context, threads, prompt diet (2026-10-01 → 10-03)",diet100,200-task,,,0.508,,,,,0.1487,,7500,,,,,,,"18.5→17.1 (clean), dominated — do not ship",,,,,,,fork-params-ab
 REPORT.md,"Fork params A/B: context, threads, prompt diet (2026-10-01 → 10-03)",params__long,"14t / 8192, 120-item long suite",,,0.7667,,,,,0.0825,,46700,,,,,,,"14.5→17.3 (clean), long-suite arm of record (#32); prefill-bound (~46.5 s of 46.7 s)",,,,,,,fork-params-ab
-Board B — our locked suite (the full model board),"Complete board (113 runs, 2026-09-25 → 2026-10-05)",stock__qwen38-2b-distill-q4km-letters.json,,120,,0.725,,0.875,0.944,0.450,0.113,,384.3,634.4,yes,0.000,4,,,,8,,,,,,llm-suite
-Board B — our locked suite (the full model board),"Complete board (113 runs, 2026-09-25 → 2026-10-05)",stock__qwen38-4b-distill-q4km-letters.json,,120,,0.792,,0.900,1.000,0.475,0.051,,1013.5,1709.1,yes,0.000,0,,,,8,,,,,,llm-suite
