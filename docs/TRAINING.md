@@ -275,6 +275,30 @@ Plan, in dependency order:
    contract is raw-teacher values with k-vote hard labels, single-vote
    answers dropped, never smoothed.
 
+   **Quarantine re-adjudication measured (qradj-v1, 2026-10-06).**
+   The donor run (`qradj_full_v3`: 116,241 prompts, 99.95 % parse,
+   zero truncated, zero transport errors) joined all 38,747
+   quarantined records; **28,937 recovered (74.7 %)** under the
+   confirm-only contract — 3/3 unanimous votes agreeing with the
+   surviving teacher gold. 6,724 splits, 3,036 unanimous
+   contradictions, and 50 incomplete sets stay quarantined. Cluster
+   anatomy verified post-hoc: no cluster in the whole pool pairs one
+   query with two labels — merge-v2's state-only grouping had flagged
+   passage-QA structure (one passage, many queries) as label fights;
+   every recovered row is a distinct (state, query) with zero
+   same-query duplicates, so all 28,937 records are admissible with no
+   dedup. Each recovered record carries a `_readjudication` block
+   (raw donor votes, values + p), so the recovery is auditable from
+   the record alone. Donor confidence is saturated (p50 1.0, 79.6 %
+   extreme votes) and carried but not gated — the contract gates on
+   vote values. Reports of record:
+   `benchmarks/decision-model/results/qradj-v1-gap-report.{md,json}`;
+   recovered pool `qradj-v1.recovered.jsonl` SHA-256
+   `8135922b…6632f4` (compute host). merged-v3
+   (105,284 + 28,937 = 134,221 records) emits after the score
+   gap-fill lands; score gap-fill (item 2) is in flight — 96,000
+   prompts = 16,000 merged-v2 states × 2 families × 3 votes.
+
 Non-goals carried from §8: no non-Apache-2.0 corpora, no cloud
 training by default; the burst node (T5500 2×V100) or Kaggle/Modal
 remain the GPU paths, user-gated.

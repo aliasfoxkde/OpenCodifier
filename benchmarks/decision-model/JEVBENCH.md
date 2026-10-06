@@ -187,17 +187,27 @@ milliseconds. Acceptance criteria:
 
 | arm | accuracy | macro | ECE | Brier | p50 / p95 | determinism | probs |
 |---|---:|---:|---:|---:|---|---|---|
-| engine (relational-v1, 2026-10-05 rerun) | 0.3766 | 0.4011 | 0.402 | 0.890 | 0.7 ms / 1.6 ms | 231/231 | native |
+| engine (relational-v1\|builtin-lexical-v2, 2026-10-06 D35 rerun) | 0.3766 | 0.4011 | 0.393 | 0.875 | 0.9 ms / 2.0 ms | 231/231 | native |
 | **jev_native bridge (0.8B-v3 Q4_K_M)** | **0.6494** | 0.6378 | **0.080** | 0.425 | 6.72 s / 103.8 s | 231/231 (labels + probs) | native |
 | vtx (VTX-JEV-3 LF2, vendor client) | 0.4113 | 0.4318 | 0.126 | 0.684 | 7.9 ms | 231/231 | native |
 | engine + 4B rung, fusion-v2 gate (2026-10-05) | 0.5584 | 0.5622 | 0.335 | 0.734 | 1.2 ms / 0.73 s | 231/231 | native |
 | engine + 4B rung, proofs-only posture (2026-10-05) | **0.6883** | 0.6622 | 0.171 | 0.431 | 0.58 s / 14.0 s | 231/231 | native |
+| engine + 4B rung, proofs-only posture (2026-10-06 D35 rerun) | 0.6840 | 0.6593 | 0.170 | 0.436 | 0.82 s / 18.7 s | 231/231 | native |
 
 The engine row was re-measured on the shipped build
 (`runs/jevbench/engine-only-fedora-v1/`, archived on the compute host):
 0.3766 reproduced byte-identically (187 ok / 44 abstains), and the row's
 missing Speed cell is filled — p50 0.7 ms, p95 1.6 ms, the fastest arm
-on the suite by two orders.
+on the suite by two orders. The D35 confidence bound re-measures it
+again with predictions byte-identical (`engine-only-fedora-v2-d35/`:
+same 0.3766, same 187/44, full replay) while the confidence columns
+move as designed: the 8 rows that reported p = 1.0 — BM25 softmax
+saturation, the maximum-confidence-wrong mechanism D35 removes — now
+report p ≤ 0.99, and the calibration cells improve for free
+(ECE 0.402 → 0.393, Brier 0.890 → 0.875) without any calibration being
+fit. The §45 focus-extraction A/B also reproduces answer-identical on
+the D35 build (acc 0.683 / ECE 0.095 with and without
+`--focus-budget 512` on the padded suite).
 
 The two full-system rows (task #105, contract and decomposition in
 `results/jevbench-fullsystem-fedora.md`): same 4B rung, same weights —
@@ -206,6 +216,26 @@ in-domain-tuned fusion gate keeps 68.8 % of items at 0.434 accuracy
 while escalating 0.833 to the rung (F24's warning, measured OOD); the
 structural posture ties the post-hoc cascade bound a priori and pays
 for 12 honest abstentions in the accuracy column.
+
+**Proofs-posture D35 delta (2026-10-06, task #115).** Re-running the
+proofs posture on the D35 build
+(`runs/jevbench/proofs-only-fedora-v2-d35/`) moves it −1 item,
+0.6883 → 0.6840. The mechanism is exactly the saturation repair: D35
+caps the BM25 softmax at p ≤ 0.99, so the 8 rows that previously
+reported p = 1.0 and were engine-accepted under `min_confidence: 1.0`
+now escalate to the rung. The per-item diff over the whole suite finds
+exactly one flip: 4 of the 8 saturated items were correct at p = 1.0,
+the rung confirms 3 of them (probability-03, opus-c long_policy-04/11)
+and loses 1 (hard-opus-a-long_policy-19, engine-right → rung-wrong at
+14.2 s); the 4 previously-wrong saturated items stay wrong — the rung
+confirms them wrong too, consistent with the gate-refit finding that
+long_policy is rung-hostile. The "escalation converts engine misfires"
+hypothesis is refuted on this suite: the 2B rung is not better than the
+lexical engine on the items the engine could not verify. What D35 buys
+here is calibrated honesty — the posture no longer sells maximum
+confidence on items it cannot prove — at the cost of one formerly-lucky
+keep, plus latency from 11 added escalations (p50 0.58 → 0.82 s, p95
+14.0 → 18.7 s).
 
 **Gate-refit negative result (2026-10-06, task #114).** The obvious
 repair — refit the fusion thresholds on the OOD distribution — is
