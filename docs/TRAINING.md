@@ -177,10 +177,34 @@ Plan, in dependency order:
      carried raw — no probability transform invented at merge time.
    - Suites emitted tagged as eval surfaces, never deduped away.
    License rulings: `nvidia/HelpSteer2` (CC-BY-4.0, disclosed jebadiah
-   source) **excluded** — Apache-2.0-only rule. Open items for merge-v2:
-   near-dup detection (v1 is exact-only, stated in the manifest), the
-   fork arms' prompt/response logs as a fourth source, and
-   `suite_long` (eval material — would ride in tagged, not as train).
+   source) **excluded** — Apache-2.0-only rule. The three merge-v2 open
+   items are resolved by measurement (2026-10-05,
+   `runner/analyze_merged_dups.py`, report on the compute host at
+   `~/oc-model-eval/corpora/merged-v1-dupreport.json`):
+   - **Near-dup**: v1's exact dedup held at the canonical level (zero
+     duplicate `(state, question)` pairs), but MinHash LSH over
+     canonicalized state text (5-gram shingles, 64 permutations, 16×4
+     banding, Jaccard ≥ 0.8, zero buckets hit the pair-gen cap) found
+     35,359 verified pairs in 12,971 clusters covering 48,330 records
+     (32.3 % of the corpus) — all in `jev-distill-corpus`, Jaccard
+     range 0.8–1.0: byte-exact v1 missed punctuation/case variants.
+   - **Label conflict inside the redundancy**: 8,957 of the 12,971
+     clusters (69 %) carry mixed gold labels — near-identical passages
+     labelled both relevant and irrelevant. Merge-v2 policy:
+     uniform-label clusters (4,014) dedup to one representative;
+     mixed-label clusters are **quarantined** (separate file, excluded
+     from train, cluster id + conflicting labels carried) — picking a
+     winner inside a label fight invents supervision, keeping the fight
+     poisons it. Quarantined rows are the VIVERE re-adjudication pool.
+   - **Fourth source (fork prompt/response logs): rejected.** The arms'
+     `raw/` captures store model *predictions* on eval-suite items — no
+     gold labels, and folding eval surfaces into train is contamination.
+   - **suite_long**: confirmed 120 items with `derived_from` recorded —
+     rides tagged as eval only.
+   - **Kind census** (per question — the training unit): 2,040 choice /
+     149,960 noul / 2,400 score, a 33.8× imbalance; near-dup removal
+     leaves ~113k unique noul against ~4.4k choice+score — the gap the
+     VIVERE extraction lane fills (item 4 below).
 2. **Quantization floor first (r11, in flight).** Winnow-E4B Q4_K_M /
    Q4_K_S / Q4_0 / IQ4_XS / IQ3_M / Q3_K_S, letters readout, scored by
    the same composite as every arm. The quant curve tells the distill
