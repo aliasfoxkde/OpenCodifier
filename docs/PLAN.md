@@ -582,7 +582,7 @@ answers before it scores them:
   candidate set, and agreed by every operator; anything else delegates
   to the inner classifier untouched. No question-text keywords: the
   facts decide what fires. `model_id` composes
-  (`relational-v1|builtin-lexical-v1`).
+  (`relational-v1|builtin-lexical-v2`).
 - **Cache-key honesty (D6/§64).** `DecisionEngine::new` now derives
   `identity.model_id` from the live classifier's `model_id()`, so a
   wrapped or swapped classifier changes keys without caller

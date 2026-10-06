@@ -291,6 +291,41 @@ pub fn softmax(scores: &[f64]) -> Vec<f64> {
     exponentials.iter().map(|value| value / sum).collect()
 }
 
+/// Maximum log-odds a lexical score may certify, `ln(99)` ≈ 4.595.
+///
+/// Lexical overlap is weak evidence (PLANNING.md §45). Uncapped, a
+/// softmax over an unbounded BM25 score reaches *exactly* 1.0 in `f64`
+/// once the score passes ~37 — and that score is a term-frequency
+/// product of state length and question overlap, so it is long inputs
+/// that saturate. Measured on the `JevBench` `long_policy` items (task
+/// #115): 15 KB policy prose drove boolean and choice confidences to
+/// 1.0 and the exact-proof gate (`min_confidence: 1.0`) accepted them —
+/// wrong answers at maximum confidence, because the score measured how
+/// often the state repeats the question's terms, not whether the
+/// question is satisfied. Bounding the spread keeps every lexical
+/// distribution strictly under 1.0: term overlap can never certify
+/// better than 99:1 odds. Order-preserving, so predictions are
+/// unchanged; only confidence is bounded.
+pub const LEXICAL_LOG_ODDS_CAP: f64 = 4.595_119_850_134_59; // ln(99)
+
+/// Bounds softmax inputs so no output probability can reach 1.0.
+///
+/// Applied when the top score exceeds [`LEXICAL_LOG_ODDS_CAP`]: the top
+/// score is pulled down to the cap and every other score is compressed
+/// into `[0, cap]`, preserving order. Scores at or under the cap pass
+/// through untouched, so ordinary lexical evidence is unaffected.
+#[must_use]
+pub fn bound_lexical_spread(mut scores: Vec<f64>) -> Vec<f64> {
+    let max = scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    if !max.is_finite() || max <= LEXICAL_LOG_ODDS_CAP {
+        return scores;
+    }
+    for score in &mut scores {
+        *score = LEXICAL_LOG_ODDS_CAP - (max - *score).min(LEXICAL_LOG_ODDS_CAP);
+    }
+    scores
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -443,6 +478,54 @@ mod tests {
         assert!(negative_infinite.iter().all(|value| (value - 0.5).abs() < 1e-12));
         let all_nan = softmax(&[f64::NAN, f64::NAN, f64::NAN]);
         assert!(all_nan.iter().all(|value| (value - 1.0 / 3.0).abs() < 1e-12));
+    }
+
+    #[test]
+    fn bound_passes_through_scores_under_the_cap() {
+        let scores = vec![1.5, 0.25, -2.0];
+        assert_eq!(bound_lexical_spread(scores.clone()), scores);
+        // Exactly at the cap is still untouched: the bound exists to stop
+        // saturation, not to rewrite ordinary evidence.
+        let at_cap = vec![LEXICAL_LOG_ODDS_CAP, 0.0];
+        assert_eq!(bound_lexical_spread(at_cap.clone()), at_cap);
+    }
+
+    #[test]
+    fn bound_caps_the_top_and_floors_the_rest() {
+        let bound = bound_lexical_spread(vec![100.0, 95.0, 3.0, 0.0]);
+        // Top pinned to the cap; anything more than the cap below the max
+        // floors at zero and ties. The winner keeps its strict lead.
+        assert_eq!(bound[0], LEXICAL_LOG_ODDS_CAP);
+        assert_eq!(&bound[1..], &[0.0, 0.0, 0.0]);
+        assert!(bound[0] > bound[1]);
+        // And the softmaxed distribution can no longer certify 1.0.
+        let probabilities = softmax(&bound);
+        assert!(probabilities.iter().all(|p| *p < 1.0));
+        assert!(probabilities[0] <= 0.99);
+    }
+
+    #[test]
+    fn bound_preserves_order_within_the_cap_window() {
+        // Scores less than the cap below the max keep their exact gaps,
+        // so argmax and ordering among contenders are unchanged (D35:
+        // predictions are identical; only confidence is bounded).
+        let bound = bound_lexical_spread(vec![100.0, 99.5, 99.0]);
+        assert_eq!(bound[0], LEXICAL_LOG_ODDS_CAP);
+        assert!(bound[1] > bound[2]);
+        assert!((bound[1] - (LEXICAL_LOG_ODDS_CAP - 0.5)).abs() < 1e-12);
+        assert!((bound[2] - (LEXICAL_LOG_ODDS_CAP - 1.0)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn bound_passes_through_when_no_value_is_orderable() {
+        // Same contract as `softmax`: no finite reference point, so the
+        // input passes through and softmax degrades to uniform instead of
+        // inventing a preference.
+        let garbage = bound_lexical_spread(vec![f64::NAN, 1.0]);
+        assert!(garbage[0].is_nan());
+        assert_eq!(garbage[1], 1.0);
+        let infinite = vec![f64::INFINITY, 1.0];
+        assert_eq!(bound_lexical_spread(infinite.clone()), infinite);
     }
 
     #[test]

@@ -308,7 +308,7 @@ mod tests {
         // ban every alternative spelling of it.
         assert_ne!(report.waves(), Vec::<Vec<opencodifier_core::NodeId>>::new());
         // The composed id: solver over lexical, folded into the identity.
-        assert_eq!(handle.identity().model_id, "relational-v1|builtin-lexical-v1");
+        assert_eq!(handle.identity().model_id, "relational-v1|builtin-lexical-v2");
     }
 
     #[test]
@@ -373,7 +373,7 @@ mod tests {
         assert_eq!(health.nodes, 10);
         let response = handle.decide(&choice_request()).unwrap();
         assert_eq!(response.answers().len(), 1);
-        assert_eq!(handle.identity().model_id, "relational-v1|builtin-lexical-v1");
+        assert_eq!(handle.identity().model_id, "relational-v1|builtin-lexical-v2");
     }
 
     #[test]

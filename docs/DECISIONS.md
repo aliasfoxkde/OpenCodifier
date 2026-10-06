@@ -96,7 +96,7 @@ id, calibration version, engine semver. Other crates reference
 **Amendment (2026-09-28, relational solver):** the model id in the key
 is the **live classifier's** id — `DecisionEngine::new` derives
 `identity.model_id` from `Classifier::model_id()` at construction, and
-wrapper classifiers compose their ids (`relational-v1|builtin-lexical-v1`),
+wrapper classifiers compose their ids (`relational-v1|builtin-lexical-v2`),
 so a swapped or decorated classifier invalidates cached decisions
 without caller bookkeeping. A hand-set `EngineIdentity::model_id` is
 never trusted over the decider that actually runs.
@@ -1344,3 +1344,45 @@ ecosystem (and Fastino's GLiDE demo) convention is a
   confirming the bias table is the export pipeline's own correction
   and belongs on the serving path. No graph-execution boundary remains
   open for either ONNX rung.
+
+## D35 — Lexical confidence is bounded: no BM25 softmax output may reach 1.0 (2026-10-06)
+
+- **What changed**: the lexical classifier's three decision paths
+  (choice, boolean, score) pass their BM25 scores through
+  `bound_lexical_spread` before the softmax. When the top score exceeds
+  `LEXICAL_LOG_ODDS_CAP` (`ln(99)` ≈ 4.595), the top is pulled to the
+  cap and the rest compress into `[0, cap]`, order-preserving. Below
+  the cap nothing changes. Model id `builtin-lexical-v1` →
+  `builtin-lexical-v2` (D6 re-key: cached v1 confidences include
+  saturated 1.0 values).
+- **Why**: the boolean hypothesis is an unbounded BM25 score against a
+  fixed zero null, and the score is a term-frequency product — state
+  length × question-term overlap. Past ~37, `softmax([evidence, 0])`
+  returns *exactly* 1.0 in `f64`. Measured on the JevBench `long_policy`
+  items (task #115): 15 KB policy prose drove boolean evidence to 42–64
+  and choice score gaps to 60+, saturating confidence to 1.0, and the
+  exact-proof ladder (`min_confidence: 1.0`) accepted those as proofs —
+  four wrong answers at maximum confidence (3× noul predicted "no" on
+  gold-"yes" items via the negation-polarity flip firing on rubric
+  text; 1× choice winner = the criterion whose words the state repeated
+  most). All four reproduced bit-exactly by an independent replication
+  of the arithmetic. This is also why the winner-prob gate refit
+  (#114) hit the grid edge: p≈1.0 was a state-length proxy, not a
+  correctness signal — the p≈1.0 band converted at 0.235 while the
+  [0.5, 0.6) band converted at 0.769.
+- **What it is not**: not a calibration claim. 0.99 is not a calibrated
+  confidence; it is a structural ceiling that keeps lexical overlap
+  from certifying better than 99:1 odds and from impersonating exact
+  proofs. Predictions are unchanged everywhere (the bound preserves
+  score order), so engine accuracy on any suite is unchanged; what
+  changes is routing under confidence gates — saturated lexical
+  answers now escalate instead of self-accepting at p = 1.0 — and the
+  entropy/margin features are no longer constant-zero for exactly the
+  items where saturation fired. The `relational` solver's proofs are
+  untouched: exact proofs over extracted facts remain the only source
+  of proof-grade confidence in the zero-ML stack.
+- **Revisit condition**: if a calibrated lexical artifact (fit through
+  the `Calibration` seam) ever supersedes the raw hypothesis, the cap
+  moves under it — calibrated confidence may exceed the cap only by
+  fitting, never by saturation.
+

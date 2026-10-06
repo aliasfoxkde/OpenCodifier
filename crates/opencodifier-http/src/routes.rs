@@ -418,7 +418,7 @@ async fn validate_request(headers: HeaderMap, body: Bytes) -> Result<Json<Value>
 ///
 /// The runtime has exactly one active decision lane, and honesty is the
 /// contract: the response reports the composed engine model id
-/// (`relational-v1|builtin-lexical-v1` for the base binary) rather than
+/// (`relational-v1|builtin-lexical-v2` for the base binary) rather than
 /// pretending to enumerate a catalog of installed artifacts.
 async fn models(State(handle): State<Arc<EngineHandle>>) -> Json<Value> {
     let identity = handle.identity();

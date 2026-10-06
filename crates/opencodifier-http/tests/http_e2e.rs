@@ -191,7 +191,7 @@ async fn healthz_reports_the_engine_identity() {
     assert_eq!(response["status"], "ok");
     assert_eq!(response["identity"]["graph_version"], health.identity.graph_version);
     // The composed id: the relational solver over the lexical classifier.
-    assert_eq!(response["identity"]["model_id"], "relational-v1|builtin-lexical-v1");
+    assert_eq!(response["identity"]["model_id"], "relational-v1|builtin-lexical-v2");
     assert_eq!(response["identity"]["calibration_version"], health.identity.calibration_version);
     assert_ne!(response["identity"]["engine_semver"].as_str().unwrap(), "");
     assert_eq!(response["nodes"].as_u64().unwrap(), u64::try_from(health.nodes).unwrap());
