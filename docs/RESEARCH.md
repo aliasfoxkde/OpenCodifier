@@ -1680,7 +1680,7 @@ LLM underneath?
 |---|---|---|---|
 | JevBench public 231 (`../JEVBENCH.md`) | 231 items | upstream authors' harness | hosted Jev 86.6 % / JEV-27B 88.70 (family-macro) / **fork_4b (ours) 76.62** / Kev-4B 73.71 / Laya 55.8–58.4 |
 | Benchmark Heaven "JevBench v1.6.0" | 1,500 decisions self-hosted / 600 hosted; 92 systems | third party, author-submitted | Quyet-1.0-Large Cap 81.7 (31B decoder), Jev Cap 76.5 (Intel 62.4), best ≤4B Cap 65.4 |
-| jabr classifier benchmark | 49 tasks / 869 cases | third party | Jev **0.966** vs best open **0.704** (Von); GLiNER2 0.698; Laya 0.583 |
+| jabr classifier benchmark | 49 tasks / 869 cases | third party | Jev **0.966** vs best open **0.704** (Von); GLiNER2 0.698; Laya 0.583; **zero-ML engine (our self-run, 2026-10-06) 0.401** |
 | jevbench.xyz | first-party run archive | JevBench itself | Banking77 80.3 % (19.7 % err); phishing recall 85.7 → 98.4 from one prompt change |
 
 Cross-surface divergence is itself the finding. Laya: own README
@@ -1840,11 +1840,15 @@ differ by exactly the Intelligence axis.**
    pre-submission measurement for the dominance program.
 2. **NEW #107 — benchmark-dominance program**: official Benchmark
    Heaven self-hosted submission (1,500 decisions, their protocol,
-   artifacts published); jabr run if the harness is public; add an
-   automation-share-at-5 %-error column to BENCHMARKS.md rows;
+   artifacts published); ~~jabr run if the harness is public~~ — DONE
+   2026-10-06: the harness is public (CC0,
+   `jabr/classifier-benchmark`); zero-ML engine self-run scored
+   **0.401 macro on v2** (866 cases, 0 errors, 1.6 ms/case;
+   BENCHMARKS.md Board C); the adapter is the artifact an upstream
+   backend PR would carry, if the owner wants one. Still open: the
+   board submission, the automation-share-at-5 %-error column, the
    large-candidate-set (77-label-class) robustness probe via the D9
-   256-candidate bench; shuffled-context OOD probe in suite
-   reporting.
+   256-candidate bench, and the shuffled-context OOD probe.
 3. Watch: jevos-v3 (CPU-binary posture twin; candidate 231 arm); Von
    (jabr open-field leader, 395M ModernBERT — same family as our
    model2vec/vtx line); Clef-flash (Apache-2.0 9B, possible rung
