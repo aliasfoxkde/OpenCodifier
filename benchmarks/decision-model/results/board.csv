@@ -165,29 +165,6 @@ Board B — our locked suite (the full model board),"Held-out suite: the fusion-
 Board B — our locked suite (the full model board),"Held-out suite: the fusion-v2 gate out of sample (2026-10-05, F29)",tree__e2bqat-q4_0-holdout.json,,,,0.750,,0.80,1.00,0.45,0.169,,,634.8,768,yes,,,,,,,,,,,,llm-suite
 Board B — our locked suite (the full model board),"Held-out suite: the fusion-v2 gate out of sample (2026-10-05, F29)",engine__holdout-fusion-v1.json,,,,0.800,,0.68,0.85,0.88,0.096,,,0.8,169,yes,,,,,,,,,,,,engine
 Board B — our locked suite (the full model board),"Held-out suite: the fusion-v2 gate out of sample (2026-10-05, F29)",engine__holdout-fusion-v2.json,,,,0.892,,0.80,1.00,0.88,0.103,,,136.7,322,yes,,,,,,,,,,,,engine
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),BF16 | 0.500 | 889ms | 63.7,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),UD-IQ2_M (2.7 bpw) | 0.392 | 585ms | 194.4,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),UD-IQ3_XXS | 0.300 | 640ms | 199.3,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),Q3_K_S | 0.550 | 611ms | 190.1,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),Q3_K_M | 0.500 | 658ms | 204.3,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),UD-Q3_K_XL | 0.433 | 589ms | 206.7,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),IQ4_XS | 0.450 | 676ms | 187.8,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),IQ4_NL | 0.442 | 569ms | 231.3,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),Q4_0 | 0.350 | 472ms | 225.5,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),QAT-Q4_0 | 0.808 | 423ms | 230.8,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),Q4_1 | 0.475 | 818ms | 118.2,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),Q4_K_M | 0.425 | 672ms | 217.4,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),Q5_K_S | 0.500 | 589ms | 197.4,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),Q5_K_M | 0.483 | 627ms | 195.4,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),UD-Q5_K_XL | 0.517 | 638ms | 193.8,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),Q6_K | 0.525 | 657ms | 190.7,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),UD-Q6_K_XL | 0.475 | 678ms | 164.3,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),Q8_0 | 0.475 | 1100ms | 114.2,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),UD-Q8_K_XL | 0.492 | 1046ms | 111.6,,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r19 E2B quant-ladder speed reference (2026-10-05),QAT mobile mixed (torch bf16) | 0.800 | 7490ms | — (no bench),,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r20b Ternary-Bonsai-2-27B PTQ probe (2026-10-05),"base | (default) | 73.8s | A −0.005, '' −7.0, The −7.37, Answer −8.09, D −8.43",,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r20b Ternary-Bonsai-2-27B PTQ probe (2026-10-05),nothink | `--reasoning-budget 0` | 82.5s | identical to base (flag inert for this model),,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
-Board B — our locked suite (the full model board),r20b Ternary-Bonsai-2-27B PTQ probe (2026-10-05),lora | `--lora=…abliterate…gguf` | — | server rejects the flag at parse (`error: invalid argument`),,,,,,,,,,,,,,,,,,,,,,,,,,unmapped-table
 Board C — jabr classifier benchmark (third-party OOD gate),,jabr v1,0 errors,78,,0.346,0.351,,,,,,,,1.6,,,,,,"self-run, public harness (CC0), 2026-10-06",,,,,,,jabr-self-run
 Board C — jabr classifier benchmark (third-party OOD gate),,jabr v2,0 errors,866,,0.400,0.401,,,,,,,,1.6,,,,,,"self-run, public harness (CC0), 2026-10-06",,,,,,,jabr-self-run
 Composite deployment score,,OpenCodifier engine,relational over lexical,,,0.683,,,,,0.094,,,,,,,,,,,,0.589,0.97,1.00,80.7,no,composite-score
