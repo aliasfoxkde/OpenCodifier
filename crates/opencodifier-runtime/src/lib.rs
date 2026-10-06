@@ -74,12 +74,16 @@
 
 pub mod backend;
 pub mod error;
+pub mod julia;
 pub mod kai;
 pub mod mock;
 pub mod tensor;
 
 pub use backend::{EmbeddingBackend, InferenceBackend};
 pub use error::RuntimeError;
+#[cfg(feature = "onnx")]
+pub use julia::JuliaOnnxBackend;
+pub use julia::{MARKER_MASK, MARKER_POS, QTYPE_INPUT};
 #[cfg(feature = "onnx")]
 pub use kai::KaiOnnxBackend;
 pub use kai::{

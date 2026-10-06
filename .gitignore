@@ -1,5 +1,9 @@
 # Build artifacts
 /target
+# The compute-host parity runner is its own cargo project (it needs the
+# `runtime-onnx-dynamic` feature, which the workspace default build must
+# not carry); its target dir is build output like any other.
+/benchmarks/validation/runner/julia-parity-rs/target
 # wasm-pack output (§57): rebuilt by `just check-wasm`, never committed
 /crates/opencodifier-wasm/pkg
 

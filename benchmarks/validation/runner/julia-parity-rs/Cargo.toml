@@ -1,0 +1,16 @@
+[package]
+name = "julia-parity-rs"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Compute-host parity run: the Rust Julia-1 contract + ONNX transport against the real export (task #92)."
+
+[dependencies]
+opencodifier-model = { path = "../../../../crates/opencodifier-model" }
+opencodifier-runtime = { path = "../../../../crates/opencodifier-runtime", features = [
+    "runtime-onnx-dynamic",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[workspace]
