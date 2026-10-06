@@ -54,7 +54,7 @@ use crate::error::{EngineError, EngineResult};
 pub struct EngineIdentity {
     /// Version of the executed decision graph.
     pub graph_version: u64,
-    /// Identifier of the deciding model (e.g. `builtin-lexical-v1`). The
+    /// Identifier of the deciding model (e.g. `builtin-lexical-v2`). The
     /// engine derives this from the live classifier's
     /// [`Classifier::model_id`](crate::classifier::Classifier::model_id)
     /// at construction — wrapper classifiers compose their ids — so a

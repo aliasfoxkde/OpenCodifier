@@ -58,7 +58,7 @@ probe.
 | `/v1/validate` | POST | decode-and-validate only: preflight a payload (question kinds, candidate counts) before paying for execution |
 | `/v1/graph/validate` | POST | validate a declarative graph document |
 | `/v1/graph/run` | POST | execute a graph document (body carries `request` + graph) |
-| `/v1/models` | GET | the model lanes actually active (e.g. `relational-v1\|builtin-lexical-v1` for the base binary) — reports what runs, never a catalog of aspirations |
+| `/v1/models` | GET | the model lanes actually active (e.g. `relational-v1\|builtin-lexical-v2` for the base binary) — reports what runs, never a catalog of aspirations |
 | `/v1/capabilities` | GET | what this build can decide (kinds, rungs, features) |
 | `/v1/healthz` | GET | liveness/readiness |
 

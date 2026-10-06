@@ -27,7 +27,7 @@ use opencodifier_core::{
 use std::collections::BTreeMap;
 
 use crate::error::{EngineError, EngineResult};
-use crate::lexical::{Bm25Index, negation_polarity, softmax};
+use crate::lexical::{Bm25Index, bound_lexical_spread, negation_polarity, softmax};
 
 /// Something that can decide one question about one state.
 ///
@@ -178,9 +178,16 @@ pub struct LexicalClassifier {
 
 impl LexicalClassifier {
     /// Builds the classifier under its built-in model id.
+    ///
+    /// `v2` is the confidence-bounded lexical hypothesis (D35): identical
+    /// predictions to `v1` — the bound preserves score order — with
+    /// distributions strictly under 1.0. The bump re-keys every cached
+    /// lexical decision, which is the point: cached `v1` confidences
+    /// include saturated 1.0 values that exact-proof gates accepted as
+    /// proofs.
     #[must_use]
     pub fn new() -> Self {
-        Self { model_id: "builtin-lexical-v1".to_owned() }
+        Self { model_id: "builtin-lexical-v2".to_owned() }
     }
 
     /// Overrides the model id (bump it if the heuristic changes, so cached
@@ -219,7 +226,12 @@ impl LexicalClassifier {
                 &local
             }
         };
-        let scores = index.score_all(query);
+        // The spread bound (D35) runs before the softmax: a long state
+        // scores candidate descriptions through a term-frequency product
+        // that grows with state length, and an unbounded softmax converts
+        // that into exactly 1.0 — a saturated lexical distribution that
+        // exact-proof gates then treat as a proof.
+        let scores = bound_lexical_spread(index.score_all(query));
         let best = scores
             .iter()
             .enumerate()
@@ -276,7 +288,11 @@ impl LexicalClassifier {
         let support = index.score_all(state_text);
         let coverage = index.coverage(0, state_text);
         let evidence = support.first().copied().unwrap_or(0.0);
-        let mut scores = vec![evidence, 0.0];
+        // The affirmative hypothesis is an unbounded BM25 score against a
+        // fixed zero null — exactly the shape that saturates on long
+        // states (D35). Bounded before the flip: the bound is per-element
+        // given the same max, so polarity does not affect it.
+        let mut scores = bound_lexical_spread(vec![evidence, 0.0]);
         if negation_polarity(question.text()) < 0.0 {
             scores.reverse();
         }
@@ -305,7 +321,7 @@ impl LexicalClassifier {
         let labels: Vec<&str> =
             question.levels().iter().map(opencodifier_core::ScoreLevel::label).collect();
         let index = Bm25Index::new(labels);
-        let scores = index.score_all(query);
+        let scores = bound_lexical_spread(index.score_all(query));
         let best = scores
             .iter()
             .enumerate()
@@ -493,7 +509,7 @@ mod tests {
         let first = classifier.decide(&state, &choice_question()).unwrap();
         let second = classifier.decide(&state, &choice_question()).unwrap();
         assert_eq!(first, second);
-        assert_eq!(classifier.model_id(), "builtin-lexical-v1");
+        assert_eq!(classifier.model_id(), "builtin-lexical-v2");
         assert_eq!(
             LexicalClassifier::default().with_model_id("lexical-v2").model_id(),
             "lexical-v2"
@@ -519,6 +535,76 @@ mod tests {
         );
         let flipped = classifier.decide(&supporting, &negated).unwrap();
         assert!(flipped.probability_of("true").unwrap() < 0.5, "{flipped:?}");
+    }
+
+    #[test]
+    fn lexical_boolean_never_saturates_on_long_states() {
+        // The #115 misfire class: a long state repeating the question's
+        // terms drove the affirmative BM25 score past ~37, where
+        // softmax([evidence, 0]) returns exactly 1.0 in `f64` — a
+        // confidence no lexical overlap can certify (D35).
+        let classifier = LexicalClassifier::new();
+        let question = DecisionQuestion::Boolean(
+            BooleanQuestion::new(
+                "policy",
+                "dispute valid raised representment compelling evidence cardholder credit?",
+            )
+            .unwrap(),
+        );
+        let repeated = State::from_text(
+            "dispute valid raised representment compelling evidence cardholder credit ".repeat(40),
+        );
+        let distribution = classifier.decide(&repeated, &question).unwrap();
+        let p_true = distribution.probability_of("true").unwrap();
+        assert!(p_true < 1.0, "saturated: {distribution:?}");
+        assert!(p_true <= 0.99, "above the lexical cap: {distribution:?}");
+        // The bound preserves order: the prediction is unchanged.
+        assert!(p_true > distribution.probability_of("false").unwrap());
+    }
+
+    #[test]
+    fn lexical_boolean_negation_flip_holds_under_the_confidence_bound() {
+        // The recorded failure: rubric text with an odd negator count
+        // flipped the polarity of a saturated distribution — "no" at
+        // exactly 1.0 (D35). The flip survives the bound; the false
+        // certainty does not.
+        let classifier = LexicalClassifier::new();
+        let question = DecisionQuestion::Boolean(
+            BooleanQuestion::new("policy", "the dispute does not contain compelling evidence?")
+                .unwrap(),
+        );
+        let repeated = State::from_text(
+            "dispute compelling evidence credit retained policy rules ".repeat(40),
+        );
+        let distribution = classifier.decide(&repeated, &question).unwrap();
+        assert!(distribution.probability_of("false").unwrap() > 0.5, "{distribution:?}");
+        assert!(distribution.top().probability < 1.0, "saturated: {distribution:?}");
+    }
+
+    #[test]
+    fn lexical_choice_never_saturates_on_long_states() {
+        // Choice saturation (#115): score gaps between candidate
+        // descriptions grow with state length; unbounded, the winner hit
+        // exactly 1.0 and exact-proof gates accepted it (D35).
+        let classifier = LexicalClassifier::new();
+        let question = DecisionQuestion::Choice(
+            ChoiceQuestion::new(
+                "disposition",
+                "Which disposition applies?",
+                vec![
+                    Candidate::new("erase_all", "erase all personal data no retention").unwrap(),
+                    Candidate::new("retain_records", "retain transaction records restricted")
+                        .unwrap(),
+                ],
+            )
+            .unwrap(),
+        );
+        let repeated = State::from_text(
+            "erase personal data retention records restricted transaction ".repeat(60),
+        );
+        let distribution = classifier.decide(&repeated, &question).unwrap();
+        assert!(distribution.top().probability < 1.0, "saturated: {distribution:?}");
+        assert!(distribution.top().probability <= 0.99, "above the cap: {distribution:?}");
     }
 
     #[test]

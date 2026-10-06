@@ -262,7 +262,7 @@ OpenAI-compatible provider.
 
 - **Runtime**: `opencodifier serve --focus-budget 512` as a systemd
   `--user` unit (`opencodifier.service`), loopback `127.0.0.1:8177`,
-  engine identity `relational-v1|builtin-lexical-v1|focused-v1@512`.
+  engine identity `relational-v1|builtin-lexical-v2|focused-v1@512`.
 - **Surface**: `POST /v1/chat/completions`
   ([INTEGRATIONS.md §2.5](INTEGRATIONS.md)) — the OpenAI-shaped
   decision projection. Amortyx's router speaks
@@ -276,7 +276,7 @@ OpenAI-compatible provider.
     api_key_env: AMORTYX_OPENCODIFIER_API_KEY   # any non-empty value; OC does not check it
     base_url: "http://127.0.0.1:8177/v1"
     models:
-      - name: relational-v1|builtin-lexical-v1|focused-v1@512   # a served id, echoed verbatim; not an LLM
+      - name: relational-v1|builtin-lexical-v2|focused-v1@512   # a served id, echoed verbatim; not an LLM
   ```
 
   The `models[].name` must be a **served model id** (the engine

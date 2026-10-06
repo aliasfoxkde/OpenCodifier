@@ -331,7 +331,7 @@ impl DecisionEngine {
         }
         // The live classifier governs the model component of every cache
         // key (PLANNING.md §64): wrapper classifiers compose their ids
-        // (e.g. `relational-v1|builtin-lexical-v1`), so a swapped or
+        // (e.g. `relational-v1|builtin-lexical-v2`), so a swapped or
         // decorated classifier changes keys without caller bookkeeping.
         // A hand-set `identity.model_id` is never trusted over this.
         // Focused extraction decorates the same way (D6): the budget is
