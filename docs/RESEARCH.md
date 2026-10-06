@@ -1845,8 +1845,16 @@ differ by exactly the Intelligence axis.**
    `jabr/classifier-benchmark`); zero-ML engine self-run scored
    **0.401 macro on v2** (866 cases, 0 errors, 1.6 ms/case;
    BENCHMARKS.md Board C); the adapter is the artifact an upstream
-   backend PR would carry, if the owner wants one. Still open: the
-   board submission, the automation-share-at-5 %-error column, the
+   backend PR would carry, if the owner wants one. ~~the
+   automation-share-at-5 %-error column~~ — DONE 2026-10-06 (Board A
+   `auto@5%` column): engine 0/231, vtx 0/231, Jev-Style bridge
+   **84/231 (0.364)**, fork label-only (—). The zeros are findings:
+   the engine's p≥0.999 single-entry (proof/relational) rows run at
+   34% precision on the OOD 231 — below base rate — which is B4's
+   per-mode calibration wrapper quantified; the confidence gate
+   refusing full automation at 38% accuracy is the design working.
+   Still open: the
+   board submission, the
    large-candidate-set (77-label-class) robustness probe via the D9
    256-candidate bench, and the shuffled-context OOD probe.
 3. Watch: jevos-v3 (CPU-binary posture twin; candidate 231 arm); Von
