@@ -109,30 +109,37 @@ def wait_healthz(port: int, deadline_s: float) -> bool:
 
 
 def trace_evidence(entries: list[dict]) -> dict:
-    ev: dict = {"focus": 0, "rungs_fired": 0}
+    """Deciding-node evidence. Focus facts are detail KEYS on the choice
+    node (`focus_engaged` = the view was extracted, `focus_escalated` =
+    the weak view reversed to the full state), not node names."""
+    ev: dict = {"focus_extracted": 0, "focus_escalated": 0, "rungs_fired": 0}
     for e in entries:
-        node = e.get("node", "")
-        detail = e.get("detail", {})
-        if node.startswith("focus_"):
-            ev["focus"] += 1
-        for k in ("policy_source", "rungs_fired", "rung_chain"):
+        detail = e.get("detail") or {}
+
+        def val(k: str):
             v = detail.get(k)
+            return v.get("value") if isinstance(v, dict) else v
+
+        if val("focus_engaged") is True:
+            ev["focus_extracted"] += 1
+        if val("focus_escalated") is True:
+            ev["focus_escalated"] += 1
+        for k in ("policy_source", "rung_chain"):
+            v = val(k)
             if v is not None:
-                if isinstance(v, dict) and "value" in v:
-                    v = v["value"]
-                if k == "rungs_fired" and isinstance(v, int):
-                    ev["rungs_fired"] = max(ev["rungs_fired"], v)
-                elif k != "rungs_fired":
-                    ev[k] = v
+                ev[k] = v
+        rf = val("rungs_fired")
+        if isinstance(rf, int):
+            ev["rungs_fired"] = max(ev["rungs_fired"], rf)
     return ev
 
 
-def one_request(port: int, body: bytes) -> dict:
+def one_request(port: int, body: bytes, timeout_s: float) -> dict:
     start = time.monotonic()
     row: dict = {"wall_ms": None, "status": None, "err_kind": None}
     try:
         conn = http.client.HTTPConnection("127.0.0.1", port,
-                                          timeout=CLIENT_TIMEOUT_S)
+                                          timeout=timeout_s)
         conn.request("POST", "/v1/decide", body=body,
                      headers={"Content-Type": "application/json"})
         resp = conn.getresponse()
@@ -169,13 +176,15 @@ def summarize(rows: list[dict], wall_s: float,
     tiers: dict = {}
     for tier, trs in sorted(by_tier.items()):
         correct = sum(1 for r in trs
-                      if r["pred"] is not None and r["pred"] == r["gold"])
+                      if r.get("pred") is not None
+                      and r["pred"] == r["gold"])
         per_class: dict = {}
         for cls in SHORT_SUITE_ANCHOR:
             sub = [r for r in trs if r.get("class") == cls]
             if sub:
                 c = sum(1 for r in sub
-                        if r["pred"] is not None and r["pred"] == r["gold"])
+                        if r.get("pred") is not None
+                        and r["pred"] == r["gold"])
                 anchor = SHORT_SUITE_ANCHOR[cls]
                 per_class[cls] = {
                     "correct": round(c / len(sub), 4),
@@ -187,11 +196,16 @@ def summarize(rows: list[dict], wall_s: float,
                           if r.get("evidence", {})
                           .get("rungs_fired", 0) > 0)
         focus_hits = sum(1 for r in trs
-                         if r.get("evidence", {}).get("focus", 0) > 0)
+                         if r.get("evidence", {}).get("focus_extracted", 0) > 0)
+        focus_reversals = sum(1 for r in trs
+                              if r.get("evidence", {})
+                              .get("focus_escalated", 0) > 0)
         outcomes: dict[str, int] = {}
         for r in trs:
-            k = r["outcome"] or f"err:{r['err_kind']}" \
-                if r["outcome"] or r["err_kind"] else f"http_{r['status']}"
+            if r.get("outcome") or r.get("err_kind"):
+                k = r.get("outcome") or f"err:{r['err_kind']}"
+            else:
+                k = f"http_{r['status']}"
             outcomes[k] = outcomes.get(k, 0) + 1
         tiers[tier] = {
             "items": len(trs),
@@ -204,7 +218,8 @@ def summarize(rows: list[dict], wall_s: float,
             },
             "escalation_rate": round(escalations / len(trs), 6)
             if trs else 0.0,
-            "focus_engaged": focus_hits,
+            "focus_extracted": focus_hits,
+            "focus_reversed": focus_reversals,
             "outcomes": dict(sorted(outcomes.items())),
         }
     summary: dict = {"tiers": tiers, "wall_s": round(wall_s, 2),
@@ -273,10 +288,14 @@ def main() -> int:
                 return 1
             rows: list = []
             probe_rows: list = []
+            # the escalate arm's server-side deadline is the D32 120 s
+            # ceiling; the client must be able to see the typed timeout,
+            # not cause one
+            timeout_s = 130.0 if args.arm == "escalate" else CLIENT_TIMEOUT_S
             t0 = time.monotonic()
             for tier_name in ("L1", "L2", "L3"):
                 for item in suite["tiers"][tier_name]["items"]:
-                    row = one_request(args.port, build_body(item))
+                    row = one_request(args.port, build_body(item), timeout_s)
                     row.update({"tier": tier_name, "id": item["id"],
                                 "class": item.get("class"),
                                 "gold": item["answer"]})
@@ -286,7 +305,7 @@ def main() -> int:
                               flush=True)
             wall_s = time.monotonic() - t0
             for item in suite["tiers"]["probe"]["items"]:
-                prow = one_request(args.port, build_body(item))
+                prow = one_request(args.port, build_body(item), timeout_s)
                 prow.update({"tier": "probe", "id": item["id"],
                              "class": item.get("class"),
                              "gold": item["answer"]})

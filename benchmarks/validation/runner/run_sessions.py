@@ -188,9 +188,9 @@ def summarize(rows: list[dict], plan: dict, wall_s: float,
     probes = [r for r in rows if r["kind"] == "repeat_probe"]
     ok200 = sum(1 for r in rows if r["status"] == 200)
     correct = sum(1 for r in decisions
-                  if r["pred"] is not None and r["pred"] == r["gold"])
+                  if r.get("pred") is not None and r["pred"] == r["gold"])
     probe_ok = sum(1 for r in probes
-                   if r["pred"] is not None and r["pred"] == r["gold"])
+                   if r.get("pred") is not None and r["pred"] == r["gold"])
     probe_hit = sum(1 for r in probes
                     if (r.get("metrics") or {}).get("cache_hit") is True)
     outcomes: dict[str, int] = {}
@@ -254,6 +254,8 @@ def main() -> int:
     ap.add_argument("--focus-budget", type=int, default=None)
     ap.add_argument("--port", type=int, required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--ladder", type=Path, default=None,
+                    help="passed through to serve --ladder (F4 arm)")
     ap.add_argument("--compare", type=Path, default=None,
                     help="prior run JSON: replay determinism gate")
     ap.add_argument("--log", type=Path, default=None,
@@ -269,6 +271,8 @@ def main() -> int:
            "--bind", f"127.0.0.1:{args.port}"]
     if args.mode == "focus":
         cmd += ["--focus-budget", str(args.focus_budget)]
+    if args.ladder is not None:
+        cmd += ["--ladder", str(args.ladder)]
     log_fh = log_path.open("w")
     proc = subprocess.Popen(cmd, stdout=log_fh, stderr=subprocess.STDOUT)
     print("serve pid %d: %s" % (proc.pid, " ".join(cmd)), flush=True)
