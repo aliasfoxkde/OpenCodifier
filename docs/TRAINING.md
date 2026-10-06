@@ -267,7 +267,13 @@ Plan, in dependency order:
    stays experimental-labeled in both trees until a measured arm clears
    the promotion gate. Running the program through VIVERE also makes it
    VIVERE's refine/validate loop — real corpus, real gaps, real
-   readout delta.
+   readout delta. The concrete gap-fill spec lives in the VIVERE lane
+   tree (`docs/extraction/OC_GAPFILL_SPEC.md`, VIVERE
+   feat/local-extraction-lane @ 277e3ce): priority order is quarantine
+   re-adjudication first (38,747 rows already on disk), then score
+   questions over existing states, then claims-bridge choice; gold
+   contract is raw-teacher values with k-vote hard labels, single-vote
+   answers dropped, never smoothed.
 
 Non-goals carried from §8: no non-Apache-2.0 corpora, no cloud
 training by default; the burst node (T5500 2×V100) or Kaggle/Modal
