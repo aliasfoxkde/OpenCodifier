@@ -65,7 +65,7 @@ RUNS=/nas/Temp/work/oc-model-eval/runs   # out-of-tree
 
 # 1. engine baseline (no ML, no models needed): the default stack is the
 #    relational solver over the lexical classifier; the run JSON's arm is
-#    the engine's live identity (e.g. relational-v1|builtin-lexical-v1)
+#    the engine's live identity (e.g. relational-v1|builtin-lexical-v2)
 python3 runner/run_engine.py --binary target/release/opencodifier \
     --out "$RUNS/engine__relational-v1.json"
 
@@ -125,6 +125,41 @@ python3 runner/fit_calibration.py --results-dir "$RUNS" \
 Model weights never enter the repository; `models.manifest.json` (written by
 `summarize.py`) pins the SHA-256 of every artifact a result was produced
 with, per the model-manifest practice in `docs/DECISIONS.md` (D14).
+
+## Ladder runs (proofs / fusion postures)
+
+`run_jevbench.py --arm engine --ladder <file>` drives `serve` with a
+LadderPolicy; under a proofs posture (`min_confidence: 1.0`) every item
+escalates to the decision rung. The rung is NOT stock llama-server — the
+escalation contract is the parallel-decision fork's `POST /v1/decision`.
+Four failure modes, each surfacing as an instant infra-STOP after 3
+consecutive items (the runner keeps only the exception name; probe the
+payload by hand to see the body):
+
+1. `cli.model_rung_unavailable` at serve startup — the binary was built
+   without `--features llamacpp` (the default build stays
+   dependency-identical).
+2. rung 404 "File Not Found" — stock build has no `/v1/decision`; use the
+   fork build (`~/oc-model-eval/llama.cpp/build-pd` on the eval host).
+3. rung 400 "decisions are disabled" — the fork needs
+   `--decision-seqs N` (N >= 3): one slot holds the cached instructions,
+   one per context in flight, the rest are parallel questions over the
+   unified KV cache.
+4. rung-side model-id mismatch — serve validates `--llama-model-id`
+   against the id the rung reports; a bare llama-server reports the model
+   file path, so pass `--alias <id>`.
+
+Hand-built probes must also carry `metadata.limits.max_execution_time`
+(the deadline field is required, not optional).
+
+Working CPU rung (the conditions the 0.6883 proofs posture was measured
+under on the eval host's :8091):
+
+```bash
+llama-server -m gemma-4-E2B-it-QAT-Q4_0.gguf \
+    --alias gemma4-e2b-it-qat-q4_0 \
+    -c 16384 -np 1 -t 8 --decision-seqs 24
+```
 
 ## Determinism
 
