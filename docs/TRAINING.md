@@ -380,3 +380,49 @@ ladder 0.867 is an ensemble ceiling, never a single-head promise.
 Non-goals carried from §8: no non-Apache-2.0 corpora, no cloud
 training by default; the burst node (T5500 2×V100) or Kaggle/Modal
 remain the GPU paths, user-gated.
+
+## 10. Transfer pathways into a small decision model (taxonomy, 2026-10-06)
+
+Recorded because it disciplines which experiment buys what. Four distinct
+methods, often conflated:
+
+1. **VIVERE extraction (ours) — labels, not weights.** Teacher judgment
+   is captured as verdicts on our states; unanimity-gated hard labels
+   become supervised rows for OUR head on OUR architecture. No teacher
+   weights at runtime and no student-architecture constraint — the
+   student can be anything, including a future pruned model. Cheapest
+   per unit of capability moved; proven at scale (merged-v3: three
+   donor legs, 173,452 records). Not classical distillation (no
+   soft-logit transfer, no teacher–student coupling); closest family is
+   label/synthetic-data distillation.
+2. **Weight distillation into an existing small arch** — what the
+   empero Qwen3.8 arms are (Qwen3.8 2.4T A95B → Qwen3.5-2B/4B arch).
+   Keeps the small arch, moves capability. Measured (r22, REPORT):
+   **no letters-lane lift over untuned Qwen3.5 at either size**
+   (2B 0.725 = base's 0.725; 4B 0.792 < base's 0.800). Capability
+   transfer into an arch does not automatically beat that arch's own
+   untuned decision behavior on a typed-decision readout; the transfer
+   showed up as emission cleanliness instead (0 invalid dists at 4B —
+   the cleanest on the board).
+3. **Prune-then-recover** — shrink a larger-arch model to <1–4 B and
+   recovery-train. The only path that changes the small model's
+   ARCHITECTURE (it inherits the larger family's improvements — the
+   Qwen3.8-vs-Qwen3.5 point). Most expensive and least proven for
+   decision tasks; bounded by recovery-training compute (full-rigor
+   budgets are pretraining-scale; burst-node-feasible only at
+   LoRA-recovery depth). Held as option C, triggered when a uniquely
+   strong teacher has no small variant AND evidence shows an
+   arch-shaped gap the data program cannot close. Middle path if
+   triggered: structured-prune an existing 4 B (e.g. the r22 4B) to
+   ~1–2 B + LoRA recovery on merged-v4 — tests shrink-large vs
+   train-small inside one arch at burst scale.
+4. **QAT last** — quantization-aware training is the deployment step on
+   whichever compressed model wins, never a substitute for 1–3. Our own
+   quant evidence says why: requant provenance dominates bit-width
+   (r11b) and QAT-sourced arms hold accuracy at 4 bit where post-hoc
+   quants collapse (r13/r15).
+
+Decision rule going forward: for each new capability need, exhaust (1)
+first → adopt ready-made (2) arms when they measure well → escalate to
+(3) only on a demonstrated arch-shaped gap → always finish with (4) at
+deployment.
