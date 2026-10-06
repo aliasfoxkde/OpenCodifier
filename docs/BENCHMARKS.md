@@ -909,6 +909,38 @@ the AtomicChat abliterate-LoRA remains unmeasured. F18's CPU
 extrapolation (~20-25 min/request for 27B) was ~20× pessimistic for
 this host: ternary 1.72-bpw prefill on 12 P-cores runs ~74 s/item.
 
+### Shuffled-context OOD probe (2026-10-06)
+
+Bounded probe, not a board row (derived suite, one engine run). The
+locked suite keeps every fact in a conventional position — the
+constraints line first, catalog lines under their header, causal
+sentences in narration order. `runner/shuffle_suite.py` deterministically
+shuffles those chunks (newline lines, sentence-split within a line) under
+a per-item seed, leaving question/candidates/answer byte-identical
+(source digest `9f0afaf63a650e8e`, seed `20260926:<item id>`); 80/120
+contexts reordered, 40 lexical_semantic items pass through unchanged as
+an invariance control. Same engine invocation as the baseline row, then
+the harness's own replay.
+
+| run | acc (meta/lex/rel) | acc | ECE | decision flips | max \|Δp\| |
+|---|---|---:|---:|---:|---:|
+| baseline (engine__relational-v1) | 0.875 / 0.225 / 0.95 | 0.683 | 0.0936 | — | — |
+| shuffled contexts | 0.875 / 0.225 / 0.95 | 0.683 | 0.0947 | **0 / 120** | 0.0255 |
+
+Zero decision flips, per-class accuracy and outcome mix (51 abstain /
+42 accept / 27 verify) byte-identical; the 40 unchanged contexts
+reproduce their baseline predictions exactly. 11/120 items move at all —
+all metadata_match, all confidence *downward* (e.g. 0.981 → 0.955):
+breaking the `Constraints:`/`Catalog:` adjacency costs a little
+confidence and no decisions. This is the order-invariance half of the
+OOD story (the relational solver and BM25 operate on extracted facts and
+term sets, not positions), complementing Board C: jabr measures the
+distribution-shift direction where the engine scores 0.401, and the
+p≥0.999 proof-row finding (Board A auto@5% note) measures the
+overconfidence direction. A positional-dependence model arm would show
+degradation here; the engine cannot. Mean latency 1.35 → 1.91 ms is
+host-load noise (SWARMONE regime), not structural.
+
 ## Board C — jabr classifier benchmark (third-party OOD gate)
 
 Method of record: public harness `jabr/classifier-benchmark` (CC0),

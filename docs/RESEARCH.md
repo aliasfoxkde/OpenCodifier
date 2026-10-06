@@ -1854,9 +1854,18 @@ differ by exactly the Intelligence axis.**
    per-mode calibration wrapper quantified; the confidence gate
    refusing full automation at 38% accuracy is the design working.
    Still open: the
-   board submission, the
+   board submission and the
    large-candidate-set (77-label-class) robustness probe via the D9
-   256-candidate bench, and the shuffled-context OOD probe.
+   256-candidate bench (needs a fork/GPU window; post-training).
+   ~~the shuffled-context OOD probe~~ — DONE 2026-10-06 (Board B
+   "Shuffled-context OOD probe"): derived suite shuffles each item's
+   context chunks (80/120 reordered, 40 lexical controls unchanged);
+   **zero decision flips, per-class accuracy byte-identical**, 11/120
+   confidence moves all downward and all ≤0.026 — the engine is
+   order-invariant by construction (facts + BM25 term sets, not
+   positions), the order-invariance third of the OOD picture beside
+   jabr's distribution-shift direction and the p≥0.999
+   overconfidence direction.
 3. Watch: jevos-v3 (CPU-binary posture twin; candidate 231 arm); Von
    (jabr open-field leader, 395M ModernBERT — same family as our
    model2vec/vtx line); Clef-flash (Apache-2.0 9B, possible rung
