@@ -1265,3 +1265,68 @@ ecosystem (and Fastino's GLiDE demo) convention is a
   `prompt_version`, or the bias table changes `MODEL_ID` and invalidates
   cached decisions (D6); the fixture test must be re-frozen against the
   new upstream fixture in the same commit.
+
+## D34 — The Julia-1 ONNX decision rung: a five-input graph, a Metaspace fixture closure, and the first Rust-side execution on real weights (2026-10-05)
+
+- **What shipped**: the second ONNX rung (task #92), beside D33's Kai.
+  `opencodifier-model::julia` is the contract — upstream
+  `julia.data.sequence` packing (`PROMPT_VERSION =
+  "julia-data-sequence-v1"`), marker computation (the option's `<mask>`
+  *start* index — the opposite pointer convention from Kai's last-token
+  `answer_pos`), `f64` softmax, and **no fitted bias table** (upstream
+  publishes none; inventing calibration is forbidden). 
+  `opencodifier-runtime::julia::JuliaOnnxBackend` is the transport,
+  feature-gated behind the same reinstated `onnx` (D33/D2).
+- **The graph has five inputs, not four.** Introspecting the real
+  export (`onnxruntime` `get_inputs()`) shows `input_ids`,
+  `attention_mask`, `marker_pos`, `marker_mask`, **and `qtype`**
+  (`int64[batch]`: choice 0, score 1, noul 2). The four-input transport
+  drafted from the parity script's first four feed calls would have
+  failed at `session.run` on every request; the parity script happened
+  to pass `qtype`, and only introspection makes the requirement
+  explicit. Contract and transport carry `qtype` from the start
+  (`JuliaKind::qtype`), and `validate_shapes` refuses a
+  wrong-width row. Lesson recorded: a graph's published signature is
+  read off the artifact, never off the caller that happens to work.
+- **The fixture tokenizer is a derivation closure, not a vocab
+  subset.** Julia-1's tokenizer is Metaspace (space → `▁`) with byte
+  fallback, so final ids cannot be re-derived from final ids alone.
+  `julia/fixtures/julia-fixture-tokenizer.json` assigns each real
+  token's GPT-2-alphabet spelling its real id and composes each
+  spelling with a left-to-right merge chain (filler ids for
+  intermediates); chains are ordered metaspace-runs-first then
+  longest-first, and a demote-and-verify repair loop moves any pair
+  that fires outside its run's chain. The generator
+  (`benchmarks/validation/runner/julia_fixture_gen2.py`) verifies every
+  frozen segment byte for byte against the Rust oracle algorithm
+  before shipping; a tree-side test re-proves it against
+  `kai.rs`'s byte-level BPE oracle (model crate). The full tokenizer
+  behind the `tokenizers` feature remains the serving path.
+- **Verified end-to-end on the compute host (fedora) 2026-10-05.**
+  (1) Python parity `julia1_parity.py`: 100/100 `parity-cases.json`
+  rows, max |Δlogit| 7.8e-5 against the export's official bar — the
+  export matches PyTorch. (2) **Rust-side**
+  (`benchmarks/validation/runner/julia-parity-rs`, `runtime-onnx-dynamic`
+  over the pip `onnxruntime` 1.30.0 dylib): 3/3 fixture argmax, max
+  |Δlogit| 6.3e-5 — ids, markers, tensors, graph execution, and logits
+  all reproduced from the shipped Rust path. This is the first
+  Rust-side graph execution on real weights for any ONNX rung; D33's
+  open boundary is closed for Julia-1 and **still open for Kai** (the
+  Kai graph exists at `model_quantized.onnx` on the compute host; its
+  Rust-side run is pending, same runner pattern).
+- **Packaging reality**: plain `--features onnx` does not link on this
+  host (no static ort backend — ort's own "Enable the `download-binaries`
+  feature" linker error); `runtime-onnx-dynamic` is the only verifiable
+  packaging here, exactly as D2 prescribed. The output width is exactly
+  the declared option count (no padding lane), so the transport's
+  `[batch, width]` check holds against the real graph.
+- **Fixture boundary**: the frozen fixture carries 3 *choice* rows only
+  (narrowest/median/widest of the 100); the export records no
+  `noul`/`score` parity cases, so those kinds are exercised in-tree
+  with a stub tokenizer over the same sequence math — the kind-generic
+  parts (packing, markers, `qtype`, softmax) are pinned, the
+  kind-specific logits are not.
+- **Revisit condition**: as D33 — any change to the served artifact or
+  `prompt_version` changes `MODEL_ID` and invalidates cached decisions
+  (D6); the fixture re-freezes against the new upstream fixture in the
+  same commit.

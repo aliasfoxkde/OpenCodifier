@@ -39,6 +39,12 @@
 //!   all feature-free and verified against a frozen upstream parity
 //!   fixture. The ONNX transport itself lives in
 //!   `opencodifier_runtime::kai`, behind the `onnx` feature.
+//! * The [`julia`] contract module — the Julia-1 ONNX decision rung
+//!   (task #92): the upstream `julia.data.sequence` packing contract,
+//!   marker computation with in-pipeline assertions, and `f64` softmax
+//!   (no fitted bias for this model), feature-free and verified against
+//!   a frozen upstream parity fixture. The ONNX transport lives in
+//!   `opencodifier_runtime::julia`, behind the `onnx` feature.
 //!
 //! # Example
 //!
@@ -73,6 +79,7 @@
 pub mod decision;
 pub mod embedding;
 pub mod error;
+pub mod julia;
 pub mod kai;
 pub mod llamacpp;
 pub mod manifest;
@@ -80,6 +87,11 @@ pub mod manifest;
 pub use decision::{CANDIDATES_INPUT, CONTEXT_INPUT, CandidateConditionedModel, LOGITS_OUTPUT};
 pub use embedding::EmbeddingClassifier;
 pub use error::ModelError;
+pub use julia::{
+    CLS_ID, HEAD_LENGTH, JULIA_FIXTURE, JULIA_FIXTURE_TOKENIZER, JuliaEncoding, JuliaKind,
+    JuliaOption, JuliaQuestion, MASK_ID, MAX_LENGTH, MAX_OPTIONS, MIN_OPTIONS, OPTION_TOKEN_LIMIT,
+    PROMPT_VERSION as JULIA_PROMPT_VERSION, SEP_ID,
+};
 #[cfg(feature = "tokenizers")]
 pub use kai::HfTokenizer;
 pub use kai::{
