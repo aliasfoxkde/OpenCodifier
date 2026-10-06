@@ -26,8 +26,8 @@ SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹", "0123456789")
 
 COLUMNS = [
     "board", "section", "name", "qualifier", "n", "n_correct", "accuracy",
-    "macro", "lexical", "metadata", "relational", "ece", "brier", "p50_ms",
-    "mean_ms", "determinism", "replay_delta", "invalid_dists", "size",
+    "macro", "lexical", "metadata", "relational", "ece", "brier", "auto_share_5err",
+    "p50_ms", "mean_ms", "determinism", "replay_delta", "invalid_dists", "size",
     "tier", "provenance", "footnotes", "composite_a_trust", "composite_spd",
     "composite_res", "overall", "vision", "notes",
 ]
@@ -197,6 +197,7 @@ def map_table(board: str, section: str, rows: list[list[str]]) -> list[dict[str,
             row["macro"] = drop_footnotes(frac(r.get("family-macro", ""))).strip()
             row["ece"] = drop_footnotes(r.get("ece", "").replace("—", "")).strip()
             row["brier"] = drop_footnotes(r.get("brier", "").replace("—", "")).strip()
+            row["auto_share_5err"] = to_float(r.get("auto@5%", "").replace("—", ""))
             row["p50_ms"] = to_ms(r.get("p50 (client wall)", ""))
             row |= parse_determinism(r.get("determinism", ""))
             row["notes"] = "jevbench-our-run"

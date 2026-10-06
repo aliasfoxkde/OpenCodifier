@@ -56,12 +56,12 @@ zero synthesized probabilities, full replay determinism.
 
 ### Our runs (authors' harness, same split)
 
-| system | n | accuracy | family-macro | ECE | Brier | p50 (client wall) | determinism |
-|---|---:|---:|---:|---:|---:|---:|---|
-| OpenCodifier engine (relational solver over lexical, `/v1/decide`) | 231 | 0.3766 | 0.4011 | 0.402 | 0.890 | **2.0 ms** | 231/231 |
-| **vtx: VTX-JEV-3** (20.5 MB 2-bit static table, vendor client) | 231 | 0.4113 | 0.4318 | 0.126 | 0.684 | **7.9 ms** | 231/231 |
-| Jev-Style-0.8B-Decision-v3 Q4_K_M (native verdict-slot readout — comparability bridge) | 231 | 0.6494 | 0.6378 | **0.080** | **0.425** | 6.72 s | 231/231 (labels + probabilities) |
-| **fork: Qwen3.5-4B UD-Q4_K_XL tree mode** (D16 tier, fork-default T — base model, no decision tune; **fedora anchor**, 2026-10-02, default instructions; replicate bit-identical ²) | 231 | **0.7662** | **0.7571** | 0.070 ¹ | 0.305 ¹ | 2.28 s | 231/231 (labels + d15 distributions ¹) |
+| system | n | accuracy | family-macro | ECE | Brier | auto@5% | p50 (client wall) | determinism |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| OpenCodifier engine (relational solver over lexical, `/v1/decide`) | 231 | 0.3766 | 0.4011 | 0.402 | 0.890 | 0.000 (0/231) | **2.0 ms** | 231/231 |
+| **vtx: VTX-JEV-3** (20.5 MB 2-bit static table, vendor client) | 231 | 0.4113 | 0.4318 | 0.126 | 0.684 | 0.000 (0/231) | **7.9 ms** | 231/231 |
+| Jev-Style-0.8B-Decision-v3 Q4_K_M (native verdict-slot readout — comparability bridge) | 231 | 0.6494 | 0.6378 | **0.080** | **0.425** | **0.364** (84/231) | 6.72 s | 231/231 (labels + probabilities) |
+| **fork: Qwen3.5-4B UD-Q4_K_XL tree mode** (D16 tier, fork-default T — base model, no decision tune; **fedora anchor**, 2026-10-02, default instructions; replicate bit-identical ²) | 231 | **0.7662** | **0.7571** | 0.070 ¹ | 0.305 ¹ | — ³ | 2.28 s | 231/231 (labels + d15 distributions ¹) |
 
 ¹ ECE/Brier come from the decision-identical build-`d15` arm
 (`fork_4b-d15-v1`, same host/build/split, predictions equal 231/231):
@@ -76,6 +76,28 @@ sibling-session storm load, not arm time).
 ² The replicate (`fork_4b-anchor-rep1-v1`, fresh session, same build /
 instructions / split) matched the anchor on all 231 `predicted` and
 `raw_sha256` values (p50 1.74 s) — see the superseded-row paragraph.
+
+**auto@5% — automation share at ≤5% error** (the Kev-column adopt,
+RESEARCH.md §14.5): the largest prefix of items, ranked by the arm's own
+confidence for its predicted label, whose error rate is ≤5%. Rank-based,
+so a temperature refit cannot move it (the d15 calibration is
+monotone). Computed 2026-10-06 from the arms' own per-item
+distributions in the runs tree (engine-v4: 187 distribution-carrying
+rows + 44 abstain-shaped rows counted as never-selectable). The zeros
+are findings, not gaps: on this OOD split neither distribution-carrying
+arm's confidence separates right from wrong at the top of its ranking
+— the engine's p≥0.999 rows run at **34% precision, below its own base
+rate** (35 rows), and even at a 30%-error tolerance it automates
+0% (vtx: 3.5%). The single-entry p=1.0 rows are the proof/relational
+answer shape — the exact overconfidence the B4 per-mode calibration
+wrapper exists to fix, here quantified on OOD data. The bridge's 36.4%
+is what a decision-tuned readout (ECE 0.080) buys operationally: the
+confidence gate automates over a third of the split while holding
+5% error. A label-only arm (³ the fork's tree-mode mapping, D15)
+invents no probabilities and so has no honest cell — its d15 refit is
+rank-invariant anyway, so the value would not change. The E1 arm, if
+its gates pass, should be judged on this column too, not accuracy
+alone.
 
 **Superseded row, kept for the record**: the same arm's first run
 (2026-09-30, this NAS box) scored 0.6667 / macro 0.6541 at p50 15.53 s
