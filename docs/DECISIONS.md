@@ -1330,3 +1330,17 @@ ecosystem (and Fastino's GLiDE demo) convention is a
   `prompt_version` changes `MODEL_ID` and invalidates cached decisions
   (D6); the fixture re-freezes against the new upstream fixture in the
   same commit.
+- **Dated addendum (same day): the Kai boundary is closed too.**
+  `benchmarks/validation/runner/kai-parity-rs` runs the full Rust Kai
+  path — request text → `HfTokenizer` → collate → `KaiOnnxBackend` →
+  the contract's own `probabilities` (softmax + fitted score bias) —
+  against the real quantized export on the compute host: **11/11
+  `ref.json` encodes byte-identical** (ids, option pointers, answer
+  pointer rebuilt from text, not fed pre-tokenized), **11/11 argmax,
+  max |Δp| 0.0174** (`language/lang`, the quantization residual on a
+  choice case). The score case lands at 0.0014 only *with* the fitted
+  bias applied — the raw-softmax comparison (python checker: 0.0392 on
+  `review/damage`) omits the bias the upstream runtime itself applies,
+  confirming the bias table is the export pipeline's own correction
+  and belongs on the serving path. No graph-execution boundary remains
+  open for either ONNX rung.
