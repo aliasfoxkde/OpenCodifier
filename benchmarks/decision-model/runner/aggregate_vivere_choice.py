@@ -37,7 +37,11 @@ LETTERS = ("A", "B", "C", "D")
 
 
 def load_jsonl(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
+    # Iterate the file object, not str.splitlines(): splitlines also
+    # breaks on U+2028/U+2029, which corpus queries can contain and
+    # ensure_ascii=False writes raw, which would split a JSON line
+    # mid-string.
+    return [json.loads(line) for line in path.open(encoding="utf-8")
             if line.strip()]
 
 
