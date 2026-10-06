@@ -136,6 +136,8 @@ def main() -> int:
         target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
         task_type="CAUSAL_LM")
     model = get_peft_model(model, lconf)
+    if torch.cuda.is_available():
+        model = model.to("cuda")  # from_pretrained leaves weights on CPU
     model.print_trainable_parameters()
 
     eos_id = tok.eos_token_id
@@ -156,6 +158,9 @@ def main() -> int:
         [p for p in model.parameters() if p.requires_grad], lr=args.lr)
     sched = get_cosine_schedule_with_warmup(
         opt, int(total_steps * args.warmup), total_steps)
+    # fp16 (the Volta/T5500 plan) needs loss scaling — unscaled fp16
+    # gradients underflow to zero and the run trains nothing, silently.
+    scaler = torch.amp.GradScaler("cuda", enabled=(args.dtype == "fp16"))
 
     args.out.mkdir(parents=True, exist_ok=True)
     log_path = args.out / "train-log.txt"
@@ -185,13 +190,15 @@ def main() -> int:
             t_att = torch.tensor(attn, device=model.device)
             loss = model(input_ids=t_ids, attention_mask=t_att,
                          labels=t_lab).loss
-            (loss / args.accum).backward()
+            scaler.scale(loss / args.accum).backward()
             epoch_loss += loss.item()
             micro += 1
             if micro % args.accum == 0:
+                scaler.unscale_(opt)
                 torch.nn.utils.clip_grad_norm_(
                     [p for p in model.parameters() if p.requires_grad], 1.0)
-                opt.step()
+                scaler.step(opt)
+                scaler.update()
                 sched.step()
                 opt.zero_grad(set_to_none=True)
                 step += 1

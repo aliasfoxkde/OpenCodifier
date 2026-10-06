@@ -337,6 +337,46 @@ Plan, in dependency order:
    duplicates of train 0, train/suite state collisions 0, suite rows
    unchanged (240). This is the E1 training corpus (item 4).
 
+### 9.5 E1 staging complete (2026-10-06) — prep, trainer, eval, smoke
+
+The full train→serve loop is staged and every leg is executed, not
+described:
+
+- **SFT prep** (`runner/decision_sft_prep.py`, commit c7e7964):
+  merged-v3 → 178,012 segmented verdict-slot rows + 240 suite rows
+  excluded = exactly all 178,252 corpus questions (choice 13,874 /
+  noul 134,581 / score 29,557), sha256 `4750dd8d…7253f6a`. The render
+  is byte-matched to the serving adapter's layout
+  (macjev-render-v1); structured states serialize with `json.dumps`
+  exactly as `run_jevbench.py` does.
+- **Trainer** (`runner/e1_train.py`, commit 4f5c268): LoRA r16 /
+  alpha 32 / dropout 0.05 on q,k,v,o; loss on verdict tokens + EOS
+  only, context masked -100. Two bugs the smoke caught, both fixed:
+  the model was never moved to GPU (trained on CPU silently), and
+  the fp16 path (Volta plan) had no GradScaler — unscaled fp16
+  gradients underflow to zero and the run trains nothing.
+- **Smoke run** (fedora, Qwen3.5-0.8B body, 400 rows, 1 epoch,
+  bf16, ~2 min on GPU): loss 1.2002 → 0.7304 → 0.6321 over 50
+  steps, adapter + `opencodifier.e1-train/1` manifest written, data
+  sha matches the pinned corpus.
+- **Eval hookup** (`runner/e1_eval.py`, commit 4f5c268, readout
+  `oc-readout-v1`): render with verdicts absent, one forward pass,
+  logit(" yes") − logit(" no") at each ` ->` slot, softmax over
+  slots. Suite run, 120/120 items scored, zero slot-position
+  failures: **untuned base 0.3333** (chance ≈ 0.20–0.25 for 4–6
+  options — the readout interface is learned, not innate, per D16),
+  **smoke adapter 0.3583** (+2.5 pp from 400 rows; per-class swings
+  at n=40 are noise). This is the plumbing proof; the pre-registered
+  E1 gates below are what the real arms must clear.
+
+**E1 arms — pre-registered gates** (registered before any real arm
+runs): each arm must beat BOTH the untuned base AND the best
+community checkpoint through this same readout/serving path — suite
+≥ 0.68 AND JevBench ≥ 0.6494 (Jev-Style-0.8B). Larger arms (2B/4B)
+additionally beat the best same-size arm on composite. Anchor: Qwen
+4B untuned 76.6 % → ~80.5 % tuned (community-measured). The fusion
+ladder 0.867 is an ensemble ceiling, never a single-head promise.
+
 Non-goals carried from §8: no non-Apache-2.0 corpora, no cloud
 training by default; the burst node (T5500 2×V100) or Kaggle/Modal
 remain the GPU paths, user-gated.
