@@ -187,11 +187,17 @@ milliseconds. Acceptance criteria:
 
 | arm | accuracy | macro | ECE | Brier | p50 / p95 | determinism | probs |
 |---|---:|---:|---:|---:|---|---|---|
-| engine (relational-v1) | 0.3766 | 0.4011 | 0.402 | 0.890 | 2.0 ms | 231/231 | native |
+| engine (relational-v1, 2026-10-05 rerun) | 0.3766 | 0.4011 | 0.402 | 0.890 | 0.7 ms / 1.6 ms | 231/231 | native |
 | **jev_native bridge (0.8B-v3 Q4_K_M)** | **0.6494** | 0.6378 | **0.080** | 0.425 | 6.72 s / 103.8 s | 231/231 (labels + probs) | native |
 | vtx (VTX-JEV-3 LF2, vendor client) | 0.4113 | 0.4318 | 0.126 | 0.684 | 7.9 ms | 231/231 | native |
 | engine + 4B rung, fusion-v2 gate (2026-10-05) | 0.5584 | 0.5622 | 0.335 | 0.734 | 1.2 ms / 0.73 s | 231/231 | native |
 | engine + 4B rung, proofs-only posture (2026-10-05) | **0.6883** | 0.6622 | 0.171 | 0.431 | 0.58 s / 14.0 s | 231/231 | native |
+
+The engine row was re-measured on the shipped build
+(`runs/jevbench/engine-only-fedora-v1/`, archived on the compute host):
+0.3766 reproduced byte-identically (187 ok / 44 abstains), and the row's
+missing Speed cell is filled — p50 0.7 ms, p95 1.6 ms, the fastest arm
+on the suite by two orders.
 
 The two full-system rows (task #105, contract and decomposition in
 `results/jevbench-fullsystem-fedora.md`): same 4B rung, same weights —
@@ -200,6 +206,20 @@ in-domain-tuned fusion gate keeps 68.8 % of items at 0.434 accuracy
 while escalating 0.833 to the rung (F24's warning, measured OOD); the
 structural posture ties the post-hoc cascade bound a priori and pays
 for 12 honest abstentions in the accuracy column.
+
+**Gate-refit negative result (2026-10-06, task #114).** The obvious
+repair — refit the fusion thresholds on the OOD distribution — is
+measured and closed: the offline winner-prob sweep
+(`results/jevbench-fusion-v3-gate-refit.md`) is monotone to the grid
+edge, so the OOD-optimal gate IS the proofs posture. Split-half
+discipline agrees (fit 0.6897 / held-out 0.6870 at the boundary). The
+per-kind view finds no pocket either: at every decision kind and every
+confidence band the rung beats the engine's accepted items — the
+lexical engine's winner-probability is not an OOD-informative gate
+feature (on choice it is anti-correlated: the p≈1.0 band converts at
+0.235 while p∈[0.5,0.6) converts at 0.769). What remains open is a
+better gate *feature* (rule/extractor provenance rather than softmax
+confidence), not a better threshold.
 
 The vtx row (added 2026-09-29): VTX-JEV-3 through its vendor `JevClient`
 with the jev_native rendering — a 20.5 MB 2-bit static table scoring
