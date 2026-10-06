@@ -1818,3 +1818,29 @@ hash is a changed artifact and invalidates the row (D14).
     mechanism candidate (codegen, not scheduling).
   - Board unchanged (no new arms); calibration artifacts unaffected — ECE
     bit-identical across builds, so no drift refit is triggered.
+- **2026-10-06 (r22 — Qwen3.8 distill arms: both measured, no letters-lane
+  lift over untuned Qwen3.5 at either size)** — the user-named empero-ai
+  arms (full-parameter distills of Qwen3.8 2.4T A95B *into the Qwen3.5
+  architecture*, ready-made Q4_K_M, Apache-2.0; weight shas recorded in the
+  results). Letters lane, stock build, -t 12, 3-perm, load-gated:
+  - **Qwen3.8-2B Q4_K_M: 0.725** (lex 0.875 / meta 0.944 / rel 0.450),
+    ECE 0.113, p50 384.3 ms, 4 invalid distributions, replay-clean
+    (Δp 0.000). Ties untuned Qwen3.5-2B Q4_K_M (0.725) on accuracy with a
+    different behavior profile (rel 0.45 vs 0.50, ECE 0.113 vs 0.062) —
+    coincidence at 87/120, not a re-upload (distinct weight sha; the
+    sha-check discipline from this same day's 0.8B duplicate find).
+  - **Qwen3.8-4B Q4_K_M: 0.792** (lex 0.900 / meta 1.000 / rel 0.475),
+    ECE 0.051, p50 1013.5 ms, **0 invalid distributions — the cleanest
+    emission measured on this lane**, replay-clean. Under untuned
+    Qwen3.5-4B (0.800).
+  - Reading: capability distillation into an existing small arch did not
+    convert into typed-decision lift at either size — consistent with the
+    D16 line that interface and emission quality dominate this readout.
+    The arms' value is elsewhere: the 4B is the natural E1 body / verifier
+    candidate (clean emission, Qwen3.5 arch = LoRA-proven targets), and
+    the 2B is the fastest >0.7 arm measured (384 ms p50).
+  - Companion provenance finding: gatilin and Atomic-Germ "different" 0.8B
+    distills are byte-identical (same sha256) — one arm, not two; verify
+    community releases by sha before counting arms.
+  - Board B rows added. These arms do not move the pre-registered E1
+    gates (suite ≥ 0.68 / JevBench ≥ 0.6494 apply to OUR tuned arms).
