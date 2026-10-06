@@ -201,10 +201,21 @@ Plan, in dependency order:
      anchor showed (76.6 % untuned vs 80.5 % tuned at 4B).
    - Acceptance bar: beat the best same-size arm on the composite, not
      accuracy alone — a tie on accuracy at half the size wins.
-4. **VIVERE knowledge extraction** stays experimental-labeled and
-   outside the promotion gate (INTEGRATION_AMORTYX §8): corpus runs
-   consume shadow-ledger exports, never live traffic, and any
-   VIVERE-derived claim is labeled experimental in both trees.
+4. **VIVERE knowledge extraction is the program's primary
+   dataset/knowledge lane** (owner directive, 2026-10-05 — was
+   "experimental side-lane"). No expensive teacher-distillation is
+   bought to extract knowledge or data: VIVERE extracts the corpus
+   cheaply, improves the dataset (gap-fill, near-dup removal — the
+   merge-v2 open items above), and transfers it onto the small model.
+   LoRA fine-tuning remains the application step; **Unsloth is the
+   named fallback tooling** if VIVERE-native transfer underperforms it
+   — which method carries is measured, not assumed. The claims gate is
+   unchanged: corpus runs consume shadow-ledger exports, never live
+   traffic (INTEGRATION_AMORTYX §8), and every VIVERE-derived claim
+   stays experimental-labeled in both trees until a measured arm clears
+   the promotion gate. Running the program through VIVERE also makes it
+   VIVERE's refine/validate loop — real corpus, real gaps, real
+   readout delta.
 
 Non-goals carried from §8: no non-Apache-2.0 corpora, no cloud
 training by default; the burst node (T5500 2×V100) or Kaggle/Modal
