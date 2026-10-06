@@ -5,7 +5,9 @@ Joins the donor's vote rows back through the out-of-band mapping and
 applies the confirm-only recovery contract (OC_GAPFILL_SPEC §3): a
 quarantined record is re-admitted to the merged corpus only when all k
 votes are parseable, unanimous, AND agree with the surviving teacher
-gold label. Split votes and unanimous contradictions stay quarantined —
+gold label. Recovered records carry a ``_readjudication`` block with the
+raw donor votes, so the recovery is auditable from the record alone.
+Split votes and unanimous contradictions stay quarantined —
 a near-duplicate cluster with mixed gold labels is exactly the evidence
 that at least one side's label is wrong, so the pool may only shrink
 when the donor independently confirms the surviving label, never grow.
@@ -94,6 +96,16 @@ def main() -> int:
         gold = ((record.get("target") or {}).get("relevance") or {}).get("label")
         vote_label = VOTE_TO_LABEL[cast[0]]
         if vote_label == gold:
+            # The recovery must be auditable from the record alone: attach
+            # the raw donor votes that justify it (same convention as the
+            # score aggregator's teacher votes).
+            record["_readjudication"] = {
+                "run": "qradj-v1",
+                "donor": "vivere/gemma-4-E2B-it-QAT-Q4_0",
+                "vote_labels": [VOTE_TO_LABEL[v] for v in cast],
+                "votes": [{"value": row["decision"]["value"],
+                           "p": row["decision"]["p"]} for row in oks],
+            }
             recovered.append(record)
         else:
             contradiction_ids.append(record_id)
