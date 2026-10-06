@@ -1,0 +1,12 @@
+{
+  "name": "opencodifier-site",
+  "private": true,
+  "description": "Dev-time CSS pipeline for the marketing site. The built artifact (tw.css) is committed; deploys stay static with zero external requests.",
+  "scripts": {
+    "build:css": "tailwindcss -i src/tw.css -o tw.css --minify"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.0.0",
+    "tailwindcss": "^4.0.0"
+  }
+}

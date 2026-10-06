@@ -79,7 +79,9 @@ body {
   transition: color 0.18s;
 }
 .nav-links a:hover { color: var(--teal); }
-@media (max-width: 760px) { .nav-links { display: none; } }
+@media (max-width: 760px) { .nav-links { display: none; } .nav { gap: 0.8rem; } }
+/* New-section styling (nav menu, ecosystem, footer socials) lives in the
+   Tailwind source: src/tw.css → built tw.css. */
 
 /* ---------- buttons ---------- */
 .btn {
@@ -276,6 +278,7 @@ body {
 .card p { color: var(--ink-dim); font-size: 0.92rem; margin-top: 0.5rem; }
 
 /* ---------- timeline ---------- */
+/* (ecosystem + footer-social styles moved to src/tw.css — Tailwind build) */
 .timeline { margin-top: 2rem; display: flex; flex-direction: column; gap: 0.9rem; }
 .tl-item {
   display: flex; gap: 1rem; align-items: flex-start;
