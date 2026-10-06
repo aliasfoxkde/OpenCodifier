@@ -1,5 +1,15 @@
 # Coverage (Phases 18a → 18j push)
 
+> **STALE BELOW THE BANNER (2026-10-06).** Everything under this banner
+> describes the 2026-09-29 post-18j tree. The B5/B6/Kai/Julia expansion
+> (8,404 lines) moved the true numbers: workspace **89.28 % on the lcov
+> `DA` basis** (14,507/16,249 — the lane's own basis), 79.25 % lines /
+> 77.41 % functions / 80.59 % regions on the text basis; the debt is
+> concentrated in the escalation core (executor/ladder/classifier/
+> engine/narrowing/lexical/handle). The CI floor is ratcheted to 89.0
+> (D36) until the Phase 20 tranches restore 98.5; this document is
+> regenerated at Phase 20g. Do not quote the pre-expansion headline.
+
 Source of truth: `cargo llvm-cov --workspace --summary-only` (the
 `just coverage-summary` recipe), cross-checked one-for-one against a
 fresh `--lcov` export, 2026-09-29 on the post-18j tree.

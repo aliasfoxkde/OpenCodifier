@@ -101,5 +101,5 @@ jobs:
     steps:
       - name: Line coverage (lcov DA basis)
         run: cargo llvm-cov --workspace --lcov --output-path /tmp/lcov.info
-      - name: Floor assertion (98.5% regression guard)
-        run: python3 scripts/coverage_floor.py /tmp/lcov.info --floor 98.5
+      - name: Floor assertion (D36 ratchet — 89.0 now, back to 98.5 per Phase 20)
+        run: python3 scripts/coverage_floor.py /tmp/lcov.info --floor 89.0

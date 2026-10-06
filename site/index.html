@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -72,11 +72,11 @@
 
   <div class="stat-strip">
     <div class="stat">
-      <div class="stat-num"><span class="count" data-target="2.0" data-decimals="1">0</span>&nbsp;ms</div>
+      <div class="stat-num"><span class="count" data-target="2.0" data-decimals="1">2.0</span>&nbsp;ms</div>
       <div class="stat-label">engine p50 per decision<br>JevBench public split, CPU-only</div>
     </div>
     <div class="stat">
-      <div class="stat-num"><span class="count" data-target="76.6" data-decimals="1">0</span>%</div>
+      <div class="stat-num"><span class="count" data-target="76.6" data-decimals="1">76.6</span>%</div>
       <div class="stat-label">best published <em>open</em> decision model<br>on the 231-item public split</div>
     </div>
     <div class="stat">
@@ -84,11 +84,11 @@
       <div class="stat-label">marginal cost per decision<br>local, offline, self-hosted</div>
     </div>
     <div class="stat">
-      <div class="stat-num"><span class="count" data-target="231" data-decimals="0">0</span>/231</div>
+      <div class="stat-num"><span class="count" data-target="231" data-decimals="0">231</span>/231</div>
       <div class="stat-label">deterministic replay — every item,<br>every time, bit-for-bit</div>
     </div>
     <div class="stat">
-      <div class="stat-num"><span class="count" data-target="0.070" data-decimals="3">0</span></div>
+      <div class="stat-num"><span class="count" data-target="0.070" data-decimals="3">0.070</span></div>
       <div class="stat-label">calibration error (ECE)<br>of our model rung on the split</div>
     </div>
   </div>
@@ -108,13 +108,19 @@
 
   <div class="chart-card reveal">
     <div class="chart-tabs" role="tablist" aria-label="Chart metric">
-      <button class="tab active" data-metric="acc" role="tab" aria-selected="true">Accuracy</button>
-      <button class="tab" data-metric="lat" role="tab" aria-selected="false">Latency (p50)</button>
-      <button class="tab" data-metric="size" role="tab" aria-selected="false">What has to load</button>
+      <button class="tab active" data-metric="acc" role="tab" id="tab-acc" aria-selected="true" aria-controls="chart-panel">Accuracy</button>
+      <button class="tab" data-metric="lat" role="tab" id="tab-lat" aria-selected="false" aria-controls="chart-panel" tabindex="-1">Latency (p50)</button>
+      <button class="tab" data-metric="cost" role="tab" id="tab-cost" aria-selected="false" aria-controls="chart-panel" tabindex="-1">Cost per 1M</button>
     </div>
 
-    <div class="chart" id="chart" aria-live="polite"></div>
-    <div class="chart-note" id="chart-note"></div>
+    <div id="chart-panel" role="tabpanel" aria-labelledby="tab-acc">
+      <div class="chart" id="chart" aria-live="polite"></div>
+      <div class="chart-note" id="chart-note"></div>
+      <noscript>
+        <p class="chart-note">The interactive comparison needs JavaScript. The same measured figures are in the
+        cards below: 2.0 ms engine p50, 76.6% on the public split, $0 marginal cost, 231/231 deterministic replay.</p>
+      </noscript>
+    </div>
   </div>
 
   <div class="grid-2">
@@ -167,6 +173,7 @@
   <div class="ladder-wrap reveal">
     <div class="ladder" id="ladder"></div>
     <div class="ladder-detail card" id="ladder-detail" aria-live="polite"></div>
+    <noscript><p class="fineprint">The clickable rung explorer needs JavaScript. The mechanism, in plain terms: exact rule → cached decision → metadata filter → lexical match → embedding similarity → decision model → verifier, each rung accepting only above its calibrated confidence gate.</p></noscript>
   </div>
 
   <div class="scenario-row">
@@ -447,6 +454,7 @@
     </a>
     <a href="https://github.com/WizerAI" rel="noopener">WizerAI org</a>
     <a href="https://github.com/TaskWizer" rel="noopener">TaskWizer org</a>
+    <a href="https://huggingface.co/TaskWizerAI" rel="noopener">Hugging Face ↗</a>
     <a href="https://vivere-5we.pages.dev/" rel="noopener">VIVERE ↗</a>
     <a href="https://amortyx.pages.dev/" rel="noopener">Amortyx ↗</a>
     <a href="https://github.com/aliasfoxkde/aegis" rel="noopener">Aegis ↗</a>

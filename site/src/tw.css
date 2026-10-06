@@ -19,7 +19,8 @@
   --color-oc-bg2: #0a1512;
   --color-oc-ink: #e7f5f0;
   --color-oc-dim: #9db8b0;
-  --color-oc-faint: #6d8a81;
+  /* WCAG 2.1 AAA (7.45:1 on card) — keep in sync with styles.css --ink-faint. */
+  --color-oc-faint: #88aca3;
   --color-oc-teal: #5eead4;
   --color-oc-green: #34d399;
   --color-oc-amber: #fbbf24;
