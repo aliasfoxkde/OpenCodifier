@@ -126,15 +126,43 @@ sha256s into `models.manifest.json`, raw JSONs out-of-tree, REPORT/
 BENCHMARKS/PLAN/CHANGELOG updated together, replay determinism, native
 probabilities only.
 
-E0 status (2026-10-05): **blocked on artifact availability**, not on
+E0 status (2026-10-05): blocked on artifact availability, not on
 code — the fork's `--lora`/`--lora-scaled`/`--lora-init-without-apply`
 flags are present in the `build-pd` server, but no ready-made
 (base, adapter) GGUF pair exists for any small base on the compute
 host (the one local adapter, bonsai2-27b, already failed arch
 validation in r20b and rides a ternary base with collapsed prefill).
-Downloading a 27B base to probe is disproportionate. The probe runs
-when E1 produces our own adapter on the GPU node — E0 executes there
-as the load-back gate.
+Downloading a 27B base to probe is disproportionate.
+
+**E0 EXECUTED 2026-10-06 — PASS.** Unblocked by the E1 smoke adapter
+(§9.5): our own LoRA converted with the fork's
+`convert_lora_to_gguf.py --base …Qwen3.5-0.8B --outtype f16` (48
+tensors, 2.2 MB — converting our own trained adapter is the documented
+serving path, not a third-party re-quant). Serving chain proven on
+CPU (`-ngl 0 -t 6`):
+
+```
+llama-server -m qwen35-08b-qat-Q4_0.gguf \
+    --lora qwen35-08b-e1-smoke-lora-F16.gguf \
+    --decision-seqs 24 --port 8095
+```
+
+- Adapter applies cleanly; the `CPU_REPACK → CPU` buft fallback
+  warnings are benign on CPU builds.
+- `/v1/decision` tree mode returns a well-formed constrained
+  distribution (4 candidates summing to 1.0, `scored_nodes: 1`,
+  6 scored rows), argmax = gold on the probe item,
+  p ≈ 0.923, 570 ms at 245 prompt tokens.
+- **Load-bearing discovery: the route is off unless the server
+  starts with `--decision-seqs N` (N ≥ 3)** — the runner default is
+  24. Any hand-rolled server launch for the JevBench leg must pass it;
+  without it the route 400s with `decisions are disabled`.
+
+This closes the last unvalidated piece of the training bundle
+(prep §9.5 → trainer → readout eval → adapter-GGUF serving). The
+JevBench leg for the tuned arm is now a mechanical replay of this
+chain: convert the r2 adapter, boot with `--lora --decision-seqs 24`,
+then `run_jevbench.py --arm fork_4b --port <p>`.
 
 ## 8. Non-goals
 
