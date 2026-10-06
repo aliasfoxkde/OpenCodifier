@@ -141,6 +141,15 @@ def classify(header: list[str]) -> str:
     joined = " ".join(header)
     if "run" in header and "determinism" in header:
         return "suite_run"
+    # Bounded-probe subsections are labeled "not a board row" in the docs
+    # (r19 speed reference, r20b PTQ probe, shuffled-context probe) — no
+    # CSV rows, per board discipline.
+    if "args" in header and "wall" in header:
+        return "probe"
+    if "decision flips" in header:
+        return "probe"
+    if "pp400 t/s" in header:
+        return "probe"
     if "system" in header and "brier" in header:
         return "jevbench_ours"
     if "public acc" in joined:
@@ -165,6 +174,8 @@ def map_table(board: str, section: str, rows: list[list[str]]) -> list[dict[str,
         return []
     header = [h.lower() for h in rows[0]]
     kind = classify(header)
+    if kind == "probe":
+        return []
     out: list[dict[str, str]] = []
     for cells in rows[1:]:
         if not any(cells) or is_separator(cells):
