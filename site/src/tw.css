@@ -1,0 +1,105 @@
+/* Tailwind v4 input — theme tokens + utilities + new-section components.
+   Preflight is skipped on purpose: the hand-written component layer
+   (styles.css) must keep rendering identically, so every border utility
+   here spells out `border-solid` (preflight normally does it).
+   Built artifact: ../tw.css (committed; deploys never load a CDN).
+   Rebuild: npm run build:css (site/) */
+
+@import "tailwindcss/theme" layer(theme);
+@import "tailwindcss/utilities" layer(utilities);
+
+/* Explicit sources so the build works from any cwd and never wanders
+   outside site/ (aegis skips gitignored paths, so node_modules/ is
+   invisible to the audit gate). */
+@source "../index.html";
+@source "../";
+
+@theme {
+  --color-oc-bg: #060d0c;
+  --color-oc-bg2: #0a1512;
+  --color-oc-ink: #e7f5f0;
+  --color-oc-dim: #9db8b0;
+  --color-oc-faint: #6d8a81;
+  --color-oc-teal: #5eead4;
+  --color-oc-green: #34d399;
+  --color-oc-amber: #fbbf24;
+  --color-oc-line: rgba(94, 234, 212, 0.14);
+  --color-oc-card: rgba(13, 26, 23, 0.66);
+  --color-oc-card2: rgba(16, 33, 29, 0.85);
+  --radius-oc: 16px;
+}
+
+@layer components {
+  /* ---------- nav: mobile menu + github ---------- */
+  .nav-gh {
+    @apply flex items-center text-oc-dim transition-colors duration-200;
+  }
+  .nav-gh:hover { @apply text-oc-teal; }
+
+  .nav-menu { @apply relative hidden; }
+  .nav-menu summary {
+    @apply cursor-pointer flex flex-col gap-1 p-2 rounded-lg
+      border border-solid border-oc-line;
+    list-style: none;
+  }
+  .nav-menu summary::-webkit-details-marker { display: none; }
+  .nav-menu summary span {
+    @apply block w-[18px] h-[2px] rounded-sm bg-oc-dim transition-all duration-200;
+  }
+  .nav-menu[open] summary span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+  .nav-menu[open] summary span:nth-child(2) { @apply opacity-0; }
+  .nav-menu[open] summary span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+  .nav-menu-panel {
+    @apply absolute right-0 top-full mt-2.5 z-60 flex flex-col min-w-[190px]
+      p-2 rounded-xl border border-solid border-oc-line bg-oc-card2
+      backdrop-blur-md;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  }
+  .nav-menu-panel a {
+    @apply text-oc-dim no-underline text-[0.94rem] px-3 py-2 rounded-lg
+      transition-colors duration-200;
+  }
+  .nav-menu-panel a:hover { @apply text-oc-teal bg-oc-teal/7; }
+
+  @media (max-width: 760px) {
+    .nav-menu { @apply block; }
+    .nav-gh { @apply hidden; }
+  }
+
+  /* ---------- ecosystem cards ---------- */
+  .eco-grid {
+    @apply grid grid-cols-1 gap-4 mt-7 md:grid-cols-3;
+  }
+  .eco-card {
+    @apply flex flex-col gap-2 rounded-oc p-6 no-underline text-inherit
+      border border-solid border-oc-line bg-oc-card
+      transition-[border-color,transform,box-shadow] duration-200;
+  }
+  .eco-card:hover {
+    @apply border-oc-teal/40 -translate-y-[3px];
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.35);
+  }
+  .eco-card p { @apply text-oc-dim text-[0.9rem] m-0; }
+  .eco-head {
+    @apply flex items-baseline gap-2 flex-wrap font-bold text-[1.02rem]
+      text-oc-ink tracking-[-0.01em];
+  }
+  .eco-tag {
+    @apply text-[0.66rem] font-semibold tracking-[0.06em] uppercase
+      text-oc-faint rounded-full px-2 py-0.5
+      border border-solid border-oc-line;
+  }
+  .eco-link {
+    @apply mt-auto pt-1.5 text-[0.78rem] text-oc-teal;
+  }
+
+  /* ---------- footer socials ---------- */
+  .foot-social {
+    @apply flex gap-x-5 gap-y-2 justify-center flex-wrap mb-4;
+  }
+  .foot-social a {
+    @apply inline-flex items-center gap-1.5 text-oc-dim no-underline
+      text-[0.86rem] transition-colors duration-200;
+  }
+  .foot-social a:hover { @apply text-oc-teal; }
+}
