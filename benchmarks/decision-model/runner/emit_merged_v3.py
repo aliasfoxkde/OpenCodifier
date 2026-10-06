@@ -12,9 +12,13 @@ Inputs and policy (docs/TRAINING.md §9, 2026-10-06):
     dedup and no representative selection applies to the recovered set;
   - score gap-fill rows (OC_GAPFILL_SPEC item 2) are new score
     questions over existing corpus states with unanimous k-vote hard
-    labels; the row is keyed by its `record_id_new` (the original
-    corpus record id moves into `_gapfill.origin_record_id`) so ids
-    stay unique next to the records the states came from;
+    labels; choice gap-fill rows (item 3) are candidate-conditioned
+    relevance questions (the state's own true query + 3 distractor
+    queries from other records) with hard labels only from k votes
+    unanimous on the mapped query; rows are keyed by `record_id_new`
+    (the original corpus record id moves into
+    `_gapfill.origin_record_id`) so ids stay unique next to the
+    records the states came from;
   - suite/suite_holdout rows pass through untouched, eval rows are
     never training rows.
 
@@ -74,6 +78,7 @@ def main() -> int:
     parent = Path(sys.argv[1])
     recovered_path = Path(sys.argv[2])
     score_rows = Path(sys.argv[3]) if len(sys.argv) > 3 else None
+    choice_rows = Path(sys.argv[4]) if len(sys.argv) > 4 else None
     out_train = parent.with_name("merged-v3.jsonl")
     out_manifest = parent.with_name("merged-v3.manifest.json")
     t_start = time.time()
@@ -82,8 +87,10 @@ def main() -> int:
     recovered = [json.loads(line) for line in recovered_path.open()]
     score = ([json.loads(line) for line in score_rows.open()]
              if score_rows else [])
+    choice = ([json.loads(line) for line in choice_rows.open()]
+              if choice_rows else [])
     print(f"loaded train={len(train)} recovered={len(recovered)} "
-          f"score={len(score)}", flush=True)
+          f"score={len(score)} choice={len(choice)}", flush=True)
 
     train_ids = {r["record_id"] for r in train}
     assert len(train_ids) == len(train), "duplicate ids in parent train"
@@ -128,13 +135,39 @@ def main() -> int:
         assert len({v["value"] for v in votes_t}) == 1, \
             f"{new_id}: teacher votes not unanimous"
 
-    # ---- emit: parent order, then recovered, then score ----
+    # ---- choice-row gate ----
+    for r in choice:
+        new_id = r.get("record_id_new") or ""
+        assert new_id and new_id not in score_ids, \
+            f"dup gap-fill id {new_id}"
+        assert new_id not in train_ids, f"choice id collides train {new_id}"
+        score_ids.add(new_id)
+        questions = (r.get("request") or {}).get("questions") or {}
+        assert len(questions) == 1, f"{new_id}: expected 1 question"
+        for _name, q in questions.items():
+            assert q.get("type") == "choice", \
+                f"{new_id}: not a choice question"
+            criteria = q.get("criteria") or {}
+            assert isinstance(criteria, dict) and len(criteria) == 4, \
+                f"{new_id}: expected 4 criteria candidates"
+            target = (r.get("target") or {}).get(_name) or {}
+            assert target.get("type") == "choice", \
+                f"{new_id}: target kind mismatch"
+            assert target.get("label") in criteria, \
+                f"{new_id}: label not a candidate id"
+        assert (r.get("request") or {}).get("state", {}).get("text"), \
+            f"{new_id}: empty state text"
+        votes_c = (((r.get("teacher") or {}).get("choice") or {})
+                   .get("votes") or [])
+        assert len(votes_c) == 3, f"{new_id}: expected 3 teacher votes"
+
+    # ---- emit: parent order, then recovered, then gap-fill rows ----
     with out_train.open("w") as fh:
         for r in train:
             fh.write(json.dumps(r, ensure_ascii=False) + "\n")
         for r in recovered:
             fh.write(json.dumps(r, ensure_ascii=False) + "\n")
-        for r in score:
+        for r in score + choice:
             row = dict(r)
             new_id = row.pop("record_id_new")
             gap = dict(row.get("_gapfill") or {})
@@ -190,6 +223,13 @@ def main() -> int:
                           "contract": "unanimous k-vote hard labels over "
                                       "existing states"}
                } if score_rows else {}),
+            **({"choice": {"corpus": choice_rows.name,
+                           "sha256": sha256_of(choice_rows),
+                           "aggregation": "opencodifier.choice-v1/1",
+                           "contract": "unanimous k-vote hard labels on "
+                                       "the mapped true query, "
+                                       "rotation-robust"}
+               } if choice_rows else {}),
         },
         "policy": {
             "recovery_rule": "re-admit qradj-v1 recovered verbatim; "
@@ -199,12 +239,18 @@ def main() -> int:
             "score_rule": "new score questions over existing states, "
                           "keyed by record_id_new; origin id kept in "
                           "_gapfill.origin_record_id",
+            "choice_rule": "candidate-conditioned relevance: the state's "
+                           "own true query + 3 distractor queries from "
+                           "other records; hard label only from 3 votes "
+                           "unanimous on the mapped query",
             "suite_rule": "pass through untouched",
         },
-        "records_total": len(train) + len(recovered) + len(score),
+        "records_total": len(train) + len(recovered) + len(score)
+                         + len(choice),
         "records_pass_through": len(train),
         "records_recovered": len(recovered),
         "records_score_gapfill": len(score),
+        "records_choice_gapfill": len(choice),
         "sources": dict(sources),
         "question_kinds": dict(kinds),
         "sha256": {"merged-v3.jsonl": sha256_of(out_train)},
@@ -212,14 +258,16 @@ def main() -> int:
                   "suite_rows_in_output": suite_rows,
                   "recovered_state_query_duplicates": sq_collisions,
                   "recovered_contract_violations": 0,
-                  "score_contract_violations": 0},
+                  "score_contract_violations": 0,
+                  "choice_contract_violations": 0},
         "runtime_s": round(time.time() - t_start, 1),
     }
     out_manifest.write_text(json.dumps(manifest, indent=1) + "\n")
     print(json.dumps({k: manifest[k] for k in
                       ("records_total", "records_recovered",
-                       "records_score_gapfill", "question_kinds",
-                       "sha256", "gates", "runtime_s")}, indent=1))
+                       "records_score_gapfill", "records_choice_gapfill",
+                       "question_kinds", "sha256", "gates",
+                       "runtime_s")}, indent=1))
     print(f"wrote {out_train}, {out_manifest}")
     return 0
 

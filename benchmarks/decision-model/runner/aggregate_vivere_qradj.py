@@ -37,7 +37,10 @@ VOTE_TO_LABEL = {"yes": "true", "no": "false"}
 
 
 def load_jsonl(path: Path) -> list[dict]:
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
+    # File iteration, not str.splitlines(): splitlines also breaks on
+    # U+2028/U+2029, which corpus text can contain and ensure_ascii=False
+    # writes raw, which would split a JSON line mid-string.
+    return [json.loads(line) for line in path.open(encoding="utf-8")
             if line.strip()]
 
 

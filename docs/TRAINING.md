@@ -294,10 +294,48 @@ Plan, in dependency order:
    vote values. Reports of record:
    `benchmarks/decision-model/results/qradj-v1-gap-report.{md,json}`;
    recovered pool `qradj-v1.recovered.jsonl` SHA-256
-   `8135922b…6632f4` (compute host). merged-v3
-   (105,284 + 28,937 = 134,221 records) emits after the score
-   gap-fill lands; score gap-fill (item 2) is in flight — 96,000
-   prompts = 16,000 merged-v2 states × 2 families × 3 votes.
+   `8135922b…6632f4` (compute host).
+
+   **Score gap-fill measured (score-v1, 2026-10-06).** 96,000 prompts
+   (16,000 merged-v2 states × 2 rubric families × 3 votes, same E2B
+   donor), 98.1 % parse (424 first-attempt JSON errors all recovered
+   by re-ask). Over 30,246 complete (state, family) sets: **27,157
+   hard labels (84.9 %)**, unanimous 3/3 only — 3,089 splits counted,
+   never smoothed. Hard-label level distribution L0 26,027 / L1 139 /
+   L2 576 / L3 415 — the L0 skew is the rubrics' honest read of these
+   states and is reported as measured, not rebalanced. Report of
+   record: `benchmarks/decision-model/results/score-v1.gap-report.md`.
+
+   **Choice gap-fill measured (choice-v1, 2026-10-06).** 48,000
+   prompts (16,000 jev-distill states × 3 votes). Each question is
+   candidate-conditioned relevance: the state's own true query (gold
+   by corpus pairing — nothing invented) plus three deterministic
+   prime-stride distractor queries from other records; the true
+   candidate's position rotates per vote, and unanimity is required
+   on the mapped QUERY, not the letter — a position-biased donor
+   cannot pass. 47,895/48,000 parseable (99.8 %; the donor run's
+   parse_status column was invalidated by a lane-parser case bug —
+   extract_local lowercased verdict values so the A–D space failed
+   membership — and was recovered offline from the kept raw text via
+   `runner/repair_parse_status.py`; lane fixed + regression-tested in
+   the VIVERE tree). Over 15,898 complete sets: **12,074 hard labels
+   (75.5 %)** — 3,266 splits and 558 unanimous-wrong counted, never
+   smoothed. Rotation-robustness readout: hard-label yield is flat
+   across true positions (A 73.6 %, B 80.7 %, C 74.9 %, D 72.7 %) and
+   the donor's letter distribution is spread (D 14,018 … C 10,086) —
+   no degenerate position lock. Report of record:
+   `benchmarks/decision-model/results/choice-v1.gap-report.md`.
+
+   **merged-v3 pinned (2026-10-06).** 173,452 records = merged-v2
+   train (105,284) + recovered (28,937) + score (27,157) + choice
+   (12,074), emitted by `runner/emit_merged_v3.py` (all four inputs,
+   manifest `opencodifier.distill-manifest/3`), SHA-256
+   `7e86c550…847b4f` (compute host). Question mix: noul 134,581 /
+   score 29,557 / choice 14,114 — non-relevance coverage 4.2 % →
+   **25.2 %**. Gates all zero: recovered-contract violations 0,
+   score/choice contract violations 0, recovered (state, query)
+   duplicates of train 0, train/suite state collisions 0, suite rows
+   unchanged (240). This is the E1 training corpus (item 4).
 
 Non-goals carried from §8: no non-Apache-2.0 corpora, no cloud
 training by default; the burst node (T5500 2×V100) or Kaggle/Modal
