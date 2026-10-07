@@ -37,8 +37,9 @@
 //! The renderer ports the prep's exact string semantics — python's
 //! `strip()`/`rstrip()` whitespace class, `json.dumps(...,
 //! ensure_ascii=False)` object spacing and document member order —
-//! because the corpora were built with those bytes. Three places where
-//! the prep coerces via `str(...)` (`criteria` descriptions, question
+//! because the corpora were built with those bytes. Four places where
+//! the prep coerces via `str(...)` (`criteria` values — choice
+//! candidates, noul verdict sides, score levels —, question
 //! instructions, target labels of non-string JSON type) are treated as
 //! unrenderable/skipped here instead of re-implementing python `repr`:
 //! the merged-v3 corpus carries strings (labels may be bare score
@@ -423,16 +424,29 @@ fn option_slots(qtype: MacjevKind, criteria: Option<&Jv>) -> Option<Vec<MacjevSl
             Some(slots)
         }
         MacjevKind::Noul => {
-            let held = criteria
-                .and_then(|criteria| criteria.get("true"))
-                .and_then(Jv::as_str)
-                .map(py_strip)
-                .unwrap_or_default();
-            let not_held = criteria
-                .and_then(|criteria| criteria.get("false"))
-                .and_then(Jv::as_str)
-                .map(py_strip)
-                .unwrap_or_default();
+            let empty = Jv::Obj(Vec::new());
+            let criteria = match criteria {
+                // A missing or non-object `criteria` renders both sides
+                // empty, as the prep's `isinstance(criteria, dict)`
+                // guard does.
+                Some(criteria @ Jv::Obj(_)) => criteria,
+                _ => &empty,
+            };
+            let side = |key: &str| -> Option<String> {
+                match criteria.get(key) {
+                    Some(Jv::Str(text)) => Some(py_strip(text).to_owned()),
+                    // Absent or `null` sides are falsy in the prep and
+                    // coerce to the empty string.
+                    None => Some(String::new()),
+                    Some(Jv::Scalar(raw)) if raw == "null" => Some(String::new()),
+                    // The prep `str(...)`-coerces truthy non-strings
+                    // (python `repr` bytes); like the other families,
+                    // that shape is unrenderable here.
+                    Some(_) => None,
+                }
+            };
+            let held = side("true")?;
+            let not_held = side("false")?;
             Some(vec![
                 MacjevSlot {
                     id: "false".to_owned(),
@@ -755,5 +769,149 @@ mod tests {
         };
         assert_eq!(render.rows, [] as [MacjevRow; 0]);
         assert_eq!(render.skips, vec![("prose".to_owned(), MacjevSkip::UnrenderableCriteria)]);
+    }
+
+    #[test]
+    fn display_impls_are_stable() {
+        assert_eq!(MacjevKind::Choice.to_string(), "choice");
+        assert_eq!(MacjevKind::Noul.to_string(), "noul");
+        assert_eq!(MacjevKind::Score.to_string(), "score");
+        assert_eq!(MacjevSkip::UnrenderableCriteria.to_string(), "unrenderable criteria");
+        assert_eq!(MacjevSkip::LabelOutsideOptions.to_string(), "target label outside options");
+        assert_eq!(MacjevSkip::EmptyInstructions.to_string(), "empty instructions");
+        let error = render_record("[1, 2]", 24_000).unwrap_err();
+        assert_eq!(error.to_string(), "macjev.invalid_record: record line is not a JSON object");
+    }
+
+    #[test]
+    fn state_semantics_follow_the_prep_exactly() {
+        let wrapper_state =
+            choice_record(r#"{"a": "b"}"#, r#""a""#, r#"{"text": "  hi  ", "keep": 1}"#);
+        let MacjevOutcome::Rendered(render) = render_record(&wrapper_state, 24_000).unwrap() else {
+            panic!("record renders");
+        };
+        // A non-blank `text` key wins and is stripped; sibling keys are
+        // dropped, exactly as the prep's early return does.
+        assert_eq!(render.state, "hi");
+
+        // Non-string, non-dict states, an empty dict, and a missing or
+        // non-object request all strip to nothing -> EmptyState.
+        for state in ["42", "true", "[1]", "null", "{}"] {
+            let record = choice_record(r#"{"a": "b"}"#, r#""a""#, state);
+            assert_eq!(
+                render_record(&record, 24_000).unwrap(),
+                MacjevOutcome::EmptyState,
+                "state {state}"
+            );
+        }
+        for record in [
+            r#"{"record_id": "r", "source": "s"}"#,
+            r#"{"record_id": "r", "source": "s", "request": {"questions": {}}}"#,
+            r#"{"record_id": "r", "source": "s", "request": []}"#,
+        ] {
+            assert_eq!(
+                render_record(record, 24_000).unwrap(),
+                MacjevOutcome::EmptyState,
+                "record {record}"
+            );
+        }
+
+        // Negative integers and floats survive the dump through the
+        // signed visitor (1.5 round-trips identically in both languages;
+        // exponent forms are a documented boundary).
+        let numbers = choice_record(r#"{"a": "b"}"#, r#""a""#, r#"{"delta": -5, "ratio": 1.5}"#);
+        let MacjevOutcome::Rendered(render) = render_record(&numbers, 24_000).unwrap() else {
+            panic!("record renders");
+        };
+        assert_eq!(render.state, r#"{"delta": -5, "ratio": 1.5}"#);
+    }
+
+    #[test]
+    fn non_string_shapes_and_missing_keys_skip() {
+        let record = r#"{"record_id": "r1", "source": "src", "request": {"state": "s",
+            "questions": {
+              "no_type": {"instructions": "i", "criteria": {"a": "x", "b": "y"}},
+              "typed": {"type": 7, "instructions": "i",
+                "criteria": {"a": "x", "b": "y"}},
+              "desc_num": {"type": "choice", "instructions": "i",
+                "criteria": {"a": "x", "b": 5}},
+              "short_score": {"type": "score", "instructions": "i",
+                "criteria": ["only"]},
+              "level_num": {"type": "score", "instructions": "i",
+                "criteria": ["low", 5]},
+              "no_instr_key": {"type": "score", "criteria": ["a", "b"]}
+            }},
+            "target": {"no_instr_key": {"type": "score", "label": 0}}}"#
+            .replace('\n', "");
+        let MacjevOutcome::Rendered(render) = render_record(&record, 24_000).unwrap() else {
+            panic!("record renders");
+        };
+        assert_eq!(render.rows, [] as [MacjevRow; 0]);
+        assert_eq!(
+            render.skips,
+            vec![
+                ("no_type".to_owned(), MacjevSkip::UnrenderableCriteria),
+                ("typed".to_owned(), MacjevSkip::UnrenderableCriteria),
+                ("desc_num".to_owned(), MacjevSkip::UnrenderableCriteria),
+                ("short_score".to_owned(), MacjevSkip::UnrenderableCriteria),
+                ("level_num".to_owned(), MacjevSkip::UnrenderableCriteria),
+                ("no_instr_key".to_owned(), MacjevSkip::EmptyInstructions),
+            ]
+        );
+    }
+
+    #[test]
+    fn noul_non_string_sides_skip_and_empty_criteria_render_blank() {
+        // A truthy non-string side would python-`str()`-coerce; per the
+        // documented boundary it skips instead of diverging silently.
+        let skip_one = r#"{"record_id": "r1", "source": "src", "request": {"state": "s",
+            "questions": {
+              "num": {"type": "noul", "instructions": "i",
+                "criteria": {"true": 5, "false": "f"}},
+              "arr": {"type": "noul", "instructions": "i",
+                "criteria": {"true": "t", "false": [1]}}
+            }},
+            "target": {}}"#
+            .replace('\n', "");
+        let MacjevOutcome::Rendered(render) = render_record(&skip_one, 24_000).unwrap() else {
+            panic!("record renders");
+        };
+        assert_eq!(
+            render.skips,
+            vec![
+                ("num".to_owned(), MacjevSkip::UnrenderableCriteria),
+                ("arr".to_owned(), MacjevSkip::UnrenderableCriteria),
+            ]
+        );
+
+        // Missing criteria entirely: both sides blank, still rendered.
+        let blank = r#"{"record_id": "r1", "source": "src", "request": {"state": "s",
+            "questions": {"q": {"type": "noul", "instructions": "i"}}},
+            "target": {"q": {"type": "noul", "label": "false"}}}"#
+            .replace('\n', "");
+        let MacjevOutcome::Rendered(render) = render_record(&blank, 24_000).unwrap() else {
+            panic!("record renders");
+        };
+        assert!(render.rows[0].full_text().contains("false: -> yes\ntrue: -> no\n"));
+    }
+
+    #[test]
+    fn non_string_target_labels_skip() {
+        for label in ["null", "-1", "1.5"] {
+            let record = r#"{"record_id": "r1", "source": "src", "request": {"state": "s",
+                "questions": {"q": {"type": "score", "instructions": "i",
+                "criteria": ["low", "high"]}}},
+                "target": {"q": {"type": "score", "label": @label@}}}"#
+                .replace("@label@", label)
+                .replace('\n', "");
+            let MacjevOutcome::Rendered(render) = render_record(&record, 24_000).unwrap() else {
+                panic!("record renders");
+            };
+            assert_eq!(
+                render.skips,
+                vec![("q".to_owned(), MacjevSkip::LabelOutsideOptions)],
+                "label {label}"
+            );
+        }
     }
 }
