@@ -410,7 +410,13 @@ fn evaluate_gates(
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
+    run(&args)
+}
 
+/// The merge itself, split out of [`main`] so the tests can drive every
+/// path — including the gate-failure and bad-input exits — without
+/// owning the process.
+fn run(args: &Args) -> Result<(), Box<dyn Error>> {
     let mut base = Bucket::new();
     load_rows(&args.base, &mut base)?;
     let mut additions = Bucket::new();
@@ -515,4 +521,375 @@ fn main() -> Result<(), Box<dyn Error>> {
         .into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
+
+    use std::fs;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use sha2::Digest as _;
+
+    use super::*;
+
+    fn next_scratch(label: &str) -> PathBuf {
+        static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "opencodifier-corpus-merge-{label}-{}-{}",
+            std::process::id(),
+            NEXT_ID.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&path).expect("scratch directory");
+        path
+    }
+
+    /// Writes one prepped rows file; rows are JSON objects carrying at
+    /// least `qtype` (the merge's only required field) and `label`.
+    fn write_prepped(dir: &Path, name: &str, rows: &[serde_json::Value]) -> PathBuf {
+        let path = dir.join(name);
+        let mut text = String::new();
+        for row in rows {
+            text.push_str(&serde_json::to_string(row).expect("row serializes"));
+            text.push('\n');
+        }
+        fs::write(&path, text).expect("rows file writes");
+        path
+    }
+
+    fn prepped(qtype: &str, label: &str, tag: &str) -> serde_json::Value {
+        serde_json::json!({
+            "id": format!("{qtype}-{tag}"),
+            "qtype": qtype,
+            "label": label,
+            "segments": [{"t": "x", "y": 0}],
+        })
+    }
+
+    /// Base universe used by the end-to-end runs: noul 4 / choice 2 /
+    /// score 10, the score bucket modal on "0" (6×) with 4 non-constant
+    /// rows, mirroring the shape the gates reason about.
+    fn base_rows() -> Vec<serde_json::Value> {
+        let mut rows = Vec::new();
+        for i in 0..4 {
+            rows.push(prepped("noul", if i % 2 == 0 { "true" } else { "false" }, &format!("n{i}")));
+        }
+        for i in 0..2 {
+            rows.push(prepped("choice", &format!("c{i}"), &format!("c{i}")));
+        }
+        for i in 0..6 {
+            rows.push(prepped("score", "0", &format!("d{i}")));
+        }
+        for i in 0..4 {
+            rows.push(prepped("score", "1", &format!("v{i}")));
+        }
+        rows
+    }
+
+    /// Score-heavy generated slice: 8 non-constant score rows + 1 noul,
+    /// which is the shape that satisfies both §9.7 B6 gates on the toy
+    /// base.
+    fn slice_rows() -> Vec<serde_json::Value> {
+        let mut rows = Vec::new();
+        for i in 0..8 {
+            rows.push(prepped("score", &format!("{}", (i % 3) + 1), &format!("s{i}")));
+        }
+        rows.push(prepped("noul", "true", "s-noul"));
+        rows
+    }
+
+    fn args_for(dir: &Path, base: &[PathBuf], slices: &[PathBuf], target: usize) -> Args {
+        Args {
+            base: base[0].clone(),
+            slices: slices.to_vec(),
+            out: dir.join("rows.jsonl"),
+            manifest: dir.join("manifest.json"),
+            target_total: target,
+            seed: 0x0C0D_1F0_2026,
+        }
+    }
+
+    #[test]
+    fn end_to_end_run_with_slices_passes_gates_and_writes_both_files() {
+        let dir = next_scratch("e2e");
+        let base = write_prepped(&dir, "base.jsonl", &base_rows());
+        let slice = write_prepped(&dir, "slice.jsonl", &slice_rows());
+        let args = args_for(&dir, &[base], &[slice], 40);
+
+        run(&args).expect("merge succeeds");
+
+        let out_text = fs::read_to_string(&args.out).expect("rows written");
+        assert_eq!(out_text.lines().count(), 40, "rows_out == target");
+
+        let manifest: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&args.manifest).expect("manifest written"))
+                .expect("manifest parses");
+        assert_eq!(manifest["manifest_version"], "opencodifier.corpus-merge/1");
+        assert_eq!(manifest["rows_out"], 40);
+        assert_eq!(manifest["gates"]["noul_share_le_cap"], true);
+        assert_eq!(manifest["gates"]["score_nonconstant_ge_min"], true);
+        assert_eq!(manifest["gates_not_applicable"], serde_json::json!({}));
+        assert_eq!(manifest["slices"]["rows"], 9);
+        assert_eq!(manifest["sample_plan"]["score_degenerate_label"], "0");
+
+        // The recorded digest is the digest of the file on disk.
+        let digest = manifest["sha256"]["rows"].as_str().expect("digest recorded");
+        let bytes = fs::read(&args.out).expect("rows readable");
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(&bytes);
+        assert_eq!(digest, format!("{:x}", hasher.finalize()));
+
+        fs::remove_dir_all(&dir).expect("scratch cleans");
+    }
+
+    #[test]
+    fn same_seed_reproduces_the_rows_file_byte_for_byte() {
+        let dir = next_scratch("repro");
+        let base = write_prepped(&dir, "base.jsonl", &base_rows());
+        let slice = write_prepped(&dir, "slice.jsonl", &slice_rows());
+
+        let mut first = args_for(&dir, &[base.clone()], &[slice.clone()], 40);
+        first.out = dir.join("rows-a.jsonl");
+        first.manifest = dir.join("manifest-a.json");
+        run(&first).expect("first merge");
+        let mut second = args_for(&dir, &[base], &[slice], 40);
+        second.out = dir.join("rows-b.jsonl");
+        second.manifest = dir.join("manifest-b.json");
+        run(&second).expect("second merge");
+
+        assert_eq!(
+            fs::read_to_string(&first.out).expect("rows a"),
+            fs::read_to_string(&second.out).expect("rows b"),
+            "seeded merge is byte-reproducible"
+        );
+        fs::remove_dir_all(&dir).expect("scratch cleans");
+    }
+
+    #[test]
+    fn slice_less_run_records_both_gates_not_applicable() {
+        let dir = next_scratch("sliceless");
+        let base = write_prepped(&dir, "base.jsonl", &base_rows());
+        let args = args_for(&dir, &[base], &[], 20);
+
+        run(&args).expect("slice-less merge succeeds (nothing to fail)");
+
+        let manifest: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&args.manifest).expect("manifest"))
+                .expect("manifest parses");
+        let reasons = manifest["gates_not_applicable"].as_object().expect("na map");
+        assert_eq!(manifest["gates"], serde_json::json!({}));
+        assert_eq!(reasons.len(), 2, "both gates skipped with reasons");
+        for (gate, why) in reasons {
+            assert!(why.as_str().expect("reason").contains("slice"), "{gate}: {why}");
+        }
+        fs::remove_dir_all(&dir).expect("scratch cleans");
+    }
+
+    #[test]
+    fn failed_gate_errors_after_the_manifest_is_written() {
+        let dir = next_scratch("gatefail");
+        let base = write_prepped(&dir, "base.jsonl", &base_rows());
+        // A noul-heavy slice pushes the dominant family past the 40%
+        // final-mix cap.
+        let noul_slice: Vec<serde_json::Value> =
+            (0..20).map(|i| prepped("noul", "true", &format!("g{i}"))).collect();
+        let slice = write_prepped(&dir, "slice.jsonl", &noul_slice);
+        let args = args_for(&dir, &[base], &[slice], 60);
+
+        let error = run(&args).expect_err("the noul-share gate fails");
+        assert!(
+            error.to_string().contains("gate noul_share_le_cap FAILED"),
+            "{error}"
+        );
+        assert!(
+            args.manifest.exists(),
+            "the manifest survives the failure (evidence rule)"
+        );
+        fs::remove_dir_all(&dir).expect("scratch cleans");
+    }
+
+    #[test]
+    fn bad_inputs_error_before_any_merge() {
+        let dir = next_scratch("inputs");
+        let empty = write_prepped(&dir, "empty.jsonl", &[]);
+        let base = write_prepped(&dir, "base.jsonl", &base_rows());
+        let slice = write_prepped(&dir, "slice.jsonl", &slice_rows());
+
+        let error = run(&args_for(&dir, &[empty], &[], 40)).expect_err("empty base");
+        assert!(error.to_string().contains("has no rows"), "{error}");
+
+        // Slices alone meeting the target leave no base budget.
+        let error = run(&args_for(&dir, &[base.clone()], &[slice], 9))
+            .expect_err("slices >= target");
+        assert!(error.to_string().contains("already meet the target"), "{error}");
+
+        // A row without `qtype` is a loud load error, not a skip.
+        let broken = dir.join("broken.jsonl");
+        fs::write(&broken, "{\"label\": \"x\"}\n").expect("broken row writes");
+        let error = run(&args_for(&dir, &[broken], &[], 40)).expect_err("missing qtype");
+        assert!(error.to_string().contains("row without qtype"), "{error}");
+        fs::remove_dir_all(&dir).expect("scratch cleans");
+    }
+
+    #[test]
+    fn temperature_shares_cap_the_dominant_family_and_conserve_mass() {
+        let mut counts = BTreeMap::new();
+        counts.insert("noul".to_owned(), 100_000_usize);
+        counts.insert("choice".to_owned(), 2_040_usize);
+        counts.insert("score".to_owned(), 2_400_usize);
+        let shares = temperature_shares(&counts);
+        for (family, share) in &shares {
+            assert!(
+                *share <= FAMILY_SHARE_CAP + 1e-9,
+                "{family} share {share} exceeds the cap"
+            );
+        }
+        let total: f64 = shares.values().sum();
+        assert!((total - 1.0).abs() < 1e-9, "shares conserve mass: {total}");
+        assert!(shares["noul"] > shares["choice"], "bigger family still bigger");
+    }
+
+    #[test]
+    fn take_plan_respects_the_oversample_and_never_oversample_caps() {
+        let mut counts = BTreeMap::new();
+        counts.insert("noul".to_owned(), 10_usize);
+        counts.insert("choice".to_owned(), 2_usize);
+        counts.insert("score".to_owned(), 6_usize);
+        let mut shares = BTreeMap::new();
+        shares.insert("noul".to_owned(), 0.6);
+        shares.insert("choice".to_owned(), 0.2);
+        shares.insert("score".to_owned(), 0.2);
+        let take = take_plan(&counts, &shares, 100);
+
+        assert_eq!(take["choice"], 8, "choice caps at OVERSAMPLE_CAP × count");
+        assert_eq!(take["score"], 6, "score never oversamples");
+        assert!(take["noul"] <= 40, "noul caps at 4× its count");
+        let total: usize = take.values().sum();
+        assert!(total <= 100, "the plan never exceeds the budget: {total}");
+    }
+
+    #[test]
+    fn select_base_draws_score_nonconstant_first_and_records_oversampling() {
+        let dir = next_scratch("select");
+        let path = write_prepped(&dir, "base.jsonl", &base_rows());
+        let mut bucket = Bucket::new();
+        load_rows(&path, &mut bucket).expect("base loads");
+
+        let mut take = BTreeMap::new();
+        take.insert("choice".to_owned(), 4_usize); // 2 rows → 2× oversample
+        take.insert("noul".to_owned(), 2_usize);
+        take.insert("score".to_owned(), 6_usize);
+
+        let mut rng = Rng::new(7);
+        let selection = select_base(&bucket, &take, Some("0"), &mut rng);
+
+        assert_eq!(selection.census["score"], 6);
+        // The 4 non-constant rows are drawn before the degenerate class.
+        assert_eq!(selection.score_nonconstant_taken, 4);
+        assert_eq!(selection.score_degenerate_taken, 2);
+        assert_eq!(selection.census["choice"], 4);
+        assert_eq!(selection.oversample_factors["choice"], "2×");
+        assert_eq!(selection.rows.len(), 12);
+        fs::remove_dir_all(&dir).expect("scratch cleans");
+    }
+
+    #[test]
+    fn evaluate_gates_applies_only_where_preconditions_hold() {
+        let mut census = BTreeMap::new();
+        census.insert("noul".to_owned(), 30_usize);
+        census.insert("score".to_owned(), 20_usize);
+
+        let with_slices = evaluate_gates(true, 20, &census, 100, 18);
+        assert_eq!(with_slices.evaluated["noul_share_le_cap"], true);
+        assert_eq!(with_slices.evaluated["score_nonconstant_ge_min"], true);
+        assert!(with_slices.not_applicable.is_empty());
+        assert!((with_slices.noul_share - 0.30).abs() < 1e-12);
+        assert!((with_slices.score_nonconstant_share - 0.90).abs() < 1e-12);
+
+        let over = evaluate_gates(true, 20, &census, 60, 5);
+        assert_eq!(over.evaluated["noul_share_le_cap"], false, "30/60 busts the cap");
+        assert_eq!(over.evaluated["score_nonconstant_ge_min"], false, "5/20 < 35%");
+
+        let slice_less = evaluate_gates(false, 0, &census, 100, 2);
+        assert!(slice_less.evaluated.is_empty());
+        assert_eq!(slice_less.not_applicable.len(), 2);
+    }
+
+    #[test]
+    fn load_rows_indexes_families_and_rejects_malformed_rows() {
+        let dir = next_scratch("load");
+        let path = write_prepped(&dir, "rows.jsonl", &base_rows());
+        let mut bucket = Bucket::new();
+        load_rows(&path, &mut bucket).expect("clean rows load");
+        assert_eq!(bucket.total(), 16);
+        assert_eq!(bucket.count("noul"), 4);
+        assert_eq!(bucket.count("score"), 10);
+        assert_eq!(bucket.count("choice"), 2);
+        assert_eq!(bucket.family_counts()["score"], 10);
+
+        let malformed = dir.join("malformed.jsonl");
+        fs::write(&malformed, "not json\n").expect("malformed writes");
+        let error = load_rows(&malformed, &mut Bucket::new()).expect_err("malformed row");
+        assert!(error.to_string().contains("malformed.jsonl:1:"), "{error}");
+
+        // Blank lines are skipped, not errors.
+        let blanks = dir.join("blanks.jsonl");
+        fs::write(&blanks, "\n{\"qtype\": \"noul\", \"label\": \"true\"}\n\n").expect("writes");
+        let mut sparse = Bucket::new();
+        load_rows(&blanks, &mut sparse).expect("blank lines skip");
+        assert_eq!(sparse.total(), 1);
+        fs::remove_dir_all(&dir).expect("scratch cleans");
+    }
+
+    #[test]
+    fn modal_score_label_is_measured_from_the_bucket() {
+        let dir = next_scratch("modal");
+        let path = write_prepped(&dir, "base.jsonl", &base_rows());
+        let mut bucket = Bucket::new();
+        load_rows(&path, &mut bucket).expect("loads");
+        assert_eq!(modal_score_label(&bucket).as_deref(), Some("0"));
+
+        let no_score = write_prepped(
+            &dir,
+            "noscore.jsonl",
+            &[prepped("noul", "true", "a"), prepped("choice", "x", "b")],
+        );
+        let mut empty_family = Bucket::new();
+        load_rows(&no_score, &mut empty_family).expect("loads");
+        assert_eq!(modal_score_label(&empty_family), None);
+        fs::remove_dir_all(&dir).expect("scratch cleans");
+    }
+
+    #[test]
+    fn write_rows_is_seeded_and_lossless() {
+        let dir = next_scratch("write");
+        let out = dir.join("rows.jsonl");
+        let slices: Vec<String> = vec!["{\"id\": \"s1\"}".to_owned(), "{\"id\": \"s2\"}".to_owned()];
+        let sampled: Vec<String> = (0..5).map(|i| format!("{{\"id\": \"b{i}\"}}")).collect();
+
+        let mut rng = Rng::new(99);
+        let first = write_rows(&out, &slices, &sampled, &mut rng).expect("writes");
+        let lines: Vec<String> =
+            fs::read_to_string(&out).expect("reads").lines().map(str::to_owned).collect();
+        let mut ids: Vec<String> = lines
+            .iter()
+            .map(|line| {
+                serde_json::from_str::<serde_json::Value>(line)
+                    .expect("row")["id"]
+                    .as_str()
+                    .expect("id")
+                    .to_owned()
+            })
+            .collect();
+        ids.sort();
+        assert_eq!(ids.len(), 7, "every row lands exactly once");
+        assert!(ids.contains(&"s1".to_owned()) && ids.contains(&"b4".to_owned()));
+
+        let mut rng = Rng::new(99);
+        let second = write_rows(&dir.join("again.jsonl"), &slices, &sampled, &mut rng)
+            .expect("writes again");
+        assert_eq!(first, second, "same seed, same bytes, same digest");
+        fs::remove_dir_all(&dir).expect("scratch cleans");
+    }
 }
