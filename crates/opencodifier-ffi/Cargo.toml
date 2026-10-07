@@ -1,0 +1,55 @@
+[package]
+name = "opencodifier-ffi"
+description = "C ABI for OpenCodifier: the zero-ML decision runtime (relational solver over BM25) as a static library for mobile and embedded hosts. A C-ABI JSON boundary over the same engine the HTTP, MCP, and WASM surfaces embed — same request shapes, same typed error codes, no ML, no network."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords = ["decision", "ffi", "mobile", "staticlib"]
+categories = ["external-ffi-bindings", "data-structures"]
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+# The workspace lint table, restated in full with ONE documented local
+# exception: `unsafe_code` is allowed *in this crate only*, because a C
+# ABI cannot exist without pointer handling. Every unsafe block here is
+# the boundary contract itself (minting/destroying the boxed engine
+# handle, reading C strings, freeing caller-owned strings) — reviewed,
+# minimal, and covered by tests/c_abi.rs, which drives the exported
+# symbols the way a C caller would. The engine behind the boundary stays
+# pure safe Rust; no unsafe appears anywhere it is not the FFI seam.
+# Cargo cannot mix `workspace = true` with an override, so the table is
+# copied — and `tests/lints_parity.rs` fails this crate's build if the
+# copy drifts from `[workspace.lints]`.
+[lints.rust]
+# The FFI seam exception (see above). Everything else matches the
+# workspace table exactly.
+unsafe_code = "allow"
+missing_docs = "deny"
+missing_debug_implementations = "deny"
+rust_2018_idioms = { level = "deny", priority = -1 }
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+module_name_repetitions = "allow"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+
+[dependencies]
+opencodifier-core = { path = "../opencodifier-core", version = "0.4.0" }
+opencodifier-engine = { path = "../opencodifier-engine", version = "0.4.0" }
+opencodifier-schema = { path = "../opencodifier-schema", version = "0.4.0" }
+serde_json.workspace = true

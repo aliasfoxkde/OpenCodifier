@@ -838,6 +838,36 @@ pending). What remains open in the matrix is unchanged: registry
 publication is an explicit user go, and native smoke exists only for
 linux-x86_64.
 
+**Status 2026-10-07 — the release recipe widened to nine legs, three of
+them new to this record.** `just release-build <target>` now stages and
+attests every cell of the matrix (the recipe's preflight fails with the
+missing tool's name when a leg lacks its toolchain):
+
+- **android-aarch64** (`aarch64-linux-android`) — the CLI binary,
+  linked by `cargo-zigbuild`; verification level: link + `file` magic
+  (no Android host or emulator here; execution is structurally out of
+  scope, same rule as darwin).
+- **ios-aarch64** (`aarch64-apple-ios`) — **the `opencodifier-ffi`
+  staticlib, not a CLI binary**: with no Apple SDK on this host no
+  linked Mach-O image can be produced or codesigned, and pretending
+  otherwise would be the "compiles = supported" lie this record bans.
+  The library is the honest artifact — an `ar` archive whose members
+  are arm64 Mach-O objects a host app links against the C ABI
+  (`include/ocffi.h`), which IS producible and attestable without an
+  SDK.
+- **wasm32-unknown-unknown** — formalized from "pkg/ rides the
+  release" to a versioned dual-glue bundle
+  (`opencodifier-<v>-wasm32-unknown-unknown.tar.gz`: `pkg-web/` +
+  `pkg-nodejs/` from `wasm-pack --release`), gzip-magic attested.
+
+Supporting machinery, all in this commit: `scripts/generate_attestation.py`
+grew per-target artifact contracts (container + arch + static/member
+probes for PE32+, Mach-O, `ar`, and gzip — an unmapped target refuses to
+attest rather than shipping unverified); `just release-checksums` writes
+`dist/sha256sums.txt`; `opencodifier-ffi` is the new staticlib crate
+(C-ABI JSON boundary over `opencodifier_engine::wire`, the same module
+the WASM binding calls — one wire contract, every transport).
+
 ## D25 — The escalation ladder is engine-internal per-node policy, never IR (2026-09-30)
 
 The fusion study (F23: engine→gte→2B blend 0.867 vs 0.725 best single)

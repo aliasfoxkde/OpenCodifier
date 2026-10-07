@@ -46,12 +46,31 @@ CANONICAL_KEY_ORDER = [
     "generated_at_utc",
 ]
 
-# The `file(1)` magic token that must appear for a declared target triple's
-# architecture, plus the linkage word required of the musl targets (static
-# linking is the reason those artifacts exist).
-ARCH_MAGIC: dict[str, str] = {
-    "x86_64": "x86-64",
-    "aarch64": "ARM aarch64",
+# Per-target artifact contract. Each entry names the `file(1)` container
+# token the artifact must carry, the architecture token that must appear
+# alongside it (None for bundles with no CPU architecture), and optional
+# extra requirements: "static" demands a statically linked binary (the
+# reason the musl legs exist); "member" demands that the first archive
+# member is itself a Mach-O of the declared architecture (a static library
+# is an `ar` archive, and the outer magic alone cannot see its contents).
+TARGET_RULES: dict[str, dict[str, object]] = {
+    "x86_64-unknown-linux-gnu": {"container": "ELF", "arch": "x86-64"},
+    "x86_64-unknown-linux-musl": {
+        "container": "ELF",
+        "arch": "x86-64",
+        "static": True,
+    },
+    "aarch64-unknown-linux-gnu": {"container": "ELF", "arch": "ARM aarch64"},
+    "x86_64-pc-windows-gnu": {"container": "PE32+", "arch": "x86-64"},
+    "x86_64-apple-darwin": {"container": "Mach-O", "arch": "x86_64"},
+    "aarch64-apple-darwin": {"container": "Mach-O", "arch": "arm64"},
+    "aarch64-linux-android": {"container": "ELF", "arch": "ARM aarch64"},
+    "aarch64-apple-ios": {
+        "container": "ar archive",
+        "arch": "arm64",
+        "member": True,
+    },
+    "wasm32-unknown-unknown": {"container": "gzip compressed", "arch": None},
 }
 
 
@@ -141,25 +160,63 @@ def toolchain(repo: pathlib.Path) -> dict[str, object]:
 def verify_magic(magic: str, target: str, path: pathlib.Path) -> None:
     """The artifact's `file` magic must agree with the triple it ships for.
 
-    The declared triple's architecture has to appear in the magic (an artifact
-    that does not match the target it is labelled with is a packaging error,
-    not a footnote), and a musl artifact has to be statically linked — that is
-    the reason the musl leg exists.
+    The declared target's contract comes from TARGET_RULES; an unmapped
+    target is an authoring error (add the rule when you add the leg, never
+    let an artifact ship unverified). Beyond container and architecture, the
+    rule can demand static linkage (musl) or inspect the first archive
+    member (iOS static library, whose outer `ar` magic cannot see the
+    Mach-O inside).
     """
-    arch = target.split("-")[0]
-    token = ARCH_MAGIC.get(arch)
-    if token is None:
-        raise AttestationError(f"{target}: no file-magic token mapped for arch")
-    if "ELF" not in magic:
-        raise AttestationError(f"{path}: not an ELF artifact — {magic}")
-    if token not in magic:
+    rule = TARGET_RULES.get(target)
+    if rule is None:
+        raise AttestationError(f"{target}: no artifact contract mapped for target")
+    if rule["container"] not in magic:
+        raise AttestationError(
+            f"{path}: expected {rule['container']} for {target} — {magic}"
+        )
+    arch = rule["arch"]
+    if arch is not None and arch not in magic:
         raise AttestationError(
             f"{path}: magic says the artifact is not for {target} — {magic}"
         )
-    if target.endswith("-musl") and STATIC_MAGIC.search(magic) is None:
+    if rule.get("static") and STATIC_MAGIC.search(magic) is None:
         raise AttestationError(
-            f"{path}: a musl artifact must be statically linked — {magic}"
+            f"{path}: this target requires a statically linked artifact — {magic}"
         )
+    if rule.get("member") and not archive_member_is_macho(str(arch), path):
+        raise AttestationError(
+            f"{path}: first archive member is not a Mach-O {arch} object"
+        )
+
+
+def archive_member_is_macho(arch: str, path: pathlib.Path) -> bool:
+    """True when the first member of an `ar` archive is a Mach-O of `arch`.
+
+    Static libraries for the iOS leg are plain archives; the guarantee the
+    attestation makes ("this really is an arm64 iOS library") lives one
+    level down, in the members. The member bytes go to `file(1)` on stdin,
+    binary-safe.
+    """
+    listing = run(["ar", "t", str(path)], path.parent)
+    members = [line for line in listing.splitlines() if line.strip()]
+    if not members:
+        return False
+    member = subprocess.run(
+        ["ar", "p", str(path), members[0]],
+        cwd=path.parent,
+        capture_output=True,
+        check=False,
+    )
+    if member.returncode != 0 or not member.stdout:
+        return False
+    probe = subprocess.run(
+        ["file", "-b", "--", "-"],
+        input=member.stdout,
+        capture_output=True,
+        check=False,
+    )
+    magic = probe.stdout.decode("utf-8", errors="replace").strip()
+    return bool(arch) and arch in magic and "Mach-O" in magic
 
 
 def artifact_identity(

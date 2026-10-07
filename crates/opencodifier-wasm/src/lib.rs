@@ -40,9 +40,13 @@
 
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
-use opencodifier_core::Limits;
-use opencodifier_engine::{DecisionGraph, EngineConfig, EngineHandle, GraphDocument, MAX_BATCH};
-use opencodifier_schema::{WireFormat, native::Native};
+use opencodifier_engine::{
+    EngineConfig, EngineHandle,
+    wire::{
+        WireFailure as EngineFailure, decide_batch_impl, decide_impl, run_graph_impl,
+        validate_graph_impl,
+    },
+};
 
 /// One assembled zero-ML decision runtime, shareable across the page.
 ///
@@ -170,169 +174,6 @@ pub fn opencodifier_version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
 }
 
-/// Decodes, decides, and encodes — the whole wire contract in one
-/// function, shared by the binding and the native tests.
-fn decide_impl(handle: &EngineHandle, request_json: &str) -> Result<String, EngineFailure> {
-    let payload: serde_json::Value =
-        serde_json::from_str(request_json).map_err(EngineFailure::MalformedJson)?;
-    let encoded = decide_value(handle, &payload)?;
-    serde_json::to_string(&encoded).map_err(EngineFailure::MalformedJson)
-}
-
-/// Decodes and decides one already-parsed request, returning the encoded
-/// native response. The value-shaped core [`decide_impl`] and
-/// [`decide_batch_impl`] both walk, so a batch never re-parses what the
-/// envelope already parsed and a single request cannot drift from a
-/// batched one.
-fn decide_value(
-    handle: &EngineHandle,
-    payload: &serde_json::Value,
-) -> Result<serde_json::Value, EngineFailure> {
-    let request = Native.decode_request(payload, &Limits::default())?;
-    let response = handle.decide(&request)?;
-    Native.encode_response(&response).map_err(EngineFailure::Schema)
-}
-
-/// Decides every request of a batch envelope on the one engine — the
-/// whole batch contract in one function, shared by the binding and the
-/// native tests.
-///
-/// The engine is borrowed, never rebuilt: the batch shares the cache a
-/// page already warmed, and items that repeat an earlier request hit it.
-fn decide_batch_impl(handle: &EngineHandle, requests_json: &str) -> Result<String, EngineFailure> {
-    let payload: serde_json::Value =
-        serde_json::from_str(requests_json).map_err(EngineFailure::MalformedJson)?;
-    let requests = batch_requests(&payload)?;
-    if requests.len() > MAX_BATCH {
-        return Err(opencodifier_schema::SchemaError::limit(
-            "max_batch",
-            requests.len(),
-            MAX_BATCH,
-        )
-        .into());
-    }
-    let results = requests.iter().map(|document| batch_item(handle, document)).collect::<Vec<_>>();
-    serde_json::to_string(&serde_json::json!({ "results": results, "count": results.len() }))
-        .map_err(EngineFailure::MalformedJson)
-}
-
-/// The batch envelope's `requests` array, borrowed: the key is required
-/// and must be an array, and other envelope members are ignored — the
-/// `POST /v1/batch` body's contract. Both refusals name `requests` under
-/// `schema.invalid_value`, so a client sees one diagnostic on either
-/// transport.
-fn batch_requests(payload: &serde_json::Value) -> Result<&Vec<serde_json::Value>, EngineFailure> {
-    match payload.get("requests") {
-        Some(serde_json::Value::Array(requests)) => Ok(requests),
-        Some(other) => Err(opencodifier_schema::SchemaError::invalid_value(
-            "requests",
-            format!("invalid type: {}, expected a sequence", json_type_name(other)),
-        )
-        .into()),
-        None => Err(opencodifier_schema::SchemaError::invalid_value(
-            "requests",
-            "missing field `requests`",
-        )
-        .into()),
-    }
-}
-
-/// The JSON type of `value`, for diagnostics: what a malformed envelope
-/// actually carried.
-fn json_type_name(value: &serde_json::Value) -> &'static str {
-    match value {
-        serde_json::Value::Null => "null",
-        serde_json::Value::Bool(_) => "boolean",
-        serde_json::Value::Number(_) => "number",
-        serde_json::Value::String(_) => "string",
-        serde_json::Value::Array(_) => "sequence",
-        serde_json::Value::Object(_) => "map",
-    }
-}
-
-/// Decodes and decides one batch item, producing its result object: the
-/// envelope the HTTP batch reports, so a client reading one reads the
-/// other. A decode failure and an engine failure land in the same
-/// `{"error": {"code", "message"}}` shape — from the client's side both
-/// are "this item has no decision", and the `schema.*` vs `engine.*`
-/// code keeps the cause distinguishable.
-fn batch_item(handle: &EngineHandle, document: &serde_json::Value) -> serde_json::Value {
-    match decide_value(handle, document) {
-        Ok(response) => serde_json::json!({ "response": response }),
-        Err(failure) => serde_json::json!({ "error": failure.error_json() }),
-    }
-}
-
-/// Decodes a graph document and validates it, returning the graph
-/// version and node count.
-fn validate_graph_impl(graph_json: &str) -> Result<(u64, usize), EngineFailure> {
-    let document: GraphDocument =
-        serde_json::from_str(graph_json).map_err(EngineFailure::MalformedJson)?;
-    let (version, nodes) = (document.version, document.nodes.len());
-    DecisionGraph::new(version, document.nodes)?;
-    Ok((version, nodes))
-}
-
-/// Validates a graph, decodes a request, decides on a throwaway engine.
-fn run_graph_impl(graph_json: &str, request_json: &str) -> Result<String, EngineFailure> {
-    let document: GraphDocument =
-        serde_json::from_str(graph_json).map_err(EngineFailure::MalformedJson)?;
-    let graph = DecisionGraph::new(document.version, document.nodes)?;
-    let handle = EngineHandle::ephemeral(graph)?;
-    decide_impl(&handle, request_json)
-}
-
-/// The error half of the wire contract: a stable code plus its message,
-/// serialized to JSON exactly once, at the boundary.
-#[derive(Debug)]
-enum EngineFailure {
-    MalformedJson(serde_json::Error),
-    Schema(opencodifier_schema::SchemaError),
-    Engine(opencodifier_engine::EngineError),
-}
-
-impl From<opencodifier_schema::SchemaError> for EngineFailure {
-    fn from(error: opencodifier_schema::SchemaError) -> Self {
-        Self::Schema(error)
-    }
-}
-
-impl From<opencodifier_engine::EngineError> for EngineFailure {
-    fn from(error: opencodifier_engine::EngineError) -> Self {
-        Self::Engine(error)
-    }
-}
-
-impl EngineFailure {
-    /// The stable error code (`schema.invalid_value`, `engine.timeout`,
-    /// `graph.cycle`, ...).
-    fn code(&self) -> String {
-        match self {
-            Self::MalformedJson(_) => "schema.invalid_json".to_owned(),
-            Self::Schema(error) => error.code().to_owned(),
-            Self::Engine(error) => error.code().to_owned(),
-        }
-    }
-
-    /// The JSON object the boundary reports: the stable code plus its
-    /// message, built exactly once. A batch item's error is the same
-    /// object, so one refusal reads identically inside an envelope and
-    /// across the boundary.
-    fn error_json(&self) -> serde_json::Value {
-        serde_json::json!({ "code": self.code(), "message": self.to_string() })
-    }
-}
-
-impl std::fmt::Display for EngineFailure {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::MalformedJson(error) => write!(formatter, "{error}"),
-            Self::Schema(error) => write!(formatter, "{error}"),
-            Self::Engine(error) => write!(formatter, "{error}"),
-        }
-    }
-}
-
 /// Lifts a failure into JS as a JSON error value: `{"code", "message"}`.
 fn wasm_error(error: impl Into<EngineFailure>) -> JsValue {
     JsValue::from_str(&error.into().error_json().to_string())
@@ -346,6 +187,8 @@ mod tests {
     use opencodifier_core::{
         Candidate, ChoiceQuestion, DecisionPolicy, DecisionQuestion, RequestMetadata, State,
     };
+    use opencodifier_engine::{MAX_BATCH, wire::decide_value};
+    use opencodifier_schema::{WireFormat, native::Native};
 
     /// A native-schema choice request, small enough to read whole.
     fn request_json() -> String {

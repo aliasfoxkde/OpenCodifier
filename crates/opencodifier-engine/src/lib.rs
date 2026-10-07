@@ -23,6 +23,7 @@
 //! | [`clock`] | §10 — `Clock`, `Deadline`, `CancellationToken` |
 //! | [`engine`] | §43 — configuration and the orchestrating `DecisionEngine` |
 //! | [`rerank`] | §26, §54 — the reranker seam (permute, never remove) |
+//! | [`wire`] | §57, §68 — the transport-neutral native-schema boundary every embedding surface shares |
 //! | [`mod@optimize`] | §51 — equivalence-preserving graph optimization (D22) |
 //!
 //! # The cheap-mechanism-first principle
@@ -130,6 +131,7 @@ pub mod relational;
 pub mod report;
 pub mod rerank;
 pub mod rules;
+pub mod wire;
 
 pub use cache::{CacheConfig, CacheKey, CacheKeyBuilder, DecisionCache, EngineIdentity};
 pub use calibration::{

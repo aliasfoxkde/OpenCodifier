@@ -1402,6 +1402,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "opencodifier-ffi"
+version = "0.4.0"
+dependencies = [
+ "opencodifier-core",
+ "opencodifier-engine",
+ "opencodifier-schema",
+ "serde_json",
+]
+
+[[package]]
 name = "opencodifier-http"
 version = "0.4.0"
 dependencies = [
