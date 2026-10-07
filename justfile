@@ -53,6 +53,18 @@ machete:
 e2e port='8188':
     python3 scripts/e2e_validate.py --binary target/release/opencodifier --port {{port}}
 
+# The macjev renderer's live-python parity lane (TRAINING.md §9.7 F2):
+# re-derives the expected bytes from the python prep implementation and
+# compares both sides. NOT part of `just ci` — python is not a CI
+# dependency; the committed fixture already pins CI's half. Run this when
+# either the renderer or the prep changes.
+check-macjev:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export TMPDIR="${TMPDIR:-/nas/Temp/tmp}"
+    cargo test -p opencodifier-schema --test macjev_parity
+    cargo test -p opencodifier-schema --test macjev_parity -- --ignored
+
 # The WASM artifact proof (PLAN 18j, D23): host tests, the wasm32 compile,
 # a wasm-pack --target nodejs build, and the Node smoke test over the real
 # artifact. NOT part of `just ci` — Node and wasm-pack are not CI

@@ -99,6 +99,7 @@ pub mod anthropic;
 pub mod codec;
 pub mod error;
 pub mod jev;
+pub mod macjev;
 pub mod native;
 pub mod openai;
 pub mod registry;
