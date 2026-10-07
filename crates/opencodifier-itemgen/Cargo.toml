@@ -1,0 +1,29 @@
+[package]
+name = "opencodifier-itemgen"
+description = "Deterministic solver-verified relational/contrastive item generator for the E1 decision-model corpus (TRAINING.md §9.7 B3): fact graphs sampled in-process, rendered through the exact extraction grammar, and verified against the relational solver itself."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords = ["decision", "synthetic-data", "test-data", "relational"]
+categories = ["development-tools", "algorithms"]
+
+[lints]
+workspace = true
+
+[dependencies]
+opencodifier-core = { path = "../opencodifier-core", version = "0.5.0" }
+opencodifier-engine = { path = "../opencodifier-engine", version = "0.5.0" }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+sha2 = "0.10"
+
+[[bin]]
+name = "opencodifier-itemgen"
+path = "src/main.rs"
+
+[[bin]]
+name = "opencodifier-corpus-merge"
+path = "src/bin/corpus_merge.rs"
