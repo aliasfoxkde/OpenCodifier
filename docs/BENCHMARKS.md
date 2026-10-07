@@ -974,9 +974,52 @@ contract_clause_type 0.588, voice_assistant_intent 0.550; score tasks
 show uniform distributions where BM25 finds no signal (argmax picks
 level 0 — the uninformative-prior decision, honestly reflected in the
 accuracy). Latency is ~200× under the slowest LLM arms on the surface
-and cost is $0, but jabr scores accuracy only — it has no
-cost/speed/calibration columns; the surface carries no universal
-number (§14 rule).
+and modeled cost is far under any model arm ("Cost per 1,000 decisions"
+below), but jabr scores accuracy only — it has no cost/speed/calibration
+columns; the surface carries no universal number (§14 rule).
+
+## Cost per 1,000 decisions (modeled, benchmarkheaven basis)
+
+"Cost" for self-hosted inference is amortized hardware, not invoices. We
+adopt the third-party board's own methodology (benchmarkheaven.com/jev-models,
+accessed 2026-10-07): every self-hosted system is priced on the hardware that
+runs it, so
+
+```
+cost_per_1k = (hardware $/hour) x (p50 latency in seconds) / 3.6
+```
+
+Their cheapest published row fixes the CPU pricing basis: verdict-small
+(118M encoder) costs $0.00087 per 1,000 decisions at a 250 ms p50, which
+implies **$0.0125/hour**. Holding that rate fixed, cost scales linearly with
+measured p50 latency, so our measured latencies price as:
+
+| Arm (this host, measured p50) | p50 | modeled cost |
+|---|---|---|
+| Engine rung (rules + lexical, JevBench public split) | 2.0 ms | **$0.0000070 / 1k** ($0.007 / 1M) |
+| vtx static-embedding rung | 7.9 ms | $0.0000275 / 1k ($0.0275 / 1M) |
+| Raw LLM route (Qwen3.5-4B + prompt) | 651 ms | $0.00227 / 1k ($2.27 / 1M) |
+| 4B model rung (escalation tail only) | 2,280 ms | $0.0079 / 1k ($7.9 / 1M) |
+
+Anchors from their board: verdict-small $0.00087/1k ($0.87/1M),
+OpenSourceJev Qwen3.5-4B Q4 $0.011/1k, hosted Jev reference $0.032/1k. On
+this basis the engine rung is ~125x under verdict-small and ~4,600x under
+the Jev reference.
+
+Caveats, stated plainly:
+
+- These are **modeled, not invoiced** — the same kind of estimate the
+  third-party board publishes, applied to our measured latencies.
+- The $0.0125/hr basis is a CPU rate. GPU-dependent rows priced on it would
+  be under-priced, so the basis is conservative for us and generous to GPU
+  arms.
+- The 4B rung's figure applies only to escalated items; the fusion ladder
+  pays it on roughly half the items of the internal suite, never on the
+  whole stream.
+- The earlier "$0 marginal cost" phrasing (this page and the site) was
+  replaced by these figures on 2026-10-07: marginal cost on owned hardware
+  is electricity and amortization, not zero, and modeled figures are what
+  makes the number comparable with the field.
 
 ## Composite deployment score
 

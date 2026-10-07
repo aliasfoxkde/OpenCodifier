@@ -38,7 +38,8 @@ document.querySelectorAll(".count").forEach((el) => cio.observe(el));
 /* ---------- benchmark chart ----------
    Accuracy: published anchors, JevBench public 231 split (upstream authors' table).
    Latency: p50, log scale; ours measured on CPU, hosted row is the vendor range midpoint.
-   Cost: third-party board reference for hosted Jev; ours is a property of the design. */
+   Cost: modeled on the third-party board's own pricing basis (formula and
+   caveats in docs/BENCHMARKS.md, "Cost per 1,000 decisions"); log scale. */
 const CHART = {
   acc: {
     title: "Accuracy — JevBench public split (231 items)",
@@ -73,17 +74,23 @@ const CHART = {
       "On our audited internal suite the full fusion ladder medians 0.9–137 ms end-to-end because roughly half the items never pay for the model.",
   },
   cost: {
-    title: "Cost per 1M decisions",
-    scale: "linear",
+    title: "Cost per 1M decisions (modeled)",
+    scale: "log",
     unit: "$",
     rows: [
-      { label: "OpenCodifier", sub: "self-hosted, your hardware", v: 0, ours: true },
-      { label: "Hosted Jev", sub: "third-party board reference estimate", v: 32 },
+      { label: "OpenCodifier engine", sub: "2.0 ms p50, rules + lexical, CPU", v: 0.007, ours: true },
+      { label: "verdict-small (118M encoder)", sub: "cheapest row on the third-party board", v: 0.87 },
+      { label: "Raw LLM route (Qwen3.5-4B + prompt)", sub: "same pricing basis, 651 ms", v: 2.3 },
+      { label: "OpenCodifier 4B model rung", sub: "escalation tail only, 2.28 s p50", v: 7.9, ours: true },
+      { label: "OpenSourceJev Qwen3.5-4B Q4", sub: "cheapest 4B on the third-party board", v: 11 },
+      { label: "Hosted Jev", sub: "third-party board reference", v: 32 },
     ],
-    note: "The reference price for hosted Jev is the third-party board's estimate " +
-      "(~$0.032 per 1,000 decisions). OpenCodifier's marginal cost is $0: no API, no metering, " +
-      "no account — your machine, your electricity, and the cheap rungs mean even the electricity " +
-      "bill is dominated by the 4B rung's rare escalations.",
+    note: "Modeled with the third-party board's own basis (benchmarkheaven.com/jev-models): hardware " +
+      "amortized at the rate implied by its cheapest row (verdict-small: $0.00087 per 1,000 decisions at a " +
+      "250 ms p50 → $0.0125/hour), scaled linearly by measured p50 latency — formula and caveats in " +
+      "docs/BENCHMARKS.md. Our engine rung lands at $0.007 per 1M decisions: ~125× under verdict-small, " +
+      "~4,600× under the hosted-Jev reference. On your own hardware the marginal cost is your electricity — " +
+      "no API, no metering, no account. The 4B rung's figure applies only to the escalated tail.",
   },
 };
 
@@ -91,22 +98,22 @@ const chartEl = document.getElementById("chart");
 const chartNote = document.getElementById("chart-note");
 
 function fmt(v, unit) {
-  if (unit === "$") return "$" + v.toFixed(0);
+  if (unit === "$") return "$" + v.toFixed(v >= 10 ? 0 : v >= 1 ? 1 : v >= 0.1 ? 2 : 3);
   if (unit === "ms") return v >= 1000 ? (v / 1000).toFixed(1) + " s" : v + " ms";
   return v.toFixed(1) + unit;
 }
 
 function renderChart(metric) {
   const cfg = CHART[metric];
-  const maxV = cfg.scale === "log"
-    ? Math.log10(Math.max(...cfg.rows.map((r) => r.v)))
-    : Math.max(...cfg.rows.map((r) => r.v));
+  const vals = cfg.rows.map((r) => r.v);
+  const maxV = cfg.scale === "log" ? Math.log10(Math.max(...vals)) : Math.max(...vals);
+  const minV = cfg.scale === "log" ? Math.log10(Math.min(...vals)) : 0;
   chartEl.innerHTML = "";
   cfg.rows.forEach((r, i) => {
     const row = document.createElement("div");
     row.className = "bar-row" + (r.ours ? " ours" : "");
     const frac = cfg.scale === "log"
-      ? (Math.log10(Math.max(r.v, 1)) / maxV)
+      ? (Math.log10(r.v) - minV) / (maxV - minV)
       : (r.v / maxV);
     const width = Math.max(2.5, frac * 100);
     row.innerHTML =
