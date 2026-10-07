@@ -1,0 +1,263 @@
+{
+  "request": {
+    "state": {
+      "text": "zebra umbra quaffle",
+      "facts": {}
+    },
+    "questions": [
+      {
+        "type": "choice",
+        "id": "decision",
+        "text": "Which component is responsible?",
+        "candidates": [
+          {
+            "id": "database",
+            "description": "The database tier"
+          },
+          {
+            "id": "network",
+            "description": "The network path"
+          },
+          {
+            "id": "storage",
+            "description": "The object store"
+          },
+          {
+            "id": "gateway",
+            "description": "The edge gateway"
+          }
+        ]
+      }
+    ],
+    "policy": {
+      "min_confidence": 0.8,
+      "verify_below": 0.65,
+      "abstain_below": 0.5,
+      "risk": "low"
+    },
+    "metadata": {
+      "request_id": "conformance-abstain",
+      "limits": {
+        "max_input_bytes": 1048576,
+        "max_questions": 32,
+        "max_candidates": 256,
+        "max_graph_nodes": 128,
+        "max_execution_time": {
+          "secs": 10,
+          "nanos": 0
+        },
+        "max_retrieval_results": 64
+      }
+    }
+  },
+  "expected": {
+    "answers": [
+      {
+        "choice": "gateway",
+        "confidence": 0.25,
+        "distribution": {
+          "entries": [
+            {
+              "key": "database",
+              "probability": 0.25
+            },
+            {
+              "key": "network",
+              "probability": 0.25
+            },
+            {
+              "key": "storage",
+              "probability": 0.25
+            },
+            {
+              "key": "gateway",
+              "probability": 0.25
+            }
+          ]
+        },
+        "question_id": "decision",
+        "type": "choice"
+      }
+    ],
+    "confidence": {
+      "calibrated_confidence": 0.25,
+      "entropy": 2.0,
+      "margin": 0.0,
+      "ood_score": 1.0,
+      "top_probability": 0.25,
+      "verifier_agreement": null
+    },
+    "metrics": {
+      "cache_hit": false,
+      "candidates_in": 4,
+      "candidates_out": 4,
+      "verification_triggered": false
+    },
+    "outcome": "abstain",
+    "trace": {
+      "entries": [
+        {
+          "detail": {
+            "facts": {
+              "kind": "integer",
+              "value": 0
+            },
+            "state_bytes": {
+              "kind": "integer",
+              "value": 19
+            }
+          },
+          "node": "normalize"
+        },
+        {
+          "detail": {
+            "hit": {
+              "kind": "boolean",
+              "value": false
+            },
+            "key": {
+              "kind": "text",
+              "value": "7ba2133a2b5748a327b4ff4d11255f40b481a4e6e134331e87327979d6298c57"
+            }
+          },
+          "node": "cache"
+        },
+        {
+          "detail": {
+            "excluded": {
+              "kind": "integer",
+              "value": 0
+            },
+            "facts_set": {
+              "kind": "integer",
+              "value": 0
+            },
+            "fired": {
+              "kind": "integer",
+              "value": 0
+            },
+            "pinned": {
+              "kind": "integer",
+              "value": 0
+            }
+          },
+          "node": "rule"
+        },
+        {
+          "detail": {
+            "after": {
+              "kind": "integer",
+              "value": 4
+            },
+            "before": {
+              "kind": "integer",
+              "value": 4
+            },
+            "question": {
+              "kind": "text",
+              "value": "decision"
+            },
+            "removed": {
+              "kind": "integer",
+              "value": 0
+            }
+          },
+          "node": "filter"
+        },
+        {
+          "detail": {
+            "pruned": {
+              "kind": "integer",
+              "value": 0
+            },
+            "question": {
+              "kind": "text",
+              "value": "decision"
+            },
+            "safe_mode": {
+              "kind": "boolean",
+              "value": true
+            },
+            "scored": {
+              "kind": "integer",
+              "value": 4
+            },
+            "top_score": {
+              "kind": "float",
+              "value": 0.0
+            }
+          },
+          "node": "lexical"
+        },
+        {
+          "detail": {
+            "calibrated": {
+              "kind": "float",
+              "value": 0.25
+            },
+            "clipped": {
+              "kind": "integer",
+              "value": 0
+            },
+            "model": {
+              "kind": "text",
+              "value": "relational-v1|builtin-lexical-v2"
+            },
+            "ood": {
+              "kind": "float",
+              "value": 1.0
+            },
+            "probability": {
+              "kind": "float",
+              "value": 0.25
+            },
+            "question": {
+              "kind": "text",
+              "value": "decision"
+            },
+            "top": {
+              "kind": "text",
+              "value": "gateway"
+            }
+          },
+          "node": "choice"
+        },
+        {
+          "detail": {
+            "outcome": {
+              "kind": "text",
+              "value": "abstain"
+            },
+            "passed": {
+              "kind": "boolean",
+              "value": false
+            },
+            "question": {
+              "kind": "text",
+              "value": "decision"
+            },
+            "threshold": {
+              "kind": "float",
+              "value": 0.8
+            },
+            "verifier": {
+              "kind": "text",
+              "value": "none"
+            }
+          },
+          "node": "threshold"
+        },
+        {
+          "detail": {
+            "reached": {
+              "kind": "boolean",
+              "value": true
+            }
+          },
+          "node": "output"
+        }
+      ],
+      "trace_version": 1
+    }
+  }
+}
