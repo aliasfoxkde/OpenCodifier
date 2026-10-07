@@ -114,7 +114,7 @@ build-release:
 # evidence for). Adding a target means adding its builder to the case in
 # `release-build` — an absent toolchain fails the recipe with the missing
 # tool's name; the matrix never narrows silently.
-release_targets := 'x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-unknown-linux-gnu'
+release_targets := 'x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-unknown-linux-gnu x86_64-pc-windows-gnu x86_64-apple-darwin aarch64-apple-darwin aarch64-linux-android aarch64-apple-ios wasm32-unknown-unknown'
 
 # Build, stage, and attest one matrix target:
 #   just release-build aarch64-unknown-linux-gnu [preflight|build]
@@ -164,16 +164,35 @@ release-build target mode='build':
             x86_64-unknown-linux-gnu)
                 need cc
                 builder="cargo build"
+                package="opencodifier-cli"
                 ;;
             x86_64-unknown-linux-musl)
                 need cc
                 need musl-gcc
                 builder="cargo build"
+                package="opencodifier-cli"
                 ;;
-            aarch64-unknown-linux-gnu)
+            aarch64-unknown-linux-gnu | x86_64-pc-windows-gnu | \
+            x86_64-apple-darwin | aarch64-apple-darwin | aarch64-linux-android)
                 need cargo-zigbuild
                 need zig
                 builder="cargo zigbuild"
+                package="opencodifier-cli"
+                ;;
+            aarch64-apple-ios)
+                need cargo-zigbuild
+                need zig
+                builder="cargo zigbuild"
+                # No C linker exists for iOS on this host and none is needed:
+                # a static library is an archive of objects, not a linked
+                # image, so cargo never invokes one. The artifact is the
+                # opencodifier-ffi staticlib (C ABI, include/ocffi.h).
+                package="opencodifier-ffi"
+                ;;
+            wasm32-unknown-unknown)
+                need wasm-pack
+                builder="wasm-pack build"
+                package="opencodifier-wasm"
                 ;;
             *)
                 printf 'unknown matrix target: %s (matrix: %s)\n' \
@@ -205,30 +224,85 @@ release-build target mode='build':
         exit 1
     fi
 
-    # Warnings are CI's gate (`.gitforge.yml` lint job, host target); the
-    # cross lanes are not rebuilt there, so a release build stays at cargo's
-    # default warning level rather than failing on a linker note from zig cc.
-    # shellcheck disable=SC2086
-    $builder --release --locked --target "$target" -p opencodifier-cli
-
-    built="target/${target}/release/opencodifier"
-    if [ ! -s "$built" ]; then
-        printf 'FAIL  %s: the build reported success but left no artifact\n' "$built" >&2
-        exit 1
-    fi
-
     version="$(cargo metadata --no-deps --format-version 1 | python3 -c \
         'import json, sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "opencodifier-cli"))')"
-    stage="dist/v${version}-${target}"
-    mkdir -p "$stage"
-    asset="opencodifier-${version}-${target}"
-    cp -f "$built" "${stage}/${asset}"
+
+    # Per-leg build + staging. Every branch ends with `built` pointing at
+    # the artifact this leg attests.
+    case "$target" in
+        wasm32-unknown-unknown)
+            # The site's `just site-wasm` builds only the web target into
+            # site/wasm; this release bundle ships BOTH glue targets so a
+            # bundler and a Node host each get the shape they import.
+            wasm_root="target/wasm-release"
+            rm -rf "$wasm_root"
+            mkdir -p "$wasm_root"
+            # wasm-pack resolves --out-dir against the crate dir; absolute
+            # keeps both outputs side by side regardless.
+            wasm-pack build crates/opencodifier-wasm --release \
+                --target web --out-dir "$PWD/$wasm_root/pkg-web" --out-name opencodifier
+            wasm-pack build crates/opencodifier-wasm --release \
+                --target nodejs --out-dir "$PWD/$wasm_root/pkg-nodejs" --out-name opencodifier
+            stage="dist/v${version}-${target}"
+            mkdir -p "$stage"
+            asset="opencodifier-${version}-${target}.tar.gz"
+            tar -czf "${stage}/${asset}" -C "$wasm_root" pkg-web pkg-nodejs
+            built="${stage}/${asset}"
+            build_command="wasm-pack build crates/opencodifier-wasm --release --target web --out-dir $wasm_root/pkg-web --out-name opencodifier && wasm-pack build crates/opencodifier-wasm --release --target nodejs --out-dir $wasm_root/pkg-nodejs --out-name opencodifier && tar -czf ${stage}/${asset} -C $wasm_root pkg-web pkg-nodejs"
+            ;;
+        aarch64-apple-ios)
+            # shellcheck disable=SC2086
+            $builder --release --locked --target "$target" -p "$package"
+            built="target/${target}/release/libopencodifier_ffi.a"
+            if [ ! -s "$built" ]; then
+                printf 'FAIL  %s: the build reported success but left no artifact\n' "$built" >&2
+                exit 1
+            fi
+            stage="dist/v${version}-${target}"
+            mkdir -p "$stage"
+            asset="opencodifier-${version}-${target}.a"
+            cp -f "$built" "${stage}/${asset}"
+            build_command="cargo zigbuild --release --locked --target ${target} -p ${package}"
+            ;;
+        x86_64-pc-windows-gnu)
+            # shellcheck disable=SC2086
+            $builder --release --locked --target "$target" -p "$package"
+            built="target/${target}/release/opencodifier.exe"
+            if [ ! -s "$built" ]; then
+                printf 'FAIL  %s: the build reported success but left no artifact\n' "$built" >&2
+                exit 1
+            fi
+            stage="dist/v${version}-${target}"
+            mkdir -p "$stage"
+            asset="opencodifier-${version}-${target}.exe"
+            cp -f "$built" "${stage}/${asset}"
+            build_command="cargo zigbuild --release --locked --target ${target} -p ${package}"
+            ;;
+        *)
+            # Warnings are CI's gate (`.gitforge.yml` lint job, host target);
+            # the cross lanes are not rebuilt there, so a release build stays
+            # at cargo's default warning level rather than failing on a
+            # linker note from zig cc.
+            # shellcheck disable=SC2086
+            $builder --release --locked --target "$target" -p "$package"
+            built="target/${target}/release/opencodifier"
+            if [ ! -s "$built" ]; then
+                printf 'FAIL  %s: the build reported success but left no artifact\n' "$built" >&2
+                exit 1
+            fi
+            stage="dist/v${version}-${target}"
+            mkdir -p "$stage"
+            asset="opencodifier-${version}-${target}"
+            cp -f "$built" "${stage}/${asset}"
+            build_command="${builder} --release --locked --target ${target} -p ${package}"
+            ;;
+    esac
 
     printf 'release-attest %s\n' "$target"
     python3 scripts/generate_attestation.py \
-        --artifact "${stage}/${asset}" \
+        --artifact "${built}" \
         --target "$target" \
-        --build-command "${builder} --release --locked --target ${target} -p opencodifier-cli" \
+        --build-command "$build_command" \
         --repo-root "$repo_root"
     printf 'staged   %s/%s\n' "$stage" "$asset"
 
@@ -267,6 +341,35 @@ release-verify:
     for attestation in "${attestations[@]}"; do
         python3 scripts/generate_attestation.py --check "$attestation" "${attestation%.attestation.json}"
     done
+
+# Hash every staged artifact into dist/sha256sums.txt (attestations and
+# the notes file excluded — the sums cover the shippable bytes, and the
+# attestations carry the same digests individually). Re-run after any
+# rebuild; the file is rewritten, never appended to.
+release-checksums:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    shopt -s nullglob
+    artifacts=()
+    for staged in dist/v*/; do
+        for file in "$staged"*; do
+            case "$file" in
+                *.attestation.json) continue ;;
+            esac
+            artifacts+=("$file")
+        done
+    done
+    if [ "${#artifacts[@]}" -eq 0 ]; then
+        printf 'no staged artifacts under dist/ — run `just release-build <target>` first\n' >&2
+        exit 1
+    fi
+    tmp="$(mktemp)"
+    for file in "${artifacts[@]}"; do
+        (cd "$(dirname "$file")" && sha256sum "$(basename "$file")") >> "$tmp"
+    done
+    mkdir -p dist
+    mv "$tmp" dist/sha256sums.txt
+    printf 'PASS  %d artifact(s) hashed into dist/sha256sums.txt\n' "${#artifacts[@]}"
 
 # Render dist/RELEASE_NOTES.md from the template plus the staged attestations.
 release-notes:

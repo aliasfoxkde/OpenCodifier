@@ -9,11 +9,11 @@ in a committed phase, **contract** = frozen v1 surface.
 | Plane | Crates | Talks to |
 |-------|--------|----------|
 | Decision core | `opencodifier-core` | nothing (pure IR + math) |
-| Deterministic engine | `opencodifier-engine` | core |
+| Deterministic engine | `opencodifier-engine` | core, schema |
 | Schema adapters | `opencodifier-schema` | core |
 | Inference runtime | `opencodifier-runtime` | core (+ `ort` behind one feature) |
 | Decision model | `opencodifier-model` | engine, runtime, core |
-| Interfaces | `opencodifier-cli`, `-http`, `-mcp`, `-wasm` | engine/model, schema |
+| Interfaces | `opencodifier-cli`, `-http`, `-mcp`, `-wasm`, `-ffi` | engine/model, schema |
 
 The dependency arrows only ever point toward `core`. Nothing in the
 workspace depends on a concrete inference library except
