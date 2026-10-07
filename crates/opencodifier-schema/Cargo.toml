@@ -14,7 +14,7 @@ categories = ["data-structures", "parser-implementations"]
 workspace = true
 
 [dependencies]
-opencodifier-core = { path = "../opencodifier-core", version = "0.4.0" }
+opencodifier-core = { path = "../opencodifier-core", version = "0.5.0" }
 serde.workspace = true
 serde_json.workspace = true
 # SHA-256 for definition identities (D20), the same primitive D6 uses
