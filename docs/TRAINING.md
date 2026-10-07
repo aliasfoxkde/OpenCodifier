@@ -567,6 +567,19 @@ the node powers on, so powered-on time is pure training.
   and Rust serving adapter stop being two hand-synced
   implementations; property test renders a corpus sample through
   both and asserts equality.
+  **Shipped (2026-10-07):**
+  `opencodifier_schema::macjev` (`macjev-render-v1`) is now the single
+  workspace-owned definition — order-preserving JSON DOM, python
+  `strip()` whitespace class, python `json.dumps` object spacing,
+  typed skips mirroring the prep's count buckets. Parity lane:
+  `tests/macjev_parity.rs` pins a real merged-v3 corpus sample
+  against python-derived expected bytes in plain CI; `just
+  check-macjev` re-derives from the live python implementation on the
+  host lane (prep changes must re-run it). Documented boundary:
+  float rendering in structured states (Rust shortest-form vs python
+  repr exponents) — never occurs in corpora; non-string
+  criteria/instructions are typed skips where python would `str()`-
+  coerce.
 - F3 Profiler-informed Python config wins (sdpa, bucketing) stay
   Python — Rust goes where determinism and proof live.
 
