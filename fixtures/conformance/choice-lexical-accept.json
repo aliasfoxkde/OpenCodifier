@@ -1,47 +1,4 @@
 {
-  "request": {
-    "state": {
-      "text": "The database tier is down and queries time out.",
-      "facts": {}
-    },
-    "questions": [
-      {
-        "type": "choice",
-        "id": "decision",
-        "text": "Which component is responsible for the outage?",
-        "candidates": [
-          {
-            "id": "database",
-            "description": "The database tier"
-          },
-          {
-            "id": "network",
-            "description": "The network path"
-          }
-        ]
-      }
-    ],
-    "policy": {
-      "min_confidence": 0.8,
-      "verify_below": 0.65,
-      "abstain_below": 0.5,
-      "risk": "low"
-    },
-    "metadata": {
-      "request_id": "conformance-choice",
-      "limits": {
-        "max_input_bytes": 1048576,
-        "max_questions": 32,
-        "max_candidates": 256,
-        "max_graph_nodes": 128,
-        "max_execution_time": {
-          "secs": 10,
-          "nanos": 0
-        },
-        "max_retrieval_results": 64
-      }
-    }
-  },
   "expected": {
     "answers": [
       {
@@ -101,7 +58,7 @@
             },
             "key": {
               "kind": "text",
-              "value": "0f3308451b4d0ef713fd43b3ee9622b7efaaf157c1834a953d4fe55fb77420a9"
+              "value": "9b50ccb6f5ac19e01086e0bdb6d08b2331f5f000d164d7ee87d522cbbc7200fd"
             }
           },
           "node": "cache"
@@ -242,6 +199,49 @@
         }
       ],
       "trace_version": 1
+    }
+  },
+  "request": {
+    "metadata": {
+      "limits": {
+        "max_candidates": 256,
+        "max_execution_time": {
+          "nanos": 0,
+          "secs": 10
+        },
+        "max_graph_nodes": 128,
+        "max_input_bytes": 1048576,
+        "max_questions": 32,
+        "max_retrieval_results": 64
+      },
+      "request_id": "conformance-choice"
+    },
+    "policy": {
+      "abstain_below": 0.5,
+      "min_confidence": 0.8,
+      "risk": "low",
+      "verify_below": 0.65
+    },
+    "questions": [
+      {
+        "candidates": [
+          {
+            "description": "The database tier",
+            "id": "database"
+          },
+          {
+            "description": "The network path",
+            "id": "network"
+          }
+        ],
+        "id": "decision",
+        "text": "Which component is responsible for the outage?",
+        "type": "choice"
+      }
+    ],
+    "state": {
+      "facts": {},
+      "text": "The database tier is down and queries time out."
     }
   }
 }

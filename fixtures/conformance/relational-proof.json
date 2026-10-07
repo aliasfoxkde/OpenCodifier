@@ -1,51 +1,4 @@
 {
-  "request": {
-    "state": {
-      "text": "billing depends on catalog. catalog is down.",
-      "facts": {}
-    },
-    "questions": [
-      {
-        "type": "choice",
-        "id": "root_cause",
-        "text": "Which component is the root cause of the outage?",
-        "candidates": [
-          {
-            "id": "catalog",
-            "description": "The catalog service"
-          },
-          {
-            "id": "billing",
-            "description": "The billing service"
-          },
-          {
-            "id": "gateway",
-            "description": "The edge gateway"
-          }
-        ]
-      }
-    ],
-    "policy": {
-      "min_confidence": 0.8,
-      "verify_below": 0.65,
-      "abstain_below": 0.5,
-      "risk": "low"
-    },
-    "metadata": {
-      "request_id": "conformance-relational",
-      "limits": {
-        "max_input_bytes": 1048576,
-        "max_questions": 32,
-        "max_candidates": 256,
-        "max_graph_nodes": 128,
-        "max_execution_time": {
-          "secs": 10,
-          "nanos": 0
-        },
-        "max_retrieval_results": 64
-      }
-    }
-  },
   "expected": {
     "answers": [
       {
@@ -109,7 +62,7 @@
             },
             "key": {
               "kind": "text",
-              "value": "41de83c6ed9bdbb4e8ead93961314af40ce16264ceee36a7c3effdf3d91e779d"
+              "value": "4c4b110ab3eb365ac1781c1a72fcc94ecd06a3523b42ae7cbaebc8b8c6e13852"
             }
           },
           "node": "cache"
@@ -176,7 +129,7 @@
             },
             "top_score": {
               "kind": "float",
-              "value": 1.9616585060234526
+              "value": 1.9616585060234528
             }
           },
           "node": "lexical"
@@ -250,6 +203,53 @@
         }
       ],
       "trace_version": 1
+    }
+  },
+  "request": {
+    "metadata": {
+      "limits": {
+        "max_candidates": 256,
+        "max_execution_time": {
+          "nanos": 0,
+          "secs": 10
+        },
+        "max_graph_nodes": 128,
+        "max_input_bytes": 1048576,
+        "max_questions": 32,
+        "max_retrieval_results": 64
+      },
+      "request_id": "conformance-relational"
+    },
+    "policy": {
+      "abstain_below": 0.5,
+      "min_confidence": 0.8,
+      "risk": "low",
+      "verify_below": 0.65
+    },
+    "questions": [
+      {
+        "candidates": [
+          {
+            "description": "The catalog service",
+            "id": "catalog"
+          },
+          {
+            "description": "The billing service",
+            "id": "billing"
+          },
+          {
+            "description": "The edge gateway",
+            "id": "gateway"
+          }
+        ],
+        "id": "root_cause",
+        "text": "Which component is the root cause of the outage?",
+        "type": "choice"
+      }
+    ],
+    "state": {
+      "facts": {},
+      "text": "billing depends on catalog. catalog is down."
     }
   }
 }

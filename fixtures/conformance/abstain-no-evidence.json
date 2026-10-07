@@ -1,55 +1,4 @@
 {
-  "request": {
-    "state": {
-      "text": "zebra umbra quaffle",
-      "facts": {}
-    },
-    "questions": [
-      {
-        "type": "choice",
-        "id": "decision",
-        "text": "Which component is responsible?",
-        "candidates": [
-          {
-            "id": "database",
-            "description": "The database tier"
-          },
-          {
-            "id": "network",
-            "description": "The network path"
-          },
-          {
-            "id": "storage",
-            "description": "The object store"
-          },
-          {
-            "id": "gateway",
-            "description": "The edge gateway"
-          }
-        ]
-      }
-    ],
-    "policy": {
-      "min_confidence": 0.8,
-      "verify_below": 0.65,
-      "abstain_below": 0.5,
-      "risk": "low"
-    },
-    "metadata": {
-      "request_id": "conformance-abstain",
-      "limits": {
-        "max_input_bytes": 1048576,
-        "max_questions": 32,
-        "max_candidates": 256,
-        "max_graph_nodes": 128,
-        "max_execution_time": {
-          "secs": 10,
-          "nanos": 0
-        },
-        "max_retrieval_results": 64
-      }
-    }
-  },
   "expected": {
     "answers": [
       {
@@ -117,7 +66,7 @@
             },
             "key": {
               "kind": "text",
-              "value": "7ba2133a2b5748a327b4ff4d11255f40b481a4e6e134331e87327979d6298c57"
+              "value": "a6ba4a960d4ad1169b669ab89fd287aa512716ef5233c80aedccb7f9871e3b82"
             }
           },
           "node": "cache"
@@ -258,6 +207,57 @@
         }
       ],
       "trace_version": 1
+    }
+  },
+  "request": {
+    "metadata": {
+      "limits": {
+        "max_candidates": 256,
+        "max_execution_time": {
+          "nanos": 0,
+          "secs": 10
+        },
+        "max_graph_nodes": 128,
+        "max_input_bytes": 1048576,
+        "max_questions": 32,
+        "max_retrieval_results": 64
+      },
+      "request_id": "conformance-abstain"
+    },
+    "policy": {
+      "abstain_below": 0.5,
+      "min_confidence": 0.8,
+      "risk": "low",
+      "verify_below": 0.65
+    },
+    "questions": [
+      {
+        "candidates": [
+          {
+            "description": "The database tier",
+            "id": "database"
+          },
+          {
+            "description": "The network path",
+            "id": "network"
+          },
+          {
+            "description": "The object store",
+            "id": "storage"
+          },
+          {
+            "description": "The edge gateway",
+            "id": "gateway"
+          }
+        ],
+        "id": "decision",
+        "text": "Which component is responsible?",
+        "type": "choice"
+      }
+    ],
+    "state": {
+      "facts": {},
+      "text": "zebra umbra quaffle"
     }
   }
 }
