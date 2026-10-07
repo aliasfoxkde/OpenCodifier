@@ -1875,3 +1875,179 @@ differ by exactly the Intelligence axis.**
    marketing material, carry the §14.1 divergence table with it —
    one number per surface, never a universal claim.
 
+
+### §14.6 The imajev / Jev-Omni family: the ecosystem converges on our serving contract (2026-10-06, user-directed)
+
+Six repos scanned (HF API metadata + full cards): `mohit67890/imajev-{4b,9b}`
+(the family's authors), `mindchain/imajev-{2b,4b}-GGUF` (third-party runnable
+GGUFs; an `imajev-9b-GGUF` also exists), `akhilaaa3/Jev-Omni` (12B merged
+multimodal classifier), `Reza2kn/Jev-Omni-Q4_K_M-GGUF` (its independent
+quantization). All Apache-2.0.
+
+1. **The de-facto ecosystem serving shape is ours.** Three independent
+   projects ship the same architecture OC's model crate already pins:
+   typed decisions over a candidate list, probabilities per option, no
+   generation; a small separate decision head/readout artifact (imajev
+   `decision_readout.safetensors` 2.6 MB; Jev-Omni `head.pt` →
+   `decision-head-f32.npz` 3.78 MiB; our kai/julia contracts with committed
+   fixtures); and a client-side temperature JSON shipped next to the weights
+   (imajev `calibration.json`, JEV-27B §11's L-BFGS fits, our `Calibration`
+   seam + D15). The Jev `POST /v1/systemone` wire shape (plus `images`,
+   `unknown_probability`, `abstained`) is the contract third parties build
+   against — our `opencodifier-schema` Jev adapter already speaks it.
+2. **imajev-2B readout mechanics confirmed from the artifacts** (downloaded
+   `decision_readout.json` + `calibration.json`): 255 option codes mapped to
+   fixed token ids (A–Z = ids 32–57; AA–JT = single vocab tokens), readout =
+   **vocab logits at the answer position restricted to those ids, ÷ T=1.646,
+   softmax** — the lm_head IS the readout, so a plain llama.cpp GGUF needs no
+   head file (contrast Jev-Omni, whose separate 256×hidden head must be
+   applied client-side over `llama-server --embedding --pooling none` hidden
+   states). Directly harnessable by `run_jev_native.py`'s single-position
+   readout machinery.
+3. **Set the prior before the run: the 2B is a previous-generation adapter**
+   (the 4B card says so explicitly) and its own calibration fit note records
+   the served number: **60.4 / ECE 0.123 on JevBench hard (rot4+cal)**, with
+   in-distribution T≈1. Our fork 2B's recorded 0.725 on the same leg already
+   beats it. The measured value of the #125 run is protocol-consistency on
+   OUR harness, not a leaderboard upset. The real open-model bar is
+   **imajev-4B**: JevBench hard 72.1% single-pass (+0.9 at 4 rotations),
+   ECE 0.082; board JevBench v1.4.2.2 #1/91 (composite 67.37); Image JevBench
+   76.4 (#2/50, best open); DecisionBench #3/56 (79.65). Q4_K_M 2.42 GB is
+   the follow-up arm if the 2B leg is worth extending.
+4. **Calibration policy evidence, now two-sided.** JEV-27B (§11) fits
+   per-kind temperatures; imajev-4b TRIED a per-type fit and REJECTED it —
+   it lowered hard-tier ECE but pushed pooled ECE past their 0.03 guard, so
+   they ship a single T=1.305. Resolution: the pooled-ECE guard decides,
+   which is exactly our ECE-worsening gate. #124's calibration A/B
+   (single-T vs per-kind on the same checkpoints, eval-only) is the local
+   measurement of this.
+5. **`unknown` as a trained readout class.** imajev trains the 256th readout
+   code as `unknown` with unknown targets at 17.15% of stage-1 data (capped
+   15% on teacher-labelled), 22% in the phase-3 hard stage; the wire response
+   carries `unknown_probability` + `abstained`. Our abstention lives at the
+   POLICY layer only; the head cannot express "can't tell" distributionally.
+   Concrete r3+ training delta → queued as #124 arm D (one variable per arm;
+   never confounded into the dedupe A/B).
+6. **Hard-question mining curriculum** (imajev phase 3): keep a question only
+   when every teacher agrees with intent, mine what the current release gets
+   WRONG from a 210k pool (58k text + 32k image kept), relabel failures with
+   teacher distribution targets, replay, and repeat one round (round 2 = the
+   13,247 still-failed + equal replay). Their shipped adapter is a
+   weight-space average of the hard adapter and the soft-target continuation.
+   A directly adoptable shape for our r3 data program; note it keeps hard
+   rows with distribution targets rather than dropping them — relevant
+   context for #124's drop-vs-down-weight measurement.
+7. **Reporting artifact worth adopting:** the automation/threshold trade
+   table — at ≥80/90/99% confidence: 63%/58%/40% automated at
+   94.9%/97.5%/100% correct. The same animal as our Board A `auto@5%`
+   column; add the confidence-threshold sweep to BENCHMARKS.md when the
+   post-training arms land.
+8. **Rotation averaging at serve time**: 4 option orders averaged, +0.9 hard
+   (350 ms vs 96 ms p50 on H100) — the serving-side twin of JEV-27B's 30%
+   permutation-training augmentation and our position-bias record. Cheap,
+   calibration-compatible (a separate rot4 calibration file), K× cost — a
+   verify-band/escalation lever, not a default-path lever.
+9. **Jev-Omni**: Gemma-4-12B-it merged + separate 256-way head; claims
+   86.15% micro on the 231 public JevBench decisions, ECE 0.040 (Medium);
+   sweet spot ≤20 options; audio ≤30 s, video 16 frames. 123 likes, 0
+   downloads — visibility is not adoption. Its Q4 quantization report is
+   honest about limits: 3/4 published text examples reproduced, max
+   probability delta 0.210, "do not assume source-equivalent probabilities
+   or calibration"; Q4-vs-BF16 benchmark deltas (choice 98.75% vs 95.42%)
+   are cross-protocol, not quantization effect sizes. Security note worth a
+   doc line on D26: the `--embedding` endpoint exposes hidden states —
+   loopback only (our backend already binds loopback).
+10. **The five Qwen3.5 GGUF conversion traps** (mindchain
+    `build_imajev_gguf.sh`): arch lookup lives in the converter table, not a
+    filename (no `qwen35.py`); `--mmproj` silently drops weights on the text
+    model; the config announces an MTP layer the checkpoint lacks
+    (`--no-mtp` fixes text and is undefined for vision); hand-patching
+    `block_count` creates a second bug; the mmproj step fails silently
+    without `preprocessor_config.json`. Recorded for conversion-adjacent
+    work; the no-self-conversions rule stands — mindchain's builds ARE the
+    ready-made artifacts for this family.
+11. **Validation-discipline additions from their card**: the blacken-the-image
+    probe (same question, blacked image; the distribution must move — 20 s
+    that separates a vision decision model from a text model handed a
+    picture) and the "task in state" effect (without the task, the same model
+    answers near-flat and "guessing looks plausible"). Adopt for any future
+    multimodal arm.
+
+**Deltas:** #125 created (imajev-2B arm: probe → text leg vs 2B-class peers,
+prior = below fork 2B per item 3); #124 rewritten as the measured A/B the
+user directed (2026-10-06) + calibration fold + arm D; watch imajev-4B Q4_K_M
+as the next arm if the 2B leg lands; #107 board watch: JevBench is now
+v1.5.4 (106 systems, Jev 1.13 #1 at 80.0) and Image JevBench v0.1.5 (50
+systems, Wity-1 API #1 at 80.2) — open-model bars 70.8 text / 76.4 image.
+
+### §14.7 JevBench open-weights board snapshot + the 2B/4B arm landscape (2026-10-06, user-directed)
+
+Live-board fetch (benchmarkheaven.com/jev-models, 2026-10-06): **JevBench
+v1.6.1** (board v1.7.12), 1,500 decisions/system, **100 ranked open-weights
+systems** (APIs live on a separate board; Jev 1.13.0 sits unranked as the
+reference at Cap 77.1, $0.032/1k, 0.24 s). Capability Score =
+mean(Intelligence, Calibration); cost and median latency are separate axes;
+"Jev-class" = within 2× Jev's cost and latency. Live boards drift — §14.6's
+v1.5.4/106-systems cite was the mindchain card's frozen snapshot; one number
+per surface extends to one *version* per citation.
+
+1. **The top is frontier-base-dominated**: #1 Quyet-1.0-Large 81.7 (Gemma-4-
+   31B-it), #2 deck-31B 77.6 (frozen 31B), #3 torchcast-decision-12b 71.7,
+   #4 Jev-Omni 71.3, #5 Winnow-12B Q8 71.2, #6 Cygnet 70.9 (all Gemma-4-12B),
+   #7 decider-chat-on-31B 70.6, #8 GEV-26B-Decide 70.1 (26B-A4B MoE + LoRA).
+   The decision-quality axis is being bought with backbone scale — which is
+   the ladder thesis' foil: the board's own cheap end ranks encoders and
+   rerankers on the same page (verdict-small, multilingual-e5-small, Cap
+   37.6 at $0.00087/1k), and our zero-ML engine arm is the local proxy for
+   that end.
+2. **The Qwen3.5-4B trio the user flagged** (all Q4_K_M ≈ 2.71 GB): #10
+   Plumb-4B 65.4, #11 decider-4b v2 64.9 (Qwen3.5-4B-**Base**), #12 JevK5
+   v0.3 64.2 — with #9 Bespoke Nimble 9B v3 66.8 (Qwen3.5-9B LoRA) just
+   above and #13 Clef-Flash 63.8 (Qwen3.5-9B post-train). Note Imajev-4B
+   sits at 61.9 Cap on the live board while its own card cites 67.37 on
+   v1.4.2.2 — cross-version board comparisons are exactly the trap §14.1's
+   divergence table exists for.
+3. **Rank 31 Decision 2B (FlyMy, "best 2B")**: Cap 54.8 with a split profile
+   — Intelligence 22.9, Calibration 86.8; the composite rewards calibration
+   over raw skill at the small end. Its card: openbmb/MiniCPM5-2B + LoRA
+   (26.2 M trained params), **pointer-head** readout (a third readout family:
+   imajev = letter-code tokens via lm_head; Jev-Omni = separate linear head
+   applied client-side; FlyMy = pointer head), frozen temperature from own
+   replay. Public-231 self-run 75.32% (easy 100 / standard 83.33 / hard
+   59.46). NOT clean open weights — "evaluation use per
+   EVALUATION-PERMISSION.md; a general commercial weight licence is not
+   asserted", plus disclosed provenance gaps (unestablished entitlement on
+   some upstream records). Evaluate-able, not adoptable.
+4. **decider-2b (Mapika, v11)**: Qwen3.5-2B-Base, Apache-2.0 clean. Readout =
+   **option-letter token logits at each answer slot ÷ fitted temperature** —
+   the same mechanics as imajev-2B, so ONE runner readout adapter evaluates
+   both arms. Per-type temperatures shipped (regression at T=1.145); ECE
+   in-task/held-out 0.0383/0.0847 (bf16) and 0.0385/0.0815 (Q4_K_M) — far
+   better calibrated than imajev-2B's self-recorded 0.123. Their 95-task /
+   144,226-question quantization regression: Q4_K_M −0.3 in-task / −0.5
+   held-out pts vs bf16 (worst: paws −4.5); **Q8_0 = bf16 quality (99.16%
+   row match, "the recommended file")**; one long-context outlier where
+   Q4_K_M chose another option (0.53 vs 0.62). Speed: 0.12–0.31 s/request
+   on 8 CPU threads — comfortably host-runnable.
+5. **Harness-discipline confirmations from decider's card**: batching
+   multiple prompts per decode shifts probabilities "by up to 0.02 in BF16
+   and 0.16 in Q4_K_M" — quantization comparisons are only valid under
+   identical batch shape. Our byte-locked suite's serial per-item decode is
+   already the correct discipline; record it as a stated requirement for any
+   third-party arm.
+6. **The 2B-class table for #125** (each on its OWN surface — not mutually
+   comparable; #125 exists to put them on ours): our fork 2B 0.725 JevBench
+   hard (verdict slots); decider-2b Q4_K_M 0.7984 in-task / 0.7472 held-out
+   (their 95-task suite); decision-2b hard 0.5946 (public-231 self-run);
+   imajev-2b 0.604 JevBench hard (its calibration note). Prior: our fork 2B
+   leads the hard leg on record; decider-2b leads on calibration.
+
+**Deltas:** #125's arm set is now: imajev-2B Q4_K_M (downloaded, readout
+confirmed) + decider-2b Q4_K_M (same readout adapter, Apache-2.0, download
+pending) vs our fork 2B, all on the byte-locked suite + 231 leg; one
+prompt per decode, quantization file recorded per arm. decision-2b-preview
+stays out of the default arm set (evaluation-only licence + provenance
+gaps) — record-only unless the user wants it run. Future-arm watch: the
+Qwen3.5-4B Q4_K_M trio (Plumb/decider-4b-v2/JevK5) defines the next size
+class; imajev-4B Q4_K_M (2.42 GB, phase-3 trained) is the single most
+informative 4B add.
