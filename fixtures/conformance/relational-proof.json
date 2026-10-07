@@ -1,0 +1,255 @@
+{
+  "request": {
+    "state": {
+      "text": "billing depends on catalog. catalog is down.",
+      "facts": {}
+    },
+    "questions": [
+      {
+        "type": "choice",
+        "id": "root_cause",
+        "text": "Which component is the root cause of the outage?",
+        "candidates": [
+          {
+            "id": "catalog",
+            "description": "The catalog service"
+          },
+          {
+            "id": "billing",
+            "description": "The billing service"
+          },
+          {
+            "id": "gateway",
+            "description": "The edge gateway"
+          }
+        ]
+      }
+    ],
+    "policy": {
+      "min_confidence": 0.8,
+      "verify_below": 0.65,
+      "abstain_below": 0.5,
+      "risk": "low"
+    },
+    "metadata": {
+      "request_id": "conformance-relational",
+      "limits": {
+        "max_input_bytes": 1048576,
+        "max_questions": 32,
+        "max_candidates": 256,
+        "max_graph_nodes": 128,
+        "max_execution_time": {
+          "secs": 10,
+          "nanos": 0
+        },
+        "max_retrieval_results": 64
+      }
+    }
+  },
+  "expected": {
+    "answers": [
+      {
+        "choice": "catalog",
+        "confidence": 1.0,
+        "distribution": {
+          "entries": [
+            {
+              "key": "catalog",
+              "probability": 1.0
+            },
+            {
+              "key": "billing",
+              "probability": 0.0
+            },
+            {
+              "key": "gateway",
+              "probability": 0.0
+            }
+          ]
+        },
+        "question_id": "root_cause",
+        "type": "choice"
+      }
+    ],
+    "confidence": {
+      "calibrated_confidence": 1.0,
+      "entropy": 0.0,
+      "margin": 1.0,
+      "ood_score": 0.0,
+      "top_probability": 1.0,
+      "verifier_agreement": null
+    },
+    "metrics": {
+      "cache_hit": false,
+      "candidates_in": 3,
+      "candidates_out": 3,
+      "verification_triggered": false
+    },
+    "outcome": "accept",
+    "trace": {
+      "entries": [
+        {
+          "detail": {
+            "facts": {
+              "kind": "integer",
+              "value": 0
+            },
+            "state_bytes": {
+              "kind": "integer",
+              "value": 44
+            }
+          },
+          "node": "normalize"
+        },
+        {
+          "detail": {
+            "hit": {
+              "kind": "boolean",
+              "value": false
+            },
+            "key": {
+              "kind": "text",
+              "value": "41de83c6ed9bdbb4e8ead93961314af40ce16264ceee36a7c3effdf3d91e779d"
+            }
+          },
+          "node": "cache"
+        },
+        {
+          "detail": {
+            "excluded": {
+              "kind": "integer",
+              "value": 0
+            },
+            "facts_set": {
+              "kind": "integer",
+              "value": 0
+            },
+            "fired": {
+              "kind": "integer",
+              "value": 0
+            },
+            "pinned": {
+              "kind": "integer",
+              "value": 0
+            }
+          },
+          "node": "rule"
+        },
+        {
+          "detail": {
+            "after": {
+              "kind": "integer",
+              "value": 3
+            },
+            "before": {
+              "kind": "integer",
+              "value": 3
+            },
+            "question": {
+              "kind": "text",
+              "value": "root_cause"
+            },
+            "removed": {
+              "kind": "integer",
+              "value": 0
+            }
+          },
+          "node": "filter"
+        },
+        {
+          "detail": {
+            "pruned": {
+              "kind": "integer",
+              "value": 0
+            },
+            "question": {
+              "kind": "text",
+              "value": "root_cause"
+            },
+            "safe_mode": {
+              "kind": "boolean",
+              "value": true
+            },
+            "scored": {
+              "kind": "integer",
+              "value": 3
+            },
+            "top_score": {
+              "kind": "float",
+              "value": 1.9616585060234526
+            }
+          },
+          "node": "lexical"
+        },
+        {
+          "detail": {
+            "calibrated": {
+              "kind": "float",
+              "value": 1.0
+            },
+            "clipped": {
+              "kind": "integer",
+              "value": 0
+            },
+            "model": {
+              "kind": "text",
+              "value": "relational-v1|builtin-lexical-v2"
+            },
+            "ood": {
+              "kind": "float",
+              "value": 0.0
+            },
+            "probability": {
+              "kind": "float",
+              "value": 1.0
+            },
+            "question": {
+              "kind": "text",
+              "value": "root_cause"
+            },
+            "top": {
+              "kind": "text",
+              "value": "catalog"
+            }
+          },
+          "node": "choice"
+        },
+        {
+          "detail": {
+            "outcome": {
+              "kind": "text",
+              "value": "accept"
+            },
+            "passed": {
+              "kind": "boolean",
+              "value": true
+            },
+            "question": {
+              "kind": "text",
+              "value": "root_cause"
+            },
+            "threshold": {
+              "kind": "float",
+              "value": 0.8
+            },
+            "verifier": {
+              "kind": "text",
+              "value": "none"
+            }
+          },
+          "node": "threshold"
+        },
+        {
+          "detail": {
+            "reached": {
+              "kind": "boolean",
+              "value": true
+            }
+          },
+          "node": "output"
+        }
+      ],
+      "trace_version": 1
+    }
+  }
+}
