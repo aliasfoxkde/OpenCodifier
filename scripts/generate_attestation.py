@@ -175,7 +175,15 @@ def verify_magic(magic: str, target: str, path: pathlib.Path) -> None:
             f"{path}: expected {rule['container']} for {target} — {magic}"
         )
     arch = rule["arch"]
-    if arch is not None and arch not in magic:
+    if rule.get("member"):
+        # An `ar` archive's outer magic names no architecture ("current ar
+        # archive"), so the arch contract lives one level down: the member
+        # probe below is the arch check.
+        if not archive_member_is_macho(str(arch), path):
+            raise AttestationError(
+                f"{path}: archive holds no Mach-O {arch} object member"
+            )
+    elif arch is not None and arch not in magic:
         raise AttestationError(
             f"{path}: magic says the artifact is not for {target} — {magic}"
         )
@@ -183,22 +191,34 @@ def verify_magic(magic: str, target: str, path: pathlib.Path) -> None:
         raise AttestationError(
             f"{path}: this target requires a statically linked artifact — {magic}"
         )
-    if rule.get("member") and not archive_member_is_macho(str(arch), path):
-        raise AttestationError(
-            f"{path}: first archive member is not a Mach-O {arch} object"
-        )
 
 
 def archive_member_is_macho(arch: str, path: pathlib.Path) -> bool:
-    """True when the first member of an `ar` archive is a Mach-O of `arch`.
+    """True when an `ar` archive holds a Mach-O of `arch`.
 
     Static libraries for the iOS leg are plain archives; the guarantee the
     attestation makes ("this really is an arm64 iOS library") lives one
     level down, in the members. The member bytes go to `file(1)` on stdin,
-    binary-safe.
+    binary-safe. Index members are skipped — rustc writes `__.SYMDEF`
+    first, and an archive index is neither Mach-O nor evidence of an
+    architecture; the probe reads the first real object member.
     """
-    listing = run(["ar", "t", str(path)], path.parent)
-    members = [line for line in listing.splitlines() if line.strip()]
+    try:
+        listing = run(["ar", "t", str(path)], path.parent)
+    except AttestationError as error:
+        if "file format not recognized" in str(error):
+            # Not an archive at all (e.g. an ELF handed to this probe):
+            # the answer is "no Mach-O member", not a crash.
+            return False
+        # Anything else is a tool failure on a real archive — reporting
+        # it as "no Mach-O member" would make the gate lie.
+        raise
+    index_members = {"__.SYMDEF", "__.SYMDEF_64", "/", "//"}
+    members = [
+        line
+        for line in listing.splitlines()
+        if line.strip() and line.strip() not in index_members
+    ]
     if not members:
         return False
     member = subprocess.run(
@@ -208,7 +228,13 @@ def archive_member_is_macho(arch: str, path: pathlib.Path) -> bool:
         check=False,
     )
     if member.returncode != 0 or not member.stdout:
-        return False
+        # A listed member that cannot be extracted is a tool or IO
+        # failure, never evidence about the architecture — fail loudly
+        # so the operator re-runs instead of trusting a false negative.
+        raise AttestationError(
+            f"{path}: ar could not extract member {members[0]!r} "
+            f"(rc={member.returncode})"
+        )
     probe = subprocess.run(
         ["file", "-b", "--", "-"],
         input=member.stdout,
@@ -383,9 +409,13 @@ def main() -> int:
 
     try:
         if args.check is not None:
+            # Resolve before use: the member probe runs `ar` from the
+            # artifact's parent directory, so a repo-relative path here
+            # would double and read as missing (build mode has resolved
+            # its --artifact since it existed; check mode now matches).
             attestation_path, artifact_path = (
-                pathlib.Path(args.check[0]),
-                pathlib.Path(args.check[1]),
+                pathlib.Path(args.check[0]).resolve(),
+                pathlib.Path(args.check[1]).resolve(),
             )
             document = load_attestation(attestation_path)
             note = check_written(attestation_path, artifact_path)
