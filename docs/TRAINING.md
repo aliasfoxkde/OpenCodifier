@@ -409,6 +409,378 @@ Non-goals carried from §8: no non-Apache-2.0 corpora, no cloud
 training by default; the burst node (T5500 2×V100) or Kaggle/Modal
 remain the GPU paths, user-gated.
 
+### 9.6 E1 r2 executed (2026-10-06 night chain) — GATE_FAIL, recorded
+
+The night chain ran to completion after the real arm finished
+(fedora, `logs/e1-night-chain.log`): trainer exit → gate eval →
+comparator arm → gate check. Every number below is from the artifacts.
+
+- **Training** (`runs/e1-a-qwen08b-r2`): 178,012 rows, 11,125 steps,
+  1 epoch, bf16 LoRA r16, final loss **0.0517** — plateaued (lr→0 by
+  schedule, loss flat over the last ~200 steps). 86/178,012 rows
+  truncated at max_len. Manifest `opencodifier.e1-train/1`, data sha
+  matches the pinned corpus. The arm is trained, not undertrained.
+- **Gate eval** (`results/e1-readout-q08b-r2`, suite sha
+  `9f0afaf6…`, 120/120 scored): **0.5667 vs the pre-registered 0.68
+  gate — GATE_FAIL.** Per-class: lexical_semantic 0.70, metadata_match
+  0.575, relational_compositional **0.425** (untuned base: 0.3333 at
+  0.25/0.40/0.35). +23.3 pp over base, but the gain is carried almost
+  entirely by lexical + metadata; relational is near-flat vs base.
+- **Comparator arm** (`results/e1-readout-qwen38-08b`): community
+  Qwen3.8-0.8B-Agentic-distill through the same readout: **0.35** ≈
+  untuned base. Nothing transfers to this readout without training on
+  it — sets expectations for the #125 imajev-2B probe the same way.
+- **JevBench leg correctly NOT run** (`e1-jevbench-leg-r2.log`:
+  `GATE_FAIL: suite 0.5667 < 0.68 — JevBench leg correctly NOT run
+  (pre-registered)`). No benchmark number may enter the record from a
+  sub-gate arm (release policy, HF gate).
+
+Diagnosis — measured, not guessed (corpus `e1-sft-v1.rows.jsonl`,
+178,012 rows): **74.6 % of the corpus is one question family** —
+`relevance` noul rows from `SargeDev/jev-distill-corpus` (132,781),
+vs choice 13,874 (7.8 %) and score 29,557 (16.6 %). Within the score
+rows, **89 % carry label `0`** (26,329/29,557) — a near-constant
+target teaches nothing. The suite's relational_compositional class
+has no training analog at all, which is exactly where the arm stayed
+at base level. Loss 0.0517 says the mix was fit; it does not say the
+mix was informative for the suite's shape.
+
+Next levers, in order (each cheap relative to a re-run):
+1. **r3 = rebalanced mix, same trainer**: cap the relevance family
+   (target ≤ 40 %), diversify templates inside every family, and
+   repair the score-label degeneracy (audit whether the vivere rows
+   are genuinely zero-heavy or the prep mapping collapsed them).
+   Relational-compositional training rows may be generated from the
+   engine's relational solver as exact-proof-verified items — with
+   the standing guardrail that no suite item (all 240) or a
+   re-rendering of one may enter the corpus (same exclusion rule the
+   prep already enforces).
+2. **Capacity, only if r3 still misses relational**: the 2 B tier
+   (§7 E3) — the Jev-Style reference shows 2 B ≈ 0.725 is attainable,
+   and #125's imajev-2B arm feeds the same question.
+3. **Not levers**: more epochs (loss plateaued at 0.0517 — more
+   training memorizes a skewed mix), readout redesign (F26: the same
+   verdict-slot readout reaches 0.8083 on Jev-Style weights — the
+   interface is fine, the data mix is not).
+
+Post-hoc confidence read of the r2 rows (`rows.jsonl`, no re-run
+needed — margins and ECE are recoverable from the recorded slot
+scores): lexical top-prob 0.813 / margin 0.660; metadata 0.525 /
+0.246; relational **0.502 / 0.226 — near-uniform**. Wrong answers
+carry mean margin 0.237 vs 0.485 for correct. Two consequences: (a)
+the failure is absent knowledge, not readout noise — and the model
+*knows where it doesn't know*, so even this arm is ladder-usable as
+an escalation trigger (low margin → next rung), which is the
+runtime's own thesis; (b) calibration is decent (ECE 0.10–0.13 per
+class) — preserve it: any contrastive/weighting fix must re-check
+ECE, not just accuracy.
+
+### 9.7 r3 protocol (2026-10-07) — systematic plan from the audit
+
+Code audit of `e1_train.py` / `decision_sft_prep.py` / `e1_eval.py`
+plus the r2 artifacts produced the findings; this section is the
+work-through order. Sound and unchanged: seeded shuffle, verdict-only
+masking, EOS supervision, fp16 GradScaler, clip 1.0, suite exclusion,
+train/eval tokenization identity (Qwen adds no BOS — verified).
+Gaps, mapped to phases: cumulative-mean loss logging (A1), no val
+split or checkpoint selection (A2/A3), silent truncated rows (A4),
+`--limit-rows` first-N skew (A5), unrecorded optimizer/library
+versions (A3), equal-weight micro-batch loss averaging (A4),
+family-skewed mix with degenerate score labels and zero relational
+analog (B), padding waste + eager attention (A7, perf pilots).
+
+**Phase A — instrument before training again.** Trainer v2 + eval v2;
+pure code, no GPU needed beyond a smoke.
+- A1 Windowed loss (last ~100 micro-batches), grad-norm, tokens/s,
+  LR — the cumulative mean stays in the manifest only.
+- A2 Stratified val slice held out from the CORPUS families (never
+  the suite): ~2k rows, per-family val loss every 500 steps.
+- A3 Save best-val AND last adapter; manifest records weight_decay,
+  betas, torch/transformers/peft versions.
+- A4 Loud-skip truncated rows at encode (count, never silently
+  train nothing); loss accumulated token-count-weighted.
+- A5 Shuffle (seeded) BEFORE `--limit-rows`; tokenized-feature cache
+  keyed by data sha (arrow/npz) so pilots skip re-tokenization.
+- A6 eval v2: margin, entropy, top-prob, ECE per class into
+  `summary.json` (proved recoverable post-hoc on r2 — bake it in).
+- A7 One `torch.profiler` pass on a pilot; apply the cheap wins it
+  names (predicted: sdpa attention, length-bucketed batching).
+
+**Phase B — data v2 (`e1-sft-v2`), the root-cause fix.**
+- B1 Rebalance: relevance family capped ≤ 40 %; template-diversity
+  audit per family (prefix census in the manifest).
+- B2 Score-degeneracy repair: audit vivere score rows vs the prep
+  mapping; degenerate (single-label) rows down-weighted, counted in
+  the manifest.
+- B3 Engine-generated relational items (Rust, workspace crate): the
+  relational solver emits dependency-chain restoration items — the
+  exact suite shape — each with exact-proof-verified gold AND
+  graph-plausible provably-wrong distractors (hard negatives from
+  the same fact graph). Guardrail in code: no suite item, prefix,
+  or near-dup render may enter the corpus (suite sha list embedded;
+  collision count asserted 0).
+- B4 Contrastive minimal pairs: one-fact corruptions that flip the
+  gold verdict (provably both sides); target ~1:1
+  negative-enriched:plain ratio on relational rows, ≤ 1:3 overall.
+- B5 Family weighting knobs in the trainer (per-family loss weight
+  or controlled resampling — one knob, manifest-recorded).
+- B6 Corpus contract gates extended in the prep manifest: family
+  share caps, label-entropy floor per family, pair counts,
+  suite-collision = 0.
+
+**Phase C — pilot campaign (30–45 min each on the 5060 Ti).**
+Pilots are 20–40 k rows through the instrumented trainer; the suite
+is scored only as the pre-registered judge (never for selection —
+per-family VAL loss selects).
+- P0 current mix, instrumented — validates the instrumentation
+  itself (windowed vs cumulative, val curve shape).
+- P1 rebalanced mix (B1+B2+B5) — rebalance effect alone.
+- P2 rebalanced + generated relational + hard negatives (B3+B4) —
+  the full fix candidate.
+- P3 ablation: P2 minus negatives — isolates the contrastive
+  contribution (the weighted-theory question, answered with a
+  number).
+- P4 capacity/config: MLP LoRA targets, r32, sdpa — only if P2
+  still moves relational weakly.
+- Gate to Phase D: pilot P2 relational ≥ 0.60 on a pilot-suite
+  slice with ECE ≤ 0.15, val relational curve still descending at
+  end. Otherwise iterate B, not D.
+
+**Phase D — full r3.** 178k-class v2 corpus, 1 epoch (2 only if the
+val curve is still descending at end — r2's "plateau" was a logging
+artifact, so this decision is now evidence-based). Pre-registered
+gates unchanged: suite ≥ 0.68 AND JevBench ≥ 0.6494 (beats base AND
+best community checkpoint); margins/ECE recorded post-hoc. Gate
+holds → JevBench leg (§7 E0 mechanics). Gate misses → E.
+
+**Phase E — escalation: 2 B tier on the T5500 (2×V100, fp16 +
+GradScaler — path already in the trainer).** Same protocol, same
+gates at the 2 B pre-registration (§7 E3: ≥ 0.75). Staged-bundle
+rule stands: data + pilot protocol + eval hookup validated BEFORE
+the node powers on, so powered-on time is pure training.
+
+**Phase F — Rust contributions (parallel track).**
+- F1 The relational/contrastive item generator lives in the
+  workspace (deterministic, exact proofs, unit-tested in CI) — it
+  is B3's implementation home, not a loose python script.
+- F2 Shared byte-exact macjev renderer in the workspace: python prep
+  and Rust serving adapter stop being two hand-synced
+  implementations; property test renders a corpus sample through
+  both and asserts equality.
+- F3 Profiler-informed Python config wins (sdpa, bucketing) stay
+  Python — Rust goes where determinism and proof live.
+
+**Phase G — research integration.** Three standing research tracks
+(small-LM LoRA knobs; hard negatives/contrastive/calibration; perf +
+instrumentation) run in parallel; their findings fold into the A/B
+knob manifests and cite sources in this file's Sources section.
+
+Standing gates carried: no suite item in training data (all 240,
+checked mechanically); no non-Apache-2.0 corpora; ECE re-checked on
+every arm (accuracy alone is not acceptance).
+
+### 9.8 Research integration (2026-10-07) — Phase G findings, dispositioned
+
+Three research tracks ran against the §9.7 plan before Phase B/C
+started. Adopted items are folded into the B/C knob manifests; the
+rest are recorded as rejected-with-reason so later phases do not
+re-litigate them.
+
+**Perf + instrumentation (track 3) — mostly adopted into trainer v2.**
+- FlashAttention-2 is Ampere+ only; NOT available on the T5500's
+  Volta V100s. PyTorch SDPA silently dispatches to the
+  memory-efficient CUTLASS backend below Ampere — functional and
+  fused, and the correct target for both hosts. Adopted: `--attn
+  sdpa` is now the trainer default with loud eager fallback (v2
+  A7); eager remains the r2-parity arm.
+- fp16 + GradScaler is mandatory on Volta (bf16 architecturally
+  absent, cc≥8.0 required). Already in the trainer; T5500 plan
+  confirmed fp16.
+- Plain DDP for 2×V100 at 0.8–2 B + LoRA; no FSDP/device_mesh. No
+  torch.compile/Triton on Volta. `output_attentions=True` silently
+  forces eager — never set it in this program.
+- Gradient checkpointing is an inherited TRL default that costs
+  ~20 % throughput; measure `max_memory_allocated()` and disable
+  where peak stays under ~70 % VRAM. Trainer v2 exposes
+  `--no-grad-checkpoint`; the decision is per-pilot, measured.
+- `pad_to_multiple_of=8` for fp16 tensor-core tile width — already
+  the PadCollate behavior.
+- Length-grouped batching: 1.5–2.5× throughput on high-variance
+  corpora but a documented eval-loss degradation risk (loss spikes
+  at megabatch boundaries; HF forum report). Adopted as
+  `--length-bucket`, DEFAULT OFF, and any use must A/B against
+  shuffle order on val loss — accuracy is judged only on eval loss
+  plus the suite, never on throughput.
+- TRL/Axolotl log schema adopted: windowed loss, pre-clip grad-norm
+  (alarm band 0.1–10), LR, tokens/s, entropy, memory peak,
+  per-family eval loss — trainer v2 emits all of these.
+- **Measured addition from smoke v2d (not from research):** the
+  dominant OOM at batch 4 × 2048 on 16 GB was the full-sequence
+  logits + grad pair (~4.9 GiB) — the loss only ever reads
+  supervised verdict positions, so trainer v2 now computes trunk
+  hidden states, gathers supervised positions, and projects only
+  those through lm_head (exact same CE, megabyte-scale logits).
+  Apply this pattern unchanged on the T5500.
+- **Measured addition (host):** the hybrid conv+recurrent Qwen3.5
+  arch requires `causal_conv1d` + `flash-linear-attention` for
+  fused kernels; r2 trained entirely on the slow reference
+  fallbacks without anyone noticing. Verify the fused import in
+  every new environment before judging throughput.
+
+**Hard negatives / data mix (track 2) — adopted into Phase B/C.**
+- Kabra et al. (ICLR 2026): SFT with plain CE on 100 % synthetic
+  multi-hop data raised in-distribution accuracy 0.024 → 0.774 but
+  FAILED to transfer to HotpotQA, while RL on the same data
+  transferred. Generator structural diversity (≥ 2 independent
+  template families) is the actual transfer fix; hard negatives are
+  the shortcut-killer, not the reasoning teacher. Adopted: B3
+  requires ≥ 2 independent relational template families (not one
+  templated shape), and the P2-vs-P3 ablation is interpreted
+  against this — if negatives lift in-distribution but the suite
+  does not move, the generator is too narrow, not the negatives too
+  few.
+- Solver-verified negatives only — never render an unverified
+  negative (RocketQA denoising; Zhan et al.: ~10 negatives optimal
+  in retrieval, deeper sampling hurts). Adopted: B3 negatives are
+  exact-proof-verified wrong answers over the same fact graph;
+  ≥ 3 near-misses per ≥ 5 options; hard:positive 1:2–1:4.
+- ANLI-style model-relative re-mining across 2–3 rounds; track the
+  mined-negative survival rate as the primary early
+  memorization-vs-generalization signal. Adopted as a P2/P3 metric.
+- In-domain val margin/ECE CANNOT distinguish shortcut from
+  rule-learning — need a held-out generator probe set plus an
+  AFLITE check (drop anything a weak lexical baseline solves;
+  > 70 % baseline accuracy = lexically separable negatives).
+  Adopted: B3 emits a held-out generator probe; the prep manifest
+  gains an AFLITE-style lexical-solvability number per family.
+- Temperature sampling p ∝ N^(1/T), T=2.5, 40 % per-family cap,
+  4× oversampling cap — adopted for B1 rebalancing. Minority-cell
+  manufacture from the symbolic generator (not class weights) for
+  the 89 %-constant score family — adopted into B2 (target ≥ 35 %
+  non-constant score rows... measured before committing the number).
+- DPO/ORPO rejected for this program (calibration tax survives
+  post-hoc recalibration) — CE + optional label smoothing ε=0.05–0.1
+  over wrong slots is the contrastive mechanism if P3 shows
+  negatives need a sharper loss than plain CE.
+- Single-softmax-over-slots head re-confirmed as the
+  calibration-correct form — oc-readout-v1 already is this.
+
+**LoRA knobs (track 1) — adopted as pilot arms, mostly rejected as
+defaults.**
+- r=16/α=32 kept as control; add r=8/α=16 parity arm (α=2r holds
+  output scale). r ≥ 32 rejected (rank-collapse evidence: vanilla
+  α/r scaling fails to improve beyond low rank — rsLoRA paper;
+  full-FT learns 10–100× LoRA rank — Biderman et al. 2405.09673).
+- LR is the real lever: the 2026 PEFT re-evaluation (2602.04998)
+  found four LoRA variants within 1–2 % of each other once LR is
+  tuned, optimal LR differing 10× between variants, and < 30 % of
+  surveyed PEFT papers tune LR at all. Adopted: pilot LR grid
+  {5e-5, 1e-4 (control), 2e-4} at fixed batch; LoRA+ λ=16 only as
+  an optional grid slot. NeFTune rejected (loss sits on 1–2 verdict
+  tokens; prompt-embedding noise has almost no loss surface).
+  rsLoRA rejected at r=16 (it matters at high rank only).
+- Epochs: 1 epoch default stands (repetition ceiling ≈ 4 epochs in
+  the literature; 173k rows is not data-limited). A 2-epoch arm
+  scored on ECE/Brier + abstention rate (not accuracy) is the
+  highest-novelty cheap measurement — the literature has no
+  repeated-epoch calibration-drift study for classification SFT.
+- Checkpoint selection: select on val LOSS (never accuracy — 2 k
+  rows ⇒ ~1.1 pt standard error, so sub-2-point "wins" are
+  selection noise); trainer v2 saves best-val AND last — the last
+  adapter is the zero-selection-bias reference the val sweep bets
+  against, and both get suite-scored before either is called the
+  result.
+
+### 9.8.1 Unsloth assessment (2026-10-07, user-directed)
+
+User asked whether Unsloth's claims ("LoRA, full fine-tuning,
+pretraining. All 2x faster, 70% less VRAM, no accuracy loss") can be
+adopted into our pipeline. Researched the Desktop docs, the GitHub
+README, and the requirements page; dispositioned against our two
+training hosts (fedora CPU; T5500 2×V100 Volta) and our arch
+(Qwen3.5 hybrid Gated-DeltaNet).
+
+**What Unsloth actually is**: a Triton-kernel patch layer over
+HuggingFace transformers + TRL (Unsloth Core, pip-installable) plus a
+no-code Desktop app. The headline numbers are measured against stock
+HF+TRL with full-sequence logits, no packing, no fused kernels.
+
+**Convergent findings — we already independently landed the two big
+memory levers**: (a) their fused cross-entropy does not materialize
+full-sequence logits — our supervised-position CE (v2e) is the same
+mechanism, measured 13 GiB → 3.03 GB peak on the 0.8 B; (b) fp16 +
+GradScaler on Volta is already our posture (§9.8 perf findings). The
+"70 % less VRAM" baseline includes losses we already took.
+
+**Adopt (measured, per-lever, into the pilot arms)**:
+1. *Length bucketing / padding-free batching* — our rows are short
+   and variable; padding waste is real compute. Plain
+   group-by-length bucketing is Volta-safe (no Triton needed).
+2. *8-bit optimizer (bnb adamw_8bit)* — optimizer state is a real
+   VRAM chunk on the 2 B tier; sm_70-supported.
+3. *All-module LoRA targets* (q,k,v,o,gate,up,down) — their ablation
+   claim; one pilot arm against our current target set costs nothing.
+4. *QLoRA NF4 arm for the 2 B tier* — weights 2 B fp16 ≈ 4 GB →
+   ~1.3 GB, buys batch/context headroom on 16 GB cards. The "no
+   accuracy loss" claim is OUR gate question: the arm must pass
+   suite ≥ 0.68 AND JevBench ≥ 0.6494 like everything else; quantized
+   base + LoRA changes the loss surface, so it is an arm, not a
+   default.
+
+**Reject**:
+- *Unsloth Desktop* — a no-code wrapper around the same library; our
+  trainer's manifest/trace determinism and supervised-position CE are
+  not expressible there.
+- *Wholesale adoption for the 0.8 B arm* — 3.03 GB / 16 GB is not a
+  VRAM-bound rung; their win over our current posture would be the
+  Triton fused-kernel share, which is the Ampere-preferring part.
+
+**Empirical probe (RESULT, 2026-10-07)** — scratch venv on fedora
+(`unsloth-probe-venv`, training env untouched; log:
+`fedora:~/oc-model-eval/logs/unsloth-probe-20261007.log`):
+
+1. *Import*: PASS — unsloth 2026.10.2 + unsloth_zoo 2026.10.2.
+2. *Arch recognition*: PASS — our exact base resolves as
+   `model_type=qwen3_5`, `Qwen3_5ForConditionalGeneration`; their
+   patcher knows the hybrid class.
+3. *Construction*: PASS — `FastLanguageModel.from_pretrained` builds
+   our 853 M-param weights on CPU (dtype resolved to bf16 on CPU; on
+   Volta the fp16 forcing would come from our trainer, as today).
+4. *LoRA forward/backward*: FAIL — **upstream bug in their text
+   path**: for this multimodal-aware class their patched tokenizer
+   routes plain text through the image processor
+   (`prepare_inputs_layout` → treats our training string as a
+   base64/URL image candidate and raises). Text-only SFT on
+   qwen3_5 is broken in their 2026.10.2 release, independent of our
+   stack.
+
+**Verdict**: the arch is supported; the drop-in is not — fighting
+their monkey-patched processor inside our deterministic trainer
+would buy a rung (0.8 B @ 3.03 GB / 16 GB) that is not VRAM-bound
+anyway. Unsloth-the-library is dropped; Unsloth-the-techniques are
+adopted directly into `e1_train.py` (the four adopt items above are
+all ordinary PyTorch/PEFT features and need no dependency): a
+group-by-length bucketing arm, an adamw_8bit arm, an all-module
+LoRA-target arm (pilot P-series), and a QLoRA NF4 arm reserved for
+the 2 B tier where VRAM actually binds. Every adopted arm passes the
+same suite ≥ 0.68 AND JevBench ≥ 0.6494 gates as everything else —
+"no accuracy loss" is a claim we measure, never inherit.
+
+Sources added this pass: arXiv:2405.09673 (LoRA rank vs full FT);
+arXiv:2312.03732 (rsLoRA); arXiv:2602.04998 + 2602.09492 (PEFT
+re-evaluations — LR dominance, batch size first-order); arXiv:
+2402.12354 (LoRA+); arXiv:2310.05914 (NeFTune); Thinking Machines
+"LoRA Without Regret"; Unsloth LoRA hyperparameters guide; Kabra
+et al. ICLR 2026 (synthetic multi-hop SFT vs RL transfer);
+RocketQA / Zhan et al. (denoised negatives, ~10 optimal); ANLI
+(re-mining protocol); AFLITE (lexical-solvability filter);
+NeurIPS 2023 "To Repeat or Not To Repeat" (arXiv:2305.13230);
+Muennighoff et al. data-constrained scaling (arXiv:2305.16264);
+"Unveiling Over-Memorization in Finetuning LLMs for Reasoning
+Tasks" (2025); arXiv:2602.22107 (validation criteria study);
+PyTorch SDPA / Volta capability matrix (FA2 Ampere+; no bf16, no
+compile, no Triton).
+
 ## 10. Transfer pathways into a small decision model (taxonomy, 2026-10-06)
 
 Recorded because it disciplines which experiment buys what. Four distinct
