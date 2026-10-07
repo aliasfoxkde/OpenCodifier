@@ -141,6 +141,26 @@ release-build target mode='build':
         fi
     }
 
+    # The Android leg links against the NDK's sysroot; without it the
+    # build dies at link time ("unable to find dynamic system library
+    # 'dl'"), so preflight refuses up front and names the fix.
+    android_linker=""
+    need_android_ndk() {
+        local ndk="${ANDROID_NDK_HOME:-}"
+        local wrapper
+        if [ -n "$ndk" ]; then
+            wrapper="$(ls "$ndk"/toolchains/llvm/prebuilt/*/bin/aarch64-linux-android24-clang 2>/dev/null | head -1)"
+        fi
+        if [ -n "${wrapper:-}" ] && [ -x "$wrapper" ]; then
+            android_linker="$wrapper"
+            printf '  ok        android NDK linker (%s)\n' "${wrapper%/toolchains*}"
+        else
+            printf '  MISSING   android NDK (fix: set ANDROID_NDK_HOME to an NDK with\n' >&2
+            printf '            toolchains/llvm/prebuilt/*/bin/aarch64-linux-android24-clang)\n' >&2
+            missing=$((missing + 1))
+        fi
+    }
+
     preflight() {
         # The tools every leg of the recipe depends on, before anything that
         # would die on their absence instead of naming them.
@@ -173,20 +193,30 @@ release-build target mode='build':
                 package="opencodifier-cli"
                 ;;
             aarch64-unknown-linux-gnu | x86_64-pc-windows-gnu | \
-            x86_64-apple-darwin | aarch64-apple-darwin | aarch64-linux-android)
+            x86_64-apple-darwin | aarch64-apple-darwin)
                 need cargo-zigbuild
                 need zig
                 builder="cargo zigbuild"
                 package="opencodifier-cli"
                 ;;
+            aarch64-linux-android)
+                # Android's system libraries (libdl, liblog, libunwind) ship
+                # only in the NDK — zig's fallback search cannot produce a
+                # linked binary without it, which the v0.5.0 matrix run
+                # proved by failing at link time after a toolchain-only
+                # preflight. The NDK's own clang wrapper is the linker.
+                need_android_ndk
+                export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$android_linker"
+                builder="cargo build"
+                package="opencodifier-cli"
+                ;;
             aarch64-apple-ios)
-                need cargo-zigbuild
-                need zig
-                builder="cargo zigbuild"
-                # No C linker exists for iOS on this host and none is needed:
-                # a static library is an archive of objects, not a linked
-                # image, so cargo never invokes one. The artifact is the
+                # Plain cargo, not zigbuild: zigbuild refuses this target,
+                # and a static library is an archive of objects, not a
+                # linked image, so cargo never invokes a linker anyway —
+                # no Apple SDK needed. The artifact is the
                 # opencodifier-ffi staticlib (C ABI, include/ocffi.h).
+                builder="cargo build"
                 package="opencodifier-ffi"
                 ;;
             wasm32-unknown-unknown)
@@ -262,7 +292,7 @@ release-build target mode='build':
             mkdir -p "$stage"
             asset="opencodifier-${version}-${target}.a"
             cp -f "$built" "${stage}/${asset}"
-            build_command="cargo zigbuild --release --locked --target ${target} -p ${package}"
+            build_command="cargo build --release --locked --target ${target} -p ${package}"
             ;;
         x86_64-pc-windows-gnu)
             # shellcheck disable=SC2086
@@ -304,6 +334,20 @@ release-build target mode='build':
         --target "$target" \
         --build-command "$build_command" \
         --repo-root "$repo_root"
+    # The attestation travels with the artifact: a release page that ships
+    # binaries without the JSON beside each one attests nothing. (The wasm
+    # leg stages first and attests the staged bundle, so its attestation
+    # already sits beside the artifact — the copy is a same-file no-op
+    # there.)
+    attestation="${built}.attestation.json"
+    if [ ! -s "$attestation" ]; then
+        printf 'FAIL  %s: the attest step left no attestation\n' "$attestation" >&2
+        exit 1
+    fi
+    staged_attestation="${stage}/$(basename "$asset").attestation.json"
+    if [ "$attestation" != "$staged_attestation" ]; then
+        cp -f "$attestation" "$staged_attestation"
+    fi
     printf 'staged   %s/%s\n' "$stage" "$asset"
 
 # Preflight every matrix target: toolchain readiness only, no builds.
@@ -350,8 +394,12 @@ release-checksums:
     #!/usr/bin/env bash
     set -euo pipefail
     shopt -s nullglob
+    # Scope to this release: prior releases keep their dist/ staging dirs,
+    # but a checksum manifest mixing versions would attest nothing.
+    version="$(cargo metadata --no-deps --format-version 1 | python3 -c \
+        'import json, sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "opencodifier-cli"))')"
     artifacts=()
-    for staged in dist/v*/; do
+    for staged in dist/v${version}-*/; do
         for file in "$staged"*; do
             case "$file" in
                 *.attestation.json) continue ;;
@@ -376,7 +424,12 @@ release-notes:
     #!/usr/bin/env bash
     set -euo pipefail
     shopt -s nullglob
-    attestations=(dist/v*/*.attestation.json)
+    # Scope to this release, like release-checksums: prior releases keep
+    # their staging dirs, and one release's notes cannot cite another's
+    # build attestations (the generator itself refuses mixed commits).
+    version="$(cargo metadata --no-deps --format-version 1 | python3 -c \
+        'import json, sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "opencodifier-cli"))')"
+    attestations=(dist/v${version}-*/*.attestation.json)
     if [ "${#attestations[@]}" -eq 0 ]; then
         printf 'no attestations under dist/ — run `just release-build <target>` first\n' >&2
         exit 1
