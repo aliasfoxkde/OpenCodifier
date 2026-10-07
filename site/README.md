@@ -5,6 +5,45 @@ inline SVG, committed CSS, no tracking). Every number on the page traces to a
 committed benchmark run (`docs/BENCHMARKS.md`,
 `benchmarks/decision-model/results/REPORT.md`, `docs/RESEARCH.md §14`).
 
+## The board page (`benchmarks.html`)
+
+Renders `board.csv` — a synced copy of
+`benchmarks/decision-model/results/board.csv` — client-side (`benchmarks.js`,
+quote-aware RFC 4180 parser, no dependencies). Filters (search, surface chips,
+quantization, tier, provenance, has-ECE / has-size) and the derived metrics
+(Trust score with an adjustable λ, accuracy-per-GiB) are computed in the
+browser; the formulas are disclosed on the page and ranking is **per benchmark
+surface**, never across them (`docs/RESEARCH.md §14.1`).
+
+After regenerating the results CSV, sync and redeploy:
+
+```bash
+just site-board                     # cp results/board.csv → site/board.csv
+wrangler pages deploy site --project-name=opencodifier
+```
+
+The page must never hand-type a number: if a figure isn't in the CSV or the
+docs of record, it doesn't ship.
+
+## The playground (`try.html`) and API reference (`api.html`)
+
+`try.html` runs the real engine (`crates/opencodifier-wasm`, zero-ML stack)
+compiled to WebAssembly, entirely in the visitor's tab. `site/wasm/` is a
+**build artifact, not source** — it is gitignored and rebuilt before every
+deploy:
+
+```bash
+just site-wasm                       # wasm-pack build --target web → site/wasm
+wrangler pages deploy site --project-name=opencodifier
+```
+
+The glue's async initializer is exported as the **default** export
+(`__wbg_init as default`) — `demo.js` calls it as `mod.default()`, not
+`mod.init()`. `api.html` documents the implemented surface only (routes,
+error codes, and envelope shapes are checked against the crate sources);
+its "run it" buttons hand a fixture to the playground via the
+`oc-preset` sessionStorage key.
+
 ## Local preview
 
 ```bash

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Pre-paint theme resolution — mirrors index.html; owned by site-core.js. -->
+<script>
+(function () {
+  "use strict";
+  var mode = "system";
+  try {
+    var v = localStorage.getItem("oc-theme");
+    if (v === "light" || v === "dark" || v === "system") mode = v;
+  } catch (e) { /* storage unavailable: system default */ }
+  var resolved = mode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : mode;
+  document.documentElement.setAttribute("data-theme", resolved);
+  document.documentElement.setAttribute("data-theme-mode", mode);
+})();
+</script>
+<title>OpenCodifier — the measured board</title>
+<meta name="description" content="Every OpenCodifier benchmark run in one filterable table: accuracy, calibration (ECE), latency, model size — with the derived-score formula disclosed and computed in your browser.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="tw.css">
+</head>
+<body>
+<a class="skip-link" href="#board">Skip to the board</a>
+
+<div class="bg-mesh" aria-hidden="true"></div>
+
+<nav class="nav">
+  <a class="brand" href="index.html">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#g)"/>
+      <path d="M7 12l3.2 3.2L17 8.6" stroke="#04120f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <defs><linearGradient id="g" x1="2" y1="2" x2="22" y2="22"><stop stop-color="#5eead4"/><stop offset="1" stop-color="#34d399"/></linearGradient></defs>
+    </svg>
+    opencodifier
+  </a>
+  <div class="nav-links">
+    <a href="index.html#numbers">Numbers</a>
+    <a href="benchmarks.html" aria-current="page">The board</a>
+    <a href="try.html">Try it</a>
+    <a href="api.html">API</a>
+    <a href="index.html#ladder">How it works</a>
+    <a href="index.html#integrity">Integrity</a>
+    <a href="index.html#faq">FAQ</a>
+  </div>
+  <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Theme: system (matches your device) — activate for light">
+    <svg class="tt-auto" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.2 14.5A8.3 8.3 0 0 1 9.5 3.8a8.3 8.3 0 1 0 10.7 10.7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+  <a class="nav-gh" href="https://github.com/aliasfoxkde/OpenCodifier" aria-label="OpenCodifier on GitHub" rel="noopener">
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+  </a>
+  <a class="btn btn-small" href="index.html#build">Start building</a>
+  <details class="nav-menu">
+    <summary aria-label="Open menu"><span></span><span></span><span></span></summary>
+    <div class="nav-menu-panel">
+      <a href="index.html#numbers">Numbers</a>
+      <a href="benchmarks.html" aria-current="page">The board</a>
+      <a href="try.html">Try it</a>
+      <a href="api.html">API</a>
+      <a href="index.html#ladder">How it works</a>
+      <a href="index.html#integrity">Integrity</a>
+      <a href="index.html#faq">FAQ</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier">GitHub ↗</a>
+    </div>
+  </details>
+</nav>
+
+<header class="hero" id="top">
+  <div class="hero-badges">
+    <span class="pill">every run, one schema</span>
+    <span class="pill">derived scores disclosed</span>
+    <span class="pill">one number per surface</span>
+  </div>
+  <h1>The measured <span class="grad">board.</span></h1>
+  <p class="hero-sub">
+    Every benchmark run behind this project — ours and the external rows we cite — rendered
+    straight from the committed CSV (<code>benchmarks/decision-model/results/board.csv</code>).
+    Filter it, sort it, and recompute the derived scores yourself; the formulas are on this page,
+    the coefficients are yours to change, and nothing is averaged across benchmark surfaces
+    unless you explicitly ask for it.
+  </p>
+</header>
+
+<main>
+
+<section id="board" class="section">
+  <div class="kicker">Live data</div>
+  <h2>192 measured rows. No hand-typed numbers.</h2>
+  <p class="lede">
+    The table renders the same CSV the repo's docs of record are generated from — every row is a
+    run with a committed artifact (see the footer for the source paths). Derived columns are marked
+    <span class="chip chip-derived">derived</span> and computed in your browser; everything else is
+    the CSV verbatim.
+  </p>
+
+  <noscript>
+    <p class="fineprint">The interactive board needs JavaScript. The same data is served verbatim at
+    <a href="board.csv">board.csv</a>, and the headline figures are on the
+    <a href="index.html#numbers">main page</a>.</p>
+  </noscript>
+
+  <div class="bench-controls" aria-label="Board filters">
+    <div class="ctl ctl-wide">
+      <label for="f-search">Search</label>
+      <input type="search" id="f-search" placeholder="model, qualifier, notes…" autocomplete="off">
+    </div>
+
+    <div class="ctl">
+      <label id="lbl-boards">Benchmark surface</label>
+      <div class="chip-row" id="f-boards" role="group" aria-labelledby="lbl-boards"></div>
+    </div>
+
+    <div class="ctl">
+      <label for="f-quant">Quantization</label>
+      <select id="f-quant"><option value="">All</option></select>
+    </div>
+
+    <div class="ctl">
+      <label for="f-tier">Tier</label>
+      <select id="f-tier"><option value="">All</option></select>
+    </div>
+
+    <div class="ctl">
+      <label for="f-prov">Provenance</label>
+      <select id="f-prov"><option value="">All</option></select>
+    </div>
+
+    <div class="ctl">
+      <label for="f-rank">Rank / best by</label>
+      <select id="f-rank">
+        <option value="trust">Trust score (derived)</option>
+        <option value="acc">Accuracy</option>
+        <option value="ipg">Accuracy per GiB (derived)</option>
+        <option value="ece">ECE — lower is better</option>
+        <option value="p50">p50 latency — lower is better</option>
+      </select>
+    </div>
+
+    <div class="ctl">
+      <label for="f-lambda">λ — ECE penalty in Trust score: <output id="lambda-out" for="f-lambda">0.50</output></label>
+      <input type="range" id="f-lambda" min="0" max="2" step="0.05" value="0.5">
+    </div>
+
+    <div class="ctl ctl-checks">
+      <label><input type="checkbox" id="f-hasece"> has ECE only</label>
+      <label><input type="checkbox" id="f-hassize"> model rows only (has measured size)</label>
+      <button type="button" class="tab" id="f-reset">Reset filters</button>
+    </div>
+  </div>
+
+  <div class="bench-summary" aria-live="polite">
+    <div id="sum-count" class="sum-count"></div>
+    <div id="sum-best" class="sum-best"></div>
+  </div>
+
+  <div class="formula-card card-honest card">
+    <h3>The derived-score formulas — disclosed, adjustable, and not board numbers</h3>
+    <dl class="formula-list">
+      <dt>Trust score <span class="chip chip-derived">derived</span></dt>
+      <dd><code>accuracy − λ · ECE</code>, λ yours to set above (default 0.5). A model that is right
+        but miscalibrated loses standing; a model that knows when it doesn't know keeps it. Rows
+        without a measured ECE get no Trust score — never a guessed one.</dd>
+      <dt>Accuracy per GiB <span class="chip chip-derived">derived</span></dt>
+      <dd><code>accuracy ÷ model file size (GiB)</code> — intelligence per gigabyte, the compression
+        view. Only rows that publish a measured artifact size get one.</dd>
+      <dt>Rank &amp; best-in-view</dt>
+      <dd>Ranked <strong>within each benchmark surface</strong>, never across them: a JevBench split
+        score and a locked-suite score measure different things (the divergence is documented in
+        <code>docs/RESEARCH.md §14</code>). "Best in view" above the table names one leader per
+        surface, by your chosen metric.</dd>
+    </dl>
+    <p class="fineprint">These formulas are presentation, not measurement — the board numbers are the
+      CSV. The only composite this project computes offline is the deployment composite (speed,
+      resource, and accuracy-trust legs), which ships as its own rows in the CSV.</p>
+  </div>
+
+  <div class="table-wrap" id="table-wrap">
+    <table class="bench-table" id="bench-table">
+      <caption class="visually-hidden">Benchmark runs with accuracy, calibration, latency, size, and derived scores. Click a column header to sort.</caption>
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <p class="fineprint" id="table-note"></p>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-grid">
+    <div class="foot-about">
+      <div class="foot-brand">opencodifier</div>
+      <p>Source of truth: <code>benchmarks/decision-model/results/board.csv</code>, generated by
+        <code>runner/board_csv.py</code> from the docs of record (<code>docs/BENCHMARKS.md</code>,
+        <code>benchmarks/decision-model/results/REPORT.md</code>) and synced into this page with
+        <code>just site-board</code>. External model rows are the numbers published by their
+        authors on the named surface. Latencies are CPU-only on consumer desktop hardware unless
+        the row's qualifier says otherwise.</p>
+      <!-- Ecosystem-wide tag: every site in the workshop carries this. -->
+      <a class="foot-tag" href="https://github.com/TaskWizer" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><path d="M7.5 12.2l3 3L16.5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Built with TaskWizer AI technologies
+      </a>
+    </div>
+    <nav class="foot-col" aria-label="Site">
+      <div class="foot-head">Site</div>
+      <a href="index.html">Home</a>
+      <a href="index.html#numbers">Numbers</a>
+      <a href="try.html">Try it in your browser</a>
+      <a href="api.html">API documentation</a>
+      <a href="index.html#faq">FAQ</a>
+    </nav>
+    <nav class="foot-col" aria-label="Source and data">
+      <div class="foot-head">Source &amp; data</div>
+      <a href="board.csv">board.csv (raw)</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier" rel="noopener">GitHub</a>
+      <a href="https://huggingface.co/TaskWizerAI" rel="noopener">Hugging Face ↗</a>
+    </nav>
+    <nav class="foot-col" aria-label="Ecosystem">
+      <div class="foot-head">Ecosystem</div>
+      <a href="https://vivere-5we.pages.dev/" rel="noopener">VIVERE ↗</a>
+      <a href="https://www.amortyx.com" rel="noopener">Amortyx ↗</a>
+      <a href="https://www.mcpmanage.com" rel="noopener">MCPManage ↗</a>
+      <a href="https://github.com/aliasfoxkde/aegis" rel="noopener">Aegis ↗</a>
+    </nav>
+  </div>
+  <p class="foot-links">Apache-2.0 · local-first · no telemetry · no external requests</p>
+</footer>
+
+<script src="site-core.js"></script>
+<script src="benchmarks.js"></script>
+</body>
+</html>

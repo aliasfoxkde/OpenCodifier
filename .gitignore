@@ -6,6 +6,8 @@
 /benchmarks/validation/runner/*/target
 # wasm-pack output (§57): rebuilt by `just check-wasm`, never committed
 /crates/opencodifier-wasm/pkg
+# site engine bundle: rebuilt by `just site-wasm` before every deploy
+/site/wasm
 
 # Release staging (`just release-matrix`, `just release-notes`): matrix
 # artifacts, their attestations, and the rendered release notes. Uploads ride

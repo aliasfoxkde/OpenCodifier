@@ -1,27 +1,16 @@
-/* OpenCodifier marketing site — vanilla JS, no dependencies.
+/* OpenCodifier landing page — vanilla JS, no dependencies.
    All numbers are measured runs; sources in the footer.
    Input contract: this page reads NO dynamic input (no URL params, no
-   storage, no fetch) — every string assigned to innerHTML below is a
-   compile-time literal in this file. Keep it that way; if a dynamic
-   source is ever added, switch those assignments to DOM construction. */
+   fetch). The theme mode is persisted by site-core.js under the "oc-theme"
+   localStorage key — the only storage this page touches, and it never
+   reaches innerHTML. The scenario cards below run the REAL deterministic
+   engine compiled to WASM (site/wasm/, same-origin, offline): every string
+   rendered into the scenario output is either a compile-time literal or a
+   value parsed from the engine's own JSON response for those literals. */
 "use strict";
 
-/* Progressive-enhancement contract: the HTML ships fully visible (html.no-js,
-   counters pre-filled with their final values, noscript summaries in the
-   interactive cards). This script opts into effects by flipping to html.js
-   and zeroing the counters so the animation starts honest. */
-document.documentElement.classList.remove("no-js");
-document.documentElement.classList.add("js");
-
-/* ---------- scroll reveal ---------- */
-const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-const io = new IntersectionObserver(
-  (entries) => entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }),
-  { threshold: 0.12 }
-);
-document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
-
 /* ---------- animated counters ---------- */
+const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 if (!prefersReduced) {
   document.querySelectorAll(".count").forEach((el) => {
     el.textContent = (0).toFixed(parseInt(el.dataset.decimals || "0", 10));
@@ -278,57 +267,172 @@ function selectRung(i) {
 }
 selectRung(0);
 
-/* ---------- scenarios ---------- */
+/* ---------- scenarios: the real engine, compiled to WASM ----------
+   No simulation. Clicking a card builds the request JSON (compile-time
+   literals below), runs engine.decide() in this tab, and renders the
+   response: rungs light from the actual trace nodes, the confidence is the
+   engine's calibrated value, and the wall time is measured around the call.
+   The WASM build ships the zero-ML stack (rungs 1–4): no embeddings, no
+   model, no verifier — which is exactly why the outcomes are honest. */
+const LIMITS = {
+  max_input_bytes: 1048576,
+  max_questions: 32,
+  max_candidates: 256,
+  max_graph_nodes: 128,
+  max_execution_time: { secs: 10, nanos: 0 },
+  max_retrieval_results: 64,
+};
+
 const SCENARIOS = {
   proof: {
-    path: [0],
-    lines: [
-      "<strong>request:</strong> “replicas must be 2; prod-03 currently runs 2 — is prod-03 compliant?”",
-      "<span class='ok'>rung 1 · exact rule:</span> unique satisfier derived over extracted facts → <span class='ok'>ACCEPT at confidence 1.0 (proof)</span>",
-      "wall: <span class='ms'>~1 ms</span> · rungs 2–7 never ran · zero ML touched this decision",
+    label: "compliance question",
+    state: "api depends on billing. billing depends on catalog. api is down. billing is down.",
+    question: "Which service is the root cause of the outage?",
+    candidates: [
+      ["api", "The public API tier"],
+      ["billing", "The billing service"],
+      ["catalog", "The product catalog"],
     ],
   },
   lexical: {
-    path: [3],
-    lines: [
-      "<strong>request:</strong> “route this ticket: duplicate charge on invoice #4411, refund demanded”",
-      "<span class='ok'>rung 4 · lexical:</span> BM25 best match clears the acceptance gate → <span class='ok'>ACCEPT</span> (calibrated p ≈ 0.9)",
-      "wall: <span class='ms'>~1 ms</span> · the 4B model was never loaded for this one",
+    label: "ticket-routing question",
+    state: "Ticket: customer reports a duplicate charge on invoice #4411 and demands a refund.",
+    question: "Which team should own this ticket?",
+    candidates: [
+      ["billing", "duplicate charges, invoice disputes, refunds and payment corrections"],
+      ["technical", "outages, error rates and broken functionality"],
+      ["sales", "pricing, quotes, renewals and new contracts"],
     ],
   },
   hard: {
-    path: [3, 5, 6],
-    lines: [
-      "<strong>request:</strong> “three services degraded, dependencies overlapping — restart which first?”",
-      "rung 4 · lexical: below gate → <em>escalate</em> (never guess on weak evidence)",
-      "<span class='ok'>rung 6 · 4B model:</span> all candidates scored in one parallel pass → calibrated distribution",
-      "<span class='ok'>rung 7 · verifier:</span> agrees → <span class='ok'>ACCEPT</span> — wall: <span class='ms'>~0.3–2.3 s</span> (CPU, context-dependent)",
-      "on our held-out suite only ~50% of items paid for the model rung; 1.7% ended in an honest <em>verify</em>",
+    label: "genuinely hard question",
+    state: "payments is degraded. search is degraded. uploads is degraded.",
+    question: "Which service should we restart first?",
+    candidates: [
+      ["payments", "handles money movement for checkout"],
+      ["search", "serves query traffic to the storefront"],
+      ["uploads", "ingests customer files"],
     ],
   },
 };
 
+/* trace node → ladder rung index (the zero-ML stack touches rungs 1–4) */
+const RUNG_OF_NODE = { rule: 0, cache: 1, filter: 2, lexical: 3, choice: 3 };
+
+function buildRequest(sc) {
+  return JSON.stringify({
+    state: { text: sc.state, facts: {} },
+    questions: [{
+      type: "choice",
+      id: "q1",
+      text: sc.question,
+      candidates: sc.candidates.map(([id, description]) => ({ id, description })),
+    }],
+    policy: { min_confidence: 0.8, verify_below: 0.65, abstain_below: 0.5, risk: "low" },
+    metadata: { request_id: "site-demo", limits: LIMITS },
+  });
+}
+
+const OUTCOME_TEXT = {
+  accept: (a) =>
+    "<span class='ok'>ACCEPT</span> at calibrated confidence " +
+    "<span class='ms'>" + a.confidence.toFixed(4) + "</span> — above the 0.8 gate, good to automate on.",
+  verify: (a) =>
+    "<span class='ms'>VERIFY</span>: top choice “" + a.choice + "” at " + a.confidence.toFixed(4) +
+    " — below the 0.8 accept gate, so the runtime hands it to the confidence-gated verifier " +
+    "instead of pretending to be sure. (This tab ships no verifier — zero-ML stack.)",
+  abstain: () =>
+    "<span class='ms'>ABSTAIN</span> at confidence 0.333 — a three-way coin flip. The runtime refuses " +
+    "to guess: abstention is a successful outcome, not an error.",
+};
+
+let enginePromise = null;
+function getEngine() {
+  if (!enginePromise) {
+    enginePromise = import("./wasm/opencodifier_wasm.js").then((m) => m.init().then(() => new m.WasmEngine()));
+  }
+  return enginePromise;
+}
+
+/* One warmup decide so the first click reports steady-state time, not
+   module materialization. Failure keeps the cards usable with an honest
+   message — the page still works, the live demo just says so. */
+let engineReady = null;
+function warmup() {
+  if (engineReady) return engineReady;
+  engineReady = getEngine()
+    .then((eng) => {
+      eng.decide(buildRequest(SCENARIOS.proof)); // warmup: steady-state timing
+      return { eng, identity: JSON.parse(eng.identity()) };
+    })
+    .catch((err) => { enginePromise = null; engineReady = null; throw err; });
+  return engineReady;
+}
+
 const outEl = document.getElementById("scenario-output");
 let scenarioTimer = null;
+
+function litRungs(traceEntries) {
+  const rungs = [];
+  traceEntries.forEach((en) => {
+    const r = RUNG_OF_NODE[en.node];
+    if (r !== undefined && !rungs.includes(r)) rungs.push(r);
+  });
+  return rungs.sort((a, b) => a - b);
+}
+
+function line(html) {
+  const div = document.createElement("div");
+  div.innerHTML = html; // literals + engine-parsed numbers/ids from our own request
+  return div;
+}
+
+function renderResult(sc, out, ms, identity) {
+  const frag = document.createDocumentFragment();
+  frag.appendChild(line("<strong>request:</strong> “" + sc.question + "” — <em>" + sc.label + "</em>, run in this tab"));
+  litRungs(out.trace.entries).forEach((r) => {
+    frag.appendChild(line("<span class='ok'>rung " + (r + 1) + " · " + RUNGS[r].name + ":</span> executed"));
+  });
+  const a = out.answers[0];
+  frag.appendChild(line(OUTCOME_TEXT[out.outcome](a)));
+  frag.appendChild(line("wall: <span class='ms'>" + ms.toFixed(2) + " ms</span> · engine: WASM in your browser · zero ML · no network · engine " +
+    identity.engine_semver + " [" + identity.model_id + "]"));
+  outEl.innerHTML = "";
+  outEl.appendChild(frag);
+}
+
 document.querySelectorAll(".scenario").forEach((btn) => {
   btn.addEventListener("click", () => {
-    const sc = SCENARIOS[btn.dataset.scenario];
-    document.querySelectorAll(".scenario").forEach((b) => b.classList.remove("running"));
+    document.querySelectorAll(".scenario").forEach((b) => {
+      b.classList.remove("running");
+      b.disabled = false;
+    });
     btn.classList.add("running");
+    btn.disabled = true;
     document.querySelectorAll(".rung").forEach((r) => r.classList.remove("lit"));
     if (scenarioTimer) scenarioTimer.forEach(clearTimeout);
     outEl.innerHTML = "";
-    const delays = prefersReduced ? sc.path.map(() => 0) : sc.path.map((_, i) => 350 + i * 550);
-    sc.path.forEach((rungIdx, i) => {
-      scenarioTimer = scenarioTimer || [];
-      scenarioTimer.push(setTimeout(() => {
-        const r = ladderEl.querySelector('.rung[data-i="' + rungIdx + '"]');
-        if (r) r.classList.add("lit");
+    outEl.appendChild(line("running the real engine in this tab…"));
+
+    warmup().then(({ eng, identity }) => {
+      const t0 = performance.now();
+      const out = JSON.parse(eng.decide(buildRequest(SCENARIOS[btn.dataset.scenario])));
+      const ms = performance.now() - t0;
+      const rungs = litRungs(out.trace.entries);
+      const delays = rungs.map((_, i) => (prefersReduced ? 0 : 250 + i * 350));
+      scenarioTimer = rungs.map((r, i) => setTimeout(() => {
+        const el = ladderEl.querySelector(".rung[data-i=\"" + r + "\"]");
+        if (el) el.classList.add("lit");
       }, delays[i]));
+      scenarioTimer.push(setTimeout(() => {
+        renderResult(SCENARIOS[btn.dataset.scenario], out, ms, identity);
+        btn.disabled = false;
+      }, prefersReduced ? 0 : 250 + rungs.length * 350));
+    }).catch(() => {
+      outEl.innerHTML = "";
+      outEl.appendChild(line("The WASM engine could not start in this browser. " +
+        "The full playground — and the native binary — are on the <a href='try.html'>Try it</a> page."));
+      btn.disabled = false;
     });
-    const textDelay = prefersReduced ? 0 : 350 + sc.path.length * 550;
-    scenarioTimer.push(setTimeout(() => {
-      outEl.innerHTML = sc.lines.join("<br>");
-    }, textDelay));
   });
 });
