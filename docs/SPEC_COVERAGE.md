@@ -1,6 +1,7 @@
 # Spec Coverage Map — PLANNING.md §§1–80 vs the Implemented Tree
 
-Status: audit record (2026-09-28). PLANNING.md is the source of truth for
+Status: audit record (2026-09-28; re-verified against the tree
+2026-10-06 after B5/B6/D26/D27/D30–D36 landed). PLANNING.md is the source of truth for
 intent; `docs/PLAN.md` tracked its own 17 phases (0–16) to done — this
 document is the check that every *section* of the spec has a landing
 place, not just every tracked phase. Verdicts: **done** (implemented,
@@ -32,10 +33,10 @@ shipped while the browser demo rides §58).
 | 10 | Deterministic Execution Engine | done | DAG executor, `Clock`/`Deadline` traits |
 | 11 | Deterministic Rules | done | `RuleEngine`, facts grammar, relational solver (Phase 15) |
 | 12 | Candidate Narrowing | done | metadata filter + hand-written BM25 |
-| 13 | Candidate-Conditioned Classification | done | `EmbeddingClassifier` + D16 decision-model tiers behind the runtime trait |
-| 14 | First ML Model | partial | candidate-conditioned scoring shipped; no trained in-house weights yet (D16 picked general small LLMs; §15/§62 are the training path) |
-| 15 | Model Training Architecture | planned | benchmark harness + dataset discipline exist (Phase 13); no trainer |
-| 16 | Training Data Format | planned | — |
+| 13 | Candidate-Conditioned Classification | done | `EmbeddingClassifier` + D16 decision-model tiers behind the runtime trait; `opencodifier-model` serving contracts (kai/julia with committed fixtures, llama.cpp loopback backend D26) |
+| 14 | First ML Model | partial | candidate-conditioned scoring shipped; no trained in-house weights published (D16 picked general small LLMs; the distill program runs out-of-tree, `docs/TRAINING.md` is the record, release is gate-gated) |
+| 15 | Model Training Architecture | partial | no trainer in-repo (deliberate: training tooling stays out-of-tree); the executed training record + harness discipline live in `docs/TRAINING.md`, and the serving side is pinned by the model-crate fixtures |
+| 16 | Training Data Format | partial | merged-corpus staging + quarantine/down-weight discipline recorded in `docs/TRAINING.md`; the corpus itself is withheld from the repo (release policy) |
 | 17 | Calibration | done | `Calibration` trait + fitted temperature artifacts (Phase 14, D15) |
 | 18 | Multi-Dimensional Confidence | done | top/margin/entropy + distributional OOD + verifier agreement |
 | 19 | Two-Model Verification | done | confidence-gated verifier cascade; never two classifiers per request |
@@ -46,10 +47,10 @@ shipped while the browser demo rides §58).
 | 24 | Embeddings | done | `EmbeddingBackend` trait + `EmbeddingClassifier` + benchmark bake-off (F20: ORT fp32 rung); the `embedding` graph node annotates through it, assembly refuses graphs that need a missing backend (D21, 18h) |
 | 25 | No Mandatory Vector Search | done | lexical path complete with zero ML |
 | 26 | Reranking | done | `Reranker` trait (`LexicalReranker`/`EmbeddingReranker`), the `rerank` node permutes never removes; trace discloses the order (D21, 18h) |
-| 27 | Model Runtime | done | `InferenceBackend`/`EmbeddingBackend`; `ort` behind the `onnx` feature (D2) |
+| 27 | Model Runtime | done | `InferenceBackend`/`EmbeddingBackend`; `ort` behind the `onnx` feature (D2); llama.cpp loopback backend behind `llamacpp` (D26); kai/julia contract runtimes behind their features |
 | 28 | Why ONNX + Burn | done-as-decided | D2; Burn unexamined until ONNX fails a need |
 | 29 | WASM | done-runtime | `opencodifier-wasm` compiled for `wasm32-unknown-unknown`; `WasmEngine` (decide/validate/run/identity) proven in Node over the real artifact; model rung stays native (D23, 18j) |
-| 30 | Tokenization | partial | deterministic bytes-over-4 estimate (D2) everywhere a budget needs one; no tokenizer — deliberate while no model arm runs in-process |
+| 30 | Tokenization | partial | deterministic bytes-over-4 estimate (D2) everywhere a budget needs one; the model crate ships a fixture-scoped byte-level BPE encoder (kai) and deterministic id schemes (julia), while the general tokenizer deliberately stays with the upstream model directory (`tokenizers` feature) |
 
 ## Interfaces and delivery (§§31–39)
 
@@ -59,8 +60,8 @@ shipped while the browser demo rides §58).
 | 32 | MCP Tool Introspection | done | rmcp schema introspection |
 | 33 | Skills | done | `skills/` — README protocol + all eight §33 areas (routing, model-selection, tool-selection, tool-gating, context-pruning, escalation, verification, memory-selection) |
 | 34 | Built-in Recipes | done | the twelve §34 areas as runnable graphs + paired requests + captured responses under `recipes/`; `opencodifier recipe list` / `recipe install [--dest] [--force]` ship the fleet inside the binary (`include_str!`), installed bytes byte-identical to the committed copies (18g) |
-| 35 | CLI | done | `decide`/`graph validate`/`serve`/`models verify`/`mcp serve`/`recipe list`/`recipe install`, D13 exit codes, `--focus-budget` |
-| 36 | HTTP API | done | eight `/v1` routes: `/v1/decide`, `/v1/batch`, `/v1/graph/validate`, `/v1/graph/run` (D19), `/v1/validate`, `/v1/models`, `/v1/capabilities`, `/v1/healthz`. There is no `/v1/systemone` HTTP route — the Jev wire shape is an `opencodifier-schema` library adapter, not an endpoint (an earlier version of this row claimed it as a sixth endpoint; corrected 2026-09-30 against `routes.rs`); 20 contract tests + 30-check e2e suite (18e) |
+| 35 | CLI | done | `decide`/`graph validate`/`serve`/`models verify`/`mcp serve`/`recipe list`/`recipe install`, D13 exit codes, `--focus-budget`, and the `--llama*` decision-rung flags (D26) |
+| 36 | HTTP API | done | nine `/v1` routes: `/v1/decide`, `/v1/batch`, `/v1/chat/completions` (strict-schema chat surface), `/v1/graph/validate`, `/v1/graph/run` (D19), `/v1/validate`, `/v1/models`, `/v1/capabilities`, `/v1/healthz`. There is no `/v1/systemone` HTTP route — the Jev wire shape is an `opencodifier-schema` library adapter, not an endpoint (an earlier version of this row claimed it as a sixth endpoint; corrected 2026-09-30 against `routes.rs`); contract tests + 30-check e2e suite (18e) |
 | 37 | Local Server | done | loopback default, explicit `--host` flag, gate-tested |
 | 38 | Privacy | done | no telemetry/cloud/accounts; explicit downloads; SHA-256 manifests (D14) |
 | 39 | Project Layout | done | `docs/PROJECT_STRUCTURE.md` matches the tree |
@@ -135,5 +136,8 @@ shipped while the browser demo rides §58).
 **Larger efforts (own phases):**
 9. ~~**§57+§68 WASM**~~ **runtime done** — `opencodifier-wasm` over the zero-ML stack, Node-proven artifact (D23, 18j); the browser demo rides §58.
 10. **§58 publication** — build matrix recorded (D24 status 2026-10-01: five targets at their named levels, no foreign-arch execution claimed); windows link+smoke and registry publication (Homebrew/winget/crates.io — outward, explicit user go) remain.
-11. **§15/§16 training pipeline** (with §62's shadow-ledger dataset discipline).
+11. **§15/§16 training pipeline** (with §62's shadow-ledger dataset
+    discipline) — in flight as the out-of-tree distill program
+    (`docs/TRAINING.md`); in-repo side stays the serving contracts +
+    fixtures, per §15/§16 rows above.
 12. **§60 implementation** — Amortyx integration per the promotion gate.

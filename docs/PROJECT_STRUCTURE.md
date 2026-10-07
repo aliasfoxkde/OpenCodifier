@@ -34,6 +34,10 @@ opencodifier/
 │   ├── opencodifier-engine/    # DAG executor, rules, caches, narrowing, BM25, relational solver (done)
 │   ├── opencodifier-runtime/   # InferenceBackend traits, mocks; `onnx` deferred by gate (done, D2)
 │   ├── opencodifier-model/     # decision serving contract + embedding classifier + manifests (done)
+│   │     src/decision.rs, embedding.rs, manifest.rs — serving contract
+│   │     src/kai.rs + kai/     — kai contract + committed fixtures
+│   │     src/julia.rs + julia/ — julia contract + committed fixtures
+│   │     src/llamacpp.rs       — llama.cpp loopback backend (D26, `llamacpp` feature)
 │   ├── opencodifier-http/      # axum 0.8 /v1 API (done)
 │   ├── opencodifier-cli/       # clap CLI binary `opencodifier` (done)
 │   ├── opencodifier-mcp/       # rmcp 2.2 stdio server, six codify_* tools (done)
@@ -45,8 +49,12 @@ opencodifier/
 ├── models/                  # model artifacts (never committed; SHA-256 verified)
 ├── benchmarks/              # per-release criterion baselines (first committed: D9, 2026-10-01)
 │   ├── baselines/criterion/ # engine + http d9-baseline estimates (committed from B1 on)
-│   └── decision-model/      # Phase 13 model-pick benchmark: byte-locked suite, arms, results
-├── site/                    # static marketing page (Cloudflare Pages direct-upload; no build)
+│   ├── decision-model/      # Phase 13 model-pick benchmark: byte-locked suite, arms, results
+│   │     results/REPORT.md  # comparison page of record; docs/BENCHMARKS.md links here
+│   └── validation/          # validation-campaign record (#104; VALIDATION.md summary)
+├── site/                    # static marketing page (Cloudflare Pages direct-upload;
+│                            #   Tailwind runs as a dev-time pipeline only —
+│                            #   `npm run build:css` writes the committed tw.css)
 └── docs/                    # PLANNING.md (founding), PLAN.md (live plan), …
                              #   RELEASE_NOTES_TEMPLATE.md is the release-notes
                              #   skeleton; `just release-notes` fills its
