@@ -44,6 +44,20 @@ error codes, and envelope shapes are checked against the crate sources);
 its "run it" buttons hand a fixture to the playground via the
 `oc-preset` sessionStorage key.
 
+## Brand assets (`assets/`)
+
+`brand-mark.svg` is the canonical vector mark — geometry extracted from
+`docs/images/OpenCodifier_Logo.svg` (paths `apg-1`/`apg-2`, the export's
+nested transforms baked into two plain ones, off-canvas design-tool clutter
+dropped) with the brand gradient `#728ee4 → #3a00ad`. The nav and the
+favicon use it; `favicon.svg` adds the dark rounded tile for legibility at
+16 px. `brand-mark.png`, `brand-label.png`, `brand-lockup.png` are
+transparency-keyed extractions of the raster art in `docs/images/` (alpha =
+max of the RGB channels, unpremultiplied color, so the neon-glow falloff
+survives on both themes); `og-image.png` (1200×630, referenced by every
+page's og/twitter meta) composes the lockup. If the `docs/images/` art
+changes, re-extract — never hand-edit the derived assets.
+
 ## Local preview
 
 ```bash

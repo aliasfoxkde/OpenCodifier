@@ -24,6 +24,19 @@
 <title>OpenCodifier — decisions, not paragraphs</title>
 <meta name="description" content="Local-first decision runtime. Typed decisions with calibrated confidence, on hardware you already own. No API keys. No cloud.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:site_name" content="OpenCodifier">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://opencodifier.pages.dev/">
+<meta property="og:title" content="OpenCodifier — decisions, not paragraphs">
+<meta property="og:description" content="Local-first decision runtime. Typed decisions with calibrated confidence, on hardware you already own. No API keys. No cloud.">
+<meta property="og:image" content="https://opencodifier.pages.dev/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The OpenCodifier mark — a hexagonal C around a code glyph — over the wordmark.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://opencodifier.pages.dev/assets/og-image.png">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="tw.css">
 </head>
@@ -34,11 +47,7 @@
 
 <nav class="nav">
   <a class="brand" href="#top">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#g)"/>
-      <path d="M7 12l3.2 3.2L17 8.6" stroke="#04120f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-      <defs><linearGradient id="g" x1="2" y1="2" x2="22" y2="22"><stop stop-color="#5eead4"/><stop offset="1" stop-color="#34d399"/></linearGradient></defs>
-    </svg>
+    <img src="assets/brand-mark.svg" alt="" width="22" height="22">
     opencodifier
   </a>
   <div class="nav-links">
@@ -79,6 +88,7 @@
 </nav>
 
 <header class="hero" id="top">
+  <img class="hero-mark" src="assets/brand-mark.png" alt="" width="112" height="112">
   <div class="hero-badges">
     <span class="pill">Apache-2.0</span>
     <span class="pill">local-first</span>
@@ -107,8 +117,8 @@
       <div class="stat-label">best published <em>open</em> decision model<br>on the 231-item public split</div>
     </div>
     <div class="stat">
-      <div class="stat-num">$<span class="count" data-target="0" data-decimals="0">0</span></div>
-      <div class="stat-label">marginal cost per decision<br>local, offline, self-hosted</div>
+      <div class="stat-num">$<span class="count" data-target="0.007" data-decimals="3">0.007</span></div>
+      <div class="stat-label">modeled cost per 1M decisions<br>engine rung, board pricing basis</div>
     </div>
     <div class="stat">
       <div class="stat-num"><span class="count" data-target="231" data-decimals="0">231</span>/231</div>
@@ -145,7 +155,7 @@
       <div class="chart-note" id="chart-note"></div>
       <noscript>
         <p class="chart-note">The interactive comparison needs JavaScript. The same measured figures are in the
-        cards below: 2.0 ms engine p50, 76.6% on the public split, $0 marginal cost, 231/231 deterministic replay.</p>
+        cards below: 2.0 ms engine p50, 76.6% on the public split, $0.007 modeled cost per 1M decisions, 231/231 deterministic replay.</p>
       </noscript>
     </div>
   </div>
@@ -157,8 +167,10 @@
         <li><strong>Speed.</strong> The deterministic engine decides in a median of <strong>2.0 ms</strong> per item —
           roughly <strong>300× faster</strong> than a raw 4B LLM prompted for the same answers (651 ms), and the
           full escalation stack still medians under 150 ms because most items never reach the model.</li>
-        <li><strong>Cost.</strong> Marginal cost is <strong>$0</strong>. It runs on the machines you have —
-          CPU-only, offline, no accounts, no metered API.</li>
+        <li><strong>Cost.</strong> Modeled at <strong>$0.007 per 1M decisions</strong> on the third-party
+          board's own pricing basis — ~125× under the cheapest row on that board (verdict-small, $0.87/1M)
+          and ~4,600× under the hosted-Jev reference ($32/1M). On your own hardware the marginal cost is
+          your electricity: CPU-only, offline, no accounts, no metered API.</li>
         <li><strong>Open accuracy leadership.</strong> Our 4B-class model rung scores <strong>76.6%</strong> on the
           public split — ahead of every purpose-built open model published on it (Kev-4B 73.7, Jev-Style-2B 73.6,
           decider-2b 71.0, Laya 58.4).</li>
@@ -462,8 +474,8 @@
     </details>
     <details class="reveal">
       <summary>Does it beat Jev?</summary>
-      <p>On latency, cost, privacy, and determinism: yes, by wide margins — 2.0 ms vs hundreds of ms, $0 marginal
-        vs metered API, fully local vs hosted. On raw accuracy against hosted Jev: not yet — 76.6% vs 86.6% on the
+      <p>On latency, cost, privacy, and determinism: yes, by wide margins — 2.0 ms vs hundreds of ms, a modeled
+        $0.007 vs ~$32 per 1M decisions (the third-party board's pricing basis), fully local vs hosted. On raw accuracy against hosted Jev: not yet — 76.6% vs 86.6% on the
         public split. We publish both numbers because the divergence is the honest state of the field, and the
         full-system re-run is on the roadmap.</p>
     </details>

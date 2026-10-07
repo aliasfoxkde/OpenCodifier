@@ -746,3 +746,9 @@ html.js .reveal.in { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
   html.js .reveal { opacity: 1; transform: none; }
 }
+
+/* ---------- brand mark (hero) ---------- */
+.hero-mark {
+  display: block; width: 112px; height: 112px;
+  margin: 0 auto 1.4rem;
+}
