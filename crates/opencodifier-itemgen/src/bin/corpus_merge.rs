@@ -606,7 +606,7 @@ mod tests {
             out: dir.join("rows.jsonl"),
             manifest: dir.join("manifest.json"),
             target_total: target,
-            seed: 0x0C0D_1F0_2026,
+            seed: 0x0C0D_1F00_2026,
         }
     }
 
@@ -649,7 +649,8 @@ mod tests {
         let base = write_prepped(&dir, "base.jsonl", &base_rows());
         let slice = write_prepped(&dir, "slice.jsonl", &slice_rows());
 
-        let mut first = args_for(&dir, &[base.clone()], &[slice.clone()], 40);
+        let mut first =
+            args_for(&dir, std::slice::from_ref(&base), std::slice::from_ref(&slice), 40);
         first.out = dir.join("rows-a.jsonl");
         first.manifest = dir.join("manifest-a.json");
         run(&first).expect("first merge");
@@ -698,14 +699,8 @@ mod tests {
         let args = args_for(&dir, &[base], &[slice], 60);
 
         let error = run(&args).expect_err("the noul-share gate fails");
-        assert!(
-            error.to_string().contains("gate noul_share_le_cap FAILED"),
-            "{error}"
-        );
-        assert!(
-            args.manifest.exists(),
-            "the manifest survives the failure (evidence rule)"
-        );
+        assert!(error.to_string().contains("gate noul_share_le_cap FAILED"), "{error}");
+        assert!(args.manifest.exists(), "the manifest survives the failure (evidence rule)");
         fs::remove_dir_all(&dir).expect("scratch cleans");
     }
 
@@ -720,7 +715,7 @@ mod tests {
         assert!(error.to_string().contains("has no rows"), "{error}");
 
         // Slices alone meeting the target leave no base budget.
-        let error = run(&args_for(&dir, &[base.clone()], &[slice], 9))
+        let error = run(&args_for(&dir, std::slice::from_ref(&base), &[slice], 9))
             .expect_err("slices >= target");
         assert!(error.to_string().contains("already meet the target"), "{error}");
 
@@ -740,10 +735,7 @@ mod tests {
         counts.insert("score".to_owned(), 2_400_usize);
         let shares = temperature_shares(&counts);
         for (family, share) in &shares {
-            assert!(
-                *share <= FAMILY_SHARE_CAP + 1e-9,
-                "{family} share {share} exceeds the cap"
-            );
+            assert!(*share <= FAMILY_SHARE_CAP + 1e-9, "{family} share {share} exceeds the cap");
         }
         let total: f64 = shares.values().sum();
         assert!((total - 1.0).abs() < 1e-9, "shares conserve mass: {total}");
@@ -801,15 +793,15 @@ mod tests {
         census.insert("score".to_owned(), 20_usize);
 
         let with_slices = evaluate_gates(true, 20, &census, 100, 18);
-        assert_eq!(with_slices.evaluated["noul_share_le_cap"], true);
-        assert_eq!(with_slices.evaluated["score_nonconstant_ge_min"], true);
+        assert!(with_slices.evaluated["noul_share_le_cap"]);
+        assert!(with_slices.evaluated["score_nonconstant_ge_min"]);
         assert!(with_slices.not_applicable.is_empty());
         assert!((with_slices.noul_share - 0.30).abs() < 1e-12);
         assert!((with_slices.score_nonconstant_share - 0.90).abs() < 1e-12);
 
         let over = evaluate_gates(true, 20, &census, 60, 5);
-        assert_eq!(over.evaluated["noul_share_le_cap"], false, "30/60 busts the cap");
-        assert_eq!(over.evaluated["score_nonconstant_ge_min"], false, "5/20 < 35%");
+        assert!(!over.evaluated["noul_share_le_cap"], "30/60 busts the cap");
+        assert!(!over.evaluated["score_nonconstant_ge_min"], "5/20 < 35%");
 
         let slice_less = evaluate_gates(false, 0, &census, 100, 2);
         assert!(slice_less.evaluated.is_empty());
@@ -865,7 +857,8 @@ mod tests {
     fn write_rows_is_seeded_and_lossless() {
         let dir = next_scratch("write");
         let out = dir.join("rows.jsonl");
-        let slices: Vec<String> = vec!["{\"id\": \"s1\"}".to_owned(), "{\"id\": \"s2\"}".to_owned()];
+        let slices: Vec<String> =
+            vec!["{\"id\": \"s1\"}".to_owned(), "{\"id\": \"s2\"}".to_owned()];
         let sampled: Vec<String> = (0..5).map(|i| format!("{{\"id\": \"b{i}\"}}")).collect();
 
         let mut rng = Rng::new(99);
@@ -875,8 +868,7 @@ mod tests {
         let mut ids: Vec<String> = lines
             .iter()
             .map(|line| {
-                serde_json::from_str::<serde_json::Value>(line)
-                    .expect("row")["id"]
+                serde_json::from_str::<serde_json::Value>(line).expect("row")["id"]
                     .as_str()
                     .expect("id")
                     .to_owned()
