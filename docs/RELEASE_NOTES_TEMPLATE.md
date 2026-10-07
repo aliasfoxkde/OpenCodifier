@@ -70,6 +70,13 @@ Mark one per row.
        never executed here
      - static-link check — musl artifacts additionally asserted statically
        linked
+     - archive + object-magic — a static library: an `ar` archive whose
+       first member is a Mach-O object of the right arch (the iOS artifact
+       is never linked here — no Apple SDK; D24 records why that is the
+       honest artifact)
+     - bundle + load-test — the wasm dual-glue bundle loaded through both
+       glue targets in Node (web initializer + nodejs entry), not a
+       browser execution
 -->
 
 | Target | Level earned | Why |
@@ -77,6 +84,12 @@ Mark one per row.
 | x86_64-unknown-linux-gnu | `<filled-by-human>` | `<receipt>` |
 | x86_64-unknown-linux-musl | `<filled-by-human>` | `<receipt>` |
 | aarch64-unknown-linux-gnu | `<filled-by-human>` | `<receipt>` |
+| x86_64-pc-windows-gnu | `<filled-by-human>` | `<receipt>` |
+| x86_64-apple-darwin | `<filled-by-human>` | `<receipt>` |
+| aarch64-apple-darwin | `<filled-by-human>` | `<receipt>` |
+| aarch64-linux-android | `<filled-by-human>` | `<receipt>` |
+| aarch64-apple-ios | `<filled-by-human>` | `<receipt>` |
+| wasm32-unknown-unknown | `<filled-by-human>` | `<receipt>` |
 
 Known gaps to state on the release page rather than paper over: no foreign
 arch is executed here (no qemu, no arm hardware), so aarch64 artifacts are

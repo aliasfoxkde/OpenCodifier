@@ -6,7 +6,14 @@ project does not yet guarantee a stable public API — version `0.x`
 releases may break, and every breaking change is recorded in this file
 (and reflected in `docs/DECISIONS.md` where a binding decision moves).
 
-## [Unreleased]
+## [0.5.0] — 2026-10-07
+
+The escalation ladder gains its model rung and its cross-rung walk,
+and the runtime gains embedding surfaces: the transport-neutral wire
+boundary shared by the WASM binding and a new C-ABI static library,
+plus a nine-leg release matrix with per-target attestations.
+
+### Added
 
 - B6 — cross-rung escalation (D27): a configured, ordered `Rung` list
   (`classifier` + optional per-rung calibration and gate policy) the
@@ -36,6 +43,38 @@ releases may break, and every breaking change is recorded in this file
   end-to-end escalation: default policy accepts a confident distribution,
   a 0.95 per-kind `LadderPolicy` sends it to `Verify` with the
   `policy_source` trace fact naming the model rung.
+- `opencodifier_engine::wire` — the transport-neutral native-schema
+  boundary (§57, §68): `decide`, `decide_batch` (the `POST /v1/batch`
+  envelope, `MAX_BATCH` ceiling, per-item `{"response"}`/`{"error"}`
+  results), `validate_graph`, and `run_graph` (D19 throwaway-engine
+  parity). Every embedding surface walks the same decode → decide →
+  encode contract and reports the same stable codes.
+- `opencodifier-ffi` (D24) — the zero-ML runtime as a C-ABI static
+  library over the wire module: ten `oc_*` entry points with a
+  thread-local last error, panic and null-argument guards, stable
+  `ffi.*` codes alongside `schema.*`/`engine.*`/`graph.*`, and a
+  hand-written `include/ocffi.h` whose signatures the integration
+  tests redeclare, so header and implementation cannot drift
+  silently. The workspace lint table is restated with exactly one
+  documented exception (`unsafe_code`, allowed only where pointer
+  handling is the boundary) and a drift-guard test pins the copy to
+  the workspace table.
+- Nine-leg release matrix (`just release-matrix`, D24): x86_64
+  gnu + musl, aarch64 gnu, x86_64 windows, macOS x86_64 + aarch64,
+  android aarch64, iOS aarch64 (a static library — an archive of
+  objects, produced honestly without an Apple SDK), and the
+  wasm32-unknown-unknown dual-glue bundle (web + nodejs). Every
+  artifact gets a per-target attestation whose container and probe
+  rules `generate_attestation.py` now generalizes; `just
+  release-checksums` writes `sha256sums.txt`.
+
+### Changed
+
+- `opencodifier-schema` is a regular dependency of the engine (was
+  dev-only) so `wire` can decode at the boundary; layering stays
+  acyclic (schema depends on core only — D11's default row). The WASM
+  crate is slimmed to call the shared module; its 17 tests, including
+  the conformance fixtures, pass unchanged.
 
 ## [0.4.0] — 2026-10-02
 

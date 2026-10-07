@@ -1359,7 +1359,7 @@ checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
 name = "opencodifier-cli"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -1378,7 +1378,7 @@ dependencies = [
 
 [[package]]
 name = "opencodifier-core"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1387,7 +1387,7 @@ dependencies = [
 
 [[package]]
 name = "opencodifier-engine"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "criterion",
  "opencodifier-core",
@@ -1403,7 +1403,7 @@ dependencies = [
 
 [[package]]
 name = "opencodifier-ffi"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "opencodifier-core",
  "opencodifier-engine",
@@ -1413,7 +1413,7 @@ dependencies = [
 
 [[package]]
 name = "opencodifier-http"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "axum",
  "criterion",
@@ -1429,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "opencodifier-mcp"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "opencodifier-core",
  "opencodifier-engine",
@@ -1443,7 +1443,7 @@ dependencies = [
 
 [[package]]
 name = "opencodifier-model"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "opencodifier-core",
  "opencodifier-engine",
@@ -1458,7 +1458,7 @@ dependencies = [
 
 [[package]]
 name = "opencodifier-runtime"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "ort",
  "thiserror",
@@ -1466,7 +1466,7 @@ dependencies = [
 
 [[package]]
 name = "opencodifier-schema"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "opencodifier-core",
  "proptest",
@@ -1478,7 +1478,7 @@ dependencies = [
 
 [[package]]
 name = "opencodifier-wasm"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "opencodifier-core",
  "opencodifier-engine",
