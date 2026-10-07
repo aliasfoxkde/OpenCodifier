@@ -126,6 +126,12 @@ def main() -> int:
     rows = []
     by_class: Counter = Counter()
     n_class: Counter = Counter()
+    conf_sum: Counter = Counter()
+    margin_sum: Counter = Counter()
+    ent_sum: Counter = Counter()
+    bin_ok: Counter = Counter()
+    bin_n: Counter = Counter()
+    bin_conf: Counter = Counter()
     with torch.no_grad():
         for it in items:
             text, opt_ids = render_choice(it["context"], it["question"],
@@ -146,15 +152,39 @@ def main() -> int:
             k = max(range(len(scores)), key=lambda i: scores[i])
             pred = opt_ids[k]
             ok = pred == it["answer"]
-            by_class[it["class"]] += int(ok)
-            n_class[it["class"]] += 1
-            rows.append({"id": it["id"], "class": it["class"],
+            # Post-hoc confidence anatomy (A6): margin between the top
+            # two slot probabilities and Shannon entropy over the slot
+            # distribution — the r2 post-mortem showed relational items
+            # separate from lexical ones on these long before accuracy
+            # does. ECE bins use the predicted-slot probability.
+            srt = sorted(probs, reverse=True)
+            margin = srt[0] - (srt[1] if len(srt) > 1 else 0.0)
+            ent = -sum(p * math.log(p) for p in probs if p > 0)
+            cls = it["class"]
+            by_class[cls] += int(ok)
+            n_class[cls] += 1
+            conf_sum[cls] += probs[k]
+            margin_sum[cls] += margin
+            ent_sum[cls] += ent
+            bin_i = min(9, int(probs[k] * 10))
+            bin_ok[bin_i] += int(ok)
+            bin_n[bin_i] += 1
+            bin_conf[bin_i] += probs[k]
+            rows.append({"id": it["id"], "class": cls,
                          "answer": it["answer"], "pred": pred,
-                         "p": round(probs[k], 4), "correct": ok,
+                         "p": round(probs[k], 4),
+                         "margin": round(margin, 4),
+                         "entropy": round(ent, 4), "correct": ok,
                          "slot_scores": [round(s, 4) for s in scores]})
 
     n_ok = sum(1 for r in rows if "correct" in r)
     acc = sum(r["correct"] for r in rows if "correct" in r)
+    # Expected Calibration Error over 10 predicted-probability bins:
+    # sum over bins of (bin share) * |bin accuracy - bin mean confidence|.
+    n_scored = sum(bin_n.values())
+    ece = sum(bin_n[b] / n_scored
+              * abs(bin_ok[b] / bin_n[b] - bin_conf[b] / bin_n[b])
+              for b in bin_n) if n_scored else None
     args.out.mkdir(parents=True, exist_ok=True)
     with (args.out / "rows.jsonl").open("w", encoding="utf-8") as fh:
         for r in rows:
@@ -167,6 +197,14 @@ def main() -> int:
         "items": len(rows),
         "scored": n_ok,
         "accuracy": round(acc / n_ok, 4) if n_ok else None,
+        "ece": round(ece, 4) if ece is not None else None,
+        "confidence_by_class": {
+            c: {
+                "mean_top_prob": round(conf_sum[c] / n_class[c], 4),
+                "mean_margin": round(margin_sum[c] / n_class[c], 4),
+                "mean_entropy": round(ent_sum[c] / n_class[c], 4),
+            }
+            for c in sorted(n_class)},
         "accuracy_by_class": {c: {"acc": round(by_class[c] / n_class[c], 4),
                                   "n": n_class[c]}
                               for c in sorted(n_class)},
