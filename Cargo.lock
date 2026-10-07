@@ -1428,6 +1428,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "opencodifier-itemgen"
+version = "0.5.0"
+dependencies = [
+ "clap",
+ "opencodifier-core",
+ "opencodifier-engine",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "opencodifier-mcp"
 version = "0.5.0"
 dependencies = [

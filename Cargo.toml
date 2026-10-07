@@ -13,6 +13,7 @@ members = [
     "crates/opencodifier-cli",
     "crates/opencodifier-wasm",
     "crates/opencodifier-ffi",
+    "crates/opencodifier-itemgen",
 ]
 
 [workspace.package]
