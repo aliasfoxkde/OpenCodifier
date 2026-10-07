@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Pre-paint theme resolution — mirrors index.html; owned by site-core.js. -->
+<script>
+(function () {
+  "use strict";
+  var mode = "system";
+  try {
+    var v = localStorage.getItem("oc-theme");
+    if (v === "light" || v === "dark" || v === "system") mode = v;
+  } catch (e) { /* storage unavailable: system default */ }
+  var resolved = mode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : mode;
+  document.documentElement.setAttribute("data-theme", resolved);
+  document.documentElement.setAttribute("data-theme-mode", mode);
+})();
+</script>
+<title>OpenCodifier — API reference (WASM, HTTP, MCP, CLI)</title>
+<meta name="description" content="The complete OpenCodifier API surface: WebAssembly module for the browser, loopback HTTP server, MCP tools, and CLI — one canonical decision IR, one error-code taxonomy, abstention as a first-class response.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="tw.css">
+</head>
+<body>
+<a class="skip-link" href="#api">Skip to the API reference</a>
+
+<div class="bg-mesh" aria-hidden="true"></div>
+
+<nav class="nav">
+  <a class="brand" href="index.html">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#g)"/>
+      <path d="M7 12l3.2 3.2L17 8.6" stroke="#04120f" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+      <defs><linearGradient id="g" x1="2" y1="2" x2="22" y2="22"><stop stop-color="#5eead4"/><stop offset="1" stop-color="#34d399"/></linearGradient></defs>
+    </svg>
+    opencodifier
+  </a>
+  <div class="nav-links">
+    <a href="index.html#numbers">Numbers</a>
+    <a href="benchmarks.html">The board</a>
+    <a href="try.html">Try it</a>
+    <a href="api.html" aria-current="page">API</a>
+    <a href="index.html#ladder">How it works</a>
+    <a href="index.html#integrity">Integrity</a>
+    <a href="index.html#faq">FAQ</a>
+  </div>
+  <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Theme: system (matches your device) — activate for light">
+    <svg class="tt-auto" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.2 14.5A8.3 8.3 0 0 1 9.5 3.8a8.3 8.3 0 1 0 10.7 10.7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+  <a class="nav-gh" href="https://github.com/aliasfoxkde/OpenCodifier" aria-label="OpenCodifier on GitHub" rel="noopener">
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+  </a>
+  <a class="btn btn-small" href="try.html">Run it live</a>
+  <details class="nav-menu">
+    <summary aria-label="Open menu"><span></span><span></span><span></span></summary>
+    <div class="nav-menu-panel">
+      <a href="index.html#numbers">Numbers</a>
+      <a href="benchmarks.html">The board</a>
+      <a href="try.html">Try it</a>
+      <a href="api.html" aria-current="page">API</a>
+      <a href="index.html#ladder">How it works</a>
+      <a href="index.html#integrity">Integrity</a>
+      <a href="index.html#faq">FAQ</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier">GitHub ↗</a>
+    </div>
+  </details>
+</nav>
+
+<header class="hero" id="top">
+  <div class="hero-badges">
+    <span class="pill">one canonical IR</span>
+    <span class="pill">four surfaces: WASM · HTTP · MCP · CLI</span>
+    <span class="pill">stable error-code taxonomy</span>
+  </div>
+  <h1>The API <span class="grad">surface.</span></h1>
+  <p class="hero-sub">
+    Every interface over the same canonical decision IR. Wire formats are adapters — native JSON
+    here, OpenAI and Anthropic shapes at the edges — and the runtime's refusals are part of the
+    contract: typed error codes, HTTP 200 abstentions, and per-item isolation in batches.
+    This page documents only what the code actually implements.
+  </p>
+</header>
+
+<main>
+
+<!-- ============ WASM ============ -->
+<section id="wasm" class="section">
+  <div class="kicker">JavaScript / WASM</div>
+  <h2>The engine as an ES module</h2>
+  <p class="lede">
+    The same binary this site's <a href="try.html">playground</a> runs. Everything is synchronous
+    after <code>init()</code>; all methods take and return JSON strings, so there is no FFI
+    surface to misuse and no worker required.
+  </p>
+
+  <pre class="pg-pre" role="img" aria-label="Import and boot code sample"><code>import init, { WasmEngine, opencodifier_version } from "./wasm/opencodifier_wasm.js";
+
+await init();
+const engine = new WasmEngine();
+
+JSON.parse(engine.identity());
+// { "engine_semver": "0.4.0", "graph_version": 1, "calibration_version": 0,
+//   "embedding_model": "none", "model_id": "relational-v1" }
+opencodifier_version(); // crate version, independent of the engine identity</code></pre>
+
+  <div class="table-wrap">
+    <table class="pg-table api-table">
+      <caption class="visually-hidden">WasmEngine methods</caption>
+      <thead><tr><th>Method</th><th>Input</th><th>Returns</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>decide(json)</code></td><td>one request</td><td>decision JSON</td>
+          <td>The full pipeline on the zero-ML stack. <a class="pg-link" href="#run-proof">Run it →</a></td>
+        </tr>
+        <tr>
+          <td><code>decide_batch(json)</code></td><td><code>{"requests":[…]}</code>, ≤ 16</td>
+          <td><code>{"count", "results":[…]}</code></td>
+          <td>Shared cache across the batch; each item is
+            <code>{"response"}</code> or <code>{"error"}</code> — one bad item never fails the rest.
+            Same envelope as <code>POST /v1/batch</code> and MCP <code>codify_batch</code>.</td>
+        </tr>
+        <tr>
+          <td><code>validate_graph(json)</code></td><td>graph</td>
+          <td><code>{"version","nodes"}</code></td>
+          <td>Structural check; cycles are <code>graph.cycle</code>.</td>
+        </tr>
+        <tr>
+          <td><code>run_graph(graph, request)</code></td><td>graph + request</td><td>decision JSON</td>
+          <td>Executes a validated graph. A node kind needing a backend this build lacks
+            returns <code>engine.missing_backend</code> — it never silently substitutes.</td>
+        </tr>
+        <tr>
+          <td><code>identity()</code></td><td>—</td><td>identity JSON</td>
+          <td>The exact versions that decide cache keys and reproduce decisions.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="api-h3">Error semantics</h3>
+  <p class="body-text">
+    Every method is <code>Result&lt;String, JsValue&gt;</code>: failures <em>throw</em> with the
+    standard error envelope as the exception value — the same <code>{"error":{"code","message"}}
+    </code> body the HTTP API returns. There is no third channel: no partial results, no
+    console-only warnings.
+  </p>
+
+  <div class="card card-honest pg-note">
+    <h3>What the WASM build does not include</h3>
+    <p>The zero-ML stack (rules → cache → filter → lexical → choice) and the graph engine.
+      Rungs 5–7 — embedding similarity, the decision model, the verifier — require inference
+      backends a browser tab does not ship; graphs that need them return
+      <code>engine.missing_backend</code>. That refusal is the honest behavior, not a gap.</p>
+  </div>
+</section>
+
+<!-- ============ HTTP ============ -->
+<section id="http" class="section">
+  <div class="kicker">HTTP</div>
+  <h2>Loopback server, decision-shaped routes</h2>
+  <p class="body-text">
+    <code>opencodifier serve</code> binds <code>127.0.0.1:8177</code> by default
+    (<code>--addr</code> to change; any non-loopback bind additionally requires
+    <code>--allow-remote</code>). Request and response bodies are UTF-8 JSON with a 1&nbsp;MiB cap.
+  </p>
+
+  <div class="table-wrap">
+    <table class="pg-table api-table">
+      <caption class="visually-hidden">HTTP routes</caption>
+      <thead><tr><th>Route</th><th>Body</th><th>Returns</th></tr></thead>
+      <tbody>
+        <tr><td><span class="method">POST</span> <code>/v1/decide</code></td>
+          <td>one request</td><td>decision (or refusal envelope)</td></tr>
+        <tr><td><span class="method">POST</span> <code>/v1/batch</code></td>
+          <td><code>{"requests":[…]}</code> ≤ 16</td>
+          <td><code>{"count","results"}</code> with per-item isolation</td></tr>
+        <tr><td><span class="method">POST</span> <code>/v1/graph/validate</code></td>
+          <td>graph</td><td><code>{"version","nodes"}</code></td></tr>
+        <tr><td><span class="method">POST</span> <code>/v1/graph/run</code></td>
+          <td><code>{"graph", "request"}</code></td><td>decision</td></tr>
+        <tr><td><span class="method">POST</span> <code>/v1/validate</code></td>
+          <td>one request</td><td>validation result — no decision is made</td></tr>
+        <tr><td><span class="method">POST</span> <code>/v1/chat/completions</code></td>
+          <td>OpenAI shape</td><td>OpenAI shape — see below</td></tr>
+        <tr><td><span class="method">GET</span> <code>/v1/models</code></td>
+          <td>—</td><td>the engine identity as a model row</td></tr>
+        <tr><td><span class="method">GET</span> <code>/v1/capabilities</code></td>
+          <td>—</td><td>decision kinds, endpoints, limits, cache state, identity</td></tr>
+        <tr><td><span class="method">GET</span> <code>/v1/healthz</code></td>
+          <td>—</td><td>liveness</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="api-h3">Wire formats — the <code>x-opencodifier-format</code> header</h3>
+  <p class="body-text">
+    Applies to the decision routes. Values: <code>native</code> (default when the header is
+    absent), <code>openai</code>, <code>anthropic</code>, <code>jev</code>. Everything is
+    normalized into the canonical IR before the pipeline sees it; unknown values are refused
+    with <code>schema.invalid_value</code> rather than silently coerced.
+  </p>
+
+  <h3 class="api-h3">OpenAI compatibility route</h3>
+  <p class="body-text">
+    <code>POST /v1/chat/completions</code> accepts OpenAI-format messages (the concatenated
+    message text becomes the decision state) and answers with a completion whose JSON content —
+    when <code>response_format</code> declares a strict schema — is the typed decision: choice,
+    confidence, and the refusal cases expressed as schema properties. Existing OpenAI-speaking
+    clients get decisions without learning a new envelope; prose-generation fields are refused
+    with <code>schema.unsupported_generation_field</code>, because pretending to generate prose
+    is how wrappers lie.
+  </p>
+
+  <h3 class="api-h3">Status codes</h3>
+  <p class="body-text">
+    Decisions — <strong>including abstentions</strong> — are <code>200</code>. Refusals are
+    <code>400</code> with the error envelope; oversize bodies and unknown routes are the
+    framework's own errors. An abstention never masquerades as a failure and a failure never
+    masquerades as a low-confidence decision.
+  </p>
+</section>
+
+<!-- ============ errors ============ -->
+<section id="errors" class="section">
+  <div class="kicker">Error taxonomy</div>
+  <h2>Every refusal has a stable code</h2>
+  <p class="body-text">
+    One envelope everywhere — <code>{"error": {"code": "…", "message": "…"}}</code> — and the
+    same codes across WASM, HTTP, MCP, and CLI. Messages are typed, never an echo of your
+    payload. These are the codes the runtime can emit today:
+  </p>
+
+  <div class="api-code-grid">
+    <div class="api-code-card">
+      <h4><code>ir.*</code> — canonical IR validation</h4>
+      <p><code>empty_field</code> · <code>empty_candidates</code> · <code>duplicate_candidate</code>
+        · <code>too_few_levels</code> · <code>duplicate_level</code> · <code>invalid_policy</code>
+        · <code>invalid_id</code> · <code>invalid_probability</code> ·
+        <code>distribution_not_normalized</code> · <code>empty_questions</code></p>
+    </div>
+    <div class="api-code-card">
+      <h4><code>schema.*</code> — adapter layer</h4>
+      <p><code>unsupported_construct</code> · <code>unsupported_generation_field</code> ·
+        <code>missing_field</code> · <code>invalid_type</code> · <code>invalid_value</code> ·
+        <code>limit_exceeded</code> · <code>empty_questions</code> · <code>invalid_json</code></p>
+    </div>
+    <div class="api-code-card">
+      <h4><code>graph.*</code> — graph engine</h4>
+      <p><code>cycle</code></p>
+    </div>
+    <div class="api-code-card">
+      <h4><code>engine.*</code> — execution</h4>
+      <p><code>missing_backend</code></p>
+    </div>
+    <div class="api-code-card">
+      <h4><code>http.*</code> — the HTTP layer itself</h4>
+      <p><code>remote_bind_forbidden</code> · <code>bind_failed</code> · <code>serve_failed</code>
+        — the only three codes the web layer owns; everything else is relayed verbatim from
+        below.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MCP + CLI ============ -->
+<section id="mcp" class="section">
+  <div class="kicker">MCP + CLI</div>
+  <h2>Agents and terminals</h2>
+
+  <h3 class="api-h3">MCP — six tools, stdin/stdout</h3>
+  <p class="body-text">
+    <code>opencodifier mcp serve</code> speaks stdio only — no network transport, matching the
+    local-first posture. The tools: <code>codify_decide</code>, <code>codify_batch</code>
+    (the ≤16-request envelope), <code>codify_graph</code>, <code>codify_validate</code>,
+    <code>codify_verify</code>, and <code>codify_explain</code>.
+  </p>
+
+  <h3 class="api-h3">CLI</h3>
+  <pre class="pg-pre" role="img" aria-label="CLI examples"><code># one decision, native format, from stdin
+opencodifier decide --input request.json
+
+# the same server the API docs describe
+opencodifier serve [--addr 127.0.0.1:8177] [--allow-remote]
+
+# validate a declarative graph
+opencodifier graph validate --input graph.json</code></pre>
+  <p class="fineprint">
+    The <code>decide</code> subcommand accepts <code>--format</code> (native default) exactly
+    like the HTTP header — one set of adapters, three doors in.
+  </p>
+</section>
+
+<!-- ============ playground handoff ============ -->
+<section id="run-proof" class="section">
+  <div class="kicker">Try it</div>
+  <h2>Every shape above runs in your tab</h2>
+  <p class="lede">
+    The playground embeds the WASM engine with these exact fixtures preloaded — including the
+    refusals. No server, no key, no network.
+  </p>
+  <div class="pg-actions api-demo-actions">
+    <button type="button" class="btn" data-preset="proof">Run the accept case</button>
+    <button type="button" class="btn btn-ghost" data-preset="lexical">Run the verify case</button>
+    <button type="button" class="btn btn-ghost" data-preset="hard">Run the abstain case</button>
+    <button type="button" class="btn btn-ghost" data-preset="invalid">Run the refusal case</button>
+  </div>
+  <p class="fineprint">Buttons hand the fixture to the playground and jump there — the decision
+    then runs on this site's embedded WASM engine, entirely in your browser.</p>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="footer-grid">
+    <div class="foot-about">
+      <div class="foot-brand">opencodifier</div>
+      <p>This page documents the implemented surface only — every route, code, and envelope here
+        is checked against the crate sources at build time of the site. When the runtime grows,
+        this page grows with it; when something is refused, the code it refuses with is already
+        listed above.</p>
+      <!-- Ecosystem-wide tag: every site in the workshop carries this. -->
+      <a class="foot-tag" href="https://github.com/TaskWizer" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><path d="M7.5 12.2l3 3L16.5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Built with TaskWizer AI technologies
+      </a>
+    </div>
+    <nav class="foot-col" aria-label="Site">
+      <div class="foot-head">Site</div>
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">The measured board</a>
+      <a href="try.html">Playground</a>
+      <a href="index.html#faq">FAQ</a>
+    </nav>
+    <nav class="foot-col" aria-label="Source and data">
+      <div class="foot-head">Source &amp; data</div>
+      <a href="board.csv">board.csv (raw)</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier" rel="noopener">GitHub</a>
+      <a href="https://huggingface.co/TaskWizerAI" rel="noopener">Hugging Face ↗</a>
+    </nav>
+    <nav class="foot-col" aria-label="Ecosystem">
+      <div class="foot-head">Ecosystem</div>
+      <a href="https://vivere-5we.pages.dev/" rel="noopener">VIVERE ↗</a>
+      <a href="https://www.amortyx.com" rel="noopener">Amortyx ↗</a>
+      <a href="https://www.mcpmanage.com" rel="noopener">MCPManage ↗</a>
+      <a href="https://github.com/aliasfoxkde/aegis" rel="noopener">Aegis ↗</a>
+    </nav>
+  </div>
+  <p class="foot-links">Apache-2.0 · local-first · no telemetry · no external requests</p>
+</footer>
+
+<script src="site-core.js"></script>
+<script>
+/* "Run it" buttons stage a preset for try.html via sessionStorage — the
+   same fixture ids demo.js owns. No engine here; just the handoff. */
+(function () {
+  "use strict";
+  document.querySelectorAll(".api-demo-actions [data-preset]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      try { sessionStorage.setItem("oc-preset", JSON.stringify({ request: btn.dataset.preset })); }
+      catch (e) { /* storage unavailable: the playground still boots on defaults */ }
+      location.href = "try.html#playground";
+    });
+  });
+})();
+</script>
+</body>
+</html>

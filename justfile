@@ -288,6 +288,20 @@ release-notes:
         --force \
         "${args[@]}"
 
+# Sync the benchmark board CSV into the site deploy directory. Run after any
+# `runner/board_csv.py` regeneration and before `wrangler pages deploy site`
+# so the live board page serves the same rows the docs of record do.
+site-board:
+    cp benchmarks/decision-model/results/board.csv site/board.csv
+
+# Build the site's WASM engine bundle (the try.html playground). site/wasm is
+# a build artifact, not source — gitignored and rebuilt by this recipe before
+# every deploy. The web-target glue exposes its async initializer as the
+# DEFAULT export (`__wbg_init as default`), which site/demo.js relies on.
+site-wasm:
+    cd crates/opencodifier-wasm && wasm-pack build \
+        --target web --out-dir ../../site/wasm --out-name opencodifier_wasm
+
 # Remove build artifacts and coverage output.
 clean:
     cargo clean
