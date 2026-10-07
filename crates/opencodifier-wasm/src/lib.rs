@@ -142,7 +142,8 @@ impl WasmEngine {
     /// A JSON error value for a batch that is unusable as a batch:
     /// unparseable JSON (`schema.invalid_json`), an envelope without a
     /// `requests` array (`schema.invalid_value`), or more requests than
-    /// [`MAX_BATCH`] (`schema.limit_exceeded`) — the ceiling the HTTP
+    /// [`opencodifier_engine::MAX_BATCH`] (`schema.limit_exceeded`) —
+    /// the ceiling the HTTP
     /// batch enforces, so a page cannot enqueue what the runtime would
     /// refuse.
     #[wasm_bindgen]
@@ -649,9 +650,19 @@ mod tests {
     /// bit-identical floats on every target, and this crate exists to be
     /// built for two of them. Refusals are compared through the same
     /// object the boundary reports, `{"code", "message"}`.
+    ///
+    /// Regeneration: with `OPENCODIFIER_UPDATE_CONFORMANCE` set, a
+    /// mismatching decision fixture is re-recorded from the live engine
+    /// instead of failing. Cache keys embed `engine_semver`
+    /// (`cache.rs`), so a release bump re-keys every recorded decision —
+    /// re-record, then inspect the diff: the answers, confidence, and
+    /// outcome must be untouched (a version bump re-keys, it does not
+    /// re-decide). The Node smoke over `tests/node/smoke.cjs` judges the
+    /// regenerated fixtures on the wasm side.
     #[test]
     fn conformance_fixtures_hold_on_the_native_engine() {
         let engine = engine();
+        let update = std::env::var("OPENCODIFIER_UPDATE_CONFORMANCE").is_ok();
         for (name, document) in [
             ("choice-lexical-accept", CHOICE_FIXTURE),
             ("relational-proof", RELATIONAL_FIXTURE),
@@ -665,6 +676,20 @@ mod tests {
             match actual {
                 Ok(response) => {
                     let difference = canonical_difference(&response, &expected, name);
+                    if let (true, true) = (update, difference.is_some()) {
+                        let path = format!(
+                            "{}/../../fixtures/conformance/{name}.json",
+                            env!("CARGO_MANIFEST_DIR")
+                        );
+                        let updated =
+                            serde_json::json!({ "request": request, "expected": response });
+                        std::fs::write(
+                            &path,
+                            serde_json::to_string_pretty(&updated).unwrap() + "\n",
+                        )
+                        .unwrap();
+                        continue;
+                    }
                     assert!(
                         difference.is_none(),
                         "{name}: the engine no longer matches its recorded decision: \
