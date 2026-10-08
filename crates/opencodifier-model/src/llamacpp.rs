@@ -42,6 +42,7 @@
 
 use std::time::Duration;
 
+use crate::render::{answers_of, question_text};
 use opencodifier_core::{DecisionQuestion, Distribution, State};
 use opencodifier_engine::{Classifier, EngineError, EngineResult};
 use serde_json::json;
@@ -362,33 +363,6 @@ impl Classifier for LlamaDecisionClassifier {
 
     fn model_id(&self) -> &str {
         &self.config.model_id
-    }
-}
-
-/// The answer keys `question`'s distribution must use, in declared
-/// order (`"true"`/`"false"` for booleans, level labels for score
-/// questions, candidate ids for choices). `None` for a kind this
-/// engine does not know — `DecisionQuestion` is `#[non_exhaustive]`.
-fn answers_of(question: &DecisionQuestion) -> Option<Vec<String>> {
-    match question {
-        DecisionQuestion::Choice(choice) => {
-            Some(choice.candidates().iter().map(|candidate| candidate.id().to_string()).collect())
-        }
-        DecisionQuestion::Boolean(_) => Some(vec!["true".to_owned(), "false".to_owned()]),
-        DecisionQuestion::Score(score) => {
-            Some(score.levels().iter().map(|level| level.label().to_owned()).collect())
-        }
-        _ => None,
-    }
-}
-
-/// The text the tree-mode prompt names as the schema description.
-fn question_text(question: &DecisionQuestion) -> &str {
-    match question {
-        DecisionQuestion::Choice(choice) => choice.text(),
-        DecisionQuestion::Boolean(boolean) => boolean.text(),
-        DecisionQuestion::Score(score) => score.text(),
-        _ => "",
     }
 }
 
