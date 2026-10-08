@@ -1578,9 +1578,20 @@ record says otherwise, criterion/suite validation, docs of record.
   frozen rows reproduced within 1e-4, end-to-end argmax matches).
   Live ORT parity is runner-hosted, not a `cargo test` case — ORT
   load-dynamic teardown segfaults the test harness at exit (kai and
-  julia ship their parity the same way). Remaining: D14 SHA-256
-  manifest registration, executor wiring as the verify-band verifier,
-  and the 231-split quality leg.
+  julia ship their parity the same way). **UNIT COMPLETE (2026-10-08).**
+  231-split leg done (`runs/jevbench/nli-zeroshot-v1`, authors'
+  harness, `--arm nli`): accuracy **0.5325** / macro 0.4904, ECE 0.232,
+  Brier 0.648, p50 0.57 s @ 4 threads, 231/231 valid native
+  distributions, replay determinism 231/231 — above engine (0.3766) and
+  vtx (0.4113), below the 0.8B bridge (0.6494); the family split is
+  entailment-shaped near-ceiling (tool_selection 1.000, intent 0.875)
+  vs below-chance collapse on composition (multi_hop 0.111, trap 0.125).
+  D14 registration done (`results/models.manifest.json` graph/tokenizer/
+  config digests). Executor verdict recorded in REPORT.md: not a general
+  decider at 53%; the verify-band verifier role (entailment-shaped
+  classes only, confidence-gated) is designed but stays unwired pending
+  a rung-level decision — wiring it would put a 705 MB artifact on the
+  serving path for a band the ladder does not yet route to.
 - **24k — MLM-head single-pass arm (item 5). — SIZED (2026-10-08),
   queued behind 24j.** Same sizing record; arm =
   `onnx-community/bert-base-uncased-ONNX` (MLM head in-graph);
