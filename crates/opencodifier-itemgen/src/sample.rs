@@ -710,7 +710,9 @@ pub fn question_text(sampled: &Sampled) -> String {
 /// not.
 #[must_use]
 pub fn down_word(rng: &mut Rng) -> &'static str {
-    rng.pick(DOWN_WORDS)
+    // Turbofish: under rustc 1.90 inference picks T = str (unsized) for a
+    // `&[&str]` argument; naming T = &str is accepted by every toolchain.
+    rng.pick::<&str>(DOWN_WORDS)
 }
 
 #[cfg(test)]
