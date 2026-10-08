@@ -86,6 +86,7 @@
     <span class="pill">the real engine, compiled to WASM</span>
     <span class="pill">zero ML · zero network · zero server</span>
     <span class="pill">sub-millisecond decisions</span>
+    <a class="pill pill-link" href="#maze">new: play the maze solver ↓</a>
   </div>
   <h1>Decide something, <span class="grad">right here.</span></h1>
   <p class="hero-sub">
@@ -179,6 +180,70 @@
       <a href="api.html">the documented endpoints</a>.</p>
   </div>
 </section>
+
+<section id="maze" class="section">
+  <div class="kicker">Maze Solver</div>
+  <h2>A fog-of-war maze, solved by the ladder</h2>
+  <p class="section-sub">
+    A procedural maze. A character dropped in the middle who can only see along
+    simulated rays. And two ways out: watch the decision ladder feel its way
+    through the dark, or grab the keyboard and race it — ghost included.
+  </p>
+
+  <div class="card mz-about">
+    <h3>What you are actually watching</h3>
+    <p>
+      Every step the bot takes is a decision made the same way the runtime makes
+      them: <strong>cheapest reliable mechanism first</strong>. There is no neural
+      network in this maze. The scout checks a rule (fight is forced, exit is
+      one step away, a monster is too close), then falls back to bread-first
+      searches over <em>only what it has seen</em> — exit route, loot, chest,
+      nearest unexplored frontier. When two frontier routes cost exactly the
+      same, and you have the engine checkbox on, that genuine tie becomes a real
+      <code>choice</code> request to the same WASM engine the panel above runs.
+      The chip next to the canvas names the rung that decided every single step.
+    </p>
+    <p>
+      <strong>How to play:</strong> pick <em>play</em> (WASD / arrows, or the
+      d-pad), or <em>versus</em> to race a glowing ghost of the bot that runs its
+      own identical maze with its own fog — it gains no information from you, and
+      you none from it. Loot piles score, chests open in one second (coins 0–5…
+      or something with teeth), monsters chase what they can see along a ray and
+      cost you a two-second static fight on contact, and the optional timer ends
+      the run when it expires. Found everything? The exit is the one opening in
+      the outer wall — usually as far from the middle as it can be.
+    </p>
+    <p>
+      <strong>Why it is here:</strong> to show the methodology moving. Real maze
+      games hand the AI omniscience; this one hands the bot the same darkness you
+      get, and you can audit every choice it made in the trace panel. The
+      leaderboard is session-only — nothing you do here is stored, sent, or
+      scored anywhere but your tab.
+    </p>
+    <div class="mz-legend">
+      <span><i class="lg lg-you"></i> you</span>
+      <span><i class="lg lg-bot"></i> the bot (ghost in versus)</span>
+      <span><i class="lg lg-exit"></i> exit</span>
+      <span><i class="lg lg-loot"></i> loot</span>
+      <span><i class="lg lg-chest"></i> chest — 1 s, coins or teeth</span>
+      <span><i class="lg lg-monster"></i> monster — 2 s fight</span>
+      <span><i class="lg lg-fog"></i> unseen</span>
+      <span><i class="lg lg-remembered"></i> remembered</span>
+    </div>
+    <p class="fineprint">
+      Honest footnotes: vision is generalized Bresenham line-of-sight per cell,
+      walls stop the ray. The maze itself, the bot's exploration ladder, and the
+      scoring arithmetic are plain, tested JavaScript (<code>site/maze-core.js</code>,
+      42 headless tests) — only the tie-breaks go to WASM. God view is a
+      spectator cheat: any run finished while it is on is marked
+      <em>assisted</em> and scores nothing. Thinking about more than a demo —
+      progression, real combat, multiplayer — is sketched in
+      <code>docs/planning/maze-solver/STANDALONE-GAME.md</code>.
+    </p>
+  </div>
+
+  <div id="maze-root" aria-label="Maze Solver game"></div>
+</section>
 </main>
 
 <footer class="footer">
@@ -221,5 +286,7 @@
 
 <script src="site-core.js"></script>
 <script src="demo.js"></script>
+<script src="maze-core.js"></script>
+<script src="maze.js"></script>
 </body>
 </html>

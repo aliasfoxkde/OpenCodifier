@@ -61,9 +61,9 @@ const flat = flatten(byId.tbody);
 const rows = flat.filter((c) => c.tag === 'tr' && c.children.length > 1);
 
 test('board renders every default-visible row', () => {
-  /* 196 CSV rows − 7 REPORT.md tuning rows (that surface ships off by
+  /* 208 CSV rows − 7 REPORT.md tuning rows (that surface ships off by
      default) = 189; drift in either number should update this deliberately */
-  assert.equal(rows.length, 189);
+  assert.equal(rows.length, 201);
 });
 
 test('row IDs are unique across the whole rendered table', () => {
