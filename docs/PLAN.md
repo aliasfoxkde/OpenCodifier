@@ -64,6 +64,7 @@ Remaining risks tracked in §6 below.
 | 21 | Site WCAG 2.1 AAA + progressive enhancement | **opened** (2026-10-06) — audit + fixes landed; deploy + X/Discord pending |
 | 22 | Docs freshness sweep | **opened** (2026-10-06) |
 | 23 | v0.5.0 release cut | **opened** (2026-10-06) — gated on Phase 20 floor policy |
+| 24 | RESEARCH §15.6 enhancement program | **opened** (2026-10-07) — item 1 (risk–coverage acceptance) done; items 2/3/4/8/9 + §15.8 fold-ins pending |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
@@ -1378,6 +1379,52 @@ D30–D35 and the Phase 21 site work.
 Acceptance: `git describe` matches the release; the pipeline of record
 is green on the release tag; release notes quote only measured numbers
 with sources.
+
+## Phase 24 — RESEARCH §15.6 enhancement program (opened 2026-10-07)
+
+The 2026-10-07 research sweep (`docs/RESEARCH.md` §15) produced a
+ranked 10-item program (§15.6). This phase implements it in units,
+each fully gated and committed. Method per unit: measure first,
+smallest change that could work, bit-identical unless the DECISIONS
+record says otherwise, criterion/suite validation, docs of record.
+
+- **24a — risk–coverage acceptance (item 1). — DONE (2026-10-07).**
+  `CalibrationFit` carries optional `aurc_before`/`aurc_after`/
+  `accuracy_at_coverage` (serde-defaulted; historical artifacts load
+  unchanged); the engine's load gate and the fitter's ship gate refuse
+  an artifact whose AURC worsens (D15 amendment: ECE and selective
+  prediction diverge, so neither alone gates); `fit_calibration.py`
+  measures and records both curves plus accuracy@50 %/80 % coverage.
+  For temperature scaling the gate is a witness (monotone rescaling
+  reorders nothing — `aurc_after == aurc_before` is the expected
+  reading); it becomes load-bearing with the first non-monotone
+  scheme. Shipped artifacts regenerated field-additively, verified
+  bit-identical per core field against HEAD; the two exact-refit
+  artifacts of record (`qwen3.5-2b-q4_k_m`, `fork_4b-d15-v1`) are not
+  regenerated — a margin refit would silently replace the better fit.
+  Evidence: `benchmarks/decision-model/results/CALIBRATION.md`
+  § Risk–coverage evidence.
+- **24b — fitted thresholds as ladder profiles (item 2).** Per-kind /
+  per-node policies and per-rung fitted calibrations already exist
+  (D25/D27, `ladders/*.json`); the missing piece is the offline fitter
+  that tunes accept thresholds from held-out data (never hard-0.5 a
+  Boolean) and emits a validated `LadderProfile` document.
+- **24c — explicit abstain candidate (item 3).**
+- **24d — label-set overlap preflight (item 4).**
+- **24e — reporting parity bundle (item 8).** ECE/Brier/AUROC +
+  reliability per rung in board outputs; p95/p99 beside p50; dual cost
+  rows; frozen-evidence packaging.
+- **24f — corpus-prep caps + noise scoring (item 9, feeds #124).**
+- **24g — §15.8 fold-ins.** Exhaustive small-K property tests (B2
+  validation) and the executor redundant-guard pass (tranche 20b).
+- Items 5/6 (MLM-head single-pass, NLI verifier arm) and 10
+  (dynamic-instruction leg) are model-rung options behind existing
+  seams — sized before any commitment, per the §15.6 note.
+
+Acceptance: each landed unit carries its own tests + doc-of-record
+amendment; the ladder's empty-default byte-identity holds for every
+engine change (fleet equivalence on the committed graphs); no new
+placeholder anywhere.
 
 ## Spec coverage map (audit, 2026-09-28; refreshed 2026-09-30)
 

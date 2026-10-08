@@ -247,6 +247,9 @@ fn a_rungs_own_policy_and_calibration_gate_its_distribution() {
             ece_before: 0.5,
             ece_after: 0.1,
             source: "test".to_owned(),
+            aurc_before: None,
+            aurc_after: None,
+            accuracy_at_coverage: None,
         },
     };
     let calibrated = Rung::new(Arc::new(fallback))

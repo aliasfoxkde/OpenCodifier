@@ -183,6 +183,9 @@ pub fn calibration_artifact(default_temperature: f64) -> opencodifier_engine::Ca
             ece_before: 0.5,
             ece_after: 0.1,
             source: "test".to_owned(),
+            aurc_before: None,
+            aurc_after: None,
+            accuracy_at_coverage: None,
         },
     }
 }

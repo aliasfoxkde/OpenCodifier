@@ -312,6 +312,47 @@ def raw_ece(observations: list[tuple[float, int]]) -> float:
     return expected_calibration_error(observations, temperature=1.0)
 
 
+def aurc(observations: list[tuple[float, int]], temperature: float) -> float:
+    """Area under the risk-coverage curve (RESEARCH.md §15.6 item 1).
+
+    Order items by calibrated confidence descending; the prefix risk at
+    coverage k is the error rate of the top-k; AURC is the mean prefix
+    risk over k = 1..n. Lower is better, and a perfect ranker reaches
+    0.0. This is the selective-prediction metric a policy gate's
+    abstention actually experiences - it is known to diverge from ECE
+    (a fit can improve calibration while worsening ranking), so the
+    ship gate reads both.
+
+    Expected reading for this fitter: temperature scaling is monotone
+    in the winner probability, so it reorders nothing and aurc_after ==
+    aurc_before is the CORRECT result, not a dead metric - the values
+    are the selective-prediction evidence of record, and the ship gate
+    becomes load-bearing the moment a non-monotone scheme (per-class
+    isotonic with flat regions, a verifier blend) writes artifacts.
+    """
+    scored = sorted(
+        ((winner_calibrated(p, temperature), 1 - y) for p, y in observations),
+        key=lambda pair: -pair[0],
+    )
+    running = 0.0
+    total = 0.0
+    for k, (_, error) in enumerate(scored, 1):
+        running += error
+        total += running / k
+    return total / len(scored)
+
+
+def accuracy_at_coverage(
+    observations: list[tuple[float, int]], temperature: float, coverage: float
+) -> float:
+    """Acceptance accuracy when the top `coverage` fraction is accepted."""
+    k = max(1, round(len(observations) * coverage))
+    top = sorted(
+        observations, key=lambda pair: -winner_calibrated(pair[0], temperature)
+    )[:k]
+    return sum(correct for _, correct in top) / k
+
+
 def build_artifact(
     name: str, run: dict, run_path: Path,
     source_suite: str = "benchmarks/decision-model suite (seed 20260926, 120 items)",
@@ -375,6 +416,12 @@ def build_artifact(
                                 "ece_before": raw_ece(by_card[k])}
     ece_before = raw_ece(pairs)
     ece_after = expected_calibration_error(pairs, temperature)
+    aurc_before = aurc(pairs, 1.0)
+    aurc_after = aurc(pairs, temperature)
+    coverage_accuracy = {
+        str(int(fraction * 100)): accuracy_at_coverage(pairs, temperature, fraction)
+        for fraction in (0.5, 0.8)
+    }
     model = run.get("model") or {}
     source = model.get("file") or model.get("name") or run_path.name
     return {
@@ -389,6 +436,11 @@ def build_artifact(
                 "items": len(pairs),
                 "ece_before": round(ece_before, 6),
                 "ece_after": round(ece_after, 6),
+                "aurc_before": round(aurc_before, 6),
+                "aurc_after": round(aurc_after, 6),
+                "accuracy_at_coverage": {
+                    key: round(value, 6) for key, value in coverage_accuracy.items()
+                },
                 "source": (
                     f"{source_suite}, "
                     f"single-run arm {run_path.name}, model {source}; {method}"
@@ -397,6 +449,8 @@ def build_artifact(
         },
         "ece_before": ece_before,
         "ece_after": ece_after,
+        "aurc_before": aurc_before,
+        "aurc_after": aurc_after,
         "temperature": temperature,
         "degenerate": degenerate,
         "per_class": per_class,
@@ -447,13 +501,18 @@ def main() -> None:
         fitted = build_artifact(artifact_name, run, run_path, source_suite)
         out_path = args.out_dir / f"{artifact_name}.json"
         # An artifact ships only if the fit does not worsen the headline
-        # calibration diagnostic. NLL (the fit objective) improves on any
-        # in-sample 1-parameter fit of enough items; ECE is the check that
-        # the rescaling is actually the right shape. A bimodal
+        # diagnostics. NLL (the fit objective) improves on any in-sample
+        # 1-parameter fit of enough items; ECE is the check that the
+        # rescaling is actually the right shape; AURC is the check that
+        # selective prediction did not pay for it (RESEARCH.md §15.1:
+        # the two diverge, so neither alone gates). A bimodal
         # proof/delegate stack (hard 1.0s plus an underconfident lexical
         # tail) is exactly where a single global temperature is the wrong
         # tool, and its artifact must not ship.
-        helps = fitted["ece_after"] <= fitted["ece_before"]
+        ece_helps = fitted["ece_after"] <= fitted["ece_before"]
+        # 1e-9: the same rounding slack the engine's load gate allows.
+        aurc_helps = fitted["aurc_after"] <= fitted["aurc_before"] + 1e-9
+        helps = ece_helps and aurc_helps
         if fitted["degenerate"] or not helps:
             out_path.unlink(missing_ok=True)
             if fitted["degenerate"]:
@@ -462,13 +521,16 @@ def main() -> None:
                 # not a valid calibration (engine validation requires
                 # T > 0 finite), and the honest reading is that this
                 # rung's scores are ordering-only, not confidence.
-                rows.append((artifact_name, float("inf"), fitted["ece_before"], float("nan")))
+                rows.append((artifact_name, float("inf"), fitted["ece_before"], float("nan"),
+                             fitted["aurc_before"], float("nan")))
             else:
                 rows.append((artifact_name, fitted["temperature"], fitted["ece_before"],
-                             fitted["ece_after"]))
+                             fitted["ece_after"], fitted["aurc_before"],
+                             fitted["aurc_after"]))
         else:
             out_path.write_text(json.dumps(fitted["artifact"], indent=2) + "\n")
-            rows.append((artifact_name, fitted["temperature"], fitted["ece_before"], fitted["ece_after"]))
+            rows.append((artifact_name, fitted["temperature"], fitted["ece_before"],
+                         fitted["ece_after"], fitted["aurc_before"], fitted["aurc_after"]))
         per_class = ", ".join(
             f"{item_class}={value:.3f}" for item_class, value in fitted["per_class"].items()
         )
@@ -477,20 +539,27 @@ def main() -> None:
             + ("[degenerate]" if bucket["degenerate"] else "")
             for key, bucket in fitted["per_cardinality"].items()
         )
+        skip_reason = ""
+        if not fitted["degenerate"] and not helps:
+            skip_reason = ("  [SKIP: AURC worsens, no artifact]"
+                           if ece_helps and not aurc_helps
+                           else "  [SKIP: ECE worsens, no artifact]")
         print(f"{artifact_name}: T={fitted['temperature']:.3f} "
-              f"ECE {fitted['ece_before']:.3f} -> {fitted['ece_after']:.3f} [{per_class}]"
+              f"ECE {fitted['ece_before']:.3f} -> {fitted['ece_after']:.3f} "
+              f"AURC {fitted['aurc_before']:.3f} -> {fitted['aurc_after']:.3f} [{per_class}]"
               + (f" | per-cardinality: {per_card}" if per_card else "")
               + ("  [DEGENERATE: T->inf, no artifact]" if fitted["degenerate"] else "")
-              + ("  [SKIP: ECE worsens, no artifact]"
-                 if not fitted["degenerate"] and not helps else ""))
+              + skip_reason)
 
     print()
-    print("| artifact | T | ECE before | ECE after |")
-    print("|---|---|---|---|")
-    for name, temperature, before, after in rows:
+    print("| artifact | T | ECE before | ECE after | AURC before | AURC after |")
+    print("|---|---|---|---|---|---|")
+    for name, temperature, before, after, aurc_before_v, aurc_after_v in rows:
         shown_t = "inf" if math.isinf(temperature) else f"{temperature:.3f}"
         shown_after = "-" if math.isnan(after) else f"{after:.3f}"
-        print(f"| {name} | {shown_t} | {before:.3f} | {shown_after} |")
+        shown_aurc_after = "-" if math.isnan(aurc_after_v) else f"{aurc_after_v:.3f}"
+        print(f"| {name} | {shown_t} | {before:.3f} | {shown_after} | "
+              f"{aurc_before_v:.3f} | {shown_aurc_after} |")
 
 
 if __name__ == "__main__":

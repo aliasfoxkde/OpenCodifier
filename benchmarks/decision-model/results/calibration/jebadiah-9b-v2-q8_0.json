@@ -11,6 +11,12 @@
     "items": 120,
     "ece_before": 0.075331,
     "ece_after": 0.072723,
+    "aurc_before": 0.039486,
+    "aurc_after": 0.039486,
+    "accuracy_at_coverage": {
+      "50": 0.983333,
+      "80": 0.927083
+    },
     "source": "benchmarks/decision-model suite (seed 20260926, 120 items), single-run arm llama__jebadiah-9b-v2-Q8_0.json, model jebadiah-9b-v2.Q8_0.gguf; winner-vs-rest margin fit, in-sample"
   }
 }
