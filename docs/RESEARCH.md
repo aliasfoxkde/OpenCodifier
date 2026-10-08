@@ -2464,8 +2464,29 @@ f64 softmax → entailment column), end-to-end argmax matching the
 fixture ranking. One structural finding: ORT's load-dynamic teardown
 segfaults the `cargo test` harness at exit (after all tests pass), so
 live ORT parity is runner-hosted — the same choice the kai and julia
-contracts made. Remaining for 24j: D14 SHA-256 manifest registration,
-executor wiring as the verify-band verifier, the 231-split leg.
+contracts made.
+
+**231-split receipt (2026-10-08, unit complete):** the quality leg ran
+the arm through the authors' own harness (`--arm nli`, renderer = the
+vtx/jev_native option-description rendering, entailment index read from
+`config.json` `id2label`): accuracy **0.5325** / family-macro 0.4904,
+ECE 0.232, Brier 0.648, p50 0.57 s (4 threads), 231/231 valid native
+distributions, replay determinism 231/231, $0. Board A: between vtx
+(0.4113) and the 0.8B bridge (0.6494). The family split is the
+prediction from the §15.6.2 probe: entailment-shaped families near
+ceiling (tool_selection 1.000, intent 0.875, adversarial/extraction/
+ordinal 0.833, fact 0.750), composition-shaped families below chance
+(multi_hop 0.111, trap 0.125, ambiguous 0.143, tradeoff 0.167) — a
+premise–hypothesis cross-encoder cannot compose hops across a premise
+boundary. Calibration is overconfident-wrong on the weak families
+(auto@5% = 3/231; p≥0.9 rows run 70.9 % precision — above the 53.2 %
+base rate, far from gate-grade). **Verdict:** NLI is not a general
+decider; it is the second opinion for entailment-shaped decision
+classes. The verify-band wiring stays an open rung-level decision (the
+artifact is 705 MB on a serving path the ladder does not yet route to);
+D14 registration is done (`results/models.manifest.json`). This closes
+item 6 of the ranked program; 24k (MLM single-pass, item 5) remains
+queued and is now the only unproven encoder use left.
 
 ### 15.7 Addendum (same day): dzhng/jevgrep — Jev as a code-search relevance judge
 

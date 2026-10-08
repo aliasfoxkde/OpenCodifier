@@ -549,6 +549,115 @@ class VtxAdapter:
         self.client = None
 
 
+class NliOnnxAdapter:
+    """Zero-shot NLI cross-encoder through ONNX Runtime (PLAN 24j; arm of
+    record `MoritzLaurer/deberta-v3-base-zeroshot-v2.0`, its own published
+    `onnx/model.onnx` — no conversion). All three JevBench kinds render as
+    candidate verbalizations over the same option descriptions the
+    vtx/jev_native rows use, so the rows are comparable: the premise is
+    the item state plus the question instructions, each option's
+    description is the hypothesis, and the entailment masses renormalized
+    over the option set are the distribution. The shipped serving path is
+    the Rust contract (`crates/opencodifier-model/src/nli.rs`); this
+    adapter is the benchmark leg of the same arm, mirroring the
+    contract's renormalization (zero total mass is refused, never
+    uniformed) and D7 (probabilities from graph logits only)."""
+
+    name = "nli-zeroshot"
+    price_input_per_m = 0.0
+    price_output_per_m = 0.0
+    # Engine-only serve metadata; its absence broke the manifest block on
+    # every non-engine adapter until this was made explicit.
+    ladder = None
+
+    def __init__(self, model_dir: Path, threads: int, timeout_s: float):
+        self.model_dir = model_dir
+        self.threads = threads
+        self.timeout_s = timeout_s
+        self.session = None
+        self.tok = None
+        self.np = None
+        self.entail_index = 0
+
+    def load(self):
+        import onnxruntime as ort
+        from tokenizers import Tokenizer
+
+        self.np = __import__("numpy")
+        config = json.loads((self.model_dir / "config.json").read_text())
+        id2label = config["id2label"]
+        for index in range(len(id2label)):
+            if str(id2label[str(index)]).lower() == "entailment":
+                self.entail_index = index
+                break
+        self.tok = Tokenizer.from_file(str(self.model_dir / "tokenizer.json"))
+        self.tok.enable_truncation(max_length=512)
+        so = ort.SessionOptions()
+        so.intra_op_num_threads = self.threads
+        self.session = ort.InferenceSession(
+            str(self.model_dir / "onnx" / "model.onnx"),
+            so,
+            providers=["CPUExecutionProvider"],
+        )
+
+    def reserve_estimate(self, _t):
+        return None
+
+    def _entailment(self, premise: str, hypothesis: str) -> float:
+        enc = self.tok.encode(premise, hypothesis)
+        feed = {
+            "input_ids": self.np.array([enc.ids], dtype=self.np.int64),
+            "attention_mask": self.np.array([enc.attention_mask], dtype=self.np.int64),
+        }
+        (logits,) = self.session.run(None, feed)
+        shifted = logits[0] - logits[0].max()
+        exp = self.np.exp(shifted)
+        return float(exp[self.entail_index] / exp.sum())
+
+    def run(self, t) -> "DecisionResult":
+        from jevbench.adapters.base import DecisionResult  # noqa: PLC0415
+
+        qtype = t.question["type"]
+        criteria = t.question.get("criteria")
+        if qtype == "noul":
+            c = criteria if isinstance(criteria, dict) else {}
+            options = {"no": c.get("false", "not held"), "yes": c.get("true", "held")}
+        elif qtype == "score":
+            descs = criteria if isinstance(criteria, list) else [lab for lab in t.labels]
+            options = {
+                lab: (descs[i] if isinstance(descs, list) and i < len(descs) else lab)
+                for i, lab in enumerate(t.labels)
+            }
+        else:
+            options = {c["id"]: c["description"] for c in choice_candidates(t)}
+        started = time.perf_counter()
+        try:
+            premise = (
+                (t.state if isinstance(t.state, str) else json.dumps(t.state))
+                + "\nQuestion: "
+                + t.question["instructions"]
+            )
+            masses = {
+                lab: self._entailment(premise, f"{desc}.") for lab, desc in options.items()
+            }
+        except Exception as e:  # noqa: BLE001 — their Runner classifies failures
+            return DecisionResult(self.name, False, error=f"{type(e).__name__}: {e}"[:200])
+        latency = time.perf_counter() - started
+        total = sum(masses.values())
+        probs = {lab: mass / total for lab, mass in masses.items()} if total > 0 else None
+        label = max(probs, key=probs.get) if probs else None
+        raw = {"options": options, "entailment_masses": masses, "premise": premise}
+        if probs is None or label not in t.labels or abs(sum(probs.values()) - 1.0) > 1e-6:
+            return DecisionResult(self.name, False, error="invalid_distribution",
+                                  latency_s=latency, raw=raw)
+        return DecisionResult(self.name, True, probs=probs, probs_source="native",
+                              label=label, latency_s=latency, raw=raw)
+
+    def close(self):
+        self.session = None
+        self.tok = None
+
+
 def replay_records(adapter, tasks, ref_dir: Path, out_dir: Path, runner_cls, ledger_cls):
     """Second full pass for the determinism block (fresh ledger + raw dir)."""
     replay_dir = out_dir / "replay"
@@ -560,7 +669,8 @@ def replay_records(adapter, tasks, ref_dir: Path, out_dir: Path, runner_cls, led
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--arm", required=True, choices=["engine", "fork_4b", "jev_native", "vtx"])
+    ap.add_argument("--arm", required=True,
+                    choices=["engine", "fork_4b", "jev_native", "vtx", "nli"])
     ap.add_argument("--ref", type=Path, default=Path("/nas/Temp/work/oc-model-eval/jevbench-ref"))
     ap.add_argument("--tasks", type=str, required=True, help="comma-separated jsonl files")
     ap.add_argument("--out-dir", type=Path, required=True)
@@ -577,6 +687,12 @@ def main() -> int:
         type=Path,
         default=Path("/nas/Temp/work/oc-model-eval/models/vtx-jev-3"),
         help="local VTXAI/VTX-JEV-3 checkout (vtx arm)",
+    )
+    ap.add_argument(
+        "--nli-dir",
+        type=Path,
+        default=Path("/nas/Temp/work/oc-model-eval/models/deberta-v3-base-zeroshot-v2.0"),
+        help="local zero-shot NLI model dir with onnx/model.onnx (nli arm)",
     )
     ap.add_argument("--threads", type=int, default=12)
     ap.add_argument("--timeout", type=float, default=600.0)
@@ -629,6 +745,8 @@ def main() -> int:
         adapter = ForkAdapter(args.port, args.instructions, args.timeout)
     elif args.arm == "vtx":
         adapter = VtxAdapter(args.vtx_dir, args.timeout)
+    elif args.arm == "nli":
+        adapter = NliOnnxAdapter(args.nli_dir, args.threads, args.timeout)
     else:
         adapter = JevNativeBridgeAdapter(args.model_dir, args.threads, args.timeout)
 
@@ -688,6 +806,11 @@ def main() -> int:
             f = args.vtx_dir / fname
             if f.is_file():
                 model_files[f"vtx/{fname}"] = hashlib.sha256(f.read_bytes()).hexdigest()
+    if args.arm == "nli":
+        for fname in ("onnx/model.onnx", "tokenizer.json", "config.json"):
+            f = args.nli_dir / fname
+            if f.is_file():
+                model_files[fname] = hashlib.sha256(f.read_bytes()).hexdigest()
 
     manifest = {
         "arm": args.arm,
@@ -717,6 +840,13 @@ def main() -> int:
             "jev_native": "noul as two-option choice; score levels as options; softmax native",
             "vtx": "noul as two-option choice; score levels as options; vendor cosine "
                    "softmax (scale 15) through JevClient's position-gated pooler",
+            "nli": "all kinds as option descriptions (same rendering as vtx/jev_native); "
+                   "premise = state + '\\nQuestion: ' + instructions, hypothesis = "
+                   "'<description>.' (bare template); entailment index from config.json "
+                   "id2label; entailment masses renormalized over options; note: the "
+                   "Rust serving boolean path uses one-hypothesis complement (IR "
+                   "booleans carry only text), this adapter verbalizes per-option from "
+                   "JevBench criteria like the zeroshot training objective",
         }[args.arm],
         "determinism": determinism,
         "adapter_warnings": getattr(adapter, "warnings", []),

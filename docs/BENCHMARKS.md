@@ -60,6 +60,7 @@ zero synthesized probabilities, full replay determinism.
 |---|---:|---:|---:|---:|---:|---:|---:|---|
 | OpenCodifier engine (relational solver over lexical, `/v1/decide`) | 231 | 0.3766 | 0.4011 | 0.402 | 0.890 | 0.000 (0/231) | **2.0 ms** | 231/231 |
 | **vtx: VTX-JEV-3** (20.5 MB 2-bit static table, vendor client) | 231 | 0.4113 | 0.4318 | 0.126 | 0.684 | 0.000 (0/231) | **7.9 ms** | 231/231 |
+| **nli: deberta-v3-base-zeroshot-v2.0** (705 MB fp32 ONNX cross-encoder, entailment renorm over options, 2026-10-08) | 231 | 0.5325 | 0.4904 | 0.232 | 0.648 | 0.013 (3/231) | 0.57 s | 231/231 (labels + probabilities) |
 | Jev-Style-0.8B-Decision-v3 Q4_K_M (native verdict-slot readout — comparability bridge) | 231 | 0.6494 | 0.6378 | **0.080** | **0.425** | **0.364** (84/231) | 6.72 s | 231/231 (labels + probabilities) |
 | **fork: Qwen3.5-4B UD-Q4_K_XL tree mode** (D16 tier, fork-default T — base model, no decision tune; **fedora anchor**, 2026-10-02, default instructions; replicate bit-identical ²) | 231 | **0.7662** | **0.7571** | 0.070 ¹ | 0.305 ¹ | — ³ | 2.28 s | 231/231 (labels + d15 distributions ¹) |
 
