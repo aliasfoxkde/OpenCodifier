@@ -9,6 +9,9 @@ It is not a chatbot, not an LLM wrapper, and not a decision-tree classifier:
 it is the decision *substrate* an AI system calls before invoking a large
 model. Jev/System One compatibility is one adapter mode, not the identity.
 
+**Live site & measured benchmark board:** [opencodifier.pages.dev](https://opencodifier.pages.dev)
+— every number this project claims, one filterable table, no hand-typed figures.
+
 ## Status
 
 **Work in progress — pre-1.0, but real and runnable today.** The

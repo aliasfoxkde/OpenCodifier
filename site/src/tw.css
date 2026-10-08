@@ -69,10 +69,10 @@
 
   /* ---------- ecosystem cards ---------- */
   .eco-grid {
-    @apply grid grid-cols-1 gap-4 mt-7 md:grid-cols-3;
+    @apply grid grid-cols-1 gap-5 mt-7 md:grid-cols-3;
   }
   .eco-card {
-    @apply flex flex-col gap-2 rounded-oc p-6 no-underline text-inherit
+    @apply flex flex-col gap-2.5 rounded-oc p-7 no-underline text-inherit
       border border-solid border-oc-line bg-oc-card
       transition-[border-color,transform,box-shadow] duration-200;
   }

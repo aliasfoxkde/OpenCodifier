@@ -363,6 +363,29 @@ html.no-js .theme-toggle, html.no-js #to-top { display: none; }
 .chart-note { margin-top: 1.1rem; font-size: 0.82rem; color: var(--ink-faint); line-height: 1.55; }
 
 /* ---------- ladder ---------- */
+/* at-a-glance rung strip: the ladder section carries real content even
+   before the interactive explorer loads (and when it never loads) */
+.rung-strip {
+  margin-top: 2rem; display: grid; gap: 0.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+}
+.rung-cell {
+  display: flex; align-items: flex-start; gap: 0.6rem;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--card);
+  padding: 0.65rem 0.8rem;
+}
+.rung-cell-txt { font-size: 0.8rem; color: var(--ink-dim); line-height: 1.45; }
+.rung-cell-txt strong { color: var(--ink); font-size: 0.86rem; }
+.rung-cell .rung-cost { margin-left: auto; white-space: nowrap; }
+
+.codeblock {
+  margin: 0.7rem 0; background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 0.8rem; overflow-x: auto;
+  font-family: var(--mono); font-size: 0.78rem; line-height: 1.55; color: var(--ink-dim);
+  white-space: pre;
+}
+.codeblock code { font-family: inherit; color: inherit; }
+
 .ladder-wrap { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 1.1rem; margin-top: 2rem; }
 @media (max-width: 880px) { .ladder-wrap { grid-template-columns: 1fr; } }
 .ladder-wrap noscript { grid-column: 1 / -1; }
@@ -499,6 +522,33 @@ details p { color: var(--ink-dim); font-size: 0.92rem; margin-top: 0.7rem; }
   clip: rect(0 0 0 0); clip-path: inset(50%); overflow: hidden; white-space: nowrap;
 }
 
+/* The board page runs wider than the landing page's --max: a 20-column
+   measured table needs the room. Scoped to .page-wide on <body>. */
+.page-wide { --max: 1680px; }
+
+.adv-panel {
+  grid-column: 1 / -1; margin-top: 0.2rem;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--bg-2);
+}
+.adv-panel summary {
+  cursor: pointer; padding: 0.55rem 0.8rem; font-size: 0.84rem; font-weight: 700;
+  color: var(--ink-dim); user-select: none;
+}
+.adv-panel summary:hover { color: var(--teal); }
+.adv-panel[open] summary { border-bottom: 1px solid var(--line); color: var(--teal); }
+.adv-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.9rem; padding: 0.9rem;
+}
+@media (max-width: 880px) { .adv-grid { grid-template-columns: 1fr 1fr; } }
+.adv-note {
+  grid-column: 1 / -1; margin: 0; font-size: 0.78rem; color: var(--ink-faint); line-height: 1.5;
+}
+.adv-grid input[type="number"] {
+  width: 100%; padding: 0.5rem 0.7rem; font: inherit; font-size: 0.9rem;
+  color: var(--ink); background: var(--card);
+  border: 1px solid var(--line); border-radius: 10px;
+}
+
 .bench-controls {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.9rem;
   margin-top: 2rem; padding: 1.2rem;
@@ -563,10 +613,12 @@ details p { color: var(--ink-dim); font-size: 0.92rem; margin-top: 0.7rem; }
 .formula-list dd code { color: var(--teal); }
 
 .table-wrap {
-  margin-top: 1.4rem; overflow-x: auto;
+  margin-top: 1.4rem; overflow: auto; max-height: 78vh;
   border: 1px solid var(--line); border-radius: var(--radius); background: var(--card);
 }
-.bench-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; min-width: 880px; }
+/* separate borders so the sticky header keeps its underline while scrolled
+   (border-collapse: collapse repaints collapsed borders away under sticky) */
+.bench-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.86rem; min-width: 980px; }
 .bench-table th, .bench-table td {
   padding: 0.55rem 0.7rem; text-align: left; border-bottom: 1px solid var(--tint-row);
   vertical-align: top;
@@ -575,8 +627,10 @@ details p { color: var(--ink-dim); font-size: 0.92rem; margin-top: 0.7rem; }
   position: sticky; top: 0; background: var(--card-2);
   font-size: 0.74rem; letter-spacing: 0.05em; text-transform: uppercase;
   color: var(--ink-faint); border-bottom: 1px solid var(--line); z-index: 2;
+  cursor: help;
 }
-.bench-table tbody tr:hover { background: var(--tint-xs); }
+.bench-table tbody tr:nth-child(even) { background: var(--tint-xs); }
+.bench-table tbody tr:hover { background: var(--tint-sm); }
 .bench-table tbody tr:last-child td { border-bottom: none; }
 .bench-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bench-table th.num { text-align: right; }

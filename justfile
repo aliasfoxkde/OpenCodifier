@@ -465,6 +465,14 @@ release-notes:
 site-board:
     cp benchmarks/decision-model/results/board.csv site/board.csv
 
+# Headless smoke of the board data page: runs the real site/benchmarks.js
+# boot→render against the real site/board.csv under a minimal DOM stub (node
+# built-in test runner — no browser, no dependencies, no network). Fails when
+# the generator's CSV schema and the page's parser drift apart. Run before
+# any deploy that touches site/benchmarks.js or site/board.csv.
+site-test:
+    node --test site/tests/board_page_test.mjs
+
 # Build the site's WASM engine bundle (the try.html playground). site/wasm is
 # a build artifact, not source — gitignored and rebuilt by this recipe before
 # every deploy. The web-target glue exposes its async initializer as the

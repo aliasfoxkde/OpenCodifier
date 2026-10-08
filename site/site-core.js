@@ -101,6 +101,12 @@ if (prefersReduced) {
     { threshold: 0.12 }
   );
   document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+  /* safety net: if the observer never fires for an element (layout quirks,
+     hidden containers, missed intersections), stop hiding it — content
+     must never be permanently invisible because of an animation gate */
+  setTimeout(() => {
+    document.querySelectorAll(".reveal:not(.in)").forEach((el) => el.classList.add("in"));
+  }, 1600);
 }
 
 /* ---------- nav scrollspy (same-page anchors only) ---------- */

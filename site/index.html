@@ -209,6 +209,16 @@
     from the actual measurement runs.
   </p>
 
+  <div class="rung-strip reveal">
+    <div class="rung-cell"><span class="rung-num">1</span><div class="rung-cell-txt"><strong>Exact rule</strong><br>relational proofs over extracted facts</div><span class="rung-cost">~0 ms</span></div>
+    <div class="rung-cell"><span class="rung-num">2</span><div class="rung-cell-txt"><strong>Cached decision</strong><br>versioned, byte-stable replay</div><span class="rung-cost">~0 ms</span></div>
+    <div class="rung-cell"><span class="rung-num">3</span><div class="rung-cell-txt"><strong>Metadata filter</strong><br>provably-out candidates removed</div><span class="rung-cost">sub-ms</span></div>
+    <div class="rung-cell"><span class="rung-num">4</span><div class="rung-cell-txt"><strong>Lexical / BM25</strong><br>hand-written scorer, gated accept</div><span class="rung-cost">0.4 ms</span></div>
+    <div class="rung-cell"><span class="rung-num">5</span><div class="rung-cell-txt"><strong>Embedding</strong><br>static-table semantic scoring</div><span class="rung-cost">7.9 ms</span></div>
+    <div class="rung-cell"><span class="rung-num">6</span><div class="rung-cell-txt"><strong>Decision model</strong><br>4B parallel readout, tail only</div><span class="rung-cost">0.3–2.3 s</span></div>
+    <div class="rung-cell"><span class="rung-num">7</span><div class="rung-cell-txt"><strong>Verifier</strong><br>one gated shot on disagreement</div><span class="rung-cost">on demand</span></div>
+  </div>
+
   <div class="ladder-wrap reveal">
     <div class="ladder" id="ladder"></div>
     <div class="ladder-detail card" id="ladder-detail" aria-live="polite"></div>
@@ -308,11 +318,98 @@
 <!-- ============ BUILD ============ -->
 <section id="build" class="section">
   <div class="kicker">Build with it</div>
-  <h2>A runtime, not a chatbot.</h2>
+  <h2>Up and running in minutes.<br>Then it stays yours.</h2>
   <p class="lede">
-    A Rust workspace with a canonical typed decision IR. Machine-readable decisions in,
-    machine-readable decisions out — over HTTP, MCP, CLI, or WASM.
+    A Rust workspace with a canonical typed decision IR: machine-readable decisions in,
+    machine-readable decisions out — over HTTP, MCP, CLI, or WASM. No accounts, no API keys,
+    no telemetry. The base binary is useful with zero models installed.
   </p>
+
+  <div class="grid-2">
+    <div class="card reveal">
+      <h3>1 · Run it — the fastest path</h3>
+      <p class="fineprint">The whole toolchain is Rust 1.90+ with cargo. One build, one command:</p>
+      <pre class="codeblock"><code>git clone https://github.com/aliasfoxkde/OpenCodifier
+cd OpenCodifier
+cargo build --release -p opencodifier-cli
+./target/release/opencodifier serve</code></pre>
+      <p>The runtime is now on <code>127.0.0.1:8177</code> — loopback-only unless you explicitly say
+        otherwise. Prove it, then decide something:</p>
+      <pre class="codeblock"><code>curl -s http://127.0.0.1:8177/v1/healthz
+curl -s http://127.0.0.1:8177/v1/decide \
+  -H 'content-type: application/json' \
+  -d @fixtures/native/request.json</code></pre>
+      <p class="fineprint">Prefer a one-command install into <code>~/.cargo/bin</code>?
+        <code>cargo install --locked --path crates/opencodifier-cli</code> — then <code>opencodifier</code>
+        is on your PATH. The committed fixture above is a real request (choice + score + boolean);
+        the response carries full distributions, calibrated confidence, and the execution trace.</p>
+    </div>
+
+    <div class="card reveal">
+      <h3>2 · Keep it running — systemd daemon</h3>
+      <p>One user service, survives reboots, restarts on crash:</p>
+      <pre class="codeblock"><code>mkdir -p ~/.local/bin ~/.config/systemd/user
+cp target/release/opencodifier ~/.local/bin/
+
+cat &gt; ~/.config/systemd/user/opencodifier.service &lt;&lt;'EOF'
+[Unit]
+Description=OpenCodifier decision runtime
+After=network-online.target
+
+[Service]
+ExecStart=%h/.local/bin/opencodifier serve
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=default.target
+EOF
+
+systemctl --user daemon-reload
+systemctl --user enable --now opencodifier
+systemctl --user status opencodifier</code></pre>
+      <p class="fineprint">Logs: <code>journalctl --user -u opencodifier -f</code>. The service binds
+        <code>127.0.0.1:8177</code> — expose it beyond loopback only deliberately
+        (<code>serve --addr 0.0.0.0:8177</code>) and behind a firewall; the local-first default is
+        the product, not a limitation.</p>
+    </div>
+
+    <div class="card reveal">
+      <h3>3 · Embed it in your own site — WASM</h3>
+      <p>The deterministic stack compiles to WebAssembly: decisions run client-side, offline, in
+        your visitor's browser. Build the bundle once:</p>
+      <pre class="codeblock"><code>wasm-pack build crates/opencodifier-wasm \
+  --target web --out-dir ../site/wasm \
+  --out-name opencodifier_wasm</code></pre>
+      <p>Then wire it into any page:</p>
+      <pre class="codeblock"><code>&lt;script type="module"&gt;
+  import init, { WasmEngine } from "./wasm/opencodifier_wasm.js";
+  await init();   // resolves ./wasm/*_bg.wasm beside the JS
+  const engine = new WasmEngine();
+  const out = JSON.parse(engine.decide(JSON.stringify(request)));
+&lt;/script&gt;</code></pre>
+      <p class="fineprint">The WASM build ships the zero-ML stack — rules, cache, metadata filters,
+        lexical scoring — the same rungs that decide most items on the server, running in the
+        browser. <a href="try.html">try.html</a> is the working example; its source is the
+        integration guide. No network calls, ever.</p>
+    </div>
+
+    <div class="card reveal">
+      <h3>4 · Pre-built binaries</h3>
+      <p>Every release target is built by the pipeline with an attestation and a sha256 beside the
+        artifact (<code>opencodifier-&lt;version&gt;-&lt;target&gt;</code> +
+        <code>.attestation.json</code>). The matrix covers Linux (x86_64 gnu + musl static,
+        aarch64), macOS (x86_64 + aarch64), Windows (x86_64), Android, iOS, and WASM. The
+        v0.5.0 cut publishes them all in one place:</p>
+      <p><a class="btn btn-small" href="https://github.com/aliasfoxkde/OpenCodifier/releases" rel="noopener">Releases ↗</a></p>
+      <p class="fineprint">Until the cut lands, the build-from-source path above is the supported
+        install — the same code the artifacts are cut from, and the attestation format is
+        documented in the repo.</p>
+    </div>
+  </div>
+
   <div class="grid-2">
     <div class="card reveal">
       <h3>Interfaces</h3>
