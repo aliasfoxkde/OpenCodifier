@@ -2305,8 +2305,8 @@ Deltas queued into the plan: items 1–4 are engine work shaped for the
 Phase 20b–20f tranche neighborhood (new behavior, new tests — they
 shrink the coverage residual the same commit that lands them); item 7
 is #107's submission work; item 8 is board/reporting; item 9 feeds
-#124; items 5–6 are model-rung options behind existing seams, to be
-sized before commitment. Watch-list adds: mandu5/jevcompat
+#124; items 5–6 are model-rung options behind existing seams, sized
+2026-10-08 (§15.6.2: both GO, NLI first). Watch-list adds: mandu5/jevcompat
 conformance, jevland listing, LiteLLM-style frozen bundles as the
 standard run-output format.
 
@@ -2357,6 +2357,68 @@ standard run-output format.
   ladder swap names its source on the trace, and injected input text
   cannot edit the policy the operator set. CI-enforced on every
   commit.
+
+### 15.6.2 Items 5–6 sizing (2026-10-08): both GO, NLI first
+
+The program clause for items 5–6 was "model-rung options behind
+existing seams, to be sized before commitment". The sizing question
+had three parts — is the substrate proven, do ready-made arms exist
+(no self-conversions, ever), and what does each arm cost — and all
+three resolve GO.
+
+**Substrate (both items): proven.** `KaiOnnxBackend` and
+`JuliaOnnxBackend` already run real ONNX graphs through
+`ort 2.0.0-rc.13` behind the `onnx` feature — named i64/f32 tensors
+in, logits out, softmax stays in Rust (D7). Items 5 and 6 are new
+instances of that shape, not new machinery. Tokenization rides the
+`tokenizers` feature path already pinned by the kai agreement work
+(task #92): every target arm below ships `tokenizer.json`, so no
+hand-rolled WordPiece or SentencePiece enters the tree.
+
+**Ready arms (the no-self-conversion rule is satisfiable):**
+
+- Item 5 (MLM head): `onnx-community/bert-base-uncased-ONNX` — MLM
+  head in-graph, fp32/int8/q4 quants, tokenizer.json included.
+  Fallbacks: `onnx-community/bert-base-cased-ONNX`,
+  `onnx-community/bert-base-multilingual-uncased-ONNX`.
+- Item 6 (NLI): `onnx-community/DeBERTa-v3-base-mnli-ONNX`;
+  `Xenova/nli-deberta-v3-small` (plus a qint8 arm64 quant);
+  `onnx-community/deberta-v3-large-zeroshot-v2.0-c-ONNX`;
+  `protectai/deberta-v3-large-zeroshot-v1-onnx`.
+
+**Cost per arm (one tranche class: the kai contract).** A runtime
+backend in the `kai.rs` shape, the readout adapter in Rust — item 5:
+the `[input] [anchor] [MASK]` template with the MLM distribution
+restricted to per-candidate verbalizer tokens; item 6: premise =
+state, hypothesis = verbalized candidate, entailment probability
+renormalized over candidates — a `Classifier` impl so the engine can
+seat the arm as a rung or in the verifier cascade slot, committed
+parity fixtures generated from the real graph (the kai/julia
+pattern), a D14 manifest with SHA-256, and feature-gated tests plus a
+Phase-13 benchmark leg on the 231 split.
+
+**Order: item 6 first.** Three reasons:
+
+1. §19's verifier cascade asks for a second opinion structurally
+   uncorrelated with the pointer/logits family — a 3-class entailment
+   head is exactly that, and the slot already exists
+   (`executor.rs` seats an `Option<Arc<dyn Classifier>>` verifier).
+2. The readout is simpler (argmax over three classes, renormalize)
+   than item 5's verbalizer restriction.
+3. Verification is confidence-gated, so item 6's O(N)-passes cost
+   only ever lands in the verify band — never per request.
+
+Item 5's single-pass win pays where N is large and the task is
+Score-kind; it stays second, gated on item 6 proving the encoder
+substrate end-to-end.
+
+**Risks (named, not hedged):** DeBERTa-v3's disentangled attention
+exports as standard ONNX ops, but its ORT-CPU latency must be
+measured before any claim — the qwen3.5-ONNX lesson (a graph that
+loads is not a graph that serves). Neither arm's zero-shot quality on
+OUR suite is known until its 231-split leg runs. Both arms ship as
+opt-in rungs, empty-by-default byte-identical, and neither becomes a
+default-rung candidate without parity-or-better on the split.
 
 ### 15.7 Addendum (same day): dzhng/jevgrep — Jev as a code-search relevance judge
 
