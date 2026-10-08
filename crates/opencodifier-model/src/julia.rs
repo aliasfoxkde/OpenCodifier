@@ -661,6 +661,17 @@ mod tests {
         ])
     }
 
+    /// The stub is an honest tokenizer: a closed vocabulary refuses
+    /// unknown words instead of guessing an id, so a sequence-math test
+    /// can never silently pass over missing vocabulary.
+    #[test]
+    fn the_stub_tokenizer_refuses_unknown_words() {
+        let error = stub().encode("unvocabularied").unwrap_err();
+        assert!(matches!(error, ModelError::Tokenizer { .. }), "{error}");
+        assert_eq!(error.code(), "model.tokenizer");
+        assert!(error.to_string().contains("unknown word `unvocabularied`"), "{error}");
+    }
+
     fn choice_question() -> JuliaQuestion {
         JuliaQuestion::new(
             "q1",

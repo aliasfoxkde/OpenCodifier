@@ -1275,8 +1275,38 @@ host) were separated by experiment:
   Reachable fraction first; construction-precluded arms document
   their guards.
 - **20c — itemgen crate tranche** (81 in-image missed, the largest
-  crate residual): sampling/verify failure arms are unit-reachable;
-  only the binary mains are not.
+  crate residual) — **DONE (2026-10-08).** Two new test files close
+  the reachable fraction: `tests/sample_arms.rs` drives the sampler's
+  public decision points with hand-built `Sampled` values —
+  `corrupt_to_pair`'s three refusals (non-chain family, no dependent
+  edge, degraded child) and its twin-ballot relabeling (gold promoted,
+  old gold → HealthyPeer, unanchored symptom → StandaloneFailure,
+  ballot egress), the family-code pool round-tripping `from_code`
+  (incl. `sb` joining by explicit selection, not the default
+  rotation), `down_word`'s pool containment, `verify_score_item`'s
+  round-trip mismatch, and `lexical_probe`'s unbuildable-ballot
+  refusals. `tests/bin_runs.rs` covers the two binary `main()`s —
+  invisible to library tests — via `CARGO_BIN_EXE_*` spawn runs: the
+  happy run's artifacts and every summary line, the unknown-family-code
+  refusal, and the loud write-failure path (`/dev/full` accepts create
+  and fails every write, proving the corpus never ships partial), plus
+  a `corpus-merge` smoke asserting the file matches the manifest's
+  `rows_out` contract. Residual census lines here are the saturated-
+  guard / retry-exhaustion arms that need a faulting suite and the
+  `#[cfg(test)]` message lines — measured again at the batch-HEAD
+  census. Folded in from 20e's reachable pool: `opencodifier-ffi`
+  gains its first in-crate test module (the panic guard's three
+  payload classes — `&str`, `String`, non-string — each landing as
+  `ffi.panic`, the `Boundary` code/message/error-json contract, and
+  the opaque handle's content-free `Debug`), and `opencodifier-model`'s
+  Julia stub tokenizer pins its unknown-word refusal. 20e's other
+  census lines are floors, not tests: `--llama`'s `with_rungs`
+  assembly is behind the non-default `llamacpp` feature (unreached by
+  the in-image measurement by construction), `macjev`'s `expecting`
+  is `Visitor` trait contract, the schema `Serialization` `map_err`
+  arms sit behind infallible-by-construction serializations, and the
+  registry capture arm is the deliberate first-run bootstrap that
+  writes the fixture it then requires.
 - **20d — model crate tranche** (57 in-image missed): backend
   transport-error arms (`kai`/`llamacpp`/`julia`/`embedding`) against
   in-process fault seams.
