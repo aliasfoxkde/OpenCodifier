@@ -110,9 +110,9 @@ impl Bucket {
 /// Reads a prepped rows file into the bucket, recording each row's
 /// question family and label.
 fn load_rows(path: &Path, bucket: &mut Bucket) -> Result<(), Box<dyn Error>> {
-    let raw = std::fs::read_to_string(path)
+    let contents = std::fs::read_to_string(path)
         .map_err(|error| format!("read {}: {error}", path.display()))?;
-    for (index, line) in raw.lines().enumerate() {
+    for (index, line) in contents.lines().enumerate() {
         if line.trim().is_empty() {
             continue;
         }
