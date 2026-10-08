@@ -595,4 +595,42 @@ mod tests {
 
         std::fs::remove_dir_all(&dir).unwrap();
     }
+
+    /// A guard holding only a run's TWIN renders leaves every base
+    /// first draw untouched and collides each twin exactly once: the
+    /// twin's first attempt re-renders the text the guard already
+    /// holds (the twin seed does not depend on which base attempt
+    /// accepted), so the pair guard fires before the re-roll escapes.
+    #[test]
+    fn a_twin_guard_collides_the_twin_first_attempt_only() {
+        let seed = 0x0C0D_1F00_2027_u64;
+        let cfg = GenConfig {
+            families: vec![Family::RootCauseChain],
+            pair_every: 1,
+            ..config(6, seed, 0)
+        };
+
+        // Run 1: collect the accepted twin renders only.
+        let mut twins = Vec::new();
+        generate(&cfg, None, |_, record, sampled| {
+            let id = record["record_id"].as_str().unwrap();
+            if id.contains("-p") {
+                let state = record["request"]["state"].as_str().unwrap().to_owned();
+                let question = crate::sample::question_text(sampled).clone();
+                twins.push((state, question));
+            }
+        })
+        .unwrap();
+        assert!(!twins.is_empty(), "the run drew no minimal pairs");
+
+        let dir = std::env::temp_dir().join(format!("itemgen-block-{}-twin", std::process::id()));
+        let guard = guard_from(&dir, &twins);
+
+        // Run 2: same seed against its own twin corpus.
+        let stats = generate(&cfg, Some(&guard), |_, _, _| {}).unwrap();
+        assert!(stats.collisions >= twins.len());
+        assert!(stats.pairs >= 1, "pairs {}", stats.pairs);
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

@@ -296,7 +296,9 @@ mod tests {
         // The interference rule from the module docs, demonstrated: a
         // detached side chain creates a second wait-for-nothing
         // starter, the solver abstains, and verification must fail.
-        let mut rng = Rng::new(23);
+        // Seed 3 redraws before accepting (seed 23 accepted first draw),
+        // so the scan's iterate edge below genuinely runs.
+        let mut rng = Rng::new(3);
         let sampled = loop {
             let candidate = sample(Family::FirstRestoredChain, &mut rng);
             let unused = candidate
@@ -417,5 +419,61 @@ mod tests {
             "Which region is healthiest overall?"
         ));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// `fact_mentions` reads every fact kind by its entity slots — the
+    /// predicate the detached-side scan's dedupe filter leans on.
+    #[test]
+    fn fact_mentions_reads_each_fact_kind_by_name() {
+        use opencodifier_engine::facts::{Health, RelationalFact};
+        let depends = RelationalFact::DependsOn {
+            dependent: "cache-a".to_owned(),
+            dependency: "db-a".to_owned(),
+        };
+        let health = RelationalFact::Health { entity: "queue-a".to_owned(), status: Health::Down };
+        let list = RelationalFact::HealthList {
+            entity: "store-a".to_owned(),
+            statuses: vec![Health::Healthy],
+        };
+        // A dependency edge matches on either endpoint and nothing else.
+        assert!(fact_mentions(&depends, "cache-a"));
+        assert!(fact_mentions(&depends, "db-a"));
+        assert!(!fact_mentions(&depends, "queue-a"));
+        // A single health report matches only its entity.
+        assert!(fact_mentions(&health, "queue-a"));
+        assert!(!fact_mentions(&health, "db-a"));
+        // A report list matches only its entity.
+        assert!(fact_mentions(&list, "store-a"));
+        assert!(!fact_mentions(&list, "cache-a"));
+    }
+
+    /// The detached-side scan usually accepts its first draw, but it
+    /// must genuinely iterate: some seeds accept only after the
+    /// `unused < 2` branch has sent a candidate back.
+    #[test]
+    fn the_detached_side_scan_iterates_before_accepting() {
+        let mut iterating_seeds = 0;
+        for seed in 1..=64u64 {
+            let mut rng = Rng::new(seed);
+            let mut draws = 0;
+            loop {
+                draws += 1;
+                assert!(draws <= 200, "seed {seed}: no detached-side draw in 200 tries");
+                let candidate = sample(Family::FirstRestoredChain, &mut rng);
+                let unused = candidate
+                    .domain
+                    .names
+                    .iter()
+                    .filter(|n| !candidate.facts.iter().any(|f| fact_mentions(f, n)))
+                    .count();
+                if unused >= 2 {
+                    if draws > 1 {
+                        iterating_seeds += 1;
+                    }
+                    break;
+                }
+            }
+        }
+        assert!(iterating_seeds > 0);
     }
 }

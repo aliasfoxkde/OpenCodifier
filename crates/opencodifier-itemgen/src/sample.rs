@@ -889,4 +889,27 @@ mod tests {
         }
         assert!(paired >= 50, "the pair shape never drew: {paired}/200");
     }
+
+    /// The status tally reads health facts only — ordering facts
+    /// (`DependsOn`, `RestoresAfter`) carry no health signal and must
+    /// not be misread as report rows.
+    #[test]
+    fn count_statuses_skips_facts_without_health() {
+        let facts = vec![
+            RelationalFact::DependsOn {
+                dependent: "cache-a".to_owned(),
+                dependency: "db-a".to_owned(),
+            },
+            RelationalFact::RestoresAfter {
+                later: "cache-a".to_owned(),
+                earlier: "db-a".to_owned(),
+            },
+            RelationalFact::Health { entity: "db-a".to_owned(), status: Health::Down },
+            RelationalFact::HealthList {
+                entity: "cache-a".to_owned(),
+                statuses: vec![Health::Degraded, Health::Healthy],
+            },
+        ];
+        assert_eq!(count_statuses(&facts), (1, 1, 1));
+    }
 }
