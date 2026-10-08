@@ -2341,3 +2341,51 @@ verbatim excerpts on stdout. Why it matters here:
   provider key and sends source externally — contrary to harness
   rules (no code exfiltration; retrieval here is codebase-memory MCP).
   Ecosystem-index candidate (jevland "integration" category) at most.
+
+### 15.8 Addendum (same day): AlphaDev — what an RL program-search result does and does not teach this engine
+
+Source: `deepmind.google/blog/alphadev-discovers-faster-sorting-algorithms/`
+(DeepMind, 2023). AlphaDev searches assembly one instruction at a time
+with a reward that requires **correct output and latency jointly** —
+every candidate runs against test inputs (for sort3, ALL 3-element
+inputs) before it can score — and landed the first RL-derived routines
+in LLVM libc++ (sort3/4/5 up to ~70 % faster; ~1.7 % on ≥250 k
+sequences; a 9–16-byte hash path 30 % faster in Abseil).
+
+Honest applicability to this runtime, ranked:
+
+1. **Exhaustive verification of small-N paths is free here** — and we
+   should use it. AlphaDev could test every sort3 input; our analogs
+   are the small candidate sets the engine actually sees: softmax over
+   K ≤ 8 candidates, the f64 cosine loop, BM25 accumulate over a
+   shortlist. The B2/B3 equivalence gate (bit-identical decisions on
+   15 committed graphs) should gain **exhaustive small-K property
+   tests** (all orderings/permutations up to K=6, deterministic RNG
+   beyond) — aggressive micro-optimization becomes provable, exactly
+   the AlphaDev reward shape: behavior AND latency, verified together.
+2. **Redundant-guard discovery** — their `min(A,B,C)` → `min(A,B)`
+   find: comparisons that look load-bearing but are implied. Direct
+   tie-in: COVERAGE group 6 is *precisely* "escalation-walk guards
+   implied by earlier checks, precluded by construction" — unreachable
+   arms are often droppable guards. A pass over executor walk guards
+   asking "is this check provably implied?" both simplifies the code
+   and closes the uncovered arm by deletion rather than by test.
+3. **Instruction-level inspection stays a diagnostic, not a program.**
+   We consume LLVM like everyone; our standing rule (objdump the `.so`
+   actually carrying kernels — the llama.cpp ISA lesson) is the right
+   weight: `cargo asm`/`llvm-mca` on the softmax/BM25 kernels only
+   AFTER B3 lands, only if the criterion number still misses budget.
+4. **Latency-in-the-reward is already our discipline** — D9 budgets
+   are CI-gated criterion asserts, not after-the-fact benchmarks.
+   AlphaDev validates the philosophy; nothing to add except keeping
+   the budgets honest as rungs land.
+5. **What we will not do**: run program search. The wins live at
+   invocation counts (trillions of sorts) we do not have, on kernels
+   (sorting) we do not own — `sort_by`/`BTreeSet` are std's. The
+   differentiator here is decisions-per-microsecond at the pipeline
+   level, which B2/B3/B4 attack by algorithmic shape, not instruction
+   golf.
+
+Queued from this addendum: the exhaustive small-K property tests
+(folded into the B2 validation step) and the executor redundant-guard
+pass (folded into tranche 20b's scope — it owns `executor.rs`).
