@@ -132,6 +132,21 @@ channel, and the raw evidence records the exact rendered request.
    no/yes, score levels as options) with the model's own cosine softmax,
    so Brier/ECE stay comparable. Adds a data point the field lacked: what
    a 20 MB static-embedding decision engine actually scores on this suite.
+5. **Zero-shot NLI cross-encoder survey arm (PLAN 24j).**
+   `MoritzLaurer/deberta-v3-base-zeroshot-v2.0`, its own published
+   `onnx/model.onnx` (705 MB fp32, no conversion), through in-process
+   ONNX Runtime (`run_jevbench.py --arm nli`, `--nli-dir`): the vtx
+   rendering (every kind as option descriptions), premise =
+   state + instructions, hypothesis = `"<description>."`, entailment
+   index read from `config.json` `id2label`, entailment masses
+   renormalized over the option set — the same renormalization the
+   Rust serving contract (`opencodifier-model::nli`) ships. Known
+   honest divergence, recorded in each run manifest: the serving
+   boolean path uses one-hypothesis complement (IR booleans carry only
+   text), while this adapter verbalizes per-option from JevBench
+   criteria — what the zeroshot training objective does. Adds the data
+   point the field lacked: what a generic entailment cross-encoder —
+   no Jev training at all — scores on the suite.
 
 Anchor rows published for the public split (sources: jev-style repo README;
 JevBench RESULTS; jev.page):
@@ -190,6 +205,7 @@ milliseconds. Acceptance criteria:
 | engine (relational-v1\|builtin-lexical-v2, 2026-10-06 D35 rerun) | 0.3766 | 0.4011 | 0.393 | 0.875 | 0.9 ms / 2.0 ms | 231/231 | native |
 | **jev_native bridge (0.8B-v3 Q4_K_M)** | **0.6494** | 0.6378 | **0.080** | 0.425 | 6.72 s / 103.8 s | 231/231 (labels + probs) | native |
 | vtx (VTX-JEV-3 LF2, vendor client) | 0.4113 | 0.4318 | 0.126 | 0.684 | 7.9 ms | 231/231 | native |
+| nli-zeroshot (deberta-v3-base-zeroshot-v2.0, entailment renorm, 2026-10-08) | 0.5325 | 0.4904 | 0.232 | 0.648 | 0.57 s / 6.9 s | 231/231 (labels + probs) | native |
 | engine + 4B rung, fusion-v2 gate (2026-10-05) | 0.5584 | 0.5622 | 0.335 | 0.734 | 1.2 ms / 0.73 s | 231/231 | native |
 | engine + 4B rung, proofs-only posture (2026-10-05) | **0.6883** | 0.6622 | 0.171 | 0.431 | 0.58 s / 14.0 s | 231/231 | native |
 | engine + 4B rung, proofs-only posture (2026-10-06 D35 rerun) | 0.6840 | 0.6593 | 0.170 | 0.436 | 0.82 s / 18.7 s | 231/231 | native |

@@ -545,6 +545,7 @@ scoring drift against every published row is zero by construction.
 | **jev_native bridge** (Jev-Style-0.8B-v3 Q4_K_M verdict slot) | 231 | 0.6494 | 0.6378 | **0.080** | **0.425** | 6.72 s | done, det 231/231 |
 | **vtx** (VTX-JEV-3 LF2 via vendor `JevClient`) | 231 | 0.4113 | 0.4318 | 0.126 | 0.684 | **7.9 ms** | done, det 231/231 |
 | **fork_4b** (tree mode, D16 config, fork-default T — **fedora anchor**, 2026-10-02) | 231 | **0.7662** | **0.7571** | 0.070 ¹ | 0.305 ¹ | 2.28 s | done, det 231/231 (labels) |
+| **nli-zeroshot** (deberta-v3-base-zeroshot-v2.0 `onnx/model.onnx`, entailment renorm, 2026-10-08) | 231 | 0.5325 | 0.4904 | 0.232 | 0.648 | 0.57 s | done, det 231/231 |
 
 ¹ ECE/Brier come from the decision-identical build-`d15` arm
 (`fork_4b-d15-v1`, same host/build/split, predictions verified equal on
@@ -594,6 +595,35 @@ the 2-bit LF2 table costs a further 7.5 pp against its own FP32 weights.
 Net: the sub-millisecond tier is real, the decision quality is not there
 — the row is the ladder's cheapest rung measured, not a new tier (D16
 unchanged).
+
+**Reading the nli row.** The 24j zero-shot NLI cross-encoder
+(deberta-v3-base-zeroshot-v2.0, its own published `onnx/model.onnx` —
+705 MB fp32, no conversion) scores **0.5325 / macro 0.4904**: above the
+engine (0.3766) and vtx (0.4113), below the 0.8B bridge (0.6494), and
+its calibration is the worst of the trained arms (ECE 0.232, Brier
+0.648 — confidently wrong on the families it fails). Family profile is
+the cleanest separation of any arm measured: entailment-shaped decisions
+score near ceiling (tool_selection 1.000, intent 0.875, adversarial
+0.833, extraction 0.833, ordinal 0.833, fact 0.750 — the candidate
+description *is* the hypothesis and the item state *is* the premise),
+while reasoning-shaped families collapse below chance
+(multi_hop 0.111, trap 0.125, ambiguous 0.143, tradeoff 0.167,
+long_policy 0.211) — a cross-encoder cannot compose hops it cannot see
+in one premise–hypothesis pair. Operational posture is perfect —
+231/231 valid native distributions, zero failures, full 231/231 replay
+determinism — and the substrate is proven: the same graph, tokenizer,
+and softmax path passed the committed 10-row fixture at 1e-6 (fixture
+gate 1e-4) in `nli-parity-rs` before this run. Verdict for 24j's
+remaining item: the quality read **does not** justify wiring NLI as a
+general decider, and **does** support the designed role — a
+confidence-gated *verifier* restricted to entailment-shaped decision
+classes (descriptive choice candidates), where its near-ceiling agreement
+is the second opinion §19 wants; wiring that band stays open in PLAN 24j
+pending a rung-level decision. Cost note: $0 (local CPU), p50 0.57 s per
+item at 4 threads (the premise is encoded once per option), p95 6.9 s on
+long_policy items. D14 registration: graph/tokenizer/config digests are
+in `../results/models.manifest.json`; per-run hashes recorded in the
+run's own manifest.
 
 **Reading the bridge row.** 0.6494 (150/231) vs the published 64.1 %
 (148/231) is a +0.9 pp reproduction delta on the authors' own harness —
