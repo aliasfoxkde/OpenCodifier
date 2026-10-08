@@ -1166,6 +1166,12 @@ mod tests {
         let literal = canonical_json(&serde_json::json!({"description": "café"})).unwrap();
         assert!(literal.contains("café"), "{literal}");
 
+        // The recursive refusal is defensive by construction: serde_json
+        // rejects overflowing literals outright ("number out of range")
+        // and `Number::from_f64` refuses non-finites, so no `Value` can
+        // reach the check carrying one. Proven empirically 2026-10-07;
+        // the arm stays as the re-assertion of the upstream invariant.
+
         // Upstream refuses `allow_nan` output; serde_json cannot even
         // represent one, which is the structural half of the guarantee.
         assert!(
