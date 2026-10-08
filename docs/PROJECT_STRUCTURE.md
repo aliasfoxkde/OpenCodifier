@@ -56,6 +56,13 @@ opencodifier/
 ├── site/                    # static marketing page (Cloudflare Pages direct-upload;
 │                            #   Tailwind runs as a dev-time pipeline only —
 │                            #   `npm run build:css` writes the committed tw.css)
+│   ├── maze-core.js         # maze demo pure logic (seeded RNG, generation,
+│   │                        #   Bresenham FOV, bot ladder, entities, rubric
+│   │                        #   scoring) — DOM-free, node-testable
+│   ├── maze.js              # maze demo shell: DPR canvas renderer, input,
+│   │                        #   rAF loop, modes (bot/play/versus), session
+│   │                        #   leaderboard, rubric editor, WASM tie-breaks
+│   └── tests/               # node --test suites (board page + maze core/shell/deep-link)
 └── docs/                    # PLANNING.md (founding), PLAN.md (live plan), …
                              #   RELEASE_NOTES_TEMPLATE.md is the release-notes
                              #   skeleton; `just release-notes` fills its

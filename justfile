@@ -471,7 +471,7 @@ site-board:
 # the generator's CSV schema and the page's parser drift apart. Run before
 # any deploy that touches site/benchmarks.js or site/board.csv.
 site-test:
-    node --test site/tests/board_page_test.mjs
+    node --test site/tests/board_page_test.mjs site/tests/maze_test.mjs site/tests/maze_shell_test.mjs site/tests/maze_deeplink_test.mjs site/tests/maze_deeplink_test.mjs
 
 # Build the site's WASM engine bundle (the try.html playground). site/wasm is
 # a build artifact, not source — gitignored and rebuilt by this recipe before
