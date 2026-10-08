@@ -1592,11 +1592,18 @@ record says otherwise, criterion/suite validation, docs of record.
   classes only, confidence-gated) is designed but stays unwired pending
   a rung-level decision — wiring it would put a 705 MB artifact on the
   serving path for a band the ladder does not yet route to.
-- **24k — MLM-head single-pass arm (item 5). — SIZED (2026-10-08),
-  queued behind 24j.** Same sizing record; arm =
-  `onnx-community/bert-base-uncased-ONNX` (MLM head in-graph);
-  `[input] [anchor] [MASK]` with verbalizer-token restriction; gated
-  on 24j proving the encoder substrate end-to-end.
+- **24k — MLM-head single-pass arm (item 5). — REJECTED AT PROBE
+  (2026-10-08), unit closed without a tranche.** Same sizing record;
+  arm = `onnx-community/bert-base-uncased-ONNX` (MLM head in-graph,
+  verified live). The probe gate did its job: four template/scoring
+  variants all fail — score kind **0/15 vs chance 0.25** (its supposed
+  sweet spot), choice 0.15–0.25 vs chance 0.20 (12/20 items don't fit
+  512 with N masks), noul at chance — receipt in `RESEARCH.md`
+  §15.6.2. Same verdict class as the `nli-deberta-v3-small` rejection:
+  verbalizer-echo readout ≠ this decision surface, while the
+  entailment head (24j) on the same backbone class clears the gate.
+  The staged arm stays in the eval tree unregistered (never an arm of
+  record; no D14 entry).
 - Item 10 (dynamic-instruction leg) shipped as 24i above; items 5/6
   carry their sizing in §15.6.2 and queue as 24j/24k.
 
