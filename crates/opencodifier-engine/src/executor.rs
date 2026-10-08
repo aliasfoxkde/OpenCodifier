@@ -336,6 +336,9 @@ impl<'a> Executor<'a> {
 
     /// Executes the graph to completion.
     pub(crate) fn run(mut self) -> EngineResult<GraphOutcome> {
+        // Validated graphs are acyclic (`DecisionGraph::new` refuses
+        // cycles), so `waves()` is always `Some` here; the arm keeps `run`
+        // total if that invariant ever changes.
         let Some(waves) = self.config.graph.waves() else {
             return Err(EngineError::Cycle { node: self.config.graph.output().id.to_string() });
         };
@@ -1551,13 +1554,12 @@ impl<'a> Executor<'a> {
 #[allow(clippy::cast_precision_loss)] // answer-set sizes are tiny
 fn distributional_ood(distribution: &Distribution) -> f64 {
     let k = distribution.entries().len();
+    // Also pins the denominator: `log2` is at least 1 once two entries
+    // survive, so no separate zero-denominator guard is needed.
     if k < 2 {
         return 0.0;
     }
     let max_entropy = (k as f64).log2();
-    if max_entropy <= 0.0 {
-        return 0.0;
-    }
     (distribution.entropy() / max_entropy).clamp(0.0, 1.0)
 }
 
