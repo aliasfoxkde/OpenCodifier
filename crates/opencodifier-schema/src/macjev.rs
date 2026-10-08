@@ -612,7 +612,6 @@ pub fn render_record(
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-    #![allow(clippy::assert_is_empty)]
 
     use super::*;
 
@@ -927,7 +926,12 @@ mod tests {
         let outcome = render_record(record, 24_000).unwrap();
         let MacjevOutcome::Rendered(render) = outcome else { panic!("not rendered: {outcome:?}") };
         assert_eq!(render.state, "the db is down");
-        assert!(render.rows.is_empty());
-        assert!(render.skips.is_empty());
+        // Comparison against the explicitly-typed empty vectors is the one
+        // "is empty" encoding both toolchains accept (see the handle.rs
+        // note): `assert_is_empty` postdates the pinned CI clippy, and
+        // 1.99's `unnecessary_first_then_check`/`len_zero` ban the
+        // alternatives.
+        assert_eq!(render.rows, Vec::<MacjevRow>::new());
+        assert_eq!(render.skips, Vec::<(String, MacjevSkip)>::new());
     }
 }
