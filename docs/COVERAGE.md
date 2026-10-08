@@ -1,18 +1,29 @@
-# Coverage (2026-10-07 census — basis re-anchored to the pinned CI image)
+# Coverage (2026-10-08 census — basis re-anchored to the pinned CI image)
 
-Headline, number of record: **98.03 % on the lcov `DA` basis
-(17 433 / 17 783 hit; 350 lines never executed), measured inside the
-pinned CI image `opencodifier-ci-rust:2`** — confirmed by two
-independent in-image runs (warm target dir, then a cold
-`CARGO_TARGET_DIR`) agreeing to the line. The D36 ratchet moves the
-CI floor **89.0 → 97.5**, rising per tranche toward 98.5.
+Headline, number of record: **97.96 % on the lcov `DA` basis
+(18 019 / 18 394 hit; 375 lines never executed), measured inside the
+pinned CI image `opencodifier-ci-rust:2` on the default-feature tree —
+the same basis the CI lane gates** (`cargo llvm-cov --workspace
+--lcov`, warm target dir). The 2026-10-07 census read 98.03 %
+(17 433 / 17 783); the §15.6 engine additions (Boolean gate fit,
+elicited abstain, label-overlap preflight) added ~600 instrumented
+lines for a −0.07-point dilution. The D36 ratchet holds the CI floor
+at **97.5**, rising per tranche toward 98.5.
 
-The same tree under the local rustc 1.99.0 reads **89.68 % DA
-(17 303 / 19 295; 1 992 never-hit records)** and 78.92 % lines /
-76.59 % functions / 79.71 % regions on the text basis. That 8.35-point
-spread is a **coverage-mapping artifact of the toolchain, not 1 600
-lines of untested code** — see "Two toolchains, two mappings" before
-quoting any percentage from a local run.
+Basis warnings for this census:
+
+- **`--all-features` is a different number**: 96.93 %
+  (18 201 / 18 777) — the `onnx`-gated transports
+  (`runtime/julia.rs` 110, `runtime/kai.rs` 92 misses) execute no
+  model in CI and drag the all-features basis down. Quote the
+  default-feature headline; never mix bases.
+- The same tree under the local rustc 1.99.0 reads **89.68 % DA
+  (17 303 / 19 295; 1 992 never-hit records)** and 78.92 % lines /
+  76.59 % functions / 79.71 % regions on the text basis (measured
+  2026-10-07; the toolchain artifact is structural, not per-tree).
+  That spread is a **coverage-mapping artifact of the toolchain** —
+  see "Two toolchains, two mappings" before quoting any percentage
+  from a local run.
 
 ## Two toolchains, two mappings
 
@@ -46,70 +57,80 @@ Standing rule (in force from this census on):
 - Only same-toolchain deltas are meaningful. A cross-toolchain
   percentage comparison is noise by construction.
 
-## Where the 350-line residual lives (in-image `DA`, this census)
+## Where the 375-line residual lives (in-image `DA`, this census)
 
 Per crate (missed / instrumented → %):
 
 | crate | missed/total | % |
 |---|---:|---:|
-| core | 1 / 1 150 | 99.91 |
 | runtime | 1 / 489 | 99.80 |
+| core | 3 / 1 266 | 99.76 |
 | mcp | 2 / 337 | 99.41 |
-| engine | 88 / 6 000 | 98.53 |
+| engine | 90 / 6 397 | 98.59 |
 | schema | 47 / 3 674 | 98.72 |
-| cli | 10 / 590 | 98.31 |
 | http | 16 / 739 | 97.83 |
-| model | 57 / 2 358 | 97.58 |
-| itemgen | 81 / 1 951 | 95.85 |
+| model | 55 / 2 364 | 97.67 |
+| itemgen | 46 / 1 950 | 97.64 |
+| ffi | 4 / 168 | 97.62 |
 | wasm | 33 / 352 | 90.62 |
-| ffi | 14 / 143 | 90.21 |
+| cli | 78 / 658 | 88.15 |
 
-Heaviest files: `engine/executor.rs` 36/973 · `wasm/lib.rs` 33/352 ·
-`classifier.rs` 24/439 · `itemgen/main.rs` 23/87 ·
-`itemgen/sample.rs` 23/476 · `model/kai.rs` 20/926 ·
-`schema/macjev.rs` 20/496 · `http/routes.rs` 16/515 · `ffi/lib.rs`
-14/143 · `model/embedding.rs` 14/301 · `model/llamacpp.rs` 12/375 ·
-`schema/jev.rs` 11/833.
+Heaviest files: `cli/ladder.rs` **67/67 — the §15.6 item-2 `ladder`
+subcommand, entirely unexecuted by the workspace suite; the single
+largest testable residual and the next tranche's first target** ·
+`engine/executor.rs` 36/1 112 · `wasm/lib.rs` 33/352 ·
+`engine/classifier.rs` 24/439 · `model/kai.rs` 20/926 ·
+`schema/macjev.rs` 20/496 · `http/routes.rs` 16/515 ·
+`model/embedding.rs` 14/301 · `itemgen/lib.rs` 12/339 ·
+`model/llamacpp.rs` 12/375 · `schema/jev.rs` 11/833 ·
+`itemgen/main.rs` 10/87.
 
 ## Residual classification (group level)
 
 The pre-expansion ledger classified every one of 125 lines
-individually. The expanded tree's residual is 350 lines across 41
-files; this census classifies it at **group level** — per-line
-restoration is Phase 20g's exit criterion, once tranches 20b–20f
-shrink the residual below ~150 where line-by-line reasoning pays
-again. Groups, largest first:
+individually. This census's residual is 375 lines; it is classified
+at **group level** — per-line restoration is Phase 20g's exit
+criterion, once the tranche work shrinks the residual below ~150
+where line-by-line reasoning pays again. Groups, largest first
+(78 + 90 + 55 + 47 + 46 + 33 + 16 + 10 = 375):
 
-1. **Item-generation crate residual (81)** — the `corpus_merge` /
-   `main` binary entry points (arg-parse and IO-failure arms reached
-   only by running the real binaries, which the e2e corpus runs do
-   outside instrumentation), plus sampling/verify failure arms fed by
-   adversarial vocab inputs whose construction the in-crate fuzzer
-   targets rather than unit tests.
-2. **Wasm/JS boundary (33)** — the standing 18j class: any
+1. **CLI shell residual (78)** — dominated by `cli/ladder.rs`
+   **67/67**: the §15.6 item-2 ladder-fitting subcommand shipped with
+   its engine core fully tested (`ladder_fit.rs` 1 miss) but no
+   integration test driving the CLI wrapper end-to-end. Unit-reachable
+   with one `assert_cmd`-style test; the first tranche target. The
+   remaining ~11 are arg-conflict / IO-failure arms.
+2. **Engine residual (90)** — `executor.rs` 36 (escalation-walk
+   guards implied by earlier checks: cycle/no-root/starvation arms
+   precluded by construction, unchanged reasons from the 125-line
+   ledger), `classifier.rs` 24 (fuzzer-targeted adversarial arms),
+   `graph.rs` 9, scattered rules/relational/cache/serde-infallibility
+   degrade arms, `ladder_fit.rs` 1.
+3. **Model-backend failure arms (55)** — `kai` 20, `embedding` 14,
+   `llamacpp` 12, `julia` 7: transport-error arms (connection
+   refused, mid-stream EOF, malformed JSON from a backend) exercised
+   against real servers in the model-eval harness, not under unit
+   instrumentation.
+4. **Schema adapter refusal arms (47)** — `macjev` 20, `jev` 11,
+   `openai` 5: `#[non_exhaustive]` future-variant wildcards (unchanged
+   class from the 125-line ledger) plus
+   `unsupported_generation_field` / decode-refusal arms reached only
+   by wire shapes no adapter test synthesizes.
+5. **Item-generation residual (46)** — `lib` 12, `main` 10 (binary
+   entry points reached only by running the real binaries, which the
+   e2e corpus runs do outside instrumentation), `sample` 10,
+   `verify` 7, plus adversarial-vocab failure arms the in-crate
+   fuzzer targets rather than unit tests.
+6. **Wasm/JS boundary (33)** — the standing 18j class: any
    `JsValue` construction SIGABRTs a host test, so error-boundary
    JSON is proven by the Node smoke test over the real `pkg/`
    artifact, which llvm-cov cannot see.
-3. **Model-backend failure arms (57)** — `kai`, `llamacpp`,
-   `julia`, `embedding` transport-error arms (connection refused,
-   mid-stream EOF, malformed JSON from a backend) exercised against
-   real servers in the model-eval harness, not under unit
-   instrumentation.
-4. **Schema adapter refusal arms (47)** — `#[non_exhaustive]`
-   future-variant wildcards (unchanged class from the 125-line
-   ledger) plus `unsupported_generation_field` / decode-refusal arms
-   in `macjev`/`jev`/`openai` reached only by wire shapes no adapter
-   test synthesizes.
-5. **Interface error arms (42)** — `http/routes.rs` server-fault
-   encode arms (engine-produced responses cannot fail to serialize),
-   `ffi/lib.rs` null/UTF-8 guard arms reachable only from a C caller
-   violating the contract, CLI arg-conflict arms, MCP node-limit
-   refuse arms.
-6. **Engine guards (88)** — escalation-walk guards implied by
-   earlier checks (cycle/no-root/starvation arms precluded by
-   construction, unchanged reasons from the 125-line ledger),
-   serde-infallibility degrade arms, and the `#[non_exhaustive]`
-   `Distribution::from_pairs` error arms fed by in-crate data.
+7. **Interface error arms (16)** — `http/routes.rs` server-fault
+   encode arms (engine-produced responses cannot fail to serialize).
+8. **Boundary guards (10)** — `ffi/lib.rs` 4 null/UTF-8 guard arms
+   reachable only from a C caller violating the contract, `core` 3
+   (`#[non_exhaustive]` `Distribution::from_pairs` error arms fed by
+   in-crate data), `mcp` 2 node-limit refuse arms, `runtime` 1.
 
 No group is silently skipped; every group names the fact that makes
 unit instrumentation the wrong tool for it. Groups 1–5 are also the
@@ -177,3 +198,9 @@ toward 98.5.
   explicit turbofish) — every in-image lane would have failed on
   grounds unrelated to coverage; the local toolchain had drifted past
   the pinned one without any local gate noticing.
+- **2026-10-08 census (this document)**: post-§15.6 re-baseline.
+  18 019/18 394 = 97.96 %; residual regrouped to eight groups, now
+  dominated by the untested `cli/ladder.rs` shell (67/67) — the
+  engine-side ladder-fit core it wraps is itself tested to 1 miss.
+  Basis warnings recorded: `--all-features` reads 96.93 % (onnx-gated
+  transports), and the local rustc 1.99.0 mapping gap is structural.

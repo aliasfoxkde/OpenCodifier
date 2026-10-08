@@ -64,7 +64,7 @@ Remaining risks tracked in §6 below.
 | 21 | Site WCAG 2.1 AAA + progressive enhancement | **opened** (2026-10-06) — audit + fixes landed; deploy + X/Discord pending |
 | 22 | Docs freshness sweep | **opened** (2026-10-06) |
 | 23 | v0.5.0 release cut | **opened** (2026-10-06) — gated on Phase 20 floor policy |
-| 24 | RESEARCH §15.6 enhancement program | **opened** (2026-10-07) — item 1 (risk–coverage acceptance) done; items 2/3/4/8/9 + §15.8 fold-ins pending |
+| 24 | RESEARCH §15.6 enhancement program | **in progress** (2026-10-07) — items 1–4, 8–10 + §15.8 fold-ins done (ledger: RESEARCH §15.6.1); items 5/6 sized, model-rung options, deferred per the §15.6 note |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
@@ -1434,17 +1434,43 @@ record says otherwise, criterion/suite validation, docs of record.
   regenerated — a margin refit would silently replace the better fit.
   Evidence: `benchmarks/decision-model/results/CALIBRATION.md`
   § Risk–coverage evidence.
-- **24b — fitted thresholds as ladder profiles (item 2).** Per-kind /
-  per-node policies and per-rung fitted calibrations already exist
-  (D25/D27, `ladders/*.json`); the missing piece is the offline fitter
-  that tunes accept thresholds from held-out data (never hard-0.5 a
-  Boolean) and emits a validated `LadderProfile` document.
-- **24c — explicit abstain candidate (item 3).**
-- **24d — label-set overlap preflight (item 4).**
-- **24e — reporting parity bundle (item 8).** ECE/Brier/AUROC +
-  reliability per rung in board outputs; p95/p99 beside p50; dual cost
-  rows; frozen-evidence packaging.
-- **24f — corpus-prep caps + noise scoring (item 9, feeds #124).**
+- **24b — fitted thresholds as ladder profiles (item 2). — DONE
+  (2026-10-08, `c5d2527`).** `ladder_fit.rs`: deterministic grid sweep
+  over candidate boundaries, F1 on the true class, ties toward the
+  smallest threshold; emits the `LadderProfile` document through the
+  real D25 loader (round-trip tested); the cli's `ladder fit-boolean`
+  writes it. Never hard-0.5 a Boolean: measured moves were F1
+  0.499 → 0.748 (UNFAIR-ToS) and 0.243 → 0.353 (GoEmotions).
+- **24c — explicit abstain candidate (item 3). — DONE (2026-10-08,
+  `c5d2527`).** `DecisionPolicy::abstain_candidate` marks a synthetic
+  never-chosen candidate; elicited abstention answers in the same
+  typed shape as acceptance; the trace discloses
+  `abstain_candidate`/`abstain_elicited`; absent-on-default
+  byte-identical.
+- **24d — label-set overlap preflight (item 4). — DONE (2026-10-08,
+  `d5f4733`).** `DecisionPolicy::max_label_overlap` — Jaccard over
+  candidate-id tokens, terminal abstention with `label_overlap*`
+  trace facts, default byte-identical.
+- **24e — reporting parity bundle (item 8). — DONE (2026-10-08).**
+  `runner/parity.py` (Brier/AUROC/reliability/p95–p99/tokens per rung
+  over frozen run JSONs); board.csv parity + billed-cost columns;
+  `docs/BENCHMARKS.md` parity table + dual cost rows; frozen-evidence
+  packaging with repro script (verified `sha256sum -c` clean).
+- **24f — corpus-prep caps + noise scoring (item 9, feeds #124). —
+  DONE (2026-10-08).** `runner/corpus_gates.py` — schema, teacher-noise
+  (top-prob floor), per-class/per-family ceilings on the file,
+  byte-exact label-fight majority; quarantine with manifest, never
+  silent delete. First measurement on merged-v3 train (655,806 rows):
+  81,740 low-confidence rows (12.5 %), 207,461 in the bottom margin
+  decile (31.6 %), zero schema/fight/cap hits at defaults — #124's
+  A/B pool is now a recorded threshold, not a judgment call
+  (TRAINING.md §11).
+- **24i — dynamic-instruction leg (item 10). — DONE (2026-10-08).**
+  `tests/dynamic_instructions.rs` pins the counter to the §15.4
+  MindStudio axis: per-request policy edits flip decisions with zero
+  retrain, the cache keeps edits from bleeding in either direction, a
+  ladder swap governs the gate and names its source on the trace, and
+  injected input text cannot edit the operator's policy.
 - **24g — §15.8 fold-ins. — DONE (2026-10-08).** (1) Exhaustive
   small-K property tests: `crates/opencodifier-engine/tests/
   small_k_exhaustive.rs` verifies the decision kernels by exhaustion
