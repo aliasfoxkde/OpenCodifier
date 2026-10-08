@@ -1273,3 +1273,25 @@ fn recipe_install_rejects_an_unknown_name() {
         .code(1)
         .stderr(predicates::str::contains("cli.unknown_recipe"));
 }
+
+#[test]
+fn ladder_fit_boolean_refuses_non_utf8_evidence() {
+    let scratch = Scratch::new("ladder-fit-utf8");
+    // Raw invalid UTF-8: the boundary the from_utf8 check owns, before
+    // any JSON parsing happens.
+    let evidence = scratch.write("evidence.jsonl", &[0xFF, 0xFE, b'\n']);
+
+    opencodifier()
+        .args(["ladder", "fit-boolean"])
+        .arg("--evidence")
+        .arg(&evidence)
+        .arg("--id")
+        .arg("fit-test-v1")
+        .arg("--out")
+        .arg(scratch.path().join("profile.json"))
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("schema.invalid_json"))
+        .stderr(predicates::str::contains("invalid utf-8"));
+}

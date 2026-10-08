@@ -1,7 +1,7 @@
 # Coverage (2026-10-08 census — basis re-anchored to the pinned CI image)
 
-Headline, number of record: **98.32 % on the lcov `DA` basis
-(18 085 / 18 394 hit; 309 lines never executed), measured inside the
+Headline, number of record: **98.38 % on the lcov `DA` basis
+(18 177 / 18 476 hit; 299 lines never executed), measured inside the
 pinned CI image `opencodifier-ci-rust:2` on the default-feature tree —
 the same basis the CI lane gates** (`cargo llvm-cov --workspace
 --lcov`, warm target dir). The day's earlier census read 97.96 %
@@ -9,8 +9,13 @@ the same basis the CI lane gates** (`cargo llvm-cov --workspace
 elicited abstain, label-overlap preflight) diluted −0.07 points, and
 the first 20g test tranche (end-to-end `ladder fit-boolean` CLI
 tests) recovered 66 of the 67 `cli/ladder.rs` misses for +0.36. The
-2026-10-07 census read 98.03 % (17 433 / 17 783). The D36 ratchet
-holds the CI floor at **97.5**, rising per tranche toward 98.5.
+second 20g tranche, same day: four itemgen tests (the twin-guard
+collision arm, the detached-side scan's iterate edge,
+`fact_mentions` over every fact kind, the `count_statuses` skip) plus
+the non-UTF-8 evidence boundary on `ladder fit-boolean` — 10 lines
+net for +0.06. The 2026-10-07 census read 98.03 % (17 433 / 17 783).
+The D36 ratchet holds the CI floor at **97.5**, rising per tranche
+toward 98.5.
 
 Basis warnings for this census:
 
@@ -59,7 +64,7 @@ Standing rule (in force from this census on):
 - Only same-toolchain deltas are meaningful. A cross-toolchain
   percentage comparison is noise by construction.
 
-## Where the 309-line residual lives (in-image `DA`, this census)
+## Where the 299-line residual lives (in-image `DA`, this census)
 
 Per crate (missed / instrumented → %):
 
@@ -70,77 +75,91 @@ Per crate (missed / instrumented → %):
 | mcp | 2 / 337 | 99.41 |
 | schema | 47 / 3 674 | 98.72 |
 | engine | 90 / 6 397 | 98.59 |
-| cli | 12 / 658 | 98.18 |
+| cli | 10 / 658 | 98.48 |
+| itemgen | 38 / 2 032 | 98.13 |
 | http | 16 / 739 | 97.83 |
 | model | 55 / 2 364 | 97.67 |
-| itemgen | 46 / 1 950 | 97.64 |
 | ffi | 4 / 168 | 97.62 |
 | wasm | 33 / 352 | 90.62 |
 
 Heaviest files: `engine/executor.rs` 36/1 112 · `wasm/lib.rs` 33/352 ·
 `engine/classifier.rs` 24/439 · `model/kai.rs` 20/926 ·
 `schema/macjev.rs` 20/496 · `http/routes.rs` 16/515 ·
-`model/embedding.rs` 14/301 · `itemgen/lib.rs` 12/339 ·
-`model/llamacpp.rs` 12/375 · `schema/jev.rs` 11/833 ·
-`itemgen/main.rs` 10/87 · `itemgen/sample.rs` 10/476 ·
-`schema/registry.rs` 8/362 · `itemgen/verify.rs` 7/248 ·
-`model/julia.rs` 7/504 · `cli/runtime.rs` 7/104.
+`model/embedding.rs` 14/301 · `model/llamacpp.rs` 12/375 ·
+`schema/jev.rs` 11/833 · `itemgen/lib.rs` 10/364 ·
+`itemgen/main.rs` 10/87 · `itemgen/sample.rs` 9/493 ·
+`schema/registry.rs` 8/362 · `model/julia.rs` 7/504 ·
+`cli/runtime.rs` 7/104.
 
 ## Residual classification (group level)
 
 The pre-expansion ledger classified every one of 125 lines
-individually. This census's residual is 309 lines; it is classified
+individually. This census's residual is 299 lines; it is classified
 at **group level** — per-line restoration is Phase 20g's exit
 criterion, once the tranche work shrinks the residual below ~150
 where line-by-line reasoning pays again. Groups, largest first
-(90 + 55 + 47 + 46 + 33 + 16 + 12 + 10 = 309):
+(90 + 55 + 47 + 38 + 33 + 16 + 10 + 10 = 299):
 
-1. **CLI shell residual (12)** — `cli/runtime.rs` 7 (serve-runtime
-   spawn/IO-failure arms), `cli/recipes.rs` 3 and `cli/ladder.rs` 2
-   (input-boundary arms: the invalid-UTF-8 evidence arm, non-UTF-8
-   recipe paths). The §15.6 item-2 ladder shell that dominated the
-   previous census (67/67) is now driven end-to-end by eight
-   integration tests; what remains is the unit-reachable tail the
-   next tranche takes.
-2. **Engine residual (90)** — `executor.rs` 36 (escalation-walk
+1. **Engine residual (90)** — `executor.rs` 36 (escalation-walk
    guards implied by earlier checks: cycle/no-root/starvation arms
    precluded by construction, unchanged reasons from the 125-line
    ledger), `classifier.rs` 24 (fuzzer-targeted adversarial arms),
    `graph.rs` 9, scattered rules/relational/cache/calibration/handle
    /serde-infallibility degrade arms, `ladder.rs` 1, `ladder_fit.rs` 1.
-3. **Model-backend failure arms (55)** — `kai` 20, `embedding` 14,
+2. **Model-backend failure arms (55)** — `kai` 20, `embedding` 14,
    `llamacpp` 12, `julia` 7: transport-error arms (connection
    refused, mid-stream EOF, malformed JSON from a backend) exercised
    against real servers in the model-eval harness, not under unit
    instrumentation.
-4. **Schema adapter refusal arms (47)** — `macjev` 20, `jev` 11,
+3. **Schema adapter refusal arms (47)** — `macjev` 20, `jev` 11,
    `openai` 5: `#[non_exhaustive]` future-variant wildcards (unchanged
    class from the 125-line ledger) plus
    `unsupported_generation_field` / decode-refusal arms reached only
    by wire shapes no adapter test synthesizes.
-5. **Item-generation residual (46)** — `lib` 12, `main` 10 (binary
-   entry points reached only by running the real binaries, which the
-   e2e corpus runs do outside instrumentation), `sample` 10,
-   `verify` 7, `corpus_merge` 4 (same binary-entry class), plus
-   adversarial-vocab failure arms the in-crate fuzzer targets rather
-   than unit tests.
-6. **Wasm/JS boundary (33)** — the standing 18j class: any
+4. **Item-generation residual (38)** — in four named classes:
+   **rejection safety nets proven never to fire (7)** — `lib`
+   181-184 and 224-226, the verification-rejection arms; a probe
+   over 400+ draws in both family sweeps recorded zero rejections,
+   so they guard the contract without a reachable trigger;
+   **dead-by-construction (7)** — `sample` 566-572, the ballot-fill
+   loop: chain symptoms take(2) + standalone + unrelated = 4
+   distractors before the fill ever runs; **test-code
+   assert/panic-message lines (6)** — `lib` 461 and 590-591,
+   `sample` 758 and 887, `verify` 356: multi-line assert messages'
+   `format_args`, evaluated only when a test fails;
+   **binary-entry class (14)** — `main` 10, `corpus_merge` 4,
+   reached only by running the real binaries, which the e2e corpus
+   runs do outside instrumentation; plus `verify` 132 (the
+   classifier-error `else` on a probe the lexical classifier cannot
+   fail over this input class), `render` 197 and `vocab` 132/147
+   (adversarial fallbacks the in-crate fuzzer targets rather than
+   unit tests).
+5. **Wasm/JS boundary (33)** — the standing 18j class: any
    `JsValue` construction SIGABRTs a host test, so error-boundary
    JSON is proven by the Node smoke test over the real `pkg/`
    artifact, which llvm-cov cannot see.
-7. **Interface error arms (16)** — `http/routes.rs` server-fault
+6. **Interface error arms (16)** — `http/routes.rs` server-fault
    encode arms (engine-produced responses cannot fail to serialize).
+7. **CLI residual, no default-build test (10)** — `runtime.rs` 7 is
+   the `--llama` `with_rungs` assembly, reachable only in a
+   `--features llamacpp` build; the default build refuses at
+   `cli.model_rung_unavailable` before assembly (the 20c
+   feature-floor class). `recipes.rs` 3 are multi-line
+   assert-message lines inside the `#[cfg(test)]` recipe validation.
+   The rest of the cli shell is now test-covered: the `ladder
+   fit-boolean` surface by nine integration tests including the
+   non-UTF-8 evidence boundary (this census closed `ladder.rs`
+   92-93).
 8. **Boundary guards (10)** — `ffi/lib.rs` 4 null/UTF-8 guard arms
    reachable only from a C caller violating the contract, `core` 3
    (`#[non_exhaustive]` `Distribution::from_pairs` error arms fed by
    in-crate data), `mcp` 2 node-limit refuse arms, `runtime` 1.
 
 No group is silently skipped; every group names the fact that makes
-unit instrumentation the wrong tool for it. Groups 1–5 are also the
-tranche-20b–20f worklist: each has testable cores (e.g. itemgen
-verify/sample arms *are* unit-reachable; only the binary mains are
-not), and closing the reachable fraction is what lifts the floor
-toward 98.5.
+unit instrumentation the wrong tool for it. Groups 3–4 hold the
+testable cores (schema wire shapes, itemgen's binary-entry tails are
+the exception); closing the reachable fraction is what lifts the
+floor toward 98.5.
 
 ## Measurement integrity
 
@@ -213,3 +232,20 @@ toward 98.5.
   empty-evidence refusals, unwritable output, base-policy carry);
   65 of 67 ladder lines recovered, cli residual 78 → 12, census
   98.32 % (18 085/18 394).
+- **2026-10-08 second tranche (this census)**: four itemgen tests —
+  the twin-guard collision arm (two-phase: run 1 captures a run's
+  twin renders into a guard, run 2 re-runs the same seed against it
+  and asserts every twin collides exactly once — the twin attempt
+  seed does not depend on which base attempt accepted), the
+  detached-side scan's iterate edge (seed 3 redraws where seed 23
+  accepted first draw), `fact_mentions` over every fact kind, the
+  `count_statuses` skip — plus `ladder fit-boolean`'s non-UTF-8
+  evidence boundary as a ninth cli integration test. Empirical
+  probes proved the rejection arms (lib 181-184/224-226) never fire
+  and the ballot-fill loop (sample 566-572) cannot fire, so both
+  joined the documented defensive classes instead of gaining
+  unreachable tests. Census 98.38 % (18 177/18 476; the +82
+  denominator is the new tests' own instrumented lines); residual
+  309 → 299. A process note: multi-line `assert!(cond, "msg")`
+  messages put lazy `format_args` on their own never-executed lines —
+  new tests keep messages single-line.

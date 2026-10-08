@@ -60,10 +60,10 @@ Remaining risks tracked in §6 below.
 | 17 | External anchor: JevBench public split | **done** (2026-10-04) — engine+bridge+vtx over the benchmark's own harness; `docs/BENCHMARKS.md` is the comparison page of record |
 | 18 | Hardening pass | **done** (2026-10-02) — coverage floor 98.5 in CI, §-items closed, D19–D28 |
 | 19 | Adoption + integration documentation | **done** (2026-10-04) — `docs/INTEGRATIONS.md` + D30/D31 + 19e Amortyx E2E |
-| 20 | Coverage restoration: the escalation core | **in progress** (2026-10-06) — 20a ratchet done (D36); 2026-10-07 census re-based the numbers on the pinned image: **98.03 % in-image DA** (350-line residual; the 980-line "executor debt" was a local-mapping artifact), floor 89.0 → 97.5, COVERAGE.md regenerated, 20h done; tranches 20b–20f re-scoped in-image, pending |
+| 20 | Coverage restoration: the escalation core | **in progress** (2026-10-06) — 20a ratchet done (D36); 2026-10-07 census re-based the numbers on the pinned image: **98.03 % in-image DA** (350-line residual; the 980-line "executor debt" was a local-mapping artifact), floor 89.0 → 97.5, COVERAGE.md regenerated, 20h done; 20g tranches 1–2 done 2026-10-08 (cli ladder shell, then itemgen probe/guard arms + UTF-8 boundary): **98.38 %** (18 177 / 18 476), residual 299 classified, 0.12 from the 98.5 floor |
 | 21 | Site WCAG 2.1 AAA + progressive enhancement | **opened** (2026-10-06) — audit + fixes landed; deploy + X/Discord pending |
 | 22 | Docs freshness sweep | **opened** (2026-10-06) |
-| 23 | v0.5.0 release cut | **opened** (2026-10-06) — gated on Phase 20 floor policy |
+| 23 | v0.5.0 release cut | **done** (2026-10-08) — tag `v0.5.0` → `0fd6a154`, 9-leg matrix rebuilt single-tree with one consistent attestation set; releases on GitForge + GitHub (19 assets, 69.4 MB) |
 | 24 | RESEARCH §15.6 enhancement program | **in progress** (2026-10-07) — items 1–4, 8–10 + §15.8 fold-ins done (ledger: RESEARCH §15.6.1); items 5/6 sized, model-rung options, deferred per the §15.6 note |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
@@ -1328,6 +1328,18 @@ host) were separated by experiment:
   missing file, unwritable output, base-policy carry + both base
   decode arms). In-image re-census: **98.32 %** (18 085 / 18 394);
   cli residual 78 → 12; 0.18 points from the 98.5 floor.
+  **Second test tranche DONE (2026-10-08):** four itemgen tests (the
+  twin-guard collision arm driven two-phase against its own twin
+  corpus, the detached-side scan's iterate edge via a redrawing
+  seed, `fact_mentions` over every fact kind, the `count_statuses`
+  skip) plus the non-UTF-8 evidence boundary as a ninth
+  `ladder fit-boolean` integration test. Empirical probes proved the
+  verification-rejection arms (lib 181-184/224-226) and the
+  ballot-fill loop (sample 566-572) cannot fire, so they joined the
+  defensive classes instead of gaining unreachable tests; the cli
+  `runtime.rs` 7 were confirmed feature-gated (`--llama` with_rungs
+  assembly behind non-default `llamacpp`). Census: **98.38 %**
+  (18 177 / 18 476); residual 309 → 299; 0.12 points from 98.5.
 - **20h — CI observability — DONE (2026-10-07).** The lane's
   `coverage_floor.py` prints `coverage_floor: <hit>/<found> lines hit
   = NN.NN% (floor N%)` plus PASS/FAIL on both the pass and fail
@@ -1397,7 +1409,7 @@ The expansion changed the tree faster than the maps describing it:
 Acceptance: every doc claim mechanically checkable against the tree;
 no doc quotes a number whose producing artifact is missing.
 
-## Phase 23 — v0.5.0 release cut (opened 2026-10-06; gated on Phase 20a)
+## Phase 23 — v0.5.0 release cut (opened 2026-10-06; **done 2026-10-08**)
 
 `CHANGELOG.md` [Unreleased] already carries B5 (`LlamaDecisionClassifier`,
 D26) and B6 (cross-rung escalation, D27) — the release ships them plus
@@ -1413,6 +1425,17 @@ D30–D35 and the Phase 21 site work.
    checked by env-var name/length only — values never echoed).
 7. Site deploy to Cloudflare Pages if the release touches `site/`.
 8. Both remotes pushed; pipeline of record green at the release commit.
+
+**Shipped 2026-10-08.** All steps except (7) — no `site/` content in
+the release diff. The full 9-leg matrix was rebuilt in one worktree at
+`0fd6a154` so every attestation cites one tree (`cargo_tree_sha256`
+hashes absolute workspace paths; legs built in different trees never
+mix — the first-pass set was mixed-tree and was discarded). The android
+ELF came out byte-identical across the two trees, proving the NDK r28c
+re-fetch exact. Tag `v0.5.0` pushed to both forges; release live on
+GitHub with 19 assets (69.4 MB) and on GitForge; attestation set,
+`sha256sums.txt`, and `RELEASE_NOTES.md` verified line-for-line against
+the staged `dist/` tree.
 
 Acceptance: `git describe` matches the release; the pipeline of record
 is green on the release tag; release notes quote only measured numbers
