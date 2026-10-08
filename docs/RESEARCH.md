@@ -2051,3 +2051,261 @@ gaps) — record-only unless the user wants it run. Future-arm watch: the
 Qwen3.5-4B Q4_K_M trio (Plumb/decider-4b-v2/JevK5) defines the next size
 class; imajev-4B Q4_K_M (2.42 GB, phase-3 trained) is the single most
 informative 4B add.
+
+## §15 — Zero-shot classification, the Jev evaluation literature, board scoring rules, and the ecosystem press (2026-10-07 sweep)
+
+Four parallel research clusters, 23 sources, fetched and read the same
+day (deep-read by research agents; numbers below are as published on
+the fetched pages, slants noted inline). This section merges them;
+where findings touch existing records (D15, D25, §14, BENCHMARKS.md's
+cost methodology) it says so instead of restating.
+
+### 15.1 The Jev evaluation literature — two papers that read like a spec review
+
+- **arXiv:2609.37647** ("Evaluating and Benchmarking the System One
+  Model JEV", Fraunhofer IAIS): 37 datasets, 346,009 requests against
+  jev-1.13.0. Jev beats Qwen3.8-27B on 27/37 and Gemma-4-E4B on 37/37;
+  pooled Choice **ECE 0.028**; US$9.15 for the whole campaign at 0.36 s
+  mean latency. Reference-scoring recipe: one forward pass, single-token
+  letter codes (A, B, … AA), restrict + renormalize the next-token
+  distribution; median 0.997–1.000 of mass on valid codes. Documented
+  pitfall: numeric candidate keys were abandoned because the key "36"
+  collided with an atomic-number answer — a one-line adapter guard for
+  our Jev schema work. Calibration is **overconfidence on 20/22
+  datasets** and concentrates where accuracy is low (Spearman
+  ρ = −0.83 between accuracy and ECE).
+- **arXiv:2609.34024** ("Jev in Medicine"): the sharpest single finding
+  of the sweep — **Jev is better calibrated (ECE 0.063 vs 0.146) and
+  discriminates better (AUROC 0.845 vs 0.801) than GPT-6 on MetaMedQA,
+  yet LOSES selective prediction** (AURC 0.087 vs 0.070; 93.9 % accuracy
+  at 49.7 % coverage vs 94.2 % at 52.8 %). Calibration quality is not
+  decision quality; the accept/reject ranking is what the gate consumes.
+  Also: calibration is **task-local** (same model: ECE 0.063 on one
+  benchmark, 0.141 on another — "calibration is not a model property");
+  abstention is **not emergent** (on 162 "don't know"-answerable items
+  the model abstained 10.5 % of the time, but when it did abstain it was
+  right 17/18 — the behavior exists and is usable when elicited);
+  Jev's separate `confidence` field ranks identically to its probability
+  (Spearman 0.964–1.000) but sits systematically 0.04–0.10 lower —
+  a coverage dial, not new information.
+- **Both papers converge on what our confidence gate should measure**:
+  risk–coverage curves (AURC) and accuracy-at-coverage, not ECE alone.
+  Our `Calibration` seam already exists; this defines the *acceptance
+  metric* that should gate a calibration artifact, per task/node.
+
+### 15.2 Zero-shot mechanisms — what transfers to the ladder's cheap rungs
+
+Sources: jaketae.github.io, statworx.com, datacamp.com,
+sparknlp.org, towardsdatascience.com (+ arXiv:2312.17543 and
+arXiv:2502.03793 from the arXiv cluster).
+
+- **NLI verbalization** (premise = text, each candidate label wrapped in
+  a hypothesis template, entailment scored per pair): the standard
+  zero-shot mechanism; **+9.4 % zero-shot balanced accuracy** from a
+  multi-dataset NLI mix (arXiv:2312.17543, DeBERTaV3, CPU-feasible).
+  Cost: N forward passes for N candidates. The hypothesis template is a
+  **tunable, cache-relevant parameter** (statworx: a German template
+  requirement; datacamp: descriptive phrases beat bare label words) —
+  if adopted, the template string must join the `CacheKeyBuilder` input.
+- **Single-pass MLM-head classification** (arXiv:2502.03793,
+  ModernBERT-Large-Instruct, 395 M params): one forward pass scores ALL
+  candidates — `[input] [anchor] [MASK]`, read the MLM distribution
+  restricted to per-candidate verbalizer tokens. Zero-shot MMLU 43.06
+  (best in class; 93 % of a model 4× larger). **Backbone-sensitive**:
+  identical recipe collapses on RoBERTa (26.44 avg vs 47.8) — any
+  adoption is fixture-gated per the model-import parity discipline
+  (quality.md). Structurally the cheapest realization of our
+  candidate-conditioned decision model: N candidates, one pass, f64
+  softmax in Rust behind the existing `InferenceBackend` seam.
+- **Failure modes worth engineering against**: raw entailment softmax is
+  shipped as "confidence" with no calibration by every library source
+  (contradiction with PLANNING §73 — our invariant is right); vague/
+  overlapping labels split confidence; fine-tuning gains are small when
+  the pretrained representation is strong (~1.7 pts on IMDB) but large
+  on fine-grained ordered tasks (SST-5 61.13 vs 59.28 — our Score kind).
+- **Corpus-prep discipline** (2312.17543): ~17 % of an established
+  multi-dataset collection was probable label noise; capping at
+  ≤500 texts/class and ≤5,000/dataset (51,731 texts) BEAT >1 M uncapped
+  on zero-shot transfer — "diversity and quality over quantity".
+  Directly applicable to merged-v3's 173k rows and the 69 %-mixed-gold
+  quarantine pool (#124): cap + noise-score + quarantine-with-manifest,
+  never silent deletion (noise removal disproportionately deletes
+  minority classes).
+
+### 15.3 Board scoring rules, decoded (benchmarkheaven.com/jev-models v1.6.1/board v1.7.12)
+
+The submission-relevant mechanics, exact from the board's own pages:
+
+- **Capability = mean(Intelligence, Calibration)** within caps
+  (≤2× Jev cost = $0.0646/1k, ≤2× Jev median latency = 1.23 s).
+  Calibration is HALF the headline and the cheaper axis to buy —
+  leaders sit I 73.4 / C 82–90; every Calibration point is worth an
+  Intelligence point.
+- **Composite** (secondary) = 4/(1/I+1/C+1/S+1/K) with ×(axis/50)²
+  soft gates below 50 — a CPU engine that maxes Speed and Cost (our
+  $0.0125/hr modeled basis lands Cost 85–100) lifts a mid Intelligence
+  into the top five: e.g. I 60 / C 90 / S 95 / K 97 ≈ 82 Composite,
+  above the current best ranked 71.4.
+- **Public-sealed gap penalty**: −1 Intelligence point per excess point
+  once (public − sealed) exceeds G_med + 8 (≈10.6) — tuning to the
+  public split is structurally self-defeating; matches our
+  no-teaching-to-the-test posture.
+- **Noul decisiveness**: P ∈ [0.20, 0.80] either vanishes from the
+  competence cell (Heaven) or counts WRONG (Open-Jev's 231 protocol) —
+  mid-band hedging is a direct points loss on both boards. Our Boolean
+  threshold policy must be per-surface.
+- **Refused/failed answers count wrong for Intelligence but are
+  EXCLUDED from Calibration** — a hard refusal path does not poison
+  the calibration axis.
+- The 23 very-long items (77–82k tokens) cause most rivals' only
+  failures; a lexical path with no context window converts them.
+- Category radar: **rules/policy is the largest pool (1,011 of 1,887
+  items) and math & numbers is where the field is weakest**
+  (leaders score 31.5–43.4; TypeSafe's own documented failure clusters
+  are math, dates, indirection, noisy states — "often move into
+  code"). Our exact-rule/relational rungs aim exactly there.
+- Open-Jev's published BANKING77 negative baseline is third-party
+  evidence for the deterministic-first thesis: their released 2B model
+  routed 64.8 % vs **BM25 top-1's 82.4 %** — mirror its reporting
+  format (coverage + accepted error + candidate recall, never accuracy
+  alone).
+- Release-gate re-read: our JevBench ≥ 0.6494 gate is a *shipping*
+  gate; board parity on the 231 split is 0.8528 (Open-Jev-27B; Jev ≈
+  0.866) — ~0.20 above the gate. Naming caution (three unrelated
+  things are called "JevBench": Heaven's scored benchmark, the
+  jevbench.dev game board, the community 534-task suite) — every
+  public claim names its surface.
+
+### 15.4 The ecosystem press — cost methodology, cascades, and the credibility bar
+
+Sources: layer3labs.io, docs.litellm.ai, mindstudio.ai,
+ayautomate.com (×2), typesafe.ai.
+
+- **Three cost methodologies in circulation**: list-price × assumed
+  tokens (largest multiples); **billed $/1k from a real meter** (AY:
+  Jev $0.0136–0.0400/1k vs Terra 40–49× dearer — the market's most
+  defensible form); registry-priced observed tokens (LiteLLM). None
+  uses a hardware-amortized basis — ours (benchmarkheaven's
+  $0.0125/hr convention) is the board's own currency. Obligations:
+  publish modeled-CPU and billed-equivalent rows side by side, always
+  naming task, n, and tokens/decision; **tokenizer drift breaks
+  price-list ratios** (Jev billed 360 tokens where GPT billed 153 on
+  the identical prompt).
+- **The vendor headline did not reproduce**: TypeSafe's 193.6×/444.6×
+  collapses to **2.0–3.6× faster / 40–49× cheaper** under fair LLM
+  baselines (minimal reasoning, strict schema, short outputs) — always
+  state the baseline configuration next to any multiple.
+- **Agreement-with-a-bigger-model inflates 6–8 points** (AY: 90.0 %
+  agreement vs 83.8 % true accuracy) — which is precisely the design
+  of TypeSafe's workflow evals (reference = average of two frontier
+  LLMs, no ground truth). Any of our rows scored against a reference
+  model instead of a labeled key must say so.
+- **Confidence-gated escalation is now a documented vendor pattern**
+  (AY/TypeSafe cascade: Terra-level accuracy at 26–28 % of cost; gate
+  0.80 → 80.6 % answered at 93.8 % accuracy). It is table stakes, not
+  a differentiator. What NO system in the ecosystem publishes:
+  abstention as an outcome, risk–coverage curves, execution traces,
+  adversarial input isolation, offline operation. Those five are our
+  unopposed claims.
+- **Confidently-wrong clusters on overlapping labels** (AY: all five
+  confident 8-way errors were one overlapping pair at 0.93–0.99 —
+  "the confidence score cannot tell you that your label set
+  overlaps"): a label-set overlap preflight (pairwise BM25/embedding
+  similarity over candidate names — both already in the tree) that
+  downgrades to abstain converts this entire documented failure class.
+- **Credibility bar**: LiteLLM's frozen-evidence bundle (corpus/
+  protocol/registry SHA256s, seeded shuffle, clustered bootstrap,
+  repro script) and Layer3's §6 independence checklist (ECE + Brier,
+  head-to-head vs schema-constrained LLMs, degradation near context
+  ceilings, p95/p99 under concurrency, open data) — **no Jev vendor
+  passes it**; meeting it is mostly packaging on top of
+  BENCHMARKS.md's existing methodology section.
+- **Tail latency compresses speedup ratios** (LiteLLM: 5.43× at p50 →
+  3.88× at p95): report p95/p99 beside p50; our cost_per_1k is
+  p50-derived today.
+- **Dynamic-instruction following is Jev's one documented decisive
+  win** (MindStudio: policy changed post-deployment, Jev adapted,
+  fine-tuned classifiers kept matching the stale pattern). Our
+  declarative DAG + version-stamped cache keys are the natural
+  counter — a benchmark leg proving runtime policy edits with zero
+  retrain closes the only axis where hosted zero-shot clearly beats
+  local.
+- Compatibility/discovery seams: `mandu5/jevcompat` (System One API
+  conformance suite) and jevland.mnimiy.com (404-repo index) are the
+  cheap credibility/visibility plays; jevbench.dev (game wins) needs a
+  harness we don't have — enter through an existing one or record the
+  surface out-of-scope in the board map.
+
+### 15.5 Contradictions and traps worth keeping
+
+1. Raw softmax presented as confidence by every library source vs
+   PLANNING §73 — our invariant holds; the empirical caveat (AY's
+   AUROC 0.990 with post-hoc thresholds) is ranking quality, not
+   calibration proof.
+2. ECE as the headline calibration metric vs the medicine paper's
+   ECE-vs-AURC divorce — adopt both, gate on risk–coverage.
+3. Abstention posture vs board scoring — mid-band Noul hedging LOSES
+   points on both boards; abstention wins only where coverage is
+   reported separately. Per-surface threshold policy, decided, not
+   ambient.
+4. Fine-tune vs zero-shot ordering (every source: fine-tune wins when
+   labels exist) vs our ladder — already the architecture; the sweep
+   adds the missing middle rungs (NLI head, MLM-head single-pass).
+5. "Zero-shot will not close an accuracy gap by label tweaking"
+   (datacamp) vs "template phrasing is the cheapest accuracy lever"
+   (statworx) — both true: phrasing moves single-digit points,
+   training moves tens.
+
+### 15.6 Ranked enhancement program (merged across the four clusters)
+
+1. **Risk–coverage acceptance for calibration artifacts** (engine +
+   core): AURC + accuracy@50 %/80 % coverage per task/node, n ≥ 200
+   floor, gate artifacts on it — not ECE alone. [2609.34024]
+2. **Per-node/per-kind calibration + fitted Boolean thresholds** via
+   the D25 `LadderPolicy` seam (empty = byte-identical): the largest
+   measured lever in the entire sweep — tuned thresholds moved F1
+   0.499 → 0.748 (UNFAIR-ToS), 0.243 → 0.353 (GoEmotions); median
+   tuned threshold 0.86. Never hard-0.5 a Boolean. [2609.37647,
+   2609.34024]
+3. **Explicit abstain candidate** injected at narrowing time, scored
+   by the model's own OOD/entropy or as an ordinary candidate;
+   abstain-when-elicted was right 17/18. Pointer contracts must assert
+   the synthetic candidate explicitly. [2609.34024, 2609.37647]
+4. **Label-set overlap preflight** at candidate preparation: pairwise
+   BM25/embedding similarity over candidate names → `label_overlap`
+   trace event + downgrade-to-abstain under a config flag, measured
+   on the 231 split before defaulting on. [ayautomate]
+5. **MLM-head single-pass decision model** behind `InferenceBackend`:
+   395 M-class encoder, all N candidates in one pass; fixture-gated
+   backbone choice; Score-kind tasks are its sweet spot. [2502.03793]
+6. **NLI verbalization head** as a structurally independent verifier
+   arm (entailment per verbalized candidate, renormalized): a second
+   opinion uncorrelated with the pointer/logits family. O(N) passes —
+   budget-capped per node. [2312.17543]
+7. **Board calibration buy**: per-type/per-tier temperature fitted on
+   held-out data, ranked-probability error for Score + distribution
+   distance for Choice as the verification metrics; Calibration is
+   half of Capability and leaders sit at 82–90. Plus: no-refusal on
+   the 23 long items via the lexical path, and the Capability-vs-
+   Composite strategic decision (CPU engine maxes S and K — Composite
+   arithmetic favors us). [benchmarkheaven]
+8. **Reporting parity bundle**: ECE + Brier + AUROC + reliability
+   curve per rung in Board B and the board CSV; p95/p99 beside p50;
+   dual cost rows (modeled CPU + billed-equivalent) with task/n/
+   tokens named; frozen-evidence packaging (SHA256s + repro script)
+   per board run. [layer3labs, litellm, ayautomate]
+9. **Corpus-prep gates for #124**: per-class/per-dataset caps +
+   label-noise scoring → quarantine-with-manifest (never silent
+   delete). [2312.17543]
+10. **Dynamic-instruction leg** on a routing task: runtime policy
+    edit, zero retrain, Jev vs our DAG — the only axis the press
+    says hosted wins. [mindstudio]
+
+Deltas queued into the plan: items 1–4 are engine work shaped for the
+Phase 20b–20f tranche neighborhood (new behavior, new tests — they
+shrink the coverage residual the same commit that lands them); item 7
+is #107's submission work; item 8 is board/reporting; item 9 feeds
+#124; items 5–6 are model-rung options behind existing seams, to be
+sized before commitment. Watch-list adds: mandu5/jevcompat
+conformance, jevland listing, LiteLLM-style frozen bundles as the
+standard run-output format.
