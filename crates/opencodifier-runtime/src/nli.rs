@@ -31,7 +31,8 @@ use crate::tensor::DenseTensor;
 #[cfg(any(feature = "onnx", test))]
 use crate::kai::{ATTENTION_MASK, INPUT_IDS, LOGITS_OUTPUT};
 
-/// Prefix of every [`NliOnnxBackend::model_id`].
+/// Prefix of every `NliOnnxBackend::model_id` (the backend struct is
+/// feature-gated, so no doc link here).
 pub const MODEL_ID: &str = "nli-zeroshot";
 
 /// The graph file `from_dir` loads, in the arm of record's repository

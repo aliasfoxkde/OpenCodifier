@@ -18,7 +18,8 @@
 //!   the entailment-to-distribution math — always compiles, over the
 //!   [`NliScorer`] trait, and its tests run feature-free;
 //! * the **serving scorer** — tokenizer plus ONNX graph through
-//!   [`opencodifier_runtime::nli::NliOnnxBackend`] — sits behind the
+//!   `opencodifier_runtime::nli::NliOnnxBackend` (feature-gated, so no
+//!   doc link) — sits behind the
 //!   crate's `nli` feature, and the compute-host parity runner
 //!   (`benchmarks/validation/runner/nli-parity-rs`) reproduces the
 //!   frozen [`FIXTURE`] against the real artifact (weights are never
