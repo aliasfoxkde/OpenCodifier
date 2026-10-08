@@ -1,14 +1,16 @@
 # Coverage (2026-10-08 census — basis re-anchored to the pinned CI image)
 
-Headline, number of record: **97.96 % on the lcov `DA` basis
-(18 019 / 18 394 hit; 375 lines never executed), measured inside the
+Headline, number of record: **98.32 % on the lcov `DA` basis
+(18 085 / 18 394 hit; 309 lines never executed), measured inside the
 pinned CI image `opencodifier-ci-rust:2` on the default-feature tree —
 the same basis the CI lane gates** (`cargo llvm-cov --workspace
---lcov`, warm target dir). The 2026-10-07 census read 98.03 %
-(17 433 / 17 783); the §15.6 engine additions (Boolean gate fit,
-elicited abstain, label-overlap preflight) added ~600 instrumented
-lines for a −0.07-point dilution. The D36 ratchet holds the CI floor
-at **97.5**, rising per tranche toward 98.5.
+--lcov`, warm target dir). The day's earlier census read 97.96 %
+(18 019 / 18 394): the §15.6 engine additions (Boolean gate fit,
+elicited abstain, label-overlap preflight) diluted −0.07 points, and
+the first 20g test tranche (end-to-end `ladder fit-boolean` CLI
+tests) recovered 66 of the 67 `cli/ladder.rs` misses for +0.36. The
+2026-10-07 census read 98.03 % (17 433 / 17 783). The D36 ratchet
+holds the CI floor at **97.5**, rising per tranche toward 98.5.
 
 Basis warnings for this census:
 
@@ -57,7 +59,7 @@ Standing rule (in force from this census on):
 - Only same-toolchain deltas are meaningful. A cross-toolchain
   percentage comparison is noise by construction.
 
-## Where the 375-line residual lives (in-image `DA`, this census)
+## Where the 309-line residual lives (in-image `DA`, this census)
 
 Per crate (missed / instrumented → %):
 
@@ -66,46 +68,46 @@ Per crate (missed / instrumented → %):
 | runtime | 1 / 489 | 99.80 |
 | core | 3 / 1 266 | 99.76 |
 | mcp | 2 / 337 | 99.41 |
-| engine | 90 / 6 397 | 98.59 |
 | schema | 47 / 3 674 | 98.72 |
+| engine | 90 / 6 397 | 98.59 |
+| cli | 12 / 658 | 98.18 |
 | http | 16 / 739 | 97.83 |
 | model | 55 / 2 364 | 97.67 |
 | itemgen | 46 / 1 950 | 97.64 |
 | ffi | 4 / 168 | 97.62 |
 | wasm | 33 / 352 | 90.62 |
-| cli | 78 / 658 | 88.15 |
 
-Heaviest files: `cli/ladder.rs` **67/67 — the §15.6 item-2 `ladder`
-subcommand, entirely unexecuted by the workspace suite; the single
-largest testable residual and the next tranche's first target** ·
-`engine/executor.rs` 36/1 112 · `wasm/lib.rs` 33/352 ·
+Heaviest files: `engine/executor.rs` 36/1 112 · `wasm/lib.rs` 33/352 ·
 `engine/classifier.rs` 24/439 · `model/kai.rs` 20/926 ·
 `schema/macjev.rs` 20/496 · `http/routes.rs` 16/515 ·
 `model/embedding.rs` 14/301 · `itemgen/lib.rs` 12/339 ·
 `model/llamacpp.rs` 12/375 · `schema/jev.rs` 11/833 ·
-`itemgen/main.rs` 10/87.
+`itemgen/main.rs` 10/87 · `itemgen/sample.rs` 10/476 ·
+`schema/registry.rs` 8/362 · `itemgen/verify.rs` 7/248 ·
+`model/julia.rs` 7/504 · `cli/runtime.rs` 7/104.
 
 ## Residual classification (group level)
 
 The pre-expansion ledger classified every one of 125 lines
-individually. This census's residual is 375 lines; it is classified
+individually. This census's residual is 309 lines; it is classified
 at **group level** — per-line restoration is Phase 20g's exit
 criterion, once the tranche work shrinks the residual below ~150
 where line-by-line reasoning pays again. Groups, largest first
-(78 + 90 + 55 + 47 + 46 + 33 + 16 + 10 = 375):
+(90 + 55 + 47 + 46 + 33 + 16 + 12 + 10 = 309):
 
-1. **CLI shell residual (78)** — dominated by `cli/ladder.rs`
-   **67/67**: the §15.6 item-2 ladder-fitting subcommand shipped with
-   its engine core fully tested (`ladder_fit.rs` 1 miss) but no
-   integration test driving the CLI wrapper end-to-end. Unit-reachable
-   with one `assert_cmd`-style test; the first tranche target. The
-   remaining ~11 are arg-conflict / IO-failure arms.
+1. **CLI shell residual (12)** — `cli/runtime.rs` 7 (serve-runtime
+   spawn/IO-failure arms), `cli/recipes.rs` 3 and `cli/ladder.rs` 2
+   (input-boundary arms: the invalid-UTF-8 evidence arm, non-UTF-8
+   recipe paths). The §15.6 item-2 ladder shell that dominated the
+   previous census (67/67) is now driven end-to-end by eight
+   integration tests; what remains is the unit-reachable tail the
+   next tranche takes.
 2. **Engine residual (90)** — `executor.rs` 36 (escalation-walk
    guards implied by earlier checks: cycle/no-root/starvation arms
    precluded by construction, unchanged reasons from the 125-line
    ledger), `classifier.rs` 24 (fuzzer-targeted adversarial arms),
-   `graph.rs` 9, scattered rules/relational/cache/serde-infallibility
-   degrade arms, `ladder_fit.rs` 1.
+   `graph.rs` 9, scattered rules/relational/cache/calibration/handle
+   /serde-infallibility degrade arms, `ladder.rs` 1, `ladder_fit.rs` 1.
 3. **Model-backend failure arms (55)** — `kai` 20, `embedding` 14,
    `llamacpp` 12, `julia` 7: transport-error arms (connection
    refused, mid-stream EOF, malformed JSON from a backend) exercised
@@ -119,8 +121,9 @@ where line-by-line reasoning pays again. Groups, largest first
 5. **Item-generation residual (46)** — `lib` 12, `main` 10 (binary
    entry points reached only by running the real binaries, which the
    e2e corpus runs do outside instrumentation), `sample` 10,
-   `verify` 7, plus adversarial-vocab failure arms the in-crate
-   fuzzer targets rather than unit tests.
+   `verify` 7, `corpus_merge` 4 (same binary-entry class), plus
+   adversarial-vocab failure arms the in-crate fuzzer targets rather
+   than unit tests.
 6. **Wasm/JS boundary (33)** — the standing 18j class: any
    `JsValue` construction SIGABRTs a host test, so error-boundary
    JSON is proven by the Node smoke test over the real `pkg/`
@@ -199,8 +202,14 @@ toward 98.5.
   grounds unrelated to coverage; the local toolchain had drifted past
   the pinned one without any local gate noticing.
 - **2026-10-08 census (this document)**: post-§15.6 re-baseline.
-  18 019/18 394 = 97.96 %; residual regrouped to eight groups, now
+  18 019/18 394 = 97.96 %; residual regrouped to eight groups, then
   dominated by the untested `cli/ladder.rs` shell (67/67) — the
   engine-side ladder-fit core it wraps is itself tested to 1 miss.
   Basis warnings recorded: `--all-features` reads 96.93 % (onnx-gated
   transports), and the local rustc 1.99.0 mapping gap is structural.
+  First 20g tranche the same day: eight integration tests drive
+  `ladder fit-boolean` end-to-end (fit → profile write → `--ladder`
+  reload, reserved ids, malformed-row naming, non-probability and
+  empty-evidence refusals, unwritable output, base-policy carry);
+  65 of 67 ladder lines recovered, cli residual 78 → 12, census
+  98.32 % (18 085/18 394).

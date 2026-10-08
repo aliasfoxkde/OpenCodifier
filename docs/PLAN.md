@@ -1320,6 +1320,14 @@ host) were separated by experiment:
   uses, residual classified in six waiver groups; floor at 97.5 with
   0.53 margin under the measured 98.03. The remaining 0.47 points
   (~84 lines) are exactly tranches 20b–20f's reachable fraction.
+  **First test tranche DONE (2026-10-08):** the §15.6 item-2 CLI shell
+  (`cli/ladder.rs`, 67/67 unexecuted — the largest single residual the
+  census named) is now driven end-to-end by eight integration tests
+  (fit + round-trip load through `--ladder`, reserved ids, malformed
+  row naming the line, non-probability refusal, empty evidence /
+  missing file, unwritable output, base-policy carry + both base
+  decode arms). In-image re-census: **98.32 %** (18 085 / 18 394);
+  cli residual 78 → 12; 0.18 points from the 98.5 floor.
 - **20h — CI observability — DONE (2026-10-07).** The lane's
   `coverage_floor.py` prints `coverage_floor: <hit>/<found> lines hit
   = NN.NN% (floor N%)` plus PASS/FAIL on both the pass and fail
