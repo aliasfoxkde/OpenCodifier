@@ -38,7 +38,7 @@
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="tw.css">
 </head>
-<body>
+<body class="page-wide">
 <a class="skip-link" href="#board">Skip to the board</a>
 
 <div class="bg-mesh" aria-hidden="true"></div>
@@ -101,12 +101,14 @@
 
 <section id="board" class="section">
   <div class="kicker">Live data</div>
-  <h2>192 measured rows. No hand-typed numbers.</h2>
+  <h2>Every measured row. No hand-typed numbers.</h2>
   <p class="lede">
     The table renders the same CSV the repo's docs of record are generated from — every row is a
-    run with a committed artifact (see the footer for the source paths). Derived columns are marked
-    <span class="chip chip-derived">derived</span> and computed in your browser; everything else is
-    the CSV verbatim.
+    run with a committed artifact (see the footer for the source paths). Every row carries a stable
+    <strong>ID</strong> (surface letter + sequence) you can sort on; hover any column header for its
+    definition; toggle extra columns and filter by size or any numeric band below. Derived columns
+    are marked <span class="chip chip-derived">derived</span> and computed in your browser;
+    everything else is the CSV verbatim.
   </p>
 
   <noscript>
@@ -142,6 +144,11 @@
     </div>
 
     <div class="ctl">
+      <label for="f-size">Artifact size</label>
+      <select id="f-size"><option value="">All</option></select>
+    </div>
+
+    <div class="ctl">
       <label for="f-rank">Rank / best by</label>
       <select id="f-rank">
         <option value="trust">Trust score (derived)</option>
@@ -162,6 +169,35 @@
       <label><input type="checkbox" id="f-hassize"> model rows only (has measured size)</label>
       <button type="button" class="tab" id="f-reset">Reset filters</button>
     </div>
+
+    <details class="adv-panel">
+      <summary>Advanced filters — accuracy, calibration, latency, trust bands</summary>
+      <div class="adv-grid">
+        <div class="ctl">
+          <label for="f-minacc">Accuracy ≥ (%)</label>
+          <input type="number" id="f-minacc" min="0" max="100" step="0.1" inputmode="decimal" placeholder="e.g. 60">
+        </div>
+        <div class="ctl">
+          <label for="f-maxece">ECE ≤</label>
+          <input type="number" id="f-maxece" min="0" max="1" step="0.01" inputmode="decimal" placeholder="e.g. 0.15">
+        </div>
+        <div class="ctl">
+          <label for="f-maxp50">p50 latency ≤ (ms)</label>
+          <input type="number" id="f-maxp50" min="0" step="1" inputmode="decimal" placeholder="e.g. 100">
+        </div>
+        <div class="ctl">
+          <label for="f-mintrust">Trust ≥ (%)</label>
+          <input type="number" id="f-mintrust" min="0" max="100" step="0.1" inputmode="decimal" placeholder="e.g. 70">
+        </div>
+        <p class="adv-note">Bands apply to rows that measure the metric — a row without an ECE is
+          hidden by an ECE band, not exempt from it. Empty means off.</p>
+      </div>
+    </details>
+
+    <div class="ctl ctl-wide">
+      <label id="lbl-cols">Columns — click to show or hide (ID, system, surface, n, accuracy, ECE, p50, size, and the derived scores are always on)</label>
+      <div class="chip-row" id="f-cols" role="group" aria-labelledby="lbl-cols"></div>
+    </div>
   </div>
 
   <div class="bench-summary" aria-live="polite">
@@ -177,8 +213,10 @@
         but miscalibrated loses standing; a model that knows when it doesn't know keeps it. Rows
         without a measured ECE get no Trust score — never a guessed one.</dd>
       <dt>Accuracy per GiB <span class="chip chip-derived">derived</span></dt>
-      <dd><code>accuracy ÷ model file size (GiB)</code> — intelligence per gigabyte, the compression
-        view. Only rows that publish a measured artifact size get one.</dd>
+      <dd><code>accuracy ÷ artifact size (GiB)</code> — intelligence per gigabyte, the compression
+        view. The artifact is the model file for model rows and the static engine binary for engine
+        rows (the engine ships no model weights — its "model" is a few MiB of code, which is exactly
+        why it dominates this column). Only rows with a measured artifact size get one.</dd>
       <dt>Rank &amp; best-in-view</dt>
       <dd>Ranked <strong>within each benchmark surface</strong>, never across them: a JevBench split
         score and a locked-suite score measure different things (the divergence is documented in

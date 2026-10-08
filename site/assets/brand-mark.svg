@@ -1,15 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <!-- OpenCodifier mark: the canonical geometry from
-       docs/images/OpenCodifier_Logo.svg (paths apg-1/apg-2), with the
-       export's nested transforms baked into two plain transforms and the
-       off-canvas design-tool clutter removed. Brand gradient is the
-       canonical #728ee4 -> #3a00ad. -->
+  <!-- OpenCodifier nav mark. The canonical logo geometry
+       (docs/images/OpenCodifier_Logo.svg, apg-1/apg-2) is drawn for large
+       surfaces; scaled to the 22 px nav slot its hairline hexagon and
+       fine code glyph turn to mush. This is the same identity redrawn for
+       small sizes: a bold hexagonal ring (pointy-top, ~80-unit wall) with
+       a chunky right-chevron code glyph in the counter, no interior
+       detail below the legibility floor. Canonical gradient kept. -->
   <defs>
     <linearGradient id="ocg" x1="0.258" y1="0.063" x2="0.742" y2="0.937">
       <stop offset="0%" stop-color="#728ee4"/>
       <stop offset="100%" stop-color="#3a00ad"/>
     </linearGradient>
   </defs>
-  <path d="M-434.6 370 C-436.15 370.89 -438.05 370.89 -439.6 370 L-504.77 332.37 C-506.32 331.48 -507.27 329.83 -507.27 328.04 L-507.27 252.79 C-507.27 251 -506.32 249.35 -504.77 248.46 L-439.6 210.81 C-438.05 209.92 -436.15 209.92 -434.6 210.81 L-370.1 248.18 C-368.77 248.94 -368.77 250.86 -370.09 251.63 L-382.97 259.23 C-384.52 260.14 -386.44 260.15 -388.01 259.26 L-434.6 232.44 C-436.15 231.55 -438.05 231.55 -439.6 232.44 L-486.04 259.27 C-487.59 260.16 -488.54 261.81 -488.54 263.6 L-488.54 317.23 C-488.54 319.02 -487.59 320.67 -486.04 321.56 L-439.6 348.38 C-438.05 349.27 -436.15 349.27 -434.6 348.38 L-388.16 321.56 C-386.61 320.67 -384.71 320.67 -383.16 321.56 L-369.94 329.2 C-368.61 329.97 -368.61 331.89 -369.94 332.66 L-434.6 370 Z" fill="url(#ocg)" transform="translate(1323.64 -451.69) scale(2.4369)"/>
-  <path d="M-179.16 284.84 C-177.94 285.68 -177.22 287.07 -177.22 288.54 L-177.22 306.46 C-177.22 308.65 -179.68 309.94 -181.47 308.69 L-225.29 278.23 C-226.51 277.39 -227.23 276 -227.23 274.53 L-227.23 258.72 C-227.23 257.25 -226.51 255.86 -225.29 255.02 L-181.47 224.56 C-179.68 223.31 -177.22 224.6 -177.22 226.78 L-177.22 244.71 C-177.22 246.18 -177.94 247.57 -179.16 248.41 L-203.22 265.14 C-204.25 265.86 -204.25 267.39 -203.22 268.1 Z M-85.3 268.1 C-84.27 267.39 -84.27 265.86 -85.3 265.14 L-109.36 248.41 C-110.58 247.57 -111.3 246.18 -111.3 244.71 L-111.3 226.78 C-111.3 224.6 -108.84 223.31 -107.05 224.56 L-63.23 255.02 C-62.01 255.86 -61.29 257.25 -61.29 258.72 L-61.29 274.53 C-61.29 276 -62.01 277.39 -63.23 278.23 L-107.05 308.69 C-108.84 309.94 -111.3 308.65 -111.3 306.46 L-111.3 288.54 C-111.3 287.07 -110.58 285.68 -109.36 284.84 Z M-120.49 214.21 C-117.17 214.21 -114.78 217.38 -115.68 220.57 L-143.1 317.49 C-143.71 319.64 -145.67 321.13 -147.91 321.13 L-168.11 321.13 C-171.43 321.13 -173.82 317.96 -172.92 314.77 L-145.49 217.85 C-144.88 215.7 -142.92 214.21 -140.68 214.21 Z" fill="url(#ocg)" transform="translate(496.78 -144.65) scale(1.508)"/>
+  <path fill-rule="evenodd" fill="url(#ocg)" d="
+    M256 26 L455.3 141 L455.3 371 L256 486 L56.7 371 L56.7 141 Z
+    M256 116 L381.9 188.5 L381.9 323.5 L256 396 L130.1 323.5 L130.1 188.5 Z"/>
+  <path fill="url(#ocg)" d="
+    M196 189 L217.8 176.4 L292 220 L292 246 L217.8 289.6 L196 277 L196 251.2
+    L259.5 233 L196 214.8 Z
+    M220 300 L294 300 L294 326 L220 326 Z"/>
 </svg>

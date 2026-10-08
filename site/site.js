@@ -356,7 +356,9 @@ const OUTCOME_TEXT = {
 let enginePromise = null;
 function getEngine() {
   if (!enginePromise) {
-    enginePromise = import("./wasm/opencodifier_wasm.js").then((m) => m.init().then(() => new m.WasmEngine()));
+    /* the wasm-pack web glue exports the async initializer as DEFAULT
+       (`__wbg_init as default`) — there is no named `init` */
+    enginePromise = import("./wasm/opencodifier_wasm.js").then((m) => m.default().then(() => new m.WasmEngine()));
   }
   return enginePromise;
 }
