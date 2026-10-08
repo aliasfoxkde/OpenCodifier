@@ -32,7 +32,11 @@ environment:
 jobs:
   - name: lint
     image: opencodifier-ci-rust:2
-    timeout: 20m
+    # 45m: 2026-10-08 receipts — run 857acb2e (f21cd8b) timed out at 20m
+    # with the host at load ~30 (co-tenant storm; the same contention the
+    # test job's 60m budget was sized for). fmt+clippy from a fresh clone
+    # is ~10-15 min calm; this is storm headroom, not workload growth.
+    timeout: 45m
     steps:
       - name: Format check
         run: cargo fmt --all -- --check
