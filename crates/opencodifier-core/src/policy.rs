@@ -76,6 +76,9 @@ pub struct DecisionPolicy {
     /// The elicited-abstain candidate (RESEARCH §15.6 item 3). `None` —
     /// the default — appends nothing and stays byte-identical.
     abstain_candidate: Option<AbstainCandidate>,
+    /// Label-set overlap ceiling (RESEARCH §15.6 item 4). `None` — the
+    /// default — measures nothing and stays byte-identical.
+    max_label_overlap: Option<f64>,
 }
 
 /// Deserialization mirror for [`DecisionPolicy`]; conversion validates.
@@ -102,6 +105,8 @@ struct RawDecisionPolicy {
     boolean_threshold: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     abstain_candidate: Option<AbstainCandidate>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    max_label_overlap: Option<f64>,
 }
 
 /// Which deterministic signal feeds the OOD channel (D28).
@@ -202,6 +207,7 @@ impl From<DecisionPolicy> for RawDecisionPolicy {
             ood_mode: (!policy.ood_mode.is_answer_entropy()).then_some(policy.ood_mode),
             boolean_threshold: policy.boolean_threshold,
             abstain_candidate: policy.abstain_candidate,
+            max_label_overlap: policy.max_label_overlap,
         }
     }
 }
@@ -231,6 +237,10 @@ impl TryFrom<RawDecisionPolicy> for DecisionPolicy {
             Some(candidate) => policy.with_abstain_candidate(candidate)?,
             None => policy,
         };
+        let policy = match raw.max_label_overlap {
+            Some(overlap) => policy.with_max_label_overlap(overlap)?,
+            None => policy,
+        };
         Ok(policy.with_ood_mode(raw.ood_mode.unwrap_or_default()))
     }
 }
@@ -250,6 +260,7 @@ impl DecisionPolicy {
         ood_mode: OodMode::AnswerEntropy,
         boolean_threshold: None,
         abstain_candidate: None,
+        max_label_overlap: None,
     };
 
     /// Validates and constructs a policy.
@@ -289,6 +300,7 @@ impl DecisionPolicy {
             ood_mode: OodMode::AnswerEntropy,
             boolean_threshold: None,
             abstain_candidate: None,
+            max_label_overlap: None,
         })
     }
 
@@ -342,6 +354,40 @@ impl DecisionPolicy {
     #[must_use]
     pub fn abstain_candidate(&self) -> Option<&AbstainCandidate> {
         self.abstain_candidate.as_ref()
+    }
+
+    /// Sets the label-set overlap ceiling (RESEARCH §15.6 item 4): when
+    /// the two most lexically similar candidate labels in a choice
+    /// question overlap at or above this fraction (Jaccard over the
+    /// names' alphanumeric tokens), the rung's choice between them is
+    /// label-noise-dominated and the question abstains instead of
+    /// guessing. Absent (the default), nothing is measured and canonical
+    /// serializations are byte-identical to the pre-field form.
+    ///
+    /// The value lives in `(0, 1]`: `0` would abstain everything, and a
+    /// ceiling above 1 is unreachable. `1.0` is meaningful — it abstains
+    /// exactly the questions whose top-two labels share one token set.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidPolicy`] unless the ceiling is a finite value
+    /// in `(0, 1]`.
+    pub fn with_max_label_overlap(mut self, overlap: f64) -> CoreResult<Self> {
+        if !overlap.is_finite() || !(0.0..=1.0).contains(&overlap) || overlap == 0.0 {
+            return Err(CoreError::InvalidPolicy {
+                reason: format!(
+                    "max_label_overlap must be a finite value in (0, 1], got {overlap}"
+                ),
+            });
+        }
+        self.max_label_overlap = Some(overlap);
+        Ok(self)
+    }
+
+    /// The label-set overlap ceiling, when one is configured.
+    #[must_use]
+    pub fn max_label_overlap(&self) -> Option<f64> {
+        self.max_label_overlap
     }
 
     /// Selects which deterministic signal feeds the OOD channel (D28).
@@ -591,6 +637,38 @@ mod tests {
         // path: a struct that bypassed `new` must not install either.
         let forged = AbstainCandidate { id: String::new(), description: "x".to_owned() };
         assert!(DecisionPolicy::default().with_abstain_candidate(forged).is_err());
+    }
+
+    #[test]
+    fn max_label_overlap_serializes_as_absent_on_the_default() {
+        // Same absent-on-default discipline: a policy without the
+        // preflight is byte-identical to the pre-field form.
+        let default_json = serde_json::to_string(&DecisionPolicy::default()).expect("serialize");
+        assert!(
+            !default_json.contains("max_label_overlap"),
+            "the default must serialize as absent, got {default_json}"
+        );
+        let opted = DecisionPolicy::default().with_max_label_overlap(0.85).unwrap();
+        let opted_json = serde_json::to_string(&opted).expect("serialize");
+        assert!(opted_json.contains("\"max_label_overlap\":0.85"), "{opted_json}");
+        let restored: DecisionPolicy = serde_json::from_str(&opted_json).expect("deserialize");
+        assert_eq!(restored, opted);
+        assert_eq!(restored.max_label_overlap(), Some(0.85));
+    }
+
+    #[test]
+    fn max_label_overlap_bounds_are_validated() {
+        assert!(DecisionPolicy::default().with_max_label_overlap(0.0).is_err());
+        assert!(DecisionPolicy::default().with_max_label_overlap(-0.5).is_err());
+        assert!(DecisionPolicy::default().with_max_label_overlap(1.01).is_err());
+        assert!(DecisionPolicy::default().with_max_label_overlap(f64::NAN).is_err());
+        assert!(DecisionPolicy::default().with_max_label_overlap(f64::INFINITY).is_err());
+        // The endpoints that ARE meaningful: 1.0 abstains exactly the
+        // questions whose top-two labels share one token set.
+        assert_eq!(
+            DecisionPolicy::default().with_max_label_overlap(1.0).unwrap().max_label_overlap(),
+            Some(1.0)
+        );
     }
 
     #[test]

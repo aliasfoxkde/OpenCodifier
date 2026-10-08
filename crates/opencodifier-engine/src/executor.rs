@@ -27,9 +27,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 use opencodifier_core::{
-    Candidate, CandidateId, ChoiceQuestion, ConfidenceReport, DecisionAnswer, DecisionMetrics,
-    DecisionOutcome, DecisionPolicy, DecisionQuestion, DecisionRequest, DecisionTrace,
-    Distribution, FactValue, NodeId, OodMode, QuestionId, State, TraceEntry,
+    AbstainCandidate, Candidate, CandidateId, ChoiceQuestion, ConfidenceReport, DecisionAnswer,
+    DecisionMetrics, DecisionOutcome, DecisionPolicy, DecisionQuestion, DecisionRequest,
+    DecisionTrace, Distribution, FactValue, NodeId, OodMode, QuestionId, State, TraceEntry,
 };
 
 use crate::cache::CacheKey;
@@ -114,6 +114,17 @@ struct NodeExecution {
     thread: String,
 }
 
+/// Why a decision abstained ahead of the confidence gate (RESEARCH
+/// §15.6): elicitation elected the configured abstain candidate, or the
+/// label-overlap preflight measured a label-noise-dominated pair.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AbstainReason {
+    /// The decision elected the policy's abstain candidate (item 3).
+    Elicited,
+    /// The label-overlap preflight hit the policy ceiling (item 4).
+    LabelOverlap,
+}
+
 /// One question's answer, from the decision node until the response is
 /// assembled.
 #[derive(Debug, Clone)]
@@ -133,10 +144,15 @@ pub(crate) struct QuestionDecision {
     /// Whether a configured Boolean threshold overruled the argmax —
     /// trace disclosure for the no-hidden-thresholds rule.
     pub(crate) boolean_flipped: bool,
-    /// Whether the decision elected the elicited-abstain candidate
-    /// (RESEARCH §15.6 item 3) — the outcome is [`DecisionOutcome::Abstain`]
-    /// and the synthetic answer never reaches the response.
-    pub(crate) abstain_elicited: bool,
+    /// Why this question abstained ahead of the confidence gate
+    /// (RESEARCH §15.6), if it did. Terminal: the escalation walk never
+    /// re-derives it into an acceptance, and a synthetic abstain
+    /// candidate's answer never reaches the response.
+    pub(crate) abstained: Option<AbstainReason>,
+    /// The preflight's measurement: the maximum pairwise label overlap
+    /// and the pair that produced it (`"a|b"`), when the policy opts in
+    /// and the question is a choice with at least two scanned labels.
+    pub(crate) label_overlap: Option<(f64, String)>,
     /// The node that decided this question (id and kind), so the
     /// threshold node can re-apply the same rung's policy — ladder
     /// resolution must not depend on which graph path is re-traced.
@@ -906,6 +922,50 @@ impl<'a> Executor<'a> {
         )
     }
 
+    /// Maximum pairwise lexical overlap over candidate labels
+    /// (RESEARCH §15.6 item 4 preflight): Jaccard over each name's
+    /// lowercase alphanumeric tokens. The cheapest reliable overlap
+    /// signal — labels are a few tokens, where BM25's IDF is degenerate
+    /// and embeddings are the most expensive layer for the same verdict.
+    /// Returns the score and the pair that produced it (`"a|b"`, in
+    /// candidate order); `None` for fewer than two candidates. Ties keep
+    /// the first pair in scan order, so the measurement is
+    /// deterministic under candidate reordering.
+    #[allow(clippy::cast_precision_loss)] // set counts, not measurements
+    fn max_label_overlap(candidates: &[&Candidate]) -> Option<(f64, String)> {
+        if candidates.len() < 2 {
+            return None;
+        }
+        let tokens: Vec<HashSet<String>> = candidates
+            .iter()
+            .map(|candidate| {
+                candidate
+                    .id()
+                    .as_str()
+                    .to_lowercase()
+                    .split(|ch: char| !ch.is_ascii_alphanumeric())
+                    .filter(|token| !token.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .collect();
+        let mut best: Option<(f64, usize, usize)> = None;
+        for i in 0..tokens.len() {
+            for j in (i + 1)..tokens.len() {
+                let (left, right) = (&tokens[i], &tokens[j]);
+                let intersection = left.intersection(right).count();
+                let union = left.union(right).count();
+                let score = if union == 0 { 0.0 } else { intersection as f64 / union as f64 };
+                if best.is_none_or(|(top, _, _)| score > top) {
+                    best = Some((score, i, j));
+                }
+            }
+        }
+        best.map(|(score, i, j)| {
+            (score, format!("{}|{}", candidates[i].id().as_str(), candidates[j].id().as_str()))
+        })
+    }
+
     /// Asks the classifier about every question of this node's kind.
     fn decide_questions(
         &self,
@@ -994,26 +1054,7 @@ impl<'a> Executor<'a> {
             // The no-hidden-thresholds rule applies to the fitted Boolean
             // boundary like every other gate (RESEARCH §15.6 item 2), and
             // an overruled argmax is disclosed, not silent.
-            if matches!(narrowed, DecisionQuestion::Boolean(_))
-                && let Some(threshold) = policy.boolean_threshold()
-            {
-                detail.push(("boolean_threshold", FactValue::Float(threshold)));
-                if decision.boolean_flipped {
-                    detail.push(("boolean_flipped", FactValue::Boolean(true)));
-                }
-            }
-            // Same no-hidden-thresholds discipline for elicitation
-            // (RESEARCH §15.6 item 3): the configured candidate is
-            // disclosed whenever it rides a choice question, and an
-            // elected abstention is disclosed, not silent.
-            if matches!(narrowed, DecisionQuestion::Choice(_))
-                && let Some(candidate) = policy.abstain_candidate()
-            {
-                detail.push(("abstain_candidate", FactValue::Text(candidate.id().to_string())));
-                if decision.abstain_elicited {
-                    detail.push(("abstain_elicited", FactValue::Boolean(true)));
-                }
-            }
+            Self::push_gate_disclosures(&mut detail, &narrowed, policy, &decision);
             if let Some(view) = &view {
                 detail.push(("focus_engaged", FactValue::Boolean(view.extracted)));
                 detail.push(("focus_kept", FactValue::Integer(int(view.kept_sentences))));
@@ -1031,6 +1072,47 @@ impl<'a> Executor<'a> {
             decided.push(decision);
         }
         Ok((decided, focus, entries))
+    }
+
+    /// Discloses every configured gate on the deciding trace entry —
+    /// the no-hidden-thresholds rule (RESEARCH §15.6): a fitted Boolean
+    /// boundary, the elicited-abstain candidate, and the label-overlap
+    /// ceiling each name themselves when configured, and an overruled
+    /// argmax or an abstention is disclosed, not silent.
+    fn push_gate_disclosures(
+        detail: &mut Vec<(&'static str, FactValue)>,
+        narrowed: &DecisionQuestion,
+        policy: &DecisionPolicy,
+        decision: &QuestionDecision,
+    ) {
+        if matches!(narrowed, DecisionQuestion::Boolean(_))
+            && let Some(threshold) = policy.boolean_threshold()
+        {
+            detail.push(("boolean_threshold", FactValue::Float(threshold)));
+            if decision.boolean_flipped {
+                detail.push(("boolean_flipped", FactValue::Boolean(true)));
+            }
+        }
+        if matches!(narrowed, DecisionQuestion::Choice(_))
+            && let Some(candidate) = policy.abstain_candidate()
+        {
+            detail.push(("abstain_candidate", FactValue::Text(candidate.id().to_string())));
+            if matches!(decision.abstained, Some(AbstainReason::Elicited)) {
+                detail.push(("abstain_elicited", FactValue::Boolean(true)));
+            }
+        }
+        if matches!(narrowed, DecisionQuestion::Choice(_))
+            && let Some(limit) = policy.max_label_overlap()
+        {
+            detail.push(("max_label_overlap", FactValue::Float(limit)));
+            if let Some((score, pair)) = &decision.label_overlap {
+                detail.push(("label_overlap", FactValue::Float(*score)));
+                detail.push(("label_overlap_pair", FactValue::Text(pair.clone())));
+                if matches!(decision.abstained, Some(AbstainReason::LabelOverlap)) {
+                    detail.push(("label_overlap_abstained", FactValue::Boolean(true)));
+                }
+            }
+        }
     }
 
     /// Whether a focused view's distribution is too weak to trust: below
@@ -1114,8 +1196,10 @@ impl<'a> Executor<'a> {
             // `live` borrows `replacements`; the outcome and verifier
             // cascade below only read it. An elected abstention is
             // terminal: the report alone would re-derive the cascade's
-            // outcome and could accept a confident "none of these".
-            let outcome = if live.abstain_elicited {
+            // outcome and could accept a confident "none of these". A
+            // label-overlap abstention (RESEARCH §15.6 item 4) is
+            // terminal for the same reason.
+            let outcome = if live.abstained.is_some() {
                 DecisionOutcome::Abstain
             } else {
                 live.report.outcome_for(policy)
@@ -1403,6 +1487,27 @@ impl<'a> Executor<'a> {
             }
             _ => false,
         };
+        // Label-set overlap preflight (RESEARCH §15.6 item 4): when the
+        // policy sets a ceiling, measure the candidate labels' maximum
+        // pairwise lexical overlap and abstain when the top-two
+        // similarity reaches it — a rung cannot honestly separate labels
+        // that are near-duplicates, and the measured E1-C failure mode
+        // (top-prob 0.917 on 0.610 accuracy) is exactly the shape this
+        // manufactures. The configured abstain candidate is a synthetic
+        // escape hatch, not a label, so it never enters the scan.
+        let label_overlap = Self::measure_label_overlap(question, policy);
+        let overlap_abstained = matches!(
+            (question, policy.max_label_overlap()),
+            (DecisionQuestion::Choice(_), Some(limit))
+                if label_overlap.as_ref().is_some_and(|(score, _)| *score >= limit)
+        );
+        let abstained = if abstain_elicited {
+            Some(AbstainReason::Elicited)
+        } else if overlap_abstained {
+            Some(AbstainReason::LabelOverlap)
+        } else {
+            None
+        };
         // D28: the policy selects what the OOD channel measures. The
         // default mode is answer entropy (the historical signal,
         // byte-identical); lexical-band mode consumes the rung's
@@ -1423,7 +1528,7 @@ impl<'a> Executor<'a> {
             }
         };
         let report = ConfidenceReport::from_distribution(&distribution, calibrated, ood, None)?;
-        let outcome = if abstain_elicited {
+        let outcome = if abstained.is_some() {
             DecisionOutcome::Abstain
         } else {
             ConfidenceReport::outcome_for(&report, policy)
@@ -1476,9 +1581,32 @@ impl<'a> Executor<'a> {
             outcome,
             verification_triggered: false,
             boolean_flipped: boolean_verdict.is_some(),
-            abstain_elicited,
+            abstained,
+            label_overlap,
             decided_by: (decided_by.to_owned(), decided_kind),
         })
+    }
+
+    /// The label-overlap preflight's measurement (RESEARCH §15.6
+    /// item 4): the candidate labels' maximum pairwise lexical overlap
+    /// when the policy opts in and the question is a choice. The
+    /// configured abstain candidate is a synthetic escape hatch, not a
+    /// label, so it never enters the scan.
+    fn measure_label_overlap(
+        question: &DecisionQuestion,
+        policy: &DecisionPolicy,
+    ) -> Option<(f64, String)> {
+        let (DecisionQuestion::Choice(choice), Some(_)) = (question, policy.max_label_overlap())
+        else {
+            return None;
+        };
+        let abstain_id = policy.abstain_candidate().map(AbstainCandidate::id);
+        let scanned: Vec<&Candidate> = choice
+            .candidates()
+            .iter()
+            .filter(|candidate| Some(candidate.id().as_str()) != abstain_id)
+            .collect();
+        Self::max_label_overlap(&scanned)
     }
 
     /// Expected value of a distribution over positional weights.
@@ -1588,9 +1716,12 @@ impl<'a> Executor<'a> {
                 Some(decision) => {
                     // An elected abstention carries no answer: the rung
                     // declined to decide, and the synthetic candidate id
-                    // is internal (RESEARCH §15.6 item 3). The per-question
-                    // outcome still records the abstention.
-                    if !decision.abstain_elicited {
+                    // is internal (RESEARCH §15.6 item 3). A label-overlap
+                    // abstention likewise ships no answer — the "choice"
+                    // it would carry is the very ambiguity the policy
+                    // refused. The per-question outcome still records the
+                    // abstention.
+                    if decision.abstained.is_none() {
                         answers.push(decision.answer.clone());
                     }
                     outcomes.push((question.id().clone(), decision.outcome));
