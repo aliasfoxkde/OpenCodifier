@@ -2386,6 +2386,12 @@ Honest applicability to this runtime, ranked:
    level, which B2/B3/B4 attack by algorithmic shape, not instruction
    golf.
 
-Queued from this addendum: the exhaustive small-K property tests
-(folded into the B2 validation step) and the executor redundant-guard
-pass (folded into tranche 20b's scope — it owns `executor.rs`).
+Executed (2026-10-08, PLAN Phase 24g): the exhaustive small-K
+property tests landed as `crates/opencodifier-engine/tests/
+small_k_exhaustive.rs` (every assignment K = 2…6, every presentation
+order, the boolean grid, every score-level permutation); the executor
+redundant-guard pass found exactly one provably-implied guard
+(`distributional_ood`'s zero-denominator arm) and deleted it — the
+other 35 missed lines are `#[non_exhaustive]` totality arms or
+boundary-honesty guards behind cross-module validation, each now
+documented in place rather than deleted.

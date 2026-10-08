@@ -21,8 +21,8 @@ use opencodifier_core::{
     FactValue, NodeId, State,
 };
 use opencodifier_engine::{
-    Classifier, Condition, DecisionEngine, DecisionGraph, EngineConfig, EngineError,
-    MockClassifier, NodeKind, SystemClock,
+    Action, Classifier, Condition, DecisionEngine, DecisionGraph, EngineConfig, EngineError,
+    MockClassifier, NodeKind, Rule, Rung, SystemClock,
 };
 
 /// The `outcome` fact of the threshold trace entry, if recorded.
@@ -432,4 +432,117 @@ fn clipping_is_bound_to_each_kinds_answer_set() {
         ]
     );
     assert_eq!(response.outcome(), DecisionOutcome::Verify);
+}
+
+/// A rule that fires on `fact = value` and excludes every candidate by id.
+fn exclude_all_rule(fact: &str, value: &str, ids: &[&str]) -> Rule {
+    Rule {
+        name: Some("exclude everything".to_owned()),
+        when: Condition::FactEquals {
+            fact: fact.to_owned(),
+            value: FactValue::Text(value.to_owned()),
+        },
+        then: ids
+            .iter()
+            .map(|id| Action::ExcludeCandidate { id: Some((*id).to_owned()), tag: None })
+            .collect(),
+    }
+}
+
+#[test]
+fn a_starved_question_is_declined_not_answered() {
+    // The rule (applied by the `filter` node) eliminates every candidate,
+    // so the question cannot be decided: the rerank node sees no
+    // survivors and traces nothing, the decision stage produces no
+    // answer, and the run reports `NoValidCandidate` rather than
+    // guessing.
+    let graph = common::graph(vec![
+        node("normalize", NodeKind::Normalize, &[]),
+        node("rules", NodeKind::Rule, &["normalize"]),
+        node("filter", NodeKind::Filter, &["rules"]),
+        node("rerank", NodeKind::Rerank, &["filter"]).with_reranker("lexical"),
+        node("choice", NodeKind::Choice, &["rerank"]),
+        node("gate", NodeKind::Threshold, &["choice"]).with_threshold(0.8),
+        node("output", NodeKind::Output, &["gate"]),
+    ]);
+    let engine = engine_with(
+        EngineConfig::new(graph).with_rules(common::rules(vec![exclude_all_rule(
+            "mode",
+            "research",
+            &["local-tiny", "local-small", "local-large", "cloud-large", "cloud-fast"],
+        )])),
+        Arc::new(FirstAnswer),
+    )
+    .unwrap();
+    let request = common::request(
+        common::state_with_fact("mode", "research"),
+        vec![choice_question("model", &common::five_candidates())],
+        opencodifier_core::RequestMetadata::default(),
+    );
+
+    let response = engine.decide(&request).unwrap();
+    assert!(response.answers().is_empty(), "no candidate survived: no answer");
+    assert_eq!(response.outcome(), DecisionOutcome::NoValidCandidate);
+    // The filter node names the starvation in its trace (after = 0); the
+    // rerank and decision stages that follow have nothing to report.
+    assert_eq!(
+        trace_int(&response, "filter", "after"),
+        Some(&FactValue::Integer(0)),
+        "the filter node reports what narrowed to nothing"
+    );
+    assert_eq!(trace_fact(&response, "rerank", "question"), None);
+    assert_eq!(trace_fact(&response, "choice", "outcome"), None);
+}
+
+#[test]
+fn a_rung_walk_reanswers_a_question_the_executor_gated() {
+    // The primary tops out under the abstain floor; the fallback rung
+    // answers decisively. Driven through `DecisionEngine` directly — the
+    // `EngineHandle` walk variants live in `rung_escalation.rs`.
+    let primary = Arc::new(
+        MockClassifier::new("mock/primary")
+            .with_script(
+                "model",
+                vec![("local-small", 0.4), ("cloud-large", 0.35), ("local-tiny", 0.25)],
+            )
+            .unwrap(),
+    );
+    let fallback = Arc::new(
+        MockClassifier::new("mock/rung")
+            .with_script("model", vec![("cloud-large", 0.9), ("local-small", 0.1)])
+            .unwrap(),
+    );
+    let engine = DecisionEngine::new_with_rungs(
+        config(1),
+        Arc::new(SystemClock),
+        primary,
+        None,
+        vec![Rung { classifier: fallback, calibration: None, policy: None }],
+    )
+    .unwrap();
+
+    let three = &[
+        ("local-small", "small local model"),
+        ("cloud-large", "cloud model"),
+        ("local-tiny", "tiny local model"),
+    ];
+    let response = engine.decide(&common::choice_request(three)).unwrap();
+
+    assert_eq!(response.outcome(), DecisionOutcome::Accept);
+    assert_eq!(
+        trace_int(&response, "threshold", "rungs_fired"),
+        Some(&FactValue::Integer(1)),
+        "the walk fired exactly one rung"
+    );
+    let chain = trace_fact(&response, "threshold", "rung_chain")
+        .and_then(FactValue::as_str)
+        .unwrap_or_default();
+    assert!(chain.starts_with("mock/rung(top=cloud-large, accept)"), "{chain}");
+    match response.answers().first().unwrap() {
+        DecisionAnswer::Choice { choice, confidence, .. } => {
+            assert_eq!(choice.as_str(), "cloud-large", "the rung owns the answer");
+            assert!((*confidence - 0.9).abs() < 1e-12, "rung confidence, got {confidence}");
+        }
+        other => panic!("expected a choice answer, got {other:?}"),
+    }
 }

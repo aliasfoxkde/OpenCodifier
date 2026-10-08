@@ -1415,8 +1415,28 @@ record says otherwise, criterion/suite validation, docs of record.
   reliability per rung in board outputs; p95/p99 beside p50; dual cost
   rows; frozen-evidence packaging.
 - **24f — corpus-prep caps + noise scoring (item 9, feeds #124).**
-- **24g — §15.8 fold-ins.** Exhaustive small-K property tests (B2
-  validation) and the executor redundant-guard pass (tranche 20b).
+- **24g — §15.8 fold-ins. — DONE (2026-10-08).** (1) Exhaustive
+  small-K property tests: `crates/opencodifier-engine/tests/
+  small_k_exhaustive.rs` verifies the decision kernels by exhaustion
+  the way `AlphaDev` verified small sorts — every score-to-candidate
+  assignment for K = 2…6 (872 runs), every candidate presentation
+  order, the full boolean confidence grid from both script orders,
+  every score-level permutation with expected-value/`level_for`
+  consistency, and clip's hallucinated-key arithmetic for every
+  survivor permutation. The score arm pins the real contract the
+  exercise surfaced: the shipped level is `level_for(EV)`'s floor
+  bracket, not the argmax level, and the test mirrors the engine's
+  fp-sum order so the expectation is bit-identical. (2) Executor
+  redundant-guard pass: of the 36 in-image missed executor lines,
+  exactly one guard was provably implied and got deleted
+  (`distributional_ood`'s `max_entropy <= 0.0` arm — `k >= 2` already
+  pins `log2 k >= 1`); the rest are mandatory `#[non_exhaustive]`
+  arms, boundary-honesty guards behind cross-module validation
+  (MissingBackend behind engine assembly, Cycle behind graph
+  validation), now each carrying an in-place justification comment.
+  Two reachable arms gained tests: a rerank node skipping a starved
+  question (reporting `NoValidCandidate`, not an answer) and a rung
+  walk firing through the graph executor directly.
 - Items 5/6 (MLM-head single-pass, NLI verifier arm) and 10
   (dynamic-instruction leg) are model-rung options behind existing
   seams — sized before any commitment, per the §15.6 note.
