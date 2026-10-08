@@ -1557,9 +1557,23 @@ record says otherwise, criterion/suite validation, docs of record.
   Two reachable arms gained tests: a rerank node skipping a starved
   question (reporting `NoValidCandidate`, not an answer) and a rung
   walk firing through the graph executor directly.
-- Items 5/6 (MLM-head single-pass, NLI verifier arm) and 10
-  (dynamic-instruction leg) are model-rung options behind existing
-  seams — sized before any commitment, per the §15.6 note.
+- **24j — NLI verbalization verifier (item 6). — SIZED (2026-10-08),
+  queued.** Sizing record: `RESEARCH.md` §15.6.2 — substrate proven
+  (`KaiOnnxBackend` shape), ready arm exists
+  (`onnx-community/DeBERTa-v3-base-mnli-ONNX` / `Xenova/
+  nli-deberta-v3-small`, no self-conversion), cost = one kai-class
+  tranche (backend + verbalizer + `Classifier` impl into the existing
+  verifier slot + parity fixtures + D14 manifest + feature-gated
+  tests + 231-split leg). First of the two arms: structurally
+  independent of the pointer/logits family, simplest readout, and its
+  O(N) cost lands only in the verify band.
+- **24k — MLM-head single-pass arm (item 5). — SIZED (2026-10-08),
+  queued behind 24j.** Same sizing record; arm =
+  `onnx-community/bert-base-uncased-ONNX` (MLM head in-graph);
+  `[input] [anchor] [MASK]` with verbalizer-token restriction; gated
+  on 24j proving the encoder substrate end-to-end.
+- Item 10 (dynamic-instruction leg) shipped as 24i above; items 5/6
+  carry their sizing in §15.6.2 and queue as 24j/24k.
 
 Acceptance: each landed unit carries its own tests + doc-of-record
 amendment; the ladder's empty-default byte-identity holds for every
