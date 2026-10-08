@@ -972,3 +972,44 @@ Decision rule going forward: for each new capability need, exhaust (1)
 first → adopt ready-made (2) arms when they measure well → escalate to
 (3) only on a demonstrated arch-shaped gap → always finish with (4) at
 deployment.
+
+## 11. Corpus-prep gates for merged-v4 (§15.6 item 9, 2026-10-08)
+
+`runner/corpus_gates.py` is the gate front-end for ingesting
+`jev-distill-corpus-v3` (and any future corpus) into a merged-v4 arm:
+schema validation, teacher-noise scoring, per-class/per-family caps,
+and byte-exact label-fight majority — every row routed to kept or
+quarantined **with its reason recorded**, never silently deleted.
+Quarantine keeps the row verbatim plus a `_gate` sidecar; kept rows
+carry a `_gates` facts sidecar (family, kind, argmax, top, margin);
+a manifest pins input SHA-256s, per-gate counts, and the noise
+histograms. Gate semantics: caps are per-class/per-family ceilings on
+the file (`floor(share × clean rows)`, first-come keep, share ≥ 1
+disabled); the noise floor is inclusive (a row at exactly the floor
+passes); fights group on byte-exact (state, question, options) and
+quarantine the minority label, everything on an exact tie.
+
+### First measurement (train.jsonl, 655,806 rows, permissive defaults)
+
+Ran 2026-10-08; row conservation verified (kept + quarantined = input,
+both in the 655,806 smoke run and the 13-row four-gate micro-fixture,
+each gate's firing hand-checked):
+
+- **top-prob < 0.5: 81,740 rows (12.5%)** — the default noise gate
+  quarantines exactly these. Distribution by decile (d = floor(10·p)):
+  d0 0, d1 80, d2 4,464, d3 27,787, d4 49,409 — the mass sits just
+  under the floor; only 80 rows are below 0.2 and none below 0.1.
+- **margin < 0.1: 207,461 rows (31.6%)** — the bottom margin decile is
+  the real ambiguity pool, 2.5× the top-prob pool. The margin gate
+  defaults OFF; these histograms are why thresholds must be chosen
+  from the measurement, not assumed.
+- Zero schema violations, zero label fights, zero cap pressure at
+  defaults — corpus-v3 is structurally clean; its noise is purely
+  teacher-uncertainty mass.
+
+**Implication for the #124 A/B:** the "38,747-row quarantine pool"
+framing came from merged-v2 near-dup analysis; corpus-v3's own noise
+pool is a different, measured quantity (81,740 at the 0.5 floor). The
+A/B arms should define the pool as `corpus_gates.py` quarantines it at
+a recorded threshold — the manifest makes the pool a reproducible
+artifact instead of a per-campaign judgement call.
