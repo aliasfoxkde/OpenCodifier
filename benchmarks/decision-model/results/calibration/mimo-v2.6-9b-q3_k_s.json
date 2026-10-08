@@ -11,6 +11,12 @@
     "items": 120,
     "ece_before": 0.047623,
     "ece_after": 0.026299,
+    "aurc_before": 0.04984,
+    "aurc_after": 0.04984,
+    "accuracy_at_coverage": {
+      "50": 1.0,
+      "80": 0.885417
+    },
     "source": "benchmarks/decision-model suite (seed 20260926, 120 items), single-run arm llama__MiMo-V2.6-Distill-Qwen-9B-Q3_K_S.json, model MiMo-V2.6-Distill-Qwen-9B-Q3_K_S.gguf; winner-vs-rest margin fit, in-sample"
   }
 }

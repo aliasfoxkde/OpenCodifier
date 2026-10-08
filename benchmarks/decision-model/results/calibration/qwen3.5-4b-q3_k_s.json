@@ -11,6 +11,12 @@
     "items": 120,
     "ece_before": 0.068585,
     "ece_after": 0.039069,
+    "aurc_before": 0.061167,
+    "aurc_after": 0.061167,
+    "accuracy_at_coverage": {
+      "50": 0.966667,
+      "80": 0.864583
+    },
     "source": "benchmarks/decision-model suite (seed 20260926, 120 items), single-run arm llama__Qwen3.5-4B-Q3_K_S.json, model Qwen3.5-4B-Q3_K_S.gguf; winner-vs-rest margin fit, in-sample"
   }
 }

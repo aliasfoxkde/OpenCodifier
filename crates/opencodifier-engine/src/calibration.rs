@@ -17,7 +17,11 @@
 //! flattens an overconfident distribution; `T < 1` sharpens. Temperatures
 //! are fitted offline (per question class, plus a default) from benchmark
 //! run data by `benchmarks/decision-model/runner/fit_calibration.py` and
-//! shipped as validated JSON artifacts.
+//! shipped as validated JSON artifacts. Loading enforces the fit's
+//! measured invariants: temperatures must be finite and positive, and a
+//! fit that carries a risk–coverage measurement must not worsen it —
+//! ECE and selective prediction diverge, so both gate an artifact
+//! ([`CalibrationFit`]).
 //!
 //! Classes are keyed by question kind (`choice`, `boolean`, `score` —
 //! see [`question_class`]). The IR does not yet carry task-class tags;
@@ -161,6 +165,16 @@ pub struct CalibrationArtifact {
 }
 
 /// Provenance and measured effect of a calibration fit.
+///
+/// The risk–coverage fields are optional so pre-existing artifacts (and
+/// arms whose fitter predates the metric) still load unchanged: the
+/// selective-prediction gate in
+/// [`TemperatureCalibration::from_artifact`] engages only when both
+/// `aurc_*` values are present. When present they are not decoration —
+/// an artifact whose fit improves ECE while worsening the risk–coverage
+/// curve is refused, because calibration error and selective prediction
+/// measurably diverge (RESEARCH.md §15.1: a better-calibrated model can
+/// be a worse ranking one, so neither metric alone may gate a fit).
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CalibrationFit {
@@ -173,6 +187,21 @@ pub struct CalibrationFit {
     pub ece_after: f64,
     /// Human-readable provenance (suite, seed, run set).
     pub source: String,
+    /// Area under the risk–coverage curve of the raw winner
+    /// probabilities (mean prefix risk when items are ordered by
+    /// confidence, lower is better). `None` when the fitter did not
+    /// measure it.
+    #[serde(default)]
+    pub aurc_before: Option<f64>,
+    /// The same curve after the fit. Refused at load when it is worse
+    /// than [`Self::aurc_before`].
+    #[serde(default)]
+    pub aurc_after: Option<f64>,
+    /// Acceptance accuracy at fixed coverage, keyed by the coverage
+    /// fraction (`"50"`, `"80"`, …). Selective-prediction evidence the
+    /// risk–coverage curve summarizes; informational at load.
+    #[serde(default)]
+    pub accuracy_at_coverage: Option<BTreeMap<String, f64>>,
 }
 
 /// Temperature scaling calibration, loaded from a validated artifact.
@@ -211,6 +240,22 @@ impl TemperatureCalibration {
         }
         if artifact.model_id.trim().is_empty() {
             return Err(invalid("model_id must not be empty".to_owned()));
+        }
+        // Selective-prediction gate (RESEARCH.md §15.1, §15.6 item 1):
+        // ECE improving says nothing about the ranking a policy gate
+        // actually consumes under abstention, and the two measurably
+        // diverge. An artifact present in full that trades ranking
+        // quality for calibration is refused, not shipped with a
+        // footnote. The `1e-9` slack absorbs fitter rounding (values are
+        // written rounded to six decimals) — only a real worsening
+        // refuses.
+        if let (Some(before), Some(after)) = (artifact.fit.aurc_before, artifact.fit.aurc_after)
+            && after > before + 1e-9
+        {
+            return Err(invalid(format!(
+                "fit worsens selective prediction: AURC {before:.6} -> {after:.6}; a \
+                 calibration that trades the risk-coverage curve for ECE must not ship"
+            )));
         }
         for (class, temperature) in
             std::iter::once((&"<default>".to_owned(), artifact.default_temperature)).chain(
@@ -331,6 +376,9 @@ mod tests {
                 ece_before: 0.5,
                 ece_after: 0.1,
                 source: "test".to_owned(),
+                aurc_before: None,
+                aurc_after: None,
+                accuracy_at_coverage: None,
             },
         }
     }
@@ -587,6 +635,77 @@ mod tests {
     fn error_code_is_stable() {
         let error = EngineError::InvalidCalibration { reason: "r".to_owned() };
         assert_eq!(error.code(), "calibration.invalid");
+    }
+
+    #[test]
+    fn an_artifact_that_worsens_selective_prediction_is_refused() {
+        // The §15.1 divergence, expressed as a refusal: this fit improves
+        // ECE (0.5 -> 0.1) while worsening the risk-coverage curve. ECE
+        // alone would ship it; the AURC gate must not.
+        let mut a = artifact(BTreeMap::new(), 2.0);
+        a.fit.aurc_before = Some(0.120_000);
+        a.fit.aurc_after = Some(0.130_001);
+        let error = TemperatureCalibration::from_artifact(a).expect_err("AURC worsens");
+        assert!(matches!(error, EngineError::InvalidCalibration { .. }));
+        assert_eq!(error.code(), "calibration.invalid");
+        assert!(error.to_string().contains("AURC"), "{error}");
+    }
+
+    #[test]
+    fn an_artifact_that_improves_or_holds_the_risk_coverage_curve_loads() {
+        let mut a = artifact(BTreeMap::new(), 2.0);
+        a.fit.aurc_before = Some(0.130_000);
+        a.fit.aurc_after = Some(0.129_999);
+        let mut coverage = BTreeMap::new();
+        coverage.insert("50".to_owned(), 0.832_000);
+        coverage.insert("80".to_owned(), 0.764_000);
+        a.fit.accuracy_at_coverage = Some(coverage);
+        let calibration = TemperatureCalibration::from_artifact(a).expect("AURC improves");
+        let fit = &calibration.artifact().fit;
+        assert_eq!(fit.aurc_before, Some(0.130_000));
+        assert_eq!(fit.aurc_after, Some(0.129_999));
+        let shown = fit.accuracy_at_coverage.as_ref().expect("coverage map");
+        assert_eq!(shown["50"], 0.832_000);
+        // Values that differ by less than the fitter's rounding slack
+        // (six decimals) must not refuse — only a real worsening does.
+        let mut noise = artifact(BTreeMap::new(), 2.0);
+        noise.fit.aurc_before = Some(0.100_000_000_4);
+        noise.fit.aurc_after = Some(0.100_000_000_9);
+        assert!(TemperatureCalibration::from_artifact(noise).is_ok());
+    }
+
+    #[test]
+    fn a_pre_risk_coverage_artifact_still_loads() {
+        // Artifacts fitted before the metric existed carry no aurc_* keys;
+        // the gate engages only on a complete pair, so the historical
+        // shape is unchanged and still valid.
+        let json = r#"{
+            "format_version": 1, "scheme": "temperature", "model_id": "m",
+            "calibration_version": 2, "default_temperature": 2.07,
+            "fit": {"items": 120, "ece_before": 0.074, "ece_after": 0.021,
+                    "source": "decision-model board"}
+        }"#;
+        let calibration = TemperatureCalibration::from_json(json).expect("historical shape");
+        assert_eq!(calibration.artifact().fit.aurc_before, None);
+        assert_eq!(calibration.artifact().fit.aurc_after, None);
+    }
+
+    #[test]
+    fn risk_coverage_fields_survive_a_json_round_trip() {
+        let json = r#"{
+            "format_version": 1, "scheme": "temperature", "model_id": "m",
+            "calibration_version": 2, "default_temperature": 2.07,
+            "fit": {"items": 231, "ece_before": 0.074, "ece_after": 0.021,
+                    "source": "public split",
+                    "aurc_before": 0.131, "aurc_after": 0.118,
+                    "accuracy_at_coverage": {"50": 0.832, "80": 0.764}}
+        }"#;
+        let calibration = TemperatureCalibration::from_json(json).expect("valid artifact");
+        let fit = &calibration.artifact().fit;
+        assert_eq!(fit.aurc_before, Some(0.131));
+        assert_eq!(fit.aurc_after, Some(0.118));
+        assert_eq!(fit.items, 231);
+        assert_eq!(fit.accuracy_at_coverage.as_ref().expect("map")["80"], 0.764);
     }
 
     #[test]

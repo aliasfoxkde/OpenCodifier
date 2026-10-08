@@ -11,6 +11,12 @@
     "items": 109,
     "ece_before": 0.435406,
     "ece_after": 0.252115,
+    "aurc_before": 0.334685,
+    "aurc_after": 0.334685,
+    "accuracy_at_coverage": {
+      "50": 0.62963,
+      "80": 0.436782
+    },
     "source": "benchmarks/decision-model suite (seed 20260926, 120 items), single-run arm stock__e2b-noqat-q4_0-letters.json, model gguf/gemma-4-E2B-it-Q4_0.gguf; exact full-distribution reverse-softmax fit (d15), in-sample"
   }
 }

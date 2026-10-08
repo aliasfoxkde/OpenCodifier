@@ -236,6 +236,23 @@ arm keeps identity calibration, and the retired `builtin-lexical-v1`
 artifact was removed with the bare-lexical stack it described. The
 fitter enforces the gate.
 
+**Amendment (2026-10-07, risk–coverage gate):** ECE alone no longer
+gates an artifact, because calibration error and selective prediction
+measurably diverge (RESEARCH.md §15.1: a better-calibrated model can
+rank worse). The fit provenance carries optional `aurc_before` /
+`aurc_after` / `accuracy_at_coverage` (serde-defaulted — historical
+artifacts load unchanged), the fitter records them for every fit, and
+both the fitter's ship gate and the engine's load gate
+(`TemperatureCalibration::from_artifact`) refuse an artifact whose AURC
+worsens beyond fitter rounding slack (1e-9). For temperature scaling
+the gate is currently a witness, not a constraint — a monotone
+rescaling cannot reorder items, so `aurc_after == aurc_before` is the
+expected reading — and it becomes load-bearing with the first
+non-monotone scheme. The regenerated field-additive artifacts and the
+selective-prediction numbers of record live in
+`benchmarks/decision-model/results/CALIBRATION.md` (§ Risk–coverage
+evidence, 2026-10-07).
+
 ## D16 — Decision-model picks: tier scheme (measured, Phase 13; amended ×8)
 
 **Decision (amended 2026-09-27, third pass — full-sweep frontier):** the
