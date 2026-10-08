@@ -1415,14 +1415,32 @@ The expansion changed the tree faster than the maps describing it:
   the shipped CLI/HTTP surface.
 - `docs/SPEC_COVERAGE.md` — re-walk §-item claims against the current
   routes/tools (same discipline as the 2026-09-30 refresh).
-- `docs/COVERAGE.md` — regenerated 2026-10-07 from the in-image
-  census (98.03 % DA, the basis CI measures); no banner, no stale
-  pre-expansion numbers.
+- `docs/COVERAGE.md` — regenerated from the in-image census, twice:
+  2026-10-07 (98.03 % DA, the basis CI measures) and again 2026-10-08
+  at the 20g ceiling (98.39 %, 298-line residual, D36 ratchet retired);
+  no banner, no stale pre-expansion numbers.
 - `docs/BENCHMARKS.md` / `results/REPORT.md` cross-links — one number
   per surface, sources resolve.
 
 Acceptance: every doc claim mechanically checkable against the tree;
 no doc quotes a number whose producing artifact is missing.
+
+**Done (2026-10-08).** Every list claim re-derived from its producing
+source in the same session: the nine `/v1` routes against
+`routes.rs:107-115`, the six `codify_*` tools against the MCP crate,
+the CLI surface against `args.rs` (which surfaced the missing
+`ladder fit-boolean`), the cargo features against the workspace
+manifests (which surfaced the phantom `kai`/`julia` features in two
+docs — the contracts ship unconditionally; only `llamacpp` and
+`tokenizers` gate anything), the quickstart by running it (exit 2,
+`verify`, top 0.5 — README's narrative holds; `fixtures/native/
+response.json` is a byte-locked wire-shape exemplar, not the
+quickstart capture), `just ci`/`just coverage` against the justfile,
+and every `BENCHMARKS.md` relative link against `results/`. Fixed:
+README (CLI list, feature claims, `just ci` description),
+SPEC_COVERAGE (header re-verification stamp, §16 itemgen, §27
+feature gating, §35 ladder CLI, §58 nine-leg matrix), and this
+section's COVERAGE.md bullet.
 
 ## Phase 23 — v0.5.0 release cut (opened 2026-10-06; **done 2026-10-08**)
 

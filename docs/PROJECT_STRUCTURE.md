@@ -31,7 +31,12 @@ opencodifier/
 ├── crates/
 │   ├── opencodifier-core/      # canonical decision IR (done)
 │   ├── opencodifier-schema/    # native/OpenAI/Anthropic/Jev adapters (done)
-│   ├── opencodifier-engine/    # DAG executor, rules, caches, narrowing, BM25, relational solver (done)
+│   ├── opencodifier-engine/    # DAG executor, rules, caches, narrowing, BM25,
+│   │                           #   relational solver, ladder + calibration seams (done)
+│   │                           #   facts.rs = the extraction grammar itemgen renders against
+│   ├── opencodifier-itemgen/   # D37 relational/contrastive item generator:
+│   │                           #   sample → render → solver-verify (binary `itemgen`;
+│   │                           #   corpus emission only, never a serving dependency)
 │   ├── opencodifier-runtime/   # InferenceBackend traits, mocks; `onnx` deferred by gate (done, D2)
 │   ├── opencodifier-model/     # decision serving contract + embedding classifier + manifests (done)
 │   │     src/decision.rs, embedding.rs, manifest.rs — serving contract
@@ -47,7 +52,8 @@ opencodifier/
 ├── fixtures/                # wire-format fixtures per adapter (done, byte-locked)
 ├── recipes/                 # runnable decision graphs + captured responses (done)
 ├── skills/                  # agent-facing usage skills: 8 §33 areas (done)
-├── models/                  # model artifacts (never committed; SHA-256 verified)
+├── models/                  # model artifacts (never committed; SHA-256 verified;
+│                            #   created on demand by the models/CLI path)
 ├── benchmarks/              # per-release criterion baselines (first committed: D9, 2026-10-01)
 │   ├── baselines/criterion/ # engine + http d9-baseline estimates (committed from B1 on)
 │   ├── decision-model/      # Phase 13 model-pick benchmark: byte-locked suite, arms, results
@@ -76,6 +82,7 @@ cli ──► http ──┐
                ├──► engine ──► core ◄── schema
 model ──► runtime ──► core
         └────────► engine
+itemgen ──► engine ──► core   (itemgen also declares the direct core edge)
 (mcp/wasm, when they land, take the same engine-facade edge as cli/http)
 ```
 
