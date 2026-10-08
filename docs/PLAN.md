@@ -60,7 +60,7 @@ Remaining risks tracked in §6 below.
 | 17 | External anchor: JevBench public split | **done** (2026-10-04) — engine+bridge+vtx over the benchmark's own harness; `docs/BENCHMARKS.md` is the comparison page of record |
 | 18 | Hardening pass | **done** (2026-10-02) — coverage floor 98.5 in CI, §-items closed, D19–D28 |
 | 19 | Adoption + integration documentation | **done** (2026-10-04) — `docs/INTEGRATIONS.md` + D30/D31 + 19e Amortyx E2E |
-| 20 | Coverage restoration: the escalation core | **in progress** (2026-10-06) — 20a ratchet done (D36); 2026-10-07 census re-based the numbers on the pinned image: **98.03 % in-image DA** (350-line residual; the 980-line "executor debt" was a local-mapping artifact), floor 89.0 → 97.5, COVERAGE.md regenerated, 20h done; 20g tranches 1–2 done 2026-10-08 (cli ladder shell, then itemgen probe/guard arms + UTF-8 boundary): **98.38 %** (18 177 / 18 476), residual 299 classified, 0.12 from the 98.5 floor |
+| 20 | Coverage restoration: the escalation core | **done** (2026-10-08) — 20a ratchet done (D36); 2026-10-07 census re-based on the pinned image (**98.03 % in-image DA**, 350-line residual; the 980-line "executor debt" was a local-mapping artifact), floor 89.0 → 97.5, COVERAGE.md regenerated, 20h done; 20g tranches 1–3 done 2026-10-08 (cli ladder shell → itemgen probe/guard arms + UTF-8 boundary → macjev fall-through): **98.39 %** (18 187 / 18 485), residual 298, every line in a named infeasible class — unit-reachable pool exhausted, D36 ratchet retired at the reachable ceiling, floor rests at 97.5 fixed |
 | 21 | Site WCAG 2.1 AAA + progressive enhancement | **opened** (2026-10-06) — audit + fixes landed; deploy + X/Discord pending |
 | 22 | Docs freshness sweep | **opened** (2026-10-06) |
 | 23 | v0.5.0 release cut | **done** (2026-10-08) — tag `v0.5.0` → `0fd6a154`, 9-leg matrix rebuilt single-tree with one consistent attestation set; releases on GitForge + GitHub (19 assets, 69.4 MB) |
@@ -1315,7 +1315,8 @@ host) were separated by experiment:
 - **20f — wasm + ffi reachable fraction** (33 + 14 in-image missed):
   the JsValue-boundary class stays with the Node smoke test; only the
   host-reachable halves count toward the floor.
-- **20g — restore the floor to 98.5** — **doc half DONE (2026-10-07)**:
+- **20g — restore the floor (amended: terminate at the reachable
+  ceiling)** — **DONE (2026-10-08)**. Doc half (2026-10-07):
   `docs/COVERAGE.md` regenerated from the in-image measurement CI
   uses, residual classified in six waiver groups; floor at 97.5 with
   0.53 margin under the measured 98.03. The remaining 0.47 points
@@ -1340,17 +1341,31 @@ host) were separated by experiment:
   `runtime.rs` 7 were confirmed feature-gated (`--llama` with_rungs
   assembly behind non-default `llamacpp`). Census: **98.38 %**
   (18 177 / 18 476); residual 309 → 299; 0.12 points from 98.5.
+  **Third tranche / pool exhaustion DONE (2026-10-08):** the one
+  genuinely reachable line the closing pass found — macjev's render
+  fall-through for a record without `request.questions` — is driven
+  by its own test; census **98.39 %** (18 187 / 18 485), residual
+  **298**. The line-by-line pass over groups 2–4 found everything
+  else class-infeasible (`#[non_exhaustive]` wildcards,
+  defensive-unreachable typed arms, wasm JsValue boundaries,
+  binary-entry mains, ffi contract guards — the full ledger in
+  COVERAGE.md), so **20g terminates at the reachable ceiling, not
+  98.5**: the D36 ratchet is retired (D36 update 2026-10-08), the
+  floor rests at 97.5 as the fixed constant, and the residual is the
+  scoped waiver ledger D36's revisit clause specified.
 - **20h — CI observability — DONE (2026-10-07).** The lane's
   `coverage_floor.py` prints `coverage_floor: <hit>/<found> lines hit
   = NN.NN% (floor N%)` plus PASS/FAIL on both the pass and fail
   paths (verified on real runs), so a red lane carries its own number
   in the run log regardless of GitForge job-API access.
 
-Acceptance: coverage lane green at every push; workspace lines ≥ 98.5
-in CI (D36 ratchet schedule complete — 97.5 now, 98.03 measured,
-0.47 to go); COVERAGE.md regenerated from the same measurement CI
-uses (done 2026-10-07); no test added solely to touch lines — each
-tranche names the behavior it pins.
+Acceptance: coverage lane green at every push; the floor is the 97.5
+fixed constant with the measured value at 98.39 and every residual
+line in a named infeasible class (D36 ratchet retired 2026-10-08 —
+reaching 98.5 would require deleting honest defensive code);
+COVERAGE.md regenerated from the same measurement CI
+uses (done 2026-10-07, final census 2026-10-08); no test added solely
+to touch lines — each tranche names the behavior it pins.
 
 ## Phase 21 — site WCAG 2.1 AAA + progressive enhancement (opened + fixes landed 2026-10-06)
 

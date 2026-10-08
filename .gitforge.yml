@@ -90,12 +90,13 @@ jobs:
         run: aegis --format json scan --file . --baseline .aegis/baseline.json
 
   # Coverage floor on the lcov DA basis, measured inside THIS image — the
-  # number of record (docs/COVERAGE.md 2026-10-07 census): local rustc
+  # number of record (docs/COVERAGE.md 2026-10-08 census): local rustc
   # versions emit a different, finer-grained mapping and read ~8 points
-  # lower on the same tree, so only an in-image measurement ratchets the
-  # floor. Measured 98.03% (17433/17783, two independent runs); floor
-  # ratcheted 89.0 -> 97.5 (D36), rising per tranche toward 98.5. The
-  # floor is a regression guard, deliberately under the measured value.
+  # lower on the same tree, so only an in-image measurement moves the
+  # floor. Measured 98.39% (18187/18485); the D36 ratchet is retired at
+  # the reachable ceiling (D36 update 2026-10-08) — the 298-line residual
+  # is proven class-infeasible, so the floor rests at 97.5 as the fixed
+  # constant, deliberately under the measured value as a regression guard.
   # Queue-cost note: this instrumented rebuild roughly doubles this run's
   # wall time; it stays in the default graph because coverage regressions
   # are exactly the kind of failure that is silent everywhere else.
@@ -106,5 +107,5 @@ jobs:
     steps:
       - name: Line coverage (lcov DA basis)
         run: cargo llvm-cov --workspace --lcov --output-path /tmp/lcov.info
-      - name: Floor assertion (D36 ratchet — 97.5 now, 98.5 per Phase 20)
+      - name: Floor assertion (97.5 fixed constant; D36 ratchet retired)
         run: python3 scripts/coverage_floor.py /tmp/lcov.info --floor 97.5
