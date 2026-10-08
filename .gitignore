@@ -37,10 +37,12 @@ lcov.info
 *.local.toml
 
 # Benchmark runtime logs and raw run JSONs are out-of-tree measurement data;
-# the repo commits only results/summary.md + results/models.manifest.json
+# the repo commits the derived board artifacts (summary.md, board.csv,
+# parity.json, models.manifest.json) but never the raw run JSONs themselves
 /benchmarks/decision-model/results/*.server.log
 /benchmarks/decision-model/results/*.json
 !/benchmarks/decision-model/results/models.manifest.json
+!/benchmarks/decision-model/results/parity.json
 
 # Editor / OS noise
 .idea/

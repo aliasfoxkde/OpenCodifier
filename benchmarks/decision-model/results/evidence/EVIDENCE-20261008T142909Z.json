@@ -1,0 +1,343 @@
+{
+ "created_utc": "20261008T142909Z",
+ "git_rev": "85ff920d3fa5e269cfb737868e4d67db85475b05",
+ "inputs": {
+  "/nas/Temp/work/oc-model-eval/runs/embed__embeddinggemma-300M-Q8_0.json": {
+   "bytes": 18031,
+   "sha256": "01201b73a299e96f87cd65f336e67dcb386aa513b5a9af99322ae6a9808696af"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/embed__gte-modernbert-base.json": {
+   "bytes": 18156,
+   "sha256": "9c632a44c595a4d156b90fbb7734c4c11582a3e995d2411e397995af5f45c601"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/embed__gte-modernbert-onnx-fp32.json": {
+   "bytes": 18066,
+   "sha256": "dd2db42bd1659382ee58f760b8e06f42f49a5e37319bfe1c1e55ea40b79b0c0e"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/embed__gte-modernbert-onnx-fp32__margins.json": {
+   "bytes": 45071,
+   "sha256": "31254e3f35dbb2f3d61d1fd1a64eb4cf0a8d80b6e53a801f7991c384c66e0ab7"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/embed__gte-modernbert-onnx-int8.json": {
+   "bytes": 18038,
+   "sha256": "3b084176b07d668c001a7aace4c04ef59011b9a5078ce0cd63ab85069c1041f3"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/embed__gte-modernbert-onnx-q4-b32.json": {
+   "bytes": 18079,
+   "sha256": "f8150622e0179c5151e9a140e3ee94434a583c8e73e4f7b581afb1b0e3384049"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/embed__minilm-l6-v2.json": {
+   "bytes": 17946,
+   "sha256": "839389fd4f96582a56d3f9978ba3a15ee30798225dd0f90db974f7bb1c5078ac"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/engine__builtin-lexical.json": {
+   "bytes": 24059,
+   "sha256": "4cbb78264e1e8231cfab129ddc0b6b17445390605c031f10e6e72dccb1091d10"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/engine__holdout-fusion-v1.json": {
+   "bytes": 70238,
+   "sha256": "16936aac6a41f7a059bc60d12907f4897fc0d2f143358cdc8070fa2bc4f32e77"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/engine__holdout-fusion-v2.json": {
+   "bytes": 70420,
+   "sha256": "1ef4f7184180e14dfc2d15fc78e7944024647021ad618fa548c2a0559889dc42"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/engine__holdout-lexical.json": {
+   "bytes": 66968,
+   "sha256": "e73df2cc94df2ff2503c3545744db0715ae9b106962679d199365493989ae597"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/engine__lexical__long__focused.json": {
+   "bytes": 24492,
+   "sha256": "03f6973319087dad54a21361373b1c8c8763a38521c6f56078f32e9c0199c0da"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/engine__lexical__long__full.json": {
+   "bytes": 24460,
+   "sha256": "d834d2688725854bd2be499eb5466ce956880404a77902ac3dab08f0513b6f10"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/engine__relational-v1-margins.json": {
+   "bytes": 67072,
+   "sha256": "2139313be0d29d7b292b6681b8f19ad0d6b236ab623e81608e9e27c9fd735480"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/engine__relational-v1-shuffled.json": {
+   "bytes": 67033,
+   "sha256": "16a295ff0cb8a4dd7e1d55562a3f22abfed784ced2af7f8e0d444825641cd68a"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/engine__relational-v1.json": {
+   "bytes": 23936,
+   "sha256": "bbacacb8c697cbf288e5a4335876e1a5efa207c8edfde135be58d6948279cb66"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/engine__rung-qate2b-q4_0-fusion-v2.json": {
+   "bytes": 70325,
+   "sha256": "5a729bbe382ca74b771672d8dfaaaaa4f84798c4e81c9c04263a92f767b8705d"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/engine__rung-qate2b-q4_0-fusion.json": {
+   "bytes": 24697,
+   "sha256": "774582d1440e3c2d6afb9f6abade5c8f9c6ba2bf26c19f5c4573b5070ac23e77"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/jev_native__suite.json": {
+   "bytes": 23939,
+   "sha256": "868c2c0d13990ac48852dcd7627368cd221c3ce47c5742fe34967a048ba98f18"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/laya__en.json": {
+   "bytes": 24632,
+   "sha256": "0f220b03ae8d38c0a057eb906c8310111f8ecfc2c2cda74032fb60e629321f73"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Bonsai-4B.json": {
+   "bytes": 33258,
+   "sha256": "3f224263c47fc08984358a6c40d3f55e46f3757eed6a6b3963cd032e59e80a6c"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Falcon-H1-Tiny-90M-Instruct.json": {
+   "bytes": 56463,
+   "sha256": "42f57c5b407559fd710208f27892232d671263af466d8eda3fc158d5dccef757"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Falcon-H1-Tiny-Tool-Calling.json": {
+   "bytes": 32959,
+   "sha256": "d6ba256f1c3764bd22846580f0129d69afe693506150d81880fd29a877223d12"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Jev-Style-0.8B-Decision-v3-Q4_K_M.json": {
+   "bytes": 56534,
+   "sha256": "1baa8bb8e495c0cd1ec89753dbca40769a4eb60983339af5c46988d88374f994"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__LFM2.5-2.6B-Q3.8-TBrilliance-NEO-MAX-Q6_K.json": {
+   "bytes": 33353,
+   "sha256": "cb2c7344681914217d6e47437b20d4078ba1897865839cbb56d98ba95fb2f1f6"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__LFM2.5-2.6B-Q4_K_M.json": {
+   "bytes": 33297,
+   "sha256": "3d9eb68fa787c06a207c3e862f27880e7596a7e9b80bdc5b905daf25e9dfca87"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Llama-3.2-1B-Instruct.json": {
+   "bytes": 56845,
+   "sha256": "4430785be8dece1368766441c5bd4ab78572f056474908e9ea8409f595b93794"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__MiMo-V2.6-Distill-Qwen-9B-IQ3_XXS.json": {
+   "bytes": 33385,
+   "sha256": "06d82b8b2d7bca933e6e4841659da452d59fc0664997fedfa916574638ad8311"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__MiMo-V2.6-Distill-Qwen-9B-Q3_K_M.json": {
+   "bytes": 33429,
+   "sha256": "1d87253a0a91710daef0b64d2ef3f5f50cbe9184ec5c251bc11ef1677384dab1"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__MiMo-V2.6-Distill-Qwen-9B-Q3_K_S.json": {
+   "bytes": 33467,
+   "sha256": "f674d879a5e1d31b11f3d34048ae917fb2e1479127fffd3eceb98f084b6b52eb"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__MiniCPM5-1B.json": {
+   "bytes": 54205,
+   "sha256": "4d0133e6d4599f519ade7c2ac6cc80e919d4f648a869885b4569d81ab629f038"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-0.8B-q4_0.json": {
+   "bytes": 56135,
+   "sha256": "119cceca859c1a7a3b4eb8b47ae36384e1cb2165a0b832ae0fefce859d2aa3e8"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-2B-UD-IQ2_XXS.json": {
+   "bytes": 33409,
+   "sha256": "eba8a3b91c81394a28c08cd95ae76caa1d051f37b232f173e77a350241c9b3db"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-2B-UD-Q2_K_XL.json": {
+   "bytes": 33324,
+   "sha256": "77fcf2d952847f6bf9048a1aa2a991e6dcb5fb49f40ffa04927a52bd54a52343"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-2B-UD-Q3_K_XL.json": {
+   "bytes": 33397,
+   "sha256": "061316331faee5e6795f6b7463342133f48ee58bca771c519c6402eba541696d"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-2B-UD-Q4_K_XL.json": {
+   "bytes": 33356,
+   "sha256": "a2ecbc82fc8a09144702b9ac3e22a72c7c479f4e6d6d82ed3e0d04749918bd0b"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-2B-UD-Q5_K_XL.json": {
+   "bytes": 33294,
+   "sha256": "f5f1ef73a85115503493e1c3938c435abc892d73c0b1e7104acf9966215f4a11"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-2B-UD-Q6_K_XL.json": {
+   "bytes": 33384,
+   "sha256": "93f96006ed67c32fb8cb755285246a71f79391a9489ebd2ed8ac9a2931afc4e6"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-2B-UD-Q8_K_XL.json": {
+   "bytes": 33302,
+   "sha256": "eaec238149c4cdb2efdd632dacabdcb97b88994fa3f48e215d914b1a71635e98"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-2B.json": {
+   "bytes": 56744,
+   "sha256": "69b039c5d373d21ac4e7b2f4360566de5d12273ce3c5a28091434eb111513644"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-4B-Q3_K_M.json": {
+   "bytes": 33119,
+   "sha256": "63cdc110a46b1a8d84b7488adaa255e38f4a87cb4c73bc86c824e2f41a48722d"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-4B-Q3_K_S.json": {
+   "bytes": 33340,
+   "sha256": "e540d9597d3f72fa28d58f7559ea6e0c263719f393f44e40f67e36d64d28a48e"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-4B-UD-IQ2_XXS.json": {
+   "bytes": 33217,
+   "sha256": "ace4ac17902fb5c37815f37af44f5882c8e08ae6e56d1b35791e75d2d9178854"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-4B-UD-IQ3_XXS.json": {
+   "bytes": 33362,
+   "sha256": "59202af4b8d2d29f228d94e7f98285c109e05f9508d50d3d13b2be6b6fab52d6"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-4B-UD-Q3_K_XL.json": {
+   "bytes": 33236,
+   "sha256": "f4ee4ab17e69b49dab62a668edc886546a6b9547e5aaf089ae488855a00e4a4a"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-4B-UD-Q4_K_XL.json": {
+   "bytes": 33083,
+   "sha256": "e6cabdb7407ca3152d8ed447c26243f2253cae906c04e0ea10f78e767315fa67"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.5-4B-q4_k_m.json": {
+   "bytes": 60348,
+   "sha256": "8ecc0f1f7bd9b1adbc1ec747781aa4848e6b4f01750f960559fff681fd9630ca"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.8-0.8B-Distilled.json": {
+   "bytes": 56269,
+   "sha256": "1d3bc80d94f1696d35a745a573ae4a93049ef50312a527794461259d9e5538b4"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.8-2B-Distill.json": {
+   "bytes": 56496,
+   "sha256": "7aa96bad7f0bf6a8b958ab65ca66e61aaa6c8add3b27afb5a9ec9e69d7776819"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__Qwen3.8-4B-Distill.json": {
+   "bytes": 56728,
+   "sha256": "209a340ceea94d5ce7d9d7dde8383913ed8fe0672b5e305e6b9e318a2fc0c03f"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__gemma-3-270m-it-q4_k_m.json": {
+   "bytes": 33018,
+   "sha256": "10c8dbe6cc27d653f43605cef9eeeedcf2559e5c8634f9e803a01ae314bc0f09"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__gemma-3-4b-it.json": {
+   "bytes": 55963,
+   "sha256": "071672065507696a03bb5b2da2cd18d76c50cb87edbdfa83d16ad8a01d95c4bf"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__glm5.1-distill.json": {
+   "bytes": 56462,
+   "sha256": "a904211061226c9060c7045d31e8548a92934aa774d22cf21f7b3734b5200cd9"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__granite-4.0-350m-q4_k_m.json": {
+   "bytes": 33020,
+   "sha256": "1d82bd6b337d5ff0662df6493eba0eb608a6876f0626fd3b12a28ad9ecc95b55"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__jebadiah-4b-v2-Q8_0.json": {
+   "bytes": 56543,
+   "sha256": "e6f72b9133a171addabc36901e80368ffd931c3517a341da251f75472a7b2a3b"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__jebadiah-9b-v2-Q8_0.json": {
+   "bytes": 56600,
+   "sha256": "805b7014ec595305b26a04f4e2ac53f32259dda293f718d0a0529c9e85efc6c7"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__qwen0.5b.json": {
+   "bytes": 56677,
+   "sha256": "8205d4fe1115d9881f68349d9698e483d4cde9df3fc96f43bd8c1e7e391e583f"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__qwen1.5b.json": {
+   "bytes": 56913,
+   "sha256": "a822c47fb745a3fc1cc185cbcd64cc015c9bbdcf0c6a059a21e3306ece03810f"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/llama__qwen3b.json": {
+   "bytes": 59048,
+   "sha256": "8f1165be419a2af5f610aa80d50f87b097c25405a1193701cea9015b6162740b"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/onnx__qwen35-2b-q4.json": {
+   "bytes": 63810,
+   "sha256": "3c2c46048755f803b62614cd69286263d7e0678eab9c5973649df3876071e1ed"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/params__ctx16k.json": {
+   "bytes": 56335,
+   "sha256": "ae283fc666a2b0d3f626b923d3c44f8fcae86557377251b6772434cc650607d5"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/params__ctx4k.json": {
+   "bytes": 56372,
+   "sha256": "75bd65d5ae28cb2d8ee003ba486d54622ebc62009ee15046db8a638470785ee4"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/params__diet100.json": {
+   "bytes": 80467,
+   "sha256": "010dfd31701220de7b2fb04a193facac488a8545eb8d97049ccf78424ea53f7e"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/params__diet200.json": {
+   "bytes": 81113,
+   "sha256": "589338112394525e4cc935a03a3af32c1f1e84b6c8bb8ce4366720ba6519c89d"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/params__long.json": {
+   "bytes": 33738,
+   "sha256": "c15eae6fb3c1a5b6660655b743331af184296871eb79a072f31b69e29cafc026"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/params__t08.json": {
+   "bytes": 33580,
+   "sha256": "d5064929d383042a5ea716708523ae28012c5398314f7af3c33902b92b721abe"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/params__t16.json": {
+   "bytes": 56686,
+   "sha256": "44ea4f407627336a7bb1ae7569e15efd0922de40c715df8f8288de780de5f3e0"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/tree__e2bqat-q4_0-collect.json": {
+   "bytes": 45171,
+   "sha256": "2c09ea32f0534620edf7bbf2146413ea55f5a74b093ceab644645c7900fa29f1"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/tree__e2bqat-q4_0-holdout.json": {
+   "bytes": 45207,
+   "sha256": "54bf78f3dc81f331e6452ab5c8ea42bab3bf53800c618cfa1bd547b0e776d9d3"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/vkab__cpu__qwen35-2b-q4km.json": {
+   "bytes": 79699,
+   "sha256": "300b62b39cb5bf11a3e5b3c467c03984218fdc40a335657f44b2c569b5b143f2"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/vkab__vk__qwen35-2b-q4km.json": {
+   "bytes": 79571,
+   "sha256": "03dcaf4a56304a2d17f3a214d27d9fac6d2fc390948cf84fa290822abf198ef2"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/vtx__VTX-JEV-3-fp32.json": {
+   "bytes": 31196,
+   "sha256": "5cb1b1d292ca2f59a9ea97b3599af1acebb5c993d2de1bdde728175c9d2772d7"
+  },
+  "/nas/Temp/work/oc-model-eval/runs/vtx__VTX-JEV-3-lf2.json": {
+   "bytes": 31199,
+   "sha256": "cea0fd8b694c65d6a11c49384e8477a7ad001abac63c8495eaca90f384a4f58a"
+  },
+  "benchmarks/decision-model/results/RELIABILITY.md": {
+   "bytes": 23478,
+   "sha256": "c326a19f787ba8a84c559b2398260464f3065b2be9a5a3056db8e13e2725dcf7"
+  },
+  "benchmarks/decision-model/results/REPORT.md": {
+   "bytes": 115286,
+   "sha256": "572d31f0bdf2f514c92b3e1a5cdf8fca6dbcd9671026cd616c32f19672e9853a"
+  },
+  "benchmarks/decision-model/results/board.csv": {
+   "bytes": 51973,
+   "sha256": "9992b1d67ccb18a355851b5277452801db1e06fc79b4523296ea9ff6c97638ff"
+  },
+  "benchmarks/decision-model/results/models.manifest.json": {
+   "bytes": 5340,
+   "sha256": "cadaf61a21834fd06d16a5d56147655c0d87ed455ec64afaa6ac573ae778840c"
+  },
+  "benchmarks/decision-model/results/parity.json": {
+   "bytes": 81475,
+   "sha256": "2880d26fa505eee3ca723b32d38ef704ca7a5925727244587aa81636c6834bba"
+  },
+  "benchmarks/decision-model/runner/board_csv.py": {
+   "bytes": 19276,
+   "sha256": "920e37d75828a016793318016a2440025ff1670d466b7913c8a0d692c87c7116"
+  },
+  "benchmarks/decision-model/runner/freeze_evidence.py": {
+   "bytes": 4731,
+   "sha256": "b1dc31c93a4526ad81d8ef91272e3a48ef33b025528d292f1d2f7cb37708b6bf"
+  },
+  "benchmarks/decision-model/runner/parity.py": {
+   "bytes": 7449,
+   "sha256": "888ab0e1c08d34966d7219aa32be0b40a6bf0f5ad75a8921c1945fe5bececae2"
+  },
+  "benchmarks/decision-model/runner/summarize.py": {
+   "bytes": 6900,
+   "sha256": "763769da0bed09c02e06f886be84bcfa88336d6eba6d6e9c2b5463263e020a7c"
+  },
+  "benchmarks/decision-model/suite/suite.json": {
+   "bytes": 104070,
+   "sha256": "9f0afaf63a650e8e549a7c413a478951b3dd99475952dc9d5e79aa8d1031ddf7"
+  },
+  "docs/BENCHMARKS.md": {
+   "bytes": 81953,
+   "sha256": "84edd7dc301a851500c74d611bf804877b34c2daf5dc1469d883c6095c97baf3"
+  }
+ },
+ "runs_dir": "/nas/Temp/work/oc-model-eval/runs"
+}
