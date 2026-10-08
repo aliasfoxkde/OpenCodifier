@@ -26,6 +26,7 @@ mod decide;
 mod error;
 mod graph;
 mod input;
+mod ladder;
 mod mcp;
 mod models;
 mod output;

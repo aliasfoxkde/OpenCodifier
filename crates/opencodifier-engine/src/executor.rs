@@ -130,6 +130,13 @@ pub(crate) struct QuestionDecision {
     pub(crate) outcome: DecisionOutcome,
     /// Whether the verifier ran for this question.
     pub(crate) verification_triggered: bool,
+    /// Whether a configured Boolean threshold overruled the argmax —
+    /// trace disclosure for the no-hidden-thresholds rule.
+    pub(crate) boolean_flipped: bool,
+    /// Whether the decision elected the elicited-abstain candidate
+    /// (RESEARCH §15.6 item 3) — the outcome is [`DecisionOutcome::Abstain`]
+    /// and the synthetic answer never reaches the response.
+    pub(crate) abstain_elicited: bool,
     /// The node that decided this question (id and kind), so the
     /// threshold node can re-apply the same rung's policy — ladder
     /// resolution must not depend on which graph path is re-traced.
@@ -866,6 +873,39 @@ impl<'a> Executor<'a> {
         )
     }
 
+    /// The build-once handoff (D28/#80) for one question: the lexical
+    /// node's index over the surviving candidates, when that index covers
+    /// exactly the deciding list in the same order. Reusable only when
+    /// the deciding list is exactly those documents in the same order —
+    /// a later `retrieve` prune or `rerank` reorder changes the list, and
+    /// a length-equal order mismatch would silently mispair scores with
+    /// candidates. An elicited-abstain candidate (appended by
+    /// `prepare_question`) also breaks the equality — the handoff index
+    /// has no score for it — so anything else hands `None` and the
+    /// classifier builds its own (bit-identical either way).
+    fn lexical_handoff(
+        &self,
+        question: &DecisionQuestion,
+        narrowed: &DecisionQuestion,
+    ) -> Option<&crate::lexical::Bm25Index> {
+        let (DecisionQuestion::Choice(choice), DecisionQuestion::Choice(narrowed_choice)) =
+            (question, narrowed)
+        else {
+            return None;
+        };
+        self.narrowing.get(choice.id()).zip(self.lexical.get(choice.id())).and_then(
+            |(outcome, scores)| {
+                let index = scores.index()?;
+                let same_order = outcome
+                    .surviving()
+                    .iter()
+                    .map(Candidate::id)
+                    .eq(narrowed_choice.candidates().iter().map(Candidate::id));
+                same_order.then_some(index)
+            },
+        )
+    }
+
     /// Asks the classifier about every question of this node's kind.
     fn decide_questions(
         &self,
@@ -893,30 +933,11 @@ impl<'a> Executor<'a> {
             if !Self::wants(kind, question) {
                 continue;
             }
-            let Some(narrowed) = self.prepare_question(question) else { continue };
-            // Build-once handoff (D28/#80): the lexical node's index over
-            // the surviving candidates. Reusable only when the deciding
-            // list is exactly those documents in the same order — a later
-            // `retrieve` prune or `rerank` reorder changes the list, and a
-            // length-equal order mismatch would silently mispair scores
-            // with candidates. Anything else hands `None` and the
-            // classifier builds its own (bit-identical either way).
-            let handoff = match (question, &narrowed) {
-                (DecisionQuestion::Choice(choice), DecisionQuestion::Choice(narrowed_choice)) => {
-                    self.narrowing.get(choice.id()).zip(self.lexical.get(choice.id())).and_then(
-                        |(outcome, scores)| {
-                            let index = scores.index()?;
-                            let same_order = outcome
-                                .surviving()
-                                .iter()
-                                .map(Candidate::id)
-                                .eq(narrowed_choice.candidates().iter().map(Candidate::id));
-                            same_order.then_some(index)
-                        },
-                    )
-                }
-                _ => None,
+            let Some(narrowed) = self.prepare_question(question, policy.abstain_candidate()) else {
+                continue;
             };
+            // Build-once handoff (D28/#80): see `lexical_handoff`.
+            let handoff = self.lexical_handoff(question, &narrowed);
             // Focused extraction (PLANNING.md §45): when configured and the
             // state exceeds the budget, the classifier reads a per-question
             // view; a weak view escalates to the full state before any
@@ -969,6 +990,29 @@ impl<'a> Executor<'a> {
             }
             if let Some(source) = calibration_source {
                 detail.push(("calibration_source", FactValue::Text(source)));
+            }
+            // The no-hidden-thresholds rule applies to the fitted Boolean
+            // boundary like every other gate (RESEARCH §15.6 item 2), and
+            // an overruled argmax is disclosed, not silent.
+            if matches!(narrowed, DecisionQuestion::Boolean(_))
+                && let Some(threshold) = policy.boolean_threshold()
+            {
+                detail.push(("boolean_threshold", FactValue::Float(threshold)));
+                if decision.boolean_flipped {
+                    detail.push(("boolean_flipped", FactValue::Boolean(true)));
+                }
+            }
+            // Same no-hidden-thresholds discipline for elicitation
+            // (RESEARCH §15.6 item 3): the configured candidate is
+            // disclosed whenever it rides a choice question, and an
+            // elected abstention is disclosed, not silent.
+            if matches!(narrowed, DecisionQuestion::Choice(_))
+                && let Some(candidate) = policy.abstain_candidate()
+            {
+                detail.push(("abstain_candidate", FactValue::Text(candidate.id().to_string())));
+                if decision.abstain_elicited {
+                    detail.push(("abstain_elicited", FactValue::Boolean(true)));
+                }
             }
             if let Some(view) = &view {
                 detail.push(("focus_engaged", FactValue::Boolean(view.extracted)));
@@ -1068,8 +1112,14 @@ impl<'a> Executor<'a> {
                 live = &replacements[replacements.len() - 1];
             }
             // `live` borrows `replacements`; the outcome and verifier
-            // cascade below only read it.
-            let outcome = live.report.outcome_for(policy);
+            // cascade below only read it. An elected abstention is
+            // terminal: the report alone would re-derive the cascade's
+            // outcome and could accept a confident "none of these".
+            let outcome = if live.abstain_elicited {
+                DecisionOutcome::Abstain
+            } else {
+                live.report.outcome_for(policy)
+            };
             let (final_outcome, agreement, verifier) = if outcome == DecisionOutcome::Verify {
                 match self.verifier {
                     Some(verifier) => {
@@ -1150,7 +1200,11 @@ impl<'a> Executor<'a> {
     /// `NoValidCandidate` instead of failing the run. Survivors are the
     /// rule-filtered set minus lexical prunes minus `retrieve` prunes,
     /// ordered by any `retrieve`/`rerank` node that ran (D21).
-    fn prepare_question(&self, question: &DecisionQuestion) -> Option<DecisionQuestion> {
+    fn prepare_question(
+        &self,
+        question: &DecisionQuestion,
+        abstain: Option<&opencodifier_core::AbstainCandidate>,
+    ) -> Option<DecisionQuestion> {
         let DecisionQuestion::Choice(choice) = question else { return Some(question.clone()) };
         // The narrowed shape when a `filter` node ran; the full question
         // otherwise — a semantic graph may narrow only through `retrieve`.
@@ -1189,6 +1243,21 @@ impl<'a> Executor<'a> {
             }
             surviving
                 .sort_by_key(|candidate| rank.get(candidate.id()).copied().unwrap_or(usize::MAX));
+        }
+        // Elicited abstention (RESEARCH §15.6 item 3): the synthetic
+        // candidate rides LAST — deterministic position, declared
+        // candidates keep their order, and earlier graph stages (rules,
+        // narrowing, lexical) never see it. A declared candidate that
+        // already owns the id is left alone: the configured id *marks*
+        // the abstain candidate, declared or synthetic, so electing it
+        // abstains either way.
+        if let Some(candidate) = abstain
+            && !surviving.iter().any(|existing| existing.id().as_str() == candidate.id())
+        {
+            // Id and description were validated at policy construction,
+            // so this cannot fail in practice; a `None` here is the
+            // prepare-question contract for "cannot be prepared".
+            surviving.push(Candidate::new(candidate.id(), candidate.description()).ok()?);
         }
         let rebuilt = ChoiceQuestion::new(choice.id().as_str(), narrowed.text(), surviving).ok()?;
         Some(DecisionQuestion::Choice(rebuilt))
@@ -1258,6 +1327,27 @@ impl<'a> Executor<'a> {
         Ok((normalized, clipped))
     }
 
+    /// The verdict a configured Boolean threshold selects when it
+    /// disagrees with the argmax (RESEARCH §15.6 item 2 — never hard-0.5
+    /// a Boolean). `p_true >= threshold` answers true, anything else
+    /// answers false; agreement with the argmax is `None` — a
+    /// byte-identical pass-through. The flip carries the verdict's own
+    /// mass because no valid binary distribution can put a minority
+    /// verdict on top: answering false at `p_true = 0.6` means answering
+    /// with 0.4 of the mass, and the honest confidence is 0.4's.
+    fn flipped_boolean_verdict(
+        distribution: &Distribution,
+        threshold: f64,
+    ) -> Option<(&'static str, f64)> {
+        let p_true = distribution.probability_of("true").unwrap_or(0.0);
+        let key = if p_true >= threshold { "true" } else { "false" };
+        if distribution.top().key == key {
+            return None;
+        }
+        let mass = if key == "true" { p_true } else { 1.0 - p_true };
+        Some((key, mass))
+    }
+
     /// Turns a normalized distribution into an answer and a confidence
     /// report.
     ///
@@ -1271,6 +1361,16 @@ impl<'a> Executor<'a> {
     /// exposes no lexical evidence; see [`distributional_ood`]). Policy
     /// reads the dimensions separately in `ConfidenceReport::outcome_for`;
     /// nothing is fused silently.
+    ///
+    /// A policy carrying a `boolean_threshold` moves the Boolean verdict
+    /// boundary: the answer is `p_true >= threshold`, not the argmax.
+    /// Agreement passes through untouched; a flip keeps the model's
+    /// distribution (and the report's statistical dimensions) exactly as
+    /// measured, while the answer's value, probability, and calibrated
+    /// confidence describe the verdict actually given — through
+    /// [`Calibration::calibrate_probability`], since a flipped verdict
+    /// carries minority mass and is never the top `calibrate` reads.
+    /// Without the field everything passes through byte-identically.
     fn decide_question(
         question: &DecisionQuestion,
         distribution: Distribution,
@@ -1280,7 +1380,29 @@ impl<'a> Executor<'a> {
         decided_kind: NodeKind,
         lexical_support: Option<f64>,
     ) -> EngineResult<QuestionDecision> {
+        let boolean_verdict = match (question, policy.boolean_threshold()) {
+            (DecisionQuestion::Boolean(_), Some(threshold)) => {
+                Self::flipped_boolean_verdict(&distribution, threshold)
+            }
+            _ => None,
+        };
         let top = distribution.top().clone();
+        // Elicited abstention (RESEARCH §15.6 item 3): a rung that selects
+        // the abstain candidate — the candidate carrying the policy's
+        // configured id, synthetic or declared — has declined to decide,
+        // whatever its confidence in the decline. Abstention is a
+        // successful outcome: it is never "verified" into an acceptance,
+        // and the gate cascade does not apply to it.
+        let abstain_elicited = match (question, policy.abstain_candidate()) {
+            (DecisionQuestion::Choice(choice), Some(candidate)) => {
+                top.key == candidate.id()
+                    && choice
+                        .candidates()
+                        .iter()
+                        .any(|existing| existing.id().as_str() == candidate.id())
+            }
+            _ => false,
+        };
         // D28: the policy selects what the OOD channel measures. The
         // default mode is answer entropy (the historical signal,
         // byte-identical); lexical-band mode consumes the rung's
@@ -1293,10 +1415,19 @@ impl<'a> Executor<'a> {
             // signal until classified here.
             _ => distributional_ood(&distribution),
         };
-        let calibrated =
-            calibration.calibrate(crate::calibration::question_class(question), &distribution);
+        let calibrated = match &boolean_verdict {
+            Some((_, mass)) => calibration
+                .calibrate_probability(crate::calibration::question_class(question), *mass),
+            None => {
+                calibration.calibrate(crate::calibration::question_class(question), &distribution)
+            }
+        };
         let report = ConfidenceReport::from_distribution(&distribution, calibrated, ood, None)?;
-        let outcome = ConfidenceReport::outcome_for(&report, policy);
+        let outcome = if abstain_elicited {
+            DecisionOutcome::Abstain
+        } else {
+            ConfidenceReport::outcome_for(&report, policy)
+        };
         let answer = match question {
             DecisionQuestion::Choice(choice) => DecisionAnswer::Choice {
                 question_id: choice.id().clone(),
@@ -1304,12 +1435,20 @@ impl<'a> Executor<'a> {
                 distribution: distribution.clone(),
                 confidence: report.calibrated_confidence,
             },
-            DecisionQuestion::Boolean(boolean) => DecisionAnswer::Boolean {
-                question_id: boolean.id().clone(),
-                value: top.key == "true",
-                probability: top.probability,
-                confidence: report.calibrated_confidence,
-            },
+            DecisionQuestion::Boolean(boolean) => {
+                let (value, probability) = match &boolean_verdict {
+                    // A threshold-flipped verdict carries its own honest
+                    // mass, not the argmax's.
+                    Some((key, mass)) => (*key == "true", *mass),
+                    None => (top.key == "true", top.probability),
+                };
+                DecisionAnswer::Boolean {
+                    question_id: boolean.id().clone(),
+                    value,
+                    probability,
+                    confidence: report.calibrated_confidence,
+                }
+            }
             DecisionQuestion::Score(score) => {
                 let expected = Self::expected_value(&distribution);
                 DecisionAnswer::Score {
@@ -1336,6 +1475,8 @@ impl<'a> Executor<'a> {
             report,
             outcome,
             verification_triggered: false,
+            boolean_flipped: boolean_verdict.is_some(),
+            abstain_elicited,
             decided_by: (decided_by.to_owned(), decided_kind),
         })
     }
@@ -1445,7 +1586,13 @@ impl<'a> Executor<'a> {
         for question in self.request.questions() {
             match self.decisions.get(question.id()) {
                 Some(decision) => {
-                    answers.push(decision.answer.clone());
+                    // An elected abstention carries no answer: the rung
+                    // declined to decide, and the synthetic candidate id
+                    // is internal (RESEARCH §15.6 item 3). The per-question
+                    // outcome still records the abstention.
+                    if !decision.abstain_elicited {
+                        answers.push(decision.answer.clone());
+                    }
                     outcomes.push((question.id().clone(), decision.outcome));
                 }
                 // The node that would have answered this question was

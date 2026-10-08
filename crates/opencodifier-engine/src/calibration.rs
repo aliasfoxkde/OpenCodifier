@@ -53,6 +53,22 @@ pub trait Calibration: std::fmt::Debug + Send + Sync {
     /// or degenerate distributions either — return `0.0`.
     fn calibrate(&self, class: &str, distribution: &Distribution) -> f64;
 
+    /// Calibrated confidence for an answer that carries `probability`
+    /// of a Boolean distribution's mass — its complement holds the rest.
+    ///
+    /// This exists for the fitted Boolean boundary (RESEARCH §15.6 item
+    /// 2): when the boundary flips the argmax, the verdict actually
+    /// given carries minority mass, so it is never the distribution's
+    /// top and [`Self::calibrate`] cannot describe it. Implementations
+    /// map `probability` through the same fitted mapping
+    /// [`Self::calibrate`] applies to the top entry, evaluated against
+    /// the `1 − probability` complement. The provided default is the
+    /// identity — an un-calibrated rung stays visible as such (D15) —
+    /// so only mappings with a real per-entry form need to override it.
+    fn calibrate_probability(&self, _class: &str, probability: f64) -> f64 {
+        probability
+    }
+
     /// Version folded into every cache key (D6). `0` means "no
     /// calibration" — the identity default. Loading a fitted artifact
     /// gives it the artifact's `calibration_version`, so replacing the
@@ -116,6 +132,10 @@ impl Calibration for ProofAwareCalibration {
             return distribution.top().probability;
         }
         self.inner.calibrate(class, distribution)
+    }
+
+    fn calibrate_probability(&self, class: &str, probability: f64) -> f64 {
+        self.inner.calibrate_probability(class, probability)
     }
 
     fn version(&self) -> u64 {
@@ -347,6 +367,24 @@ impl Calibration for TemperatureCalibration {
             .into_iter()
             .find(|(key, _)| key == top_key)
             .map_or(distribution.top().probability, |(_, probability)| probability)
+    }
+
+    fn calibrate_probability(&self, class: &str, probability: f64) -> f64 {
+        // The same map `rescale` applies per entry, evaluated at
+        // `probability` against its binary complement. Mirrors the
+        // `rescale` guards exactly: zero mass stays zero, and a
+        // degenerate total falls back to the raw value rather than
+        // inventing mass.
+        let temperature = self.temperature_for(class);
+        let exponent = 1.0 / temperature;
+        let weight = if probability > 0.0 { probability.powf(exponent) } else { 0.0 };
+        let complement =
+            if (1.0 - probability) > 0.0 { (1.0 - probability).powf(exponent) } else { 0.0 };
+        let total = weight + complement;
+        if !total.is_finite() || total <= 0.0 {
+            return probability;
+        }
+        weight / total
     }
 
     fn version(&self) -> u64 {
@@ -706,6 +744,56 @@ mod tests {
         assert_eq!(fit.aurc_after, Some(0.118));
         assert_eq!(fit.items, 231);
         assert_eq!(fit.accuracy_at_coverage.as_ref().expect("map")["80"], 0.764);
+    }
+
+    #[test]
+    fn probability_calibration_matches_top_calibration_when_the_verdict_tops() {
+        // The threshold path uses `calibrate_probability` only when a
+        // boundary overruled the argmax; when the same probability is the
+        // top of its distribution, both entry points must agree exactly —
+        // one fitted map, not two.
+        let calibration =
+            TemperatureCalibration::from_artifact(artifact(BTreeMap::new(), 2.0)).unwrap();
+        let distribution = Distribution::from_pairs([("false", 0.3), ("true", 0.7)]).unwrap();
+        let top = calibration.calibrate("boolean", &distribution);
+        let by_probability = calibration.calibrate_probability("boolean", 0.7);
+        // Not bit-equal by construction: the probability path computes the
+        // complement as `1 − p` and sums weight-first, while `calibrate`
+        // reads the literal entry and sums in distribution order. Same
+        // fitted map, same value to float noise.
+        assert!((top - by_probability).abs() < 1e-12, "top {top} vs probability {by_probability}");
+    }
+
+    #[test]
+    fn probability_calibration_maps_a_minority_verdict_through_the_same_fit() {
+        // p_true 0.6 at a boundary of 0.86 answers false with 0.4 of the
+        // mass. The calibrated value must be the fit applied to 0.4 —
+        // strictly less than the fit applied to the overruled argmax —
+        // and the pair must stay complementary (mass is conserved).
+        let calibration =
+            TemperatureCalibration::from_artifact(artifact(BTreeMap::new(), 2.0)).unwrap();
+        let minority = calibration.calibrate_probability("boolean", 0.4);
+        let majority = calibration.calibrate_probability("boolean", 0.6);
+        assert!(minority < majority, "minority {minority} vs majority {majority}");
+        assert!((minority + majority - 1.0).abs() < 1e-9, "{minority} + {majority}");
+    }
+
+    #[test]
+    fn identity_and_proof_aware_probability_calibration_keep_the_raw_value() {
+        // The provided default is the identity: an un-calibrated rung
+        // stays visible as such (D15), and a proof/delegate wrapper has
+        // no per-entry form of its own to invent.
+        assert_eq!(IdentityCalibration.calibrate_probability("boolean", 0.4), 0.4);
+        let proof_aware = ProofAwareCalibration::new(Arc::new(IdentityCalibration));
+        assert_eq!(proof_aware.calibrate_probability("boolean", 0.4), 0.4);
+    }
+
+    #[test]
+    fn degenerate_probability_masses_calibrate_without_inventing_mass() {
+        let calibration =
+            TemperatureCalibration::from_artifact(artifact(BTreeMap::new(), 2.0)).unwrap();
+        assert_eq!(calibration.calibrate_probability("boolean", 0.0), 0.0);
+        assert_eq!(calibration.calibrate_probability("boolean", 1.0), 1.0);
     }
 
     #[test]

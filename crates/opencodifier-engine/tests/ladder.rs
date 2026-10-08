@@ -17,7 +17,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use common::{boolean_question, choice_question, config, engine_with, request_with_policy};
-use opencodifier_core::{DecisionOutcome, DecisionPolicy, RequestMetadata, RiskLevel, State};
+use opencodifier_core::{
+    DecisionAnswer, DecisionOutcome, DecisionPolicy, FactValue, RequestMetadata, RiskLevel, State,
+};
 use opencodifier_engine::{
     CacheKeyBuilder, EngineConfig, EngineError, IdentityCalibration, LadderPolicy, LadderProfile,
     MockClassifier, NodeKind, TemperatureCalibration,
@@ -367,4 +369,160 @@ fn the_handle_assembles_with_a_ladder_and_propagates_refusals() {
         EngineHandle::with_ladder(config(1), classifier, None, boolean_kind_ladder("none", 0.95))
             .unwrap_err();
     assert!(matches!(error, EngineError::InvalidConfig { .. }), "{error:?}");
+}
+
+/// A boolean rung carrying a fitted verdict boundary (RESEARCH §15.6
+/// item 2), with gates that accept at `min_confidence` — the gate must
+/// read the verdict actually given, not the argmax it overruled.
+fn boolean_threshold_ladder(id: &str, threshold: f64, min_confidence: f64) -> LadderPolicy {
+    let policy = DecisionPolicy::new(
+        min_confidence,
+        min_confidence / 2.0,
+        min_confidence / 4.0,
+        RiskLevel::Low,
+    )
+    .unwrap()
+    .with_boolean_threshold(threshold)
+    .unwrap();
+    LadderPolicy {
+        id: id.to_owned(),
+        per_kind: BTreeMap::from([(NodeKind::Boolean, policy)]),
+        ..LadderPolicy::default()
+    }
+}
+
+/// The Boolean answer of a single-question response: `(value,
+/// probability, confidence)`.
+fn boolean_answer(response: &opencodifier_core::DecisionResponse) -> (bool, f64, f64) {
+    match &response.answers()[0] {
+        DecisionAnswer::Boolean { value, probability, confidence, .. } => {
+            (*value, *probability, *confidence)
+        }
+        other => panic!("expected a boolean answer, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_fitted_boolean_threshold_overrules_the_argmax_with_honest_mass() {
+    // The research shape (UNFAIR-ToS): p_true 0.6 — the argmax says true,
+    // the fitted boundary 0.86 says false. The verdict must follow the
+    // boundary, and probability plus calibrated confidence must be the
+    // verdict's own mass (0.4), never the overruled argmax's 0.6.
+    let classifier = Arc::new(
+        MockClassifier::new("mock/bools")
+            .with_script("tools", vec![("true", 0.6), ("false", 0.4)])
+            .unwrap(),
+    );
+    let request = loose_request(vec![boolean_question("tools", "Does this request need tools?")]);
+
+    // Gates at 0.50: the argmax's 0.6 would accept outright, the
+    // verdict's 0.4 must not — proving the gate read the answer given.
+    let engine = engine_with(
+        config(1).with_ladder(boolean_threshold_ladder("bools-fit-v1", 0.86, 0.50)),
+        classifier,
+    )
+    .unwrap();
+    let (response, _) = engine.decide_with_report(&request).unwrap();
+    let (value, probability, confidence) = boolean_answer(&response);
+    assert!(!value, "the boundary 0.86 answers false at p_true 0.6");
+    assert!((probability - 0.4).abs() < 1e-9, "probability {probability}");
+    assert!((confidence - 0.4).abs() < 1e-9, "confidence {confidence}");
+    assert_eq!(response.outcome(), DecisionOutcome::Verify);
+    // No hidden thresholds: the boundary is named, and the overruled
+    // argmax is disclosed, in the deciding node's trace.
+    let fact = common::trace_fact(&response, "boolean", "boolean_threshold");
+    assert_eq!(fact, Some(&FactValue::Float(0.86)));
+    let flipped = common::trace_fact(&response, "boolean", "boolean_flipped");
+    assert_eq!(flipped, Some(&FactValue::Boolean(true)));
+}
+
+#[test]
+fn a_threshold_flip_keeps_the_measured_distribution_in_the_answer() {
+    // The model said true 0.6 / false 0.4; the boundary answers false.
+    // The answer's distribution stays exactly what the model measured —
+    // flipping a verdict never rewrites the evidence it came from.
+    let classifier = Arc::new(
+        MockClassifier::new("mock/bools")
+            .with_script("tools", vec![("true", 0.6), ("false", 0.4)])
+            .unwrap(),
+    );
+    let request = loose_request(vec![boolean_question("tools", "Does this request need tools?")]);
+    let engine = engine_with(
+        config(1).with_ladder(boolean_threshold_ladder("bools-fit-v1", 0.86, 0.50)),
+        classifier,
+    )
+    .unwrap();
+    let (response, _) = engine.decide_with_report(&request).unwrap();
+    // The deciding node's facts still describe the model's measured
+    // distribution: top stays the argmax (true @ 0.6) even though the
+    // answer above is false @ 0.4.
+    let top = common::trace_fact(&response, "boolean", "top");
+    let probability = common::trace_fact(&response, "boolean", "probability");
+    assert_eq!(top, Some(&FactValue::Text(String::from("true"))));
+    assert_eq!(probability, Some(&FactValue::Float(0.6)));
+}
+
+#[test]
+fn a_threshold_that_agrees_with_the_argmax_changes_no_decision() {
+    // p_true 0.42, boundary 0.70: the verdict is false either way. The
+    // boundary that agrees still discloses itself, but never flips
+    // anything — answers, outcome, and confidence match the
+    // same-gates ladder without the field.
+    let classifier = Arc::new(
+        MockClassifier::new("mock/bools")
+            .with_script("tools", vec![("true", 0.42), ("false", 0.58)])
+            .unwrap(),
+    );
+    let request = loose_request(vec![boolean_question("tools", "Does this request need tools?")]);
+
+    let plain = engine_with(
+        config(1).with_ladder(boolean_kind_ladder("bools-plain-v1", 0.70)),
+        classifier.clone(),
+    )
+    .unwrap();
+    let bounded = engine_with(
+        config(1).with_ladder(boolean_threshold_ladder("bools-bound-v1", 0.70, 0.70)),
+        classifier,
+    )
+    .unwrap();
+
+    let (plain_response, _) = plain.decide_with_report(&request).unwrap();
+    let (response, _) = bounded.decide_with_report(&request).unwrap();
+    let (value, probability, confidence) = boolean_answer(&response);
+    assert!(!value);
+    assert!((probability - 0.58).abs() < 1e-9, "probability {probability}");
+    assert!((confidence - 0.58).abs() < 1e-9, "confidence {confidence}");
+    assert_eq!(response.outcome(), plain_response.outcome());
+    let fact = common::trace_fact(&response, "boolean", "boolean_threshold");
+    assert_eq!(fact, Some(&FactValue::Float(0.70)));
+    let flipped = common::trace_fact(&response, "boolean", "boolean_flipped");
+    assert_eq!(flipped, None, "an agreeing boundary must not claim a flip");
+}
+
+#[test]
+fn without_a_boundary_the_boolean_verdict_stays_the_argmax() {
+    // The default (None) posture: the same distribution the boundary
+    // above flips to false decides true here, and no threshold fact
+    // appears anywhere in the trace.
+    let classifier = Arc::new(
+        MockClassifier::new("mock/bools")
+            .with_script("tools", vec![("true", 0.6), ("false", 0.4)])
+            .unwrap(),
+    );
+    let request = loose_request(vec![boolean_question("tools", "Does this request need tools?")]);
+
+    let engine =
+        engine_with(config(1).with_ladder(boolean_kind_ladder("bools-plain-v1", 0.50)), classifier)
+            .unwrap();
+    let (response, _) = engine.decide_with_report(&request).unwrap();
+    let (value, probability, confidence) = boolean_answer(&response);
+    assert!(value);
+    assert!((probability - 0.6).abs() < 1e-9, "probability {probability}");
+    assert!((confidence - 0.6).abs() < 1e-9, "confidence {confidence}");
+    for entry in response.trace().entries() {
+        assert!(
+            !entry.detail.contains_key("boolean_threshold"),
+            "an unset boundary must not leak a trace fact"
+        );
+    }
 }

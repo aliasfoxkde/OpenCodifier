@@ -68,6 +68,14 @@ pub struct DecisionPolicy {
     /// default measures answer entropy; `LexicalBand` opts into
     /// input-likeness evidence.
     ood_mode: OodMode,
+    /// Boolean verdict boundary (RESEARCH §15.6 item 2): the question is
+    /// answered true when `p_true >= boolean_threshold`, replacing the
+    /// hard argmax (never hard-0.5 a Boolean). `None` — the default —
+    /// keeps the argmax verdict byte-identically.
+    boolean_threshold: Option<f64>,
+    /// The elicited-abstain candidate (RESEARCH §15.6 item 3). `None` —
+    /// the default — appends nothing and stays byte-identical.
+    abstain_candidate: Option<AbstainCandidate>,
 }
 
 /// Deserialization mirror for [`DecisionPolicy`]; conversion validates.
@@ -90,6 +98,10 @@ struct RawDecisionPolicy {
     ood_ceiling: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ood_mode: Option<OodMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    boolean_threshold: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    abstain_candidate: Option<AbstainCandidate>,
 }
 
 /// Which deterministic signal feeds the OOD channel (D28).
@@ -119,6 +131,60 @@ impl OodMode {
     }
 }
 
+/// The elicited-abstain candidate (RESEARCH §15.6 item 3): a synthetic
+/// choice candidate appended to every choice question of a policy that
+/// carries one, giving the deciding rung a way to elect "none of these"
+/// instead of guessing. A decision that selects it becomes an
+/// [`crate::response::DecisionOutcome::Abstain`], the answer is withheld
+/// from the response, and the trace discloses both the configured
+/// candidate and the elicitation. Abstain-when-elicted measured right in
+/// 17 of 18 research cases — the rung knows when the state does not
+/// decide the question, if it is given somewhere to say so.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AbstainCandidate {
+    /// The synthetic candidate's id. The id *marks* the abstain candidate:
+    /// if a declared candidate of the question already owns it, that
+    /// candidate takes the abstain role and nothing is appended.
+    id: String,
+    /// How the candidate reads in the candidate list — the deciding rung
+    /// scores it like any other option.
+    description: String,
+}
+
+impl AbstainCandidate {
+    /// Validates and constructs the synthetic candidate.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::EmptyField`] when the id is empty or `"none"` (the
+    /// D25 reserved id), or the description is empty.
+    pub fn new(id: impl Into<String>, description: impl Into<String>) -> CoreResult<Self> {
+        let id = id.into();
+        let description = description.into();
+        if id.is_empty() || id == "none" {
+            return Err(CoreError::EmptyField {
+                field: "abstain candidate id (empty or the reserved \"none\")",
+            });
+        }
+        if description.is_empty() {
+            return Err(CoreError::EmptyField { field: "abstain candidate description" });
+        }
+        Ok(Self { id, description })
+    }
+
+    /// The synthetic candidate's id.
+    #[must_use]
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// How the candidate reads in the candidate list.
+    #[must_use]
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+}
+
 impl From<DecisionPolicy> for RawDecisionPolicy {
     fn from(policy: DecisionPolicy) -> Self {
         // Disabled gates serialize as absent, keeping the canonical form
@@ -134,6 +200,8 @@ impl From<DecisionPolicy> for RawDecisionPolicy {
             min_margin: (policy.min_margin != 0.0).then_some(policy.min_margin),
             ood_ceiling: (policy.ood_ceiling != f64::INFINITY).then_some(policy.ood_ceiling),
             ood_mode: (!policy.ood_mode.is_answer_entropy()).then_some(policy.ood_mode),
+            boolean_threshold: policy.boolean_threshold,
+            abstain_candidate: policy.abstain_candidate,
         }
     }
 }
@@ -155,6 +223,14 @@ impl TryFrom<RawDecisionPolicy> for DecisionPolicy {
             Some(ceiling) => policy.with_ood_ceiling(ceiling)?,
             None => policy,
         };
+        let policy = match raw.boolean_threshold {
+            Some(threshold) => policy.with_boolean_threshold(threshold)?,
+            None => policy,
+        };
+        let policy = match raw.abstain_candidate {
+            Some(candidate) => policy.with_abstain_candidate(candidate)?,
+            None => policy,
+        };
         Ok(policy.with_ood_mode(raw.ood_mode.unwrap_or_default()))
     }
 }
@@ -172,6 +248,8 @@ impl DecisionPolicy {
         min_margin: 0.0,
         ood_ceiling: f64::INFINITY,
         ood_mode: OodMode::AnswerEntropy,
+        boolean_threshold: None,
+        abstain_candidate: None,
     };
 
     /// Validates and constructs a policy.
@@ -209,7 +287,61 @@ impl DecisionPolicy {
             min_margin: 0.0,
             ood_ceiling: f64::INFINITY,
             ood_mode: OodMode::AnswerEntropy,
+            boolean_threshold: None,
+            abstain_candidate: None,
         })
+    }
+
+    /// Sets the Boolean verdict boundary (RESEARCH §15.6 item 2): the
+    /// question is answered true when `p_true >= threshold` instead of
+    /// at the hard argmax. Absent (the default), the argmax governs and
+    /// canonical serializations are byte-identical to the pre-field
+    /// form. The value must lie strictly inside `(0, 1)`: an endpoint
+    /// would collapse every Boolean to one verdict.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidPolicy`] unless the threshold is a finite
+    /// value strictly between 0 and 1.
+    pub fn with_boolean_threshold(mut self, threshold: f64) -> CoreResult<Self> {
+        if !threshold.is_finite() || !(0.0..1.0).contains(&threshold) {
+            return Err(CoreError::InvalidPolicy {
+                reason: format!(
+                    "boolean_threshold must be a finite value strictly inside (0, 1), \
+                     got {threshold}"
+                ),
+            });
+        }
+        self.boolean_threshold = Some(threshold);
+        Ok(self)
+    }
+
+    /// The Boolean verdict boundary, when one is configured.
+    #[must_use]
+    pub fn boolean_threshold(&self) -> Option<f64> {
+        self.boolean_threshold
+    }
+
+    /// Appends the elicited-abstain candidate (RESEARCH §15.6 item 3) to
+    /// every choice question this policy decides. Absent (the default),
+    /// nothing is appended and canonical serializations are byte-identical
+    /// to the pre-field form.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::EmptyField`] when the candidate fails
+    /// [`AbstainCandidate::new`]'s validation (re-checked here because the
+    /// builder is also the deserialization path).
+    pub fn with_abstain_candidate(mut self, candidate: AbstainCandidate) -> CoreResult<Self> {
+        AbstainCandidate::new(candidate.id.clone(), candidate.description.clone())?;
+        self.abstain_candidate = Some(candidate);
+        Ok(self)
+    }
+
+    /// The elicited-abstain candidate, when one is configured.
+    #[must_use]
+    pub fn abstain_candidate(&self) -> Option<&AbstainCandidate> {
+        self.abstain_candidate.as_ref()
     }
 
     /// Selects which deterministic signal feeds the OOD channel (D28).
@@ -424,6 +556,41 @@ mod tests {
         let json = serde_json::to_string(&policy).expect("serialize");
         let back: DecisionPolicy = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(back, policy);
+    }
+
+    #[test]
+    fn abstain_candidate_serializes_as_absent_on_the_default() {
+        // Same absent-on-default discipline as the §19 gates and the
+        // Boolean boundary: a policy without elicitation is byte-identical
+        // to the pre-field form, so cache keys do not shift.
+        let default_json = serde_json::to_string(&DecisionPolicy::default()).expect("serialize");
+        assert!(
+            !default_json.contains("abstain_candidate"),
+            "the default must serialize as absent, got {default_json}"
+        );
+        let opted = DecisionPolicy::default()
+            .with_abstain_candidate(
+                AbstainCandidate::new("abstain", "None of the listed candidates").unwrap(),
+            )
+            .unwrap();
+        let opted_json = serde_json::to_string(&opted).expect("serialize");
+        assert!(opted_json.contains("\"abstain_candidate\":{\"id\":\"abstain\""), "{opted_json}");
+        let restored: DecisionPolicy = serde_json::from_str(&opted_json).expect("deserialize");
+        assert_eq!(restored, opted);
+        let restored_default: DecisionPolicy =
+            serde_json::from_str(&default_json).expect("deserialize");
+        assert!(restored_default.abstain_candidate().is_none());
+    }
+
+    #[test]
+    fn abstain_candidate_construction_refuses_empty_and_reserved_ids() {
+        assert!(AbstainCandidate::new("", "anything").is_err());
+        assert!(AbstainCandidate::new("none", "anything").is_err());
+        assert!(AbstainCandidate::new("abstain", "").is_err());
+        // And the builder re-checks, because it is the deserialization
+        // path: a struct that bypassed `new` must not install either.
+        let forged = AbstainCandidate { id: String::new(), description: "x".to_owned() };
+        assert!(DecisionPolicy::default().with_abstain_candidate(forged).is_err());
     }
 
     #[test]

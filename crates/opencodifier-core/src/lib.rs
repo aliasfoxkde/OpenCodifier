@@ -106,7 +106,7 @@ pub use answer::{DecisionAnswer, Distribution, DistributionEntry};
 pub use confidence::ConfidenceReport;
 pub use error::{CoreError, CoreResult};
 pub use ids::{CandidateId, NodeId, QuestionId};
-pub use policy::{DecisionPolicy, Limits, OodMode, RequestMetadata, RiskLevel};
+pub use policy::{AbstainCandidate, DecisionPolicy, Limits, OodMode, RequestMetadata, RiskLevel};
 pub use question::{
     BooleanQuestion, Candidate, ChoiceQuestion, DecisionQuestion, ScoreLevel, ScoreQuestion,
 };

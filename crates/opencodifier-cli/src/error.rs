@@ -97,6 +97,19 @@ pub const CODE_RECIPE_EXISTS: &str = "cli.recipe_exists";
 /// created or written.
 pub const CODE_UNWRITABLE_DESTINATION: &str = "cli.unwritable_destination";
 
+/// Stable code reported when `ladder fit-boolean` is given an empty id or
+/// `"none"` — the id decorates every cache key (D25), so an anonymous
+/// profile is refused before any fitting happens.
+pub const CODE_LADDER_ID_REFUSED: &str = "cli.ladder_id_refused";
+
+/// Stable code reported when `ladder fit-boolean` evidence file carries no
+/// rows: a fit over nothing is not a fit.
+pub const CODE_LADDER_EMPTY_EVIDENCE: &str = "cli.ladder_empty_evidence";
+
+/// Stable code reported when a subcommand cannot write a file the caller
+/// named with `--out`.
+pub const CODE_UNWRITABLE_OUTPUT: &str = "cli.unwritable_output";
+
 /// The MCP serving session itself failed (handshake refused, session task
 /// ended abnormally). Internal error: exit 3.
 pub const CODE_MCP_SESSION_FAILED: &str = "mcp.session_failed";
