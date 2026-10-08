@@ -18,7 +18,7 @@ please report it on the GitHub tracker.
 |---|---|
 | `/` (`index.html`) | Overview: measured numbers, decision ladder, integrity commitments, ecosystem, FAQ |
 | `/benchmarks.html` | The measured board — renders `board.csv` with client-side filters and derived-score math |
-| `/try.html` | Playground — the real decision engine compiled to WASM, run in-tab |
+| `/try.html` | Playground — the real decision engine compiled to WASM, run in-tab, plus the maze-solver demo (fog-of-war bot driven by the same ladder) |
 | `/api.html` | API reference for the WASM module, loopback HTTP server, MCP tools, and CLI |
 | `/board.csv` | The raw benchmark data behind `/benchmarks.html` (RFC 4180) |
 | `/sitemap.xml` | Page index for crawlers |

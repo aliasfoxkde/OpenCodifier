@@ -2312,6 +2312,18 @@ standard run-output format.
 
 ### 15.6.1 Items landed from the program (status ledger)
 
+- **Item 2 (fitted thresholds as ladder profiles)** — shipped
+  2026-10-08: `ladder_fit.rs` fits the Boolean verdict boundary by
+  deterministic grid sweep (F1 on the true class, ties toward the
+  smallest threshold) and emits a `LadderProfile` document that
+  round-trips the engine's real D25 loader; the cli's
+  `ladder fit-boolean` writes it (commit `c5d2527`).
+- **Item 3 (explicit abstain candidate)** — shipped 2026-10-08:
+  `DecisionPolicy::abstain_candidate: Option<AbstainCandidate>` — a
+  marked synthetic candidate carries the refusal; elicited abstention
+  rides the same typed answer shape as acceptance, and the trace
+  discloses `abstain_candidate` / `abstain_elicited`; absent-on-default
+  byte-identical (commit `c5d2527`).
 - **Item 4 (label-overlap preflight)** — shipped 2026-10-08:
   `DecisionPolicy::max_label_overlap`, Jaccard over candidate-id
   tokens, terminal abstention with `label_overlap*` trace facts,
