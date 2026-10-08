@@ -32,7 +32,16 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-SLOT_MARKER = " ->\n"
+# The readout anchor is the token ending a slot's `` ->`` — the position
+# whose logits predict the verdict in the SFT stream
+# (decision_sft_prep.segments_for renders "{opt} ->" then " yes"/" no"
+# as the very next tokens; the "\n" comes after the verdict, never
+# between "->" and it). Anchoring after a rendered "\n" instead reads
+# an untrained context: measured positional collapse (accuracy by gold
+# slot 0.435/0.055/0.413/0.711/1.000, predictions piling on one slot)
+# and rel-acc 0.41 where the trained anchor reads 0.61-0.63 flat
+# (E1-C p2b-lr1e4, rel200 — see TRAINING.md §9.7.1).
+SLOT_MARKER = " ->"
 
 
 def sha256_of(path: Path) -> str:

@@ -98,6 +98,28 @@ import time
 from collections import Counter, deque
 from pathlib import Path
 
+# Suite-family tagging for the A2 gate criterion (TRAINING.md §9.7.1):
+# the val curve Phase-C needs is the relational *suite-family* curve,
+# but corpus rows carry qtype (choice/noul/score). The itemgen chain
+# sources are the relational family by construction — iterate-B raised
+# exactly these to hit the relational corpus-share target — so rows
+# from them are tagged `relational_compositional`; every other row
+# keeps its qtype tag. Derived from `source` at load time, so corpora
+# written before this rule are tagged without a re-prep.
+RELATIONAL_SOURCES = (
+    "itemgen/root-cause-chain",
+    "itemgen/root-cause-agreeing",
+    "itemgen/first-restored-chain",
+)
+
+
+def row_family(row: dict) -> str:
+    """Suite-family tag for one corpus row (see RELATIONAL_SOURCES)."""
+    source = str(row.get("source") or "")
+    if source.startswith(RELATIONAL_SOURCES):
+        return "relational_compositional"
+    return str(row.get("qtype"))
+
 
 def sha256_of(path: Path) -> str:
     h = hashlib.sha256()
@@ -163,7 +185,7 @@ def stratified_split(rows: list[dict], val_frac: float, val_cap: int,
     prep tool already excluded it."""
     by_family: dict[str, list[int]] = {}
     for i, r in enumerate(rows):
-        by_family.setdefault(str(r.get("qtype")), []).append(i)
+        by_family.setdefault(row_family(r), []).append(i)
     rng = random.Random(seed)
     val: list[int] = []
     for fam in sorted(by_family):
@@ -346,8 +368,11 @@ def main() -> int:
     # Families travel with the feats so loud-skips cannot desync
     # row<->family.
     cache_dir = args.data / ".cache"
+    # fam2: split_tag carries the family-rule version — fams are cached
+    # alongside the feats, so a rule change must invalidate the cache or
+    # a re-run silently serves qtype-tagged families.
     split_tag = (f"l{args.limit_rows or 0}-s{args.seed}"
-                 f"-vf{args.val_frac:g}-vc{args.val_cap}")
+                 f"-vf{args.val_frac:g}-vc{args.val_cap}-fam2")
     cache_path = cache_dir / (f"e1-train-{data_sha[:12]}-"
                               f"ml{args.max_len}-{split_tag}.npz")
 
@@ -362,7 +387,7 @@ def main() -> int:
                 skipped += 1
                 continue
             feats.append(enc)
-            fams.append(str(row.get("qtype")))
+            fams.append(row_family(row))
         say(f"{tag}: feats={len(feats)} loud_skipped_over_maxlen="
             f"{skipped}")
         return feats, fams, skipped
