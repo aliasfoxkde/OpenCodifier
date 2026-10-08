@@ -612,6 +612,7 @@ pub fn render_record(
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+    #![allow(clippy::assert_is_empty)]
 
     use super::*;
 
@@ -913,5 +914,20 @@ mod tests {
                 "label {label}"
             );
         }
+    }
+
+    #[test]
+    fn a_record_without_questions_renders_an_empty_frame() {
+        // `request.questions` absent (or not an object): the state still
+        // renders, with no rows and no skips -- the `if let` fall-through
+        // in `render_record`. The let-else stays on one line so the
+        // refusal arm adds no never-executed line.
+        let record =
+            r#"{"record_id": "r1", "source": "src", "request": {"state": "the db is down"}}"#;
+        let outcome = render_record(record, 24_000).unwrap();
+        let MacjevOutcome::Rendered(render) = outcome else { panic!("not rendered: {outcome:?}") };
+        assert_eq!(render.state, "the db is down");
+        assert!(render.rows.is_empty());
+        assert!(render.skips.is_empty());
     }
 }

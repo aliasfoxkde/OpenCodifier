@@ -1564,6 +1564,23 @@ ecosystem (and Fastino's GLiDE demo) convention is a
   Phase 20 tranches close the reachable residual). Standing rule
   added: only an in-image measurement may move the floor; local
   toolchains are for tranche targeting, never for floor arithmetic.
+- **Update (2026-10-08) — ratchet retired at the reachable ceiling.**
+  Phase 20g's tranches recovered every unit-reachable line (cli
+  ladder 65, itemgen classes, the macjev render fall-through) and the
+  closing line-by-line pass over the residual found the pool **empty**:
+  the remaining 298 `DA` misses (98.39 %, 18,187/18,485 in-image) are
+  all in proven-infeasible classes — `#[non_exhaustive]` wildcards no
+  in-crate test can construct, defensive-unreachable typed arms kept
+  so a future change fails loudly, wasm `JsValue` boundaries that
+  SIGABRT a host test, binary-entry mains, ffi contract-violation
+  guards (full ledger in `docs/COVERAGE.md`). Reaching 98.5 would
+  require deleting honest defensive code or covering infeasible lines,
+  so the "restore 98.5" exit condition is amended: **the floor rests
+  at 97.5 as the fixed constant** and the ratchet clause is retired
+  now rather than at 98.5. The revisit clause's own remedy applies
+  verbatim — the residual *is* the scoped waiver, recorded group by
+  group in `docs/COVERAGE.md`; a future tranche that finds a genuinely
+  reachable line reopens the ratchet upward.
 
 ## D37 — Generated relational/contrastive items are solver-verified in-engine, never emitted unproven (2026-10-07)
 

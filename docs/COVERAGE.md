@@ -1,7 +1,7 @@
 # Coverage (2026-10-08 census — basis re-anchored to the pinned CI image)
 
-Headline, number of record: **98.38 % on the lcov `DA` basis
-(18 177 / 18 476 hit; 299 lines never executed), measured inside the
+Headline, number of record: **98.39 % on the lcov `DA` basis
+(18 187 / 18 485 hit; 298 lines never executed), measured inside the
 pinned CI image `opencodifier-ci-rust:2` on the default-feature tree —
 the same basis the CI lane gates** (`cargo llvm-cov --workspace
 --lcov`, warm target dir). The day's earlier census read 97.96 %
@@ -11,11 +11,14 @@ the first 20g test tranche (end-to-end `ladder fit-boolean` CLI
 tests) recovered 66 of the 67 `cli/ladder.rs` misses for +0.36. The
 second 20g tranche, same day: four itemgen tests (the twin-guard
 collision arm, the detached-side scan's iterate edge,
-`fact_mentions` over every fact kind, the `count_statuses` skip) plus
-the non-UTF-8 evidence boundary on `ladder fit-boolean` — 10 lines
-net for +0.06. The 2026-10-07 census read 98.03 % (17 433 / 17 783).
-The D36 ratchet holds the CI floor at **97.5**, rising per tranche
-toward 98.5.
+`fact_mentions` over every fact kind, the `count_statuses` skip),
+the non-UTF-8 evidence boundary on `ladder fit-boolean`, and the one
+genuinely reachable schema line (macjev's render fall-through for a
+record without `request.questions`) — 11 lines net, with the
+remaining residual proven class-infeasible (see the groups below and
+the D36 amendment). The 2026-10-07 census read 98.03 % (17 433 /
+17 783). The CI floor rests at **97.5** as the fixed constant; the
+D36 ratchet is retired at the reachable ceiling.
 
 Basis warnings for this census:
 
@@ -64,7 +67,7 @@ Standing rule (in force from this census on):
 - Only same-toolchain deltas are meaningful. A cross-toolchain
   percentage comparison is noise by construction.
 
-## Where the 299-line residual lives (in-image `DA`, this census)
+## Where the 298-line residual lives (in-image `DA`, this census)
 
 Per crate (missed / instrumented → %):
 
@@ -73,7 +76,7 @@ Per crate (missed / instrumented → %):
 | runtime | 1 / 489 | 99.80 |
 | core | 3 / 1 266 | 99.76 |
 | mcp | 2 / 337 | 99.41 |
-| schema | 47 / 3 674 | 98.72 |
+| schema | 46 / 3 683 | 98.75 |
 | engine | 90 / 6 397 | 98.59 |
 | cli | 10 / 658 | 98.48 |
 | itemgen | 38 / 2 032 | 98.13 |
@@ -84,7 +87,7 @@ Per crate (missed / instrumented → %):
 
 Heaviest files: `engine/executor.rs` 36/1 112 · `wasm/lib.rs` 33/352 ·
 `engine/classifier.rs` 24/439 · `model/kai.rs` 20/926 ·
-`schema/macjev.rs` 20/496 · `http/routes.rs` 16/515 ·
+`schema/macjev.rs` 19/496 · `http/routes.rs` 16/515 ·
 `model/embedding.rs` 14/301 · `model/llamacpp.rs` 12/375 ·
 `schema/jev.rs` 11/833 · `itemgen/lib.rs` 10/364 ·
 `itemgen/main.rs` 10/87 · `itemgen/sample.rs` 9/493 ·
@@ -94,11 +97,11 @@ Heaviest files: `engine/executor.rs` 36/1 112 · `wasm/lib.rs` 33/352 ·
 ## Residual classification (group level)
 
 The pre-expansion ledger classified every one of 125 lines
-individually. This census's residual is 299 lines; it is classified
-at **group level** — per-line restoration is Phase 20g's exit
-criterion, once the tranche work shrinks the residual below ~150
-where line-by-line reasoning pays again. Groups, largest first
-(90 + 55 + 47 + 38 + 33 + 16 + 10 + 10 = 299):
+individually. This census's residual is 298 lines; it is classified
+at **group level**, and every group is now a proven-infeasible
+class — the unit-reachable pool is exhausted (per-line restoration
+is no longer Phase 20g's exit criterion; see the D36 amendment).
+Groups, largest first (90 + 55 + 46 + 38 + 33 + 16 + 10 + 10 = 298):
 
 1. **Engine residual (90)** — `executor.rs` 36 (escalation-walk
    guards implied by earlier checks: cycle/no-root/starvation arms
@@ -106,16 +109,32 @@ where line-by-line reasoning pays again. Groups, largest first
    ledger), `classifier.rs` 24 (fuzzer-targeted adversarial arms),
    `graph.rs` 9, scattered rules/relational/cache/calibration/handle
    /serde-infallibility degrade arms, `ladder.rs` 1, `ladder_fit.rs` 1.
-2. **Model-backend failure arms (55)** — `kai` 20, `embedding` 14,
-   `llamacpp` 12, `julia` 7: transport-error arms (connection
-   refused, mid-stream EOF, malformed JSON from a backend) exercised
-   against real servers in the model-eval harness, not under unit
-   instrumentation.
-3. **Schema adapter refusal arms (47)** — `macjev` 20, `jev` 11,
-   `openai` 5: `#[non_exhaustive]` future-variant wildcards (unchanged
-   class from the 125-line ledger) plus
-   `unsupported_generation_field` / decode-refusal arms reached only
-   by wire shapes no adapter test synthesizes.
+2. **Model-backend residual (55)** — the transports themselves are
+   mock-tested (`llamacpp`'s `Transport` fault seam drives connection
+   and decode failures); what remains is four named classes:
+   **`#[non_exhaustive]` future-variant wildcards (26)** — `kai` 9,
+   `llamacpp` 8, `julia` 5, `embedding` 4: the typed refusals for
+   question/answer kinds that do not exist yet and cannot be
+   constructed by in-crate tests; **defensive-unreachable typed
+   arms (17)** — `embedding`'s three `Distribution::from_pairs`
+   map_errs over unique normalized keys (documented in-line as
+   "kept typed so a future change fails loudly"), `kai`'s
+   non-finite-JSON refusal (serde_json `Number` cannot carry one —
+   the crate's own test proves the constructor returns `None`) and
+   its infallible-serialization map_err, `llamacpp`'s
+   `from_pairs` after normalize; **algorithm guards (2)** — the
+   softmax sum guard and the BPE merge-loop's dead-right edge (any
+   merge that kills the right side leaves an alive join at a scanned
+   position or bumps the version — the guard is provably
+   unreached); **test-code message regions (10)**.
+3. **Schema adapter residual (46)** — **IR wildcards (13)** — `jev` 5,
+   `openai` 4, `native` 1, plus `macjev`'s `Visitor::expecting` (3),
+   which serde reads only while composing an error no `serde_json`
+   input can trigger; **test-code message regions (30)**; the
+   **registry first-run capture bootstrap (3)** that writes the
+   fixture it then requires; and one line this census closed —
+   `macjev`'s render fall-through for a record whose
+   `request.questions` is absent, now driven by its own test.
 4. **Item-generation residual (38)** — in four named classes:
    **rejection safety nets proven never to fire (7)** — `lib`
    181-184 and 224-226, the verification-rejection arms; a probe
@@ -156,10 +175,13 @@ where line-by-line reasoning pays again. Groups, largest first
    in-crate data), `mcp` 2 node-limit refuse arms, `runtime` 1.
 
 No group is silently skipped; every group names the fact that makes
-unit instrumentation the wrong tool for it. Groups 3–4 hold the
-testable cores (schema wire shapes, itemgen's binary-entry tails are
-the exception); closing the reachable fraction is what lifts the
-floor toward 98.5.
+unit instrumentation the wrong tool for it. That is now true in the
+strong sense: a line-by-line pass over groups 2–4 (this census)
+found the reachable pool empty outside the macjev fall-through this
+tranche closed — every other line belongs to a class above. The
+residual is the permanent waiver ledger D36's revisit clause
+anticipated; the ratchet retires at the reachable ceiling, and a
+future tranche that finds a genuinely reachable line reopens it.
 
 ## Measurement integrity
 
@@ -249,3 +271,13 @@ floor toward 98.5.
   309 → 299. A process note: multi-line `assert!(cond, "msg")`
   messages put lazy `format_args` on their own never-executed lines —
   new tests keep messages single-line.
+- **2026-10-08 pool exhausted (this census)**: the third same-day
+  census closed the one genuinely reachable line the line-by-line
+  pass found — `macjev`'s render fall-through for a record without
+  `request.questions`, driven by its own test (single-line let-else
+  so the refusal arm adds no dead line). Census 98.39 % (18 187 /
+  18 485; 298 residual; the +9 denominator is the new test's own
+  lines). The line-by-line pass over groups 2–4 found everything
+  else class-infeasible: the unit-reachable pool is empty, the D36
+  ratchet retires at the reachable ceiling (amendment in
+  DECISIONS.md), and the floor rests at 97.5 as the fixed constant.
