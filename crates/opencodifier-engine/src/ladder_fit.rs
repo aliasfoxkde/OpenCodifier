@@ -5,14 +5,14 @@
 //! point for skewed tasks — tuned thresholds moved F1 `0.499 -> 0.748`
 //! (UNFAIR-ToS) and `0.243 -> 0.353` (`GoEmotions`), with a median tuned
 //! threshold of 0.86. This module fits that boundary from labeled
-//! evidence and emits it as a [`LadderProfile`] document — data the
+//! evidence and emits it as a [`LadderProfile`](crate::ladder::LadderProfile) document — data the
 //! engine loads through the D25 seam (`--ladder`), never a hardcoded
 //! constant.
 //!
 //! The fit is deliberately simple and inspectable: a deterministic grid
 //! sweep over candidate boundaries, scored by F1 on the true class,
 //! ties resolved toward the smallest threshold. Every emitted document
-//! round-trips through [`LadderProfile`]'s real loader (tested), so a
+//! round-trips through [`LadderProfile`](crate::ladder::LadderProfile)'s real loader (tested), so a
 //! fitted profile can never drift from what `--ladder` accepts.
 
 use std::collections::BTreeMap;
@@ -117,7 +117,7 @@ fn grid_threshold(step: usize) -> f64 {
 /// Emits a ladder-profile document carrying the fitted Boolean boundary
 /// as the `boolean` kind override, composed over `base`.
 ///
-/// The document is the canonical JSON form [`LadderProfile`] deserializes
+/// The document is the canonical JSON form [`LadderProfile`](crate::ladder::LadderProfile) deserializes
 /// (field order and names included); callers write it to disk and load
 /// it with `--ladder`. The ladder id is validated here too — an
 /// anonymous profile is refused at emit time, not just at load.
