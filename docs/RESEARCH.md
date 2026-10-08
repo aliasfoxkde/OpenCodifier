@@ -2309,3 +2309,35 @@ is #107's submission work; item 8 is board/reporting; item 9 feeds
 sized before commitment. Watch-list adds: mandu5/jevcompat
 conformance, jevland listing, LiteLLM-style frozen bundles as the
 standard run-output format.
+
+### 15.7 Addendum (same day): dzhng/jevgrep — Jev as a code-search relevance judge
+
+`github.com/dzhng/jevgrep` (dzhng = the browser-use author; MIT,
+Node 22+): a coding-agent CLI — ask a natural-language repository
+question, it walks the hierarchy, uses **hosted Jev** (TypeSafe /
+Vercel AI Gateway / OpenRouter key required) to judge relevance across
+folders → files → declarations, and returns files, reading leads, and
+verbatim excerpts on stdout. Why it matters here:
+
+- **It is a production instance of our thesis category**: a decision
+  model used as a cheap relevance ROUTER/FILTER (with the LiteLLM
+  complexity-tier classifier, the "decision models as filters" family
+  §15.4 named). Its two-stage shape — cheap content previews narrow,
+  Jev judges the shortlist — is our metadata-filter → BM25 → model
+  ladder with exactly one hosted rung and no deterministic rungs below.
+- **A local-first equivalent is unclaimed**: jevgrep sends eligible
+  source to a cloud provider by design (their own warning: choose the
+  search root you intend to send). "Repository question answering that
+  never leaves the machine" — our narrowing stack + extraction + trace
+  — is a legitimate, differentiated demo surface for the engine.
+  Recorded as an idea, not a commitment; sized before any work.
+- **Reporting discipline worth copying**: their own benchmark section
+  states 7/10 vs 8/10 solves at ~40 % lower cost, one 10-task repeat,
+  baselines run once, "a cost reduction with a quality tradeoff, not
+  evidence of equal or better solve quality", and both runs failed the
+  original quality gate — third-party practice of exactly the
+  §15.5/§15.6(8) rule (never report cost without quality alongside).
+- **Not adoptable as a tool for this harness**: requires a cloud
+  provider key and sends source externally — contrary to harness
+  rules (no code exfiltration; retrieval here is codebase-memory MCP).
+  Ecosystem-index candidate (jevland "integration" category) at most.
