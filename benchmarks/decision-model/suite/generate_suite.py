@@ -51,6 +51,15 @@ HOLDOUT_SUITE_VERSION = 3
 B_POOL_MAIN = slice(0, 40)
 B_POOL_HOLDOUT = slice(40, 80)
 
+# The relational-heavy eval slice (suite_holdout_rel200.json): the
+# iterate-B gate (TRAINING.md §9.7.1) requires >= 200 relational rows,
+# more than any 40/40/40 suite carries. Same generator and class-B
+# pool as the holdout; the relational class is deepened to 200 and
+# the other classes keep their 40s. --holdout-rel200 selects it.
+HOLDOUT_REL200_SEED = 20261008
+HOLDOUT_REL200_VERSION = 1
+HOLDOUT_REL200_CLASS_C = 200
+
 INSTRUCTIONS = (
     "You are choosing from a fixed list of options. Read the context and "
     "answer with exactly one option id from the allowed choices. Do not "
@@ -453,13 +462,15 @@ def build_suite(
     b_pool: slice = B_POOL_MAIN,
     suite_version: int = SUITE_VERSION,
     id_prefix: str = "",
+    class_c_count: int = 40,
 ) -> dict:
     rng = random.Random(seed)
     items: list[dict] = []
     items += _gen_class_a(rng, 40, id_prefix)[:40]
     items += _gen_class_b(b_pool, id_prefix)
-    items += _gen_class_c(rng, 40, id_prefix)[:40]
-    # Validate: unique ids, answers present in candidates, balanced classes.
+    items += _gen_class_c(rng, class_c_count, id_prefix)[:class_c_count]
+    # Validate: unique ids, answers present in candidates, expected class
+    # counts (the relational class is the only one that changes size).
     ids = [i["id"] for i in items]
     assert len(ids) == len(set(ids)), "duplicate item ids"
     for it in items:
@@ -469,7 +480,9 @@ def build_suite(
     classes = {}
     for it in items:
         classes[it["class"]] = classes.get(it["class"], 0) + 1
-    assert all(v == 40 for v in classes.values()), f"unbalanced classes: {classes}"
+    expected = {"metadata_match": 40, "lexical_semantic": 40,
+                "relational_compositional": class_c_count}
+    assert classes == expected, f"unbalanced classes: {classes}"
     return {
         "suite_version": suite_version,
         "seed": seed,
@@ -480,9 +493,21 @@ def build_suite(
 
 def main() -> int:
     argv = sys.argv[1:]
+    holdout_rel200 = "--holdout-rel200" in argv
+    argv = [a for a in argv if a != "--holdout-rel200"]
     holdout = "--holdout" in argv
     argv = [a for a in argv if a != "--holdout"]
-    if holdout:
+    if holdout_rel200:
+        out = (
+            Path(argv[0]) if argv
+            else Path(__file__).parent / "suite_holdout_rel200.json"
+        )
+        suite = build_suite(
+            seed=HOLDOUT_REL200_SEED, b_pool=B_POOL_HOLDOUT,
+            suite_version=HOLDOUT_REL200_VERSION, id_prefix="r",
+            class_c_count=HOLDOUT_REL200_CLASS_C,
+        )
+    elif holdout:
         out = (
             Path(argv[0]) if argv
             else Path(__file__).parent / "suite_holdout.json"

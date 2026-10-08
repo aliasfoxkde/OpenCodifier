@@ -74,7 +74,10 @@ def arm_row(runs_root: Path, logs_root: Path, arm: str) -> dict:
     manifest = None
     if manifest_path.exists():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    history = parse_val_history(
+    # e1-train/3 manifests carry the val curve themselves (A2 fix);
+    # log scraping stays as the fallback for v2 manifests whose logs
+    # survive.
+    history = (manifest or {}).get("val_history") or parse_val_history(
         logs_root / f"e1c-{arm}-train.log")
     curve = relational_curve(history)
 

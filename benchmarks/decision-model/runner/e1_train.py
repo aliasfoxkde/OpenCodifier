@@ -62,6 +62,16 @@ r2 trainer and why:
   optimizer steps in ``torch.profiler`` and writes a chrome trace +
   summary table under ``out/profile/``.
 
+v3 (iterate-B, TRAINING.md §9.7.1) — the val curve is now durable:
+
+- **val_history in the manifest** (A2 fix): every ``run_val`` call
+  appends ``{step, loss, tok_acc, entropy, per_family}`` to a list
+  persisted as ``manifest["val_history"]``. The r3 pilot ran the
+  gate on curves scraped from log files via a ``VAL_LINE`` regex —
+  when logs were absent, the pilot table silently lost the val
+  columns. The manifest is the record of record; the log line
+  remains for humans.
+
 torch/transformers/peft import lazily so the pure helpers (segment
 encoding, label masking, batching, stratified split) unit-test on
 machines without torch. Every knob is a CLI flag with the
@@ -445,13 +455,14 @@ def main() -> int:
     log(f"knobs: {json.dumps({**vars(args), 'data_sha': data_sha[:12]},
                               default=str)}")
 
-    def run_val(step: int) -> float:
+    def run_val(step: int) -> tuple[float, dict, float, float]:
         """Exact per-row token-mean val losses in ONE forward per
         batch: cross-entropy gathered only at supervised positions
         (a full-vocab reshape at 2048 tokens would need tens of GB),
         attributed per row and per family. Also reports token
         accuracy and mean entropy over supervised positions. Returns
-        the token-weighted overall loss; logs the per-family table."""
+        ``(overall loss, per-family losses, token accuracy, mean
+        entropy)``; logs the per-family table."""
         model.eval()
         row_losses: list[tuple[int, int]] = []
         n_correct = 0
@@ -496,17 +507,24 @@ def main() -> int:
             fam_tok[val_fams[i]] += c
         per_family = {f: round(fam_sum[f] / max(1, fam_tok[f]), 4)
                       for f in sorted(fam_sum)}
+        tok_acc = n_correct / max(1, n_sup)
+        ent_mean = ent_sum / max(1, n_sup)
         log(f"val step={step} loss={overall:.4f} "
-            f"tok_acc={n_correct / max(1, n_sup):.4f} "
-            f"entropy={ent_sum / max(1, n_sup):.4f} "
+            f"tok_acc={tok_acc:.4f} "
+            f"entropy={ent_mean:.4f} "
             f"per_family={json.dumps(per_family)} "
             f"rows={len(row_losses)}")
-        return overall
+        return overall, per_family, tok_acc, ent_mean
 
     best = {"step": -1, "val_loss": float("inf")}
+    val_history: list[dict] = []
 
     def maybe_checkpoint(step: int) -> None:
-        val_loss = run_val(step)
+        val_loss, per_family, tok_acc, ent_mean = run_val(step)
+        val_history.append({"step": step, "loss": round(val_loss, 4),
+                            "tok_acc": round(tok_acc, 4),
+                            "entropy": round(ent_mean, 4),
+                            "per_family": per_family})
         if val_loss < best["val_loss"]:
             best["step"] = step
             best["val_loss"] = val_loss
@@ -605,7 +623,7 @@ def main() -> int:
     peak_mem = (int(torch.cuda.max_memory_allocated())
                 if torch.cuda.is_available() else 0)
     manifest = {
-        "manifest_version": "opencodifier.e1-train/2",
+        "manifest_version": "opencodifier.e1-train/3",
         "base": args.base,
         "data": {"path": str(rows_path), "sha256": data_sha,
                  "rows": len(rows), "train": len(train_feats),
@@ -640,6 +658,7 @@ def main() -> int:
             cum_tokens / max(1e-9, time.time() - t0)),
         "peak_memory_bytes": peak_mem,
         "loss_surface": "verdict tokens only (y=1 segments + EOS)",
+        "val_history": val_history,
         "best_checkpoint": {"step": best["step"],
                             "val_loss": round(best["val_loss"], 4)}
         if best["step"] >= 0 else None,
