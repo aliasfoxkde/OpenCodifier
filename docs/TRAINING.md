@@ -675,6 +675,56 @@ are in the tree before any new arm runs:
   byte-for-byte (verified pre-commit). Corpus share target for the
   matching itemgen build: ~26% relational (3.0× the p2 share).
 
+#### 9.7.2 Gate reader defect found and fixed (2026-10-08) — rel-acc verdict revised
+
+The rel200 rows exposed a failure shape the pilot table could not
+explain: accuracy by gold slot position 0.435 / **0.055** / 0.413 /
+0.711 / 1.000, mean slot logit climbing monotonically −1.13 → +4.28,
+105/200 predictions piling onto slot 3 — and wrong-prob mean 0.7516 ≈
+right-prob mean 0.7563 (confidently wrong under this reader).
+
+**Root cause: the oc-readout-v1 anchor was one token past the trained
+context.** The SFT stream (`decision_sft_prep.segments_for`) renders
+`"{opt} ->"` then the verdict `" yes"`/`" no"` as the very next tokens —
+the newline comes *after* the verdict, never between `"->"` and it.
+`e1_eval.py` rendered slot lines joined by `"\n"` and anchored each
+readout at the end of `" ->\n"` (`SLOT_MARKER` included the newline), so
+every slot ≥ 2 was scored under a bigram (`"->\n"`) that never occurs in
+training. The corpus was never the problem (itemgen items match the eval
+template) and volume was never falsified — the reader was.
+
+**Proof (three-mode probe, p2b-lr1e4 adapter-best, same 200 rows):**
+re-anchored at `" ->"` — the position whose logits predict the verdict in
+training — allslot reads **0.61**, the training-faithful causal
+interleaving **0.62**, per-candidate slot0 **0.63**, with a flat position
+profile (pos1 0.5455–0.5636 vs the collapsed 0.055). Reader mode is a
+±0.02 effect; the anchor was the whole defect.
+
+**Canonical re-run with the fixed `e1_eval.py`** (committed alongside
+this section; output `runs/e1c-p2b-lr1e4/eval-rel200-fixed-best`,
+full 280-item slice): overall acc **0.6679**, ECE **0.2411**;
+per class — metadata 0.900, lexical 0.725, **relational 0.610 @ n=200**
+(matches the probe's allslot exactly, validating the probe), relational
+mean top-prob **0.9167** against 0.610 accuracy.
+
+**Revised iterate-B verdict:**
+
+- The §9.7 Phase-C *accuracy* gate (rel ≥ 0.60) **passes marginally at
+  0.610**; the 0.41 FAIL that motivated "volume falsified" was a reader
+  artifact.
+- The *calibration* gate **still fails decisively** (ECE 0.2411 > 0.15;
+  relational top-prob 0.917 vs acc 0.610). Confidently-wrong remains the
+  failure mode, consistent with the §9.7.1 temperature probe: this is a
+  training-side problem, and B3/B4 volume stays the lever.
+- Per-family val curves remain unjudgeable for the pilot arms
+  (trainer v2 manifests); trainer v3 fixes this for iterate-B arms.
+- **Scope:** every class accuracy and ECE e1_eval has ever reported is
+  suspect by the same off-by-one until re-read (relative arm ordering
+  may shift). The llama.cpp fork's native verdict-slot readout — the
+  board numbers (F26) — was validated separately and is unaffected.
+  Iterate-B arms run exclusively on the fixed reader, which re-baselines
+  the program; the six pilot arms are not re-read.
+
 ### 9.8 Research integration (2026-10-07) — Phase G findings, dispositioned
 
 Three research tracks ran against the §9.7 plan before Phase B/C
