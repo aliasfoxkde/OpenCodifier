@@ -27,7 +27,8 @@ SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹", "0123456789")
 COLUMNS = [
     "board", "section", "name", "qualifier", "n", "n_correct", "accuracy",
     "macro", "lexical", "metadata", "relational", "ece", "brier", "auto_share_5err",
-    "p50_ms", "mean_ms", "determinism", "replay_delta", "invalid_dists", "size",
+    "p50_ms", "mean_ms", "cost_per_1k_usd", "cost_per_1m_usd",
+    "determinism", "replay_delta", "invalid_dists", "size",
     "tier", "provenance", "footnotes", "composite_a_trust", "composite_spd",
     "composite_res", "overall", "vision", "notes",
 ]
@@ -52,7 +53,7 @@ def to_float(text: str) -> str:
 
 
 def to_ms(text: str) -> str:
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(ms|s)\b", text)
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(ms|s)\b", text.replace(",", ""))
     if not m:
         return ""
     value = float(m.group(1))
@@ -166,6 +167,8 @@ def classify(header: list[str]) -> str:
         return "composite"
     if "arm" in header and "suite" in header:
         return "params_ab"
+    if "modeled cost" in header:
+        return "cost"
     return "other"
 
 
@@ -212,6 +215,14 @@ def map_table(board: str, section: str, rows: list[list[str]]) -> list[dict[str,
             row["p50_ms"] = to_ms(r.get("p50 (client wall)", ""))
             row |= parse_determinism(r.get("determinism", ""))
             row["notes"] = "jevbench-our-run"
+            # Engine rows carry their measured artifact size: the static
+            # (x86_64-unknown-linux-musl) engine binary of the release the
+            # run rode — no model weights, which is the point of the
+            # Acc/GiB column (dist/v0.4.0-x86_64-unknown-linux-musl,
+            # 6,772,912 bytes, attested). Model rows keep the published
+            # GGUF sizes their docs of record already carry.
+            if name.lower().startswith("opencodifier engine"):
+                row["size"] = "6.5 MiB"
         elif kind == "jevbench_published":
             cell = r.get("public acc", "")
             name, qual = split_qualifier(r.get("system", "").strip())
@@ -286,6 +297,18 @@ def map_table(board: str, section: str, rows: list[list[str]]) -> list[dict[str,
                 v for v in (r.get("load window", ""), r.get("status", ""))
                 if v)
             row["notes"] = "fork-params-ab"
+        elif kind == "cost":
+            row["name"] = r.get("arm (this host, measured p50)", "")
+            row["p50_ms"] = to_ms(r.get("p50", ""))
+            cell = r.get("modeled cost", "")
+            m = re.search(r"\$\s*([\d.]+)\s*/\s*1k\b", cell)
+            if m:
+                row["cost_per_1k_usd"] = m.group(1)
+            m = re.search(r"\$\s*([\d.]+)\s*/\s*1M\b", cell)
+            if m:
+                row["cost_per_1m_usd"] = m.group(1)
+            row["provenance"] = "modeled, benchmarkheaven $0.0125/hr CPU basis (2026-10-07)"
+            row["notes"] = "modeled-cost"
         else:
             row["name"] = clean(" | ".join(cells))
             row["notes"] = "unmapped-table"
