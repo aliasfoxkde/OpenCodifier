@@ -806,6 +806,59 @@ What the board established (full findings catalog in REPORT.md):
   model-rung format for portability; the decision arm stays on
   llama.cpp.
 
+### Reporting parity per rung (2026-10-08)
+
+Accuracy + ECE + p50 alone make two rungs with the same ECE look
+interchangeable when they separate on every other parity axis. The
+parity bundle computes, **per rung, from the frozen run JSONs**
+(never rewritten — each row's source file is SHA-256-pinned in
+`results/parity.json`):
+
+- **Brier** — confidence Brier: mean over items of
+  `(p_top − 1{pred = answer})²`. The scored companion to the binned
+  ECE. Not a multiclass Brier: the frozen evidence stores the winner
+  probability, not the full distribution.
+- **AUROC** — winner probability as the score for the binary task
+  "answered correctly" (selective-classification discrimination:
+  does higher confidence mean more often right?). Midranks on ties.
+- **Reliability** — the 10-bin curve (same binning as the ECE
+  convention), cell `mean-p/acc/n` per occupied bin; full curves in
+  `results/RELIABILITY.md`.
+- **p95/p99** — nearest-index percentiles beside p50 (same
+  convention as every run's p50). Null where the frozen evidence
+  stores no per-item wall clock (embed rungs) or only p95 (llama
+  rungs) — nulls are honest, not missing measurements.
+- **tokens** — measured prompt tokens per decision plus the single
+  verdict token (model rungs only; the zero-ML rungs consume no
+  model tokens).
+
+| rung | n | acc | ECE | Brier | AUROC | p50 | p95 | p99 | tokens | reliability (mean-p/acc/n) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| engine lexical rung | 120 | 0.483 | 0.115 | 0.160 | 0.842 | 5.3ms | 18.6ms | 23.8ms | — | 0.25/0.23/47 0.37/0.18/11 0.44/0.28/18 0.57/0.73/15 0.67/1.00/7 0.74/1.00/6 0.84/1.00/7 0.94/1.00/9 |
+| engine relational rung | 120 | 0.683 | 0.094 | 0.127 | 0.907 | 1.3ms | 1.8ms | 2.0ms | — | 0.25/0.27/33 0.34/0.50/4 0.45/0.36/14 0.57/0.79/14 0.67/1.00/7 0.74/1.00/6 0.84/1.00/7 0.98/1.00/35 |
+| engine fusion (gate-refit) | 120 | 0.933 | 0.092 | 0.072 | 0.727 | 0.9ms | 1210.2ms | 1501.6ms | — | 0.42/0.00/1 0.58/0.91/11 0.67/1.00/8 0.75/0.78/9 0.84/1.00/11 0.98/0.95/80 |
+| embed gte-modernbert ONNX fp32 | 120 | 0.575 | 0.330 | 0.341 | 0.750 | — | — | — | — | 0.17/0.33/15 0.26/0.61/104 0.31/1.00/1 |
+| embed gte-modernbert ONNX int8 | 120 | 0.442 | 0.233 | 0.278 | 0.827 | — | — | — | — | 0.17/0.07/15 0.24/0.50/105 |
+| embed gte-modernbert ONNX q4 | 120 | 0.575 | 0.330 | 0.343 | 0.717 | — | — | — | — | 0.17/0.40/15 0.25/0.59/103 0.30/1.00/2 |
+| embed embeddinggemma 300M q8 | 120 | 0.500 | 0.256 | 0.317 | 0.656 | — | — | — | — | 0.17/0.80/15 0.25/0.45/104 0.31/1.00/1 |
+| model Qwen3.5-0.8B q4_0 | 120 | 0.650 | 0.074 | 0.184 | 0.785 | 612.6ms | 1388.0ms | — | 77 | 0.36/0.33/15 0.45/0.43/35 0.55/0.71/21 0.65/0.83/12 0.77/0.87/15 0.84/0.85/13 0.92/1.00/9 |
+| model Qwen3.5-2B Q4_K_M | 120 | 0.725 | 0.062 | 0.151 | 0.823 | 1734.8ms | 3873.7ms | — | 77 | 0.36/0.22/9 0.45/0.53/17 0.55/0.60/25 0.66/0.73/11 0.75/0.83/12 0.84/0.70/10 0.98/1.00/36 |
+| model Qwen3.5-4B Q3_K_S | 120 | 0.800 | 0.069 | 0.130 | 0.827 | 6776.0ms | 17986.5ms | — | 77 | 0.36/0.00/2 0.46/0.60/10 0.55/0.57/7 0.64/0.62/8 0.74/0.58/12 0.85/0.69/13 0.98/0.96/68 |
+| model Qwen3.5-4B UD-Q4_K_XL | 120 | 0.800 | 0.074 | 0.110 | 0.890 | 4871.7ms | 10703.8ms | — | 77 | 0.38/0.00/2 0.47/0.20/5 0.55/0.40/10 0.66/0.50/4 0.75/0.80/10 0.85/0.70/20 0.99/0.97/69 |
+| model MiMo-9B Q3_K_S | 120 | 0.817 | 0.048 | 0.119 | 0.844 | 14307.4ms | 48123.0ms | — | 74 | 0.47/0.50/6 0.56/0.45/11 0.64/0.67/9 0.75/0.67/9 0.87/0.81/16 0.98/0.94/69 |
+
+What the extra columns say that ECE alone did not: the fusion
+gate-refit's 0.933 buys accuracy at discrimination's expense
+(AUROC 0.727 — the gate concentrates mass but separates correct
+from wrong worse than the relational rung's 0.907); the embedding
+rungs' near-identical accuracies hide three different calibration
+failures (fp32 ECE 0.330 with all mass mid-band; int8 0.233 with
+probability collapsed into two bins); and the Q4_K_XL export beats
+its Q3_K_S sibling on every confidence axis at the same accuracy.
+The board CSV carries these columns for every suite row whose run
+JSON is in `results/parity.json`, not just the rungs of record
+here. Regenerate: `python3 runner/parity.py --runs-dir "$RUNS"`.
+
 ### Held-out suite: the fusion-v2 gate out of sample (2026-10-05, F29)
 
 `suite_holdout.json` (committed byte-locked, seed 20261005, version 3,
@@ -994,12 +1047,33 @@ Their cheapest published row fixes the CPU pricing basis: verdict-small
 implies **$0.0125/hour**. Holding that rate fixed, cost scales linearly with
 measured p50 latency, so our measured latencies price as:
 
-| Arm (this host, measured p50) | p50 | modeled cost |
-|---|---|---|
-| Engine rung (rules + lexical, JevBench public split) | 2.0 ms | **$0.0000070 / 1k** ($0.007 / 1M) |
-| vtx static-embedding rung | 7.9 ms | $0.0000275 / 1k ($0.0275 / 1M) |
-| Raw LLM route (Qwen3.5-4B + prompt) | 651 ms | $0.00227 / 1k ($2.27 / 1M) |
-| 4B model rung (escalation tail only) | 2,280 ms | $0.0079 / 1k ($7.9 / 1M) |
+| Arm (this host, measured p50) | p50 | modeled cost | tokens/decision | billed-equivalent |
+|---|---|---|---:|---|
+| Engine rung (rules + lexical, JevBench public split) | 2.0 ms | **$0.0000070 / 1k** ($0.007 / 1M) | 0 | **$0** — no model tokens exist to bill |
+| vtx static-embedding rung | 7.9 ms | $0.0000275 / 1k ($0.0275 / 1M) | ~0¹ | ~$0 at any token rate |
+| Raw LLM route (Qwen3.5-4B + prompt) | 651 ms | $0.00227 / 1k ($2.27 / 1M) | 136² | $0.014 / 1k ($14 / 1M) |
+| 4B model rung (escalation tail only) | 2,280 ms | $0.0079 / 1k ($7.9 / 1M) | 77² | $0.0081 / 1k ($8.1 / 1M) |
+
+Dual cost rows (2026-10-08): every row names its **task** (the row
+label — Board A rows ride the 231-item JevBench public split, Board B
+rows the 120-item locked suite, per the row's p50 source) and its
+measured **tokens per decision** — prompt tokens plus the single
+verdict token, taken from the frozen run JSONs
+(`results/parity.json`, `tokens_per_decision`). The
+**billed-equivalent** column prices those tokens at the named
+parametric API rate of **$0.10 per 1M input + $0.40 per 1M output
+tokens** via `(in × $0.10 + out × $0.40) / 10⁶` per decision — a
+representative hosted small-model rate used as a parameter, not a
+vendor quote; substitute any vendor's rate. The modeled-CPU column
+stays the benchmarkheaven hardware basis; the two answer different
+questions (what owned hardware amortizes to vs what the same
+workload bills for through an API).
+
+¹ The embedding rung sends the utterance to the embed server, but
+  the frozen runs do not record per-item embed tokens; the decision
+  itself consumes none.
+² Measured: 77 tokens/decision on the locked suite (Board B), 136 on
+  the JevBench prompt route (Board A).
 
 Anchors from their board: verdict-small $0.00087/1k ($0.87/1M),
 OpenSourceJev Qwen3.5-4B Q4 $0.011/1k, hosted Jev reference $0.032/1k. On

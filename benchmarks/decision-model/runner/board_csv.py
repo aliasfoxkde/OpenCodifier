@@ -26,8 +26,10 @@ SUPERSCRIPTS = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹", "0123456789")
 
 COLUMNS = [
     "board", "section", "name", "qualifier", "n", "n_correct", "accuracy",
-    "macro", "lexical", "metadata", "relational", "ece", "brier", "auto_share_5err",
-    "p50_ms", "mean_ms", "cost_per_1k_usd", "cost_per_1m_usd",
+    "macro", "lexical", "metadata", "relational", "ece", "brier", "auroc",
+    "auto_share_5err", "p50_ms", "mean_ms", "p95_ms", "p99_ms", "reliability",
+    "cost_per_1k_usd", "cost_per_1m_usd", "cost_billed_per_1k_usd",
+    "cost_billed_per_1m_usd", "tokens_per_decision",
     "determinism", "replay_delta", "invalid_dists", "size",
     "tier", "provenance", "footnotes", "composite_a_trust", "composite_spd",
     "composite_res", "overall", "vision", "notes",
@@ -151,6 +153,8 @@ def classify(header: list[str]) -> str:
         return "probe"
     if "pp400 t/s" in header:
         return "probe"
+    if "brier" in header and "auroc" in header:
+        return "parity"
     if "system" in header and "brier" in header:
         return "jevbench_ours"
     if "public acc" in joined:
@@ -297,6 +301,25 @@ def map_table(board: str, section: str, rows: list[list[str]]) -> list[dict[str,
                 v for v in (r.get("load window", ""), r.get("status", ""))
                 if v)
             row["notes"] = "fork-params-ab"
+        elif kind == "parity":
+            # Reporting-parity rows (RESEARCH §15.6 item 8): one rung per
+            # row, parity metrics from runner/parity.py over the frozen
+            # run JSONs. The reliability cell is the compact per-bin
+            # digest "mean_p/acc/n" (full curve: results/RELIABILITY.md).
+            row["name"] = r.get("rung", "")
+            row["n"] = to_float(r.get("n", ""))
+            row["accuracy"] = to_float(r.get("acc", ""))
+            row["ece"] = to_float(r.get("ece", ""))
+            row["brier"] = to_float(r.get("brier", ""))
+            row["auroc"] = to_float(r.get("auroc", ""))
+            row["p50_ms"] = to_ms(r.get("p50", ""))
+            row["p95_ms"] = to_ms(r.get("p95", ""))
+            row["p99_ms"] = to_ms(r.get("p99", ""))
+            row["tokens_per_decision"] = to_float(r.get("tokens", ""))
+            row["reliability"] = r.get("reliability", "")
+            row["provenance"] = ("parity.py over frozen run JSONs; "
+                                 "SHA-256 per source in results/parity.json")
+            row["notes"] = "reporting-parity"
         elif kind == "cost":
             row["name"] = r.get("arm (this host, measured p50)", "")
             row["p50_ms"] = to_ms(r.get("p50", ""))
@@ -307,6 +330,17 @@ def map_table(board: str, section: str, rows: list[list[str]]) -> list[dict[str,
             m = re.search(r"\$\s*([\d.]+)\s*/\s*1M\b", cell)
             if m:
                 row["cost_per_1m_usd"] = m.group(1)
+            # Dual cost row (RESEARCH §15.6 item 8): the billed-equivalent
+            # column prices the same task at the named parametric API rate,
+            # with the tokens the figure assumes carried beside it.
+            billed = r.get("billed-equivalent", "")
+            m = re.search(r"\$\s*([\d.]+)\s*/\s*1k\b", billed)
+            if m:
+                row["cost_billed_per_1k_usd"] = m.group(1)
+            m = re.search(r"\$\s*([\d.]+)\s*/\s*1M\b", billed)
+            if m:
+                row["cost_billed_per_1m_usd"] = m.group(1)
+            row["tokens_per_decision"] = to_float(r.get("tokens", ""))
             row["provenance"] = "modeled, benchmarkheaven $0.0125/hr CPU basis (2026-10-07)"
             row["notes"] = "modeled-cost"
         else:
@@ -317,29 +351,52 @@ def map_table(board: str, section: str, rows: list[list[str]]) -> list[dict[str,
 
 
 def enrich(runs_dir: Path, csv_path: Path) -> int:
-    """Fill mean_ms/n from raw run JSONs where they are reachable."""
+    """Fill mean_ms/n from raw run JSONs where they are reachable, and the
+    reporting-parity columns from the committed results/parity.json."""
     by_name = {p.name: p for p in runs_dir.glob("*.json")} if runs_dir.is_dir() else {}
+    parity_path = csv_path.parent / "parity.json"
+    parity: dict[str, dict] = {}
+    if parity_path.is_file():
+        try:
+            parity = json.loads(parity_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            parity = {}
     rows = list(csv.DictReader(csv_path.open()))
     added = 0
     for row in rows:
         src = by_name.get(row["name"])
-        if not src:
-            continue
-        try:
-            data = json.loads(src.read_text())
-        except (OSError, json.JSONDecodeError):
-            continue
-        metrics = data.get("metrics", {})
-        # Engine arms nest latency under metrics.latency (run_engine.py);
-        # model arms carry a flat mean_ms.
-        mean = metrics.get("mean_ms")
-        if mean is None and isinstance(metrics.get("latency"), dict):
-            mean = metrics["latency"].get("mean_ms")
-        if mean and not row["mean_ms"]:
-            row["mean_ms"] = str(round(mean))
-        if metrics.get("n") and not row["n"]:
-            row["n"] = str(metrics["n"])
-        added += 1
+        if src:
+            try:
+                data = json.loads(src.read_text())
+            except (OSError, json.JSONDecodeError):
+                data = None
+            if data is not None:
+                metrics = data.get("metrics", {})
+                # Engine arms nest latency under metrics.latency (run_engine.py);
+                # model arms carry a flat mean_ms.
+                mean = metrics.get("mean_ms")
+                if mean is None and isinstance(metrics.get("latency"), dict):
+                    mean = metrics["latency"].get("mean_ms")
+                if mean and not row["mean_ms"]:
+                    row["mean_ms"] = str(round(mean))
+                if metrics.get("n") and not row["n"]:
+                    row["n"] = str(metrics["n"])
+                added += 1
+        # Parity join (RESEARCH §15.6 item 8): fills the derived parity
+        # columns for any row whose run JSON has one, never overriding a
+        # published cell.
+        p = parity.get(row["name"])
+        if p:
+            for key, col in (("brier_top1", "brier"), ("auroc_top1", "auroc"),
+                             ("p95_ms", "p95_ms"), ("p99_ms", "p99_ms"),
+                             ("tokens_per_decision", "tokens_per_decision")):
+                value = p.get(key)
+                if value is not None and not row[col]:
+                    row[col] = f"{value:.3f}" if key.endswith("top1") else str(round(value))
+            if p.get("reliability") and not row["reliability"]:
+                row["reliability"] = " ".join(
+                    f"{b['mean_p']:.2f}/{b['acc']:.2f}/{b['n']}"
+                    for b in p["reliability"])
     with csv_path.open("w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=COLUMNS)
         writer.writeheader()
