@@ -422,6 +422,21 @@ def build_artifact(
         str(int(fraction * 100)): accuracy_at_coverage(pairs, temperature, fraction)
         for fraction in (0.5, 0.8)
     }
+    # The selective-prediction evidence floor (RESEARCH.md §15.6 item 1):
+    # the engine refuses an artifact presenting the risk-coverage pair on
+    # fewer than 200 items, so the fitter omits the pair (and the
+    # accuracy-at-coverage map with it) below the floor instead of
+    # producing an artifact that cannot load. The values stay in this
+    # analysis dict and the printed table either way — they are analysis
+    # evidence at any n; they are only *artifact* evidence at the floor.
+    selective_included = len(pairs) >= 200
+    selective_fit = {
+        "aurc_before": round(aurc_before, 6),
+        "aurc_after": round(aurc_after, 6),
+        "accuracy_at_coverage": {
+            key: round(value, 6) for key, value in coverage_accuracy.items()
+        },
+    } if selective_included else {}
     model = run.get("model") or {}
     source = model.get("file") or model.get("name") or run_path.name
     return {
@@ -436,11 +451,7 @@ def build_artifact(
                 "items": len(pairs),
                 "ece_before": round(ece_before, 6),
                 "ece_after": round(ece_after, 6),
-                "aurc_before": round(aurc_before, 6),
-                "aurc_after": round(aurc_after, 6),
-                "accuracy_at_coverage": {
-                    key: round(value, 6) for key, value in coverage_accuracy.items()
-                },
+                **selective_fit,
                 "source": (
                     f"{source_suite}, "
                     f"single-run arm {run_path.name}, model {source}; {method}"
@@ -453,6 +464,7 @@ def build_artifact(
         "aurc_after": aurc_after,
         "temperature": temperature,
         "degenerate": degenerate,
+        "selective_included": selective_included,
         "per_class": per_class,
         "per_cardinality": per_card,
     }
@@ -544,12 +556,15 @@ def main() -> None:
             skip_reason = ("  [SKIP: AURC worsens, no artifact]"
                            if ece_helps and not aurc_helps
                            else "  [SKIP: ECE worsens, no artifact]")
+        floor_note = ("  [aurc below the 200-item evidence floor: "
+                      "analysis-only, not in the artifact]"
+                      if not fitted["selective_included"] else "")
         print(f"{artifact_name}: T={fitted['temperature']:.3f} "
               f"ECE {fitted['ece_before']:.3f} -> {fitted['ece_after']:.3f} "
               f"AURC {fitted['aurc_before']:.3f} -> {fitted['aurc_after']:.3f} [{per_class}]"
               + (f" | per-cardinality: {per_card}" if per_card else "")
               + ("  [DEGENERATE: T->inf, no artifact]" if fitted["degenerate"] else "")
-              + skip_reason)
+              + skip_reason + floor_note)
 
     print()
     print("| artifact | T | ECE before | ECE after | AURC before | AURC after |")

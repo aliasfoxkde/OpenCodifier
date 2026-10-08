@@ -2312,6 +2312,19 @@ standard run-output format.
 
 ### 15.6.1 Items landed from the program (status ledger)
 
+- **Item 1 (risk–coverage acceptance)** — shipped 2026-10-08:
+  `CalibrationFit` carries `aurc_before` / `aurc_after` /
+  `accuracy_at_coverage` (50 %/80 %), the engine's loader refuses an
+  artifact whose fit worsens the risk–coverage curve (ECE-alone
+  shipping is structurally impossible — the §15.1 divergence is a
+  gate, not a footnote), and the item's **n ≥ 200 floor** is enforced
+  on both sides: `SELECTIVE_PREDICTION_MIN_ITEMS` refuses
+  selective-prediction evidence on smaller samples at load, and the
+  fitter omits the pair below it (values stay in its analysis output;
+  the 231-item public split clears the floor, the 120-item internal
+  suite does not by construction — pending artifact regen noted in
+  results/CALIBRATION.md, loadable historical shape unchanged).
+
 - **Item 2 (fitted thresholds as ladder profiles)** — shipped
   2026-10-08: `ladder_fit.rs` fits the Boolean verdict boundary by
   deterministic grid sweep (F1 on the true class, ties toward the
