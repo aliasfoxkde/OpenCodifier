@@ -1557,16 +1557,21 @@ record says otherwise, criterion/suite validation, docs of record.
   Two reachable arms gained tests: a rerank node skipping a starved
   question (reporting `NoValidCandidate`, not an answer) and a rung
   walk firing through the graph executor directly.
-- **24j — NLI verbalization verifier (item 6). — SIZED (2026-10-08),
-  queued.** Sizing record: `RESEARCH.md` §15.6.2 — substrate proven
-  (`KaiOnnxBackend` shape), ready arm exists
-  (`onnx-community/DeBERTa-v3-base-mnli-ONNX` / `Xenova/
-  nli-deberta-v3-small`, no self-conversion), cost = one kai-class
+- **24j — NLI verbalization verifier (item 6). — SIZED + PROBED
+  (2026-10-08), queued.** Sizing record: `RESEARCH.md` §15.6.2 —
+  substrate proven (`KaiOnnxBackend` shape), cost = one kai-class
   tranche (backend + verbalizer + `Classifier` impl into the existing
   verifier slot + parity fixtures + D14 manifest + feature-gated
-  tests + 231-split leg). First of the two arms: structurally
-  independent of the pointer/logits family, simplest readout, and its
-  O(N) cost lands only in the verify band.
+  tests + 231-split leg). Probe receipts (§15.6.2): raw-RNLI
+  `nli-deberta-v3-small` rejected (template-dominated, one verbalizer
+  below chance); **arm of record `MoritzLaurer/
+  deberta-v3-base-zeroshot-v2.0`** — official in-repo `onnx/
+  model.onnx`, 2-class entailment read, p50 ~49 ms/pass @ 4 threads
+  on a loaded host, both verbalizer templates above chance on the
+  internal slice. Latency risk retired; the decisive quality read is
+  the 231-split leg. First of the two arms: structurally independent
+  of the pointer/logits family, simplest readout, and its O(N) cost
+  lands only in the verify band.
 - **24k — MLM-head single-pass arm (item 5). — SIZED (2026-10-08),
   queued behind 24j.** Same sizing record; arm =
   `onnx-community/bert-base-uncased-ONNX` (MLM head in-graph);

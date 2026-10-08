@@ -2420,6 +2420,37 @@ OUR suite is known until its 231-split leg runs. Both arms ship as
 opt-in rungs, empty-by-default byte-identical, and neither becomes a
 default-rung candidate without parity-or-better on the split.
 
+**Probe receipts (2026-10-08, same day — item 6 measured first).**
+Two arms probed through our exact rendering (HF `tokenizers` over
+`tokenizer.json`, `input_ids`+`attention_mask`, softmax in the probe,
+ORT-CPU 4 threads, host under co-tenant load 26–37):
+
+- `Xenova/nli-deberta-v3-small` (raw 3-class RNLI): p50 36 ms/pass;
+  sanity triples read; but on a 24-item slice of the internal suite's
+  choice items the renormalized-entailment ranking was
+  **template-dominated** — 0.292 above chance (0.195) with the bare
+  description verbalizer and 0.167 *below chance* with "The answer
+  is …". A raw NLI cross-encoder is the wrong family for
+  verbalized-candidate classification; the sub-chance template is the
+  recorded bug alarm.
+- `MoritzLaurer/deberta-v3-base-zeroshot-v2.0` (2-class
+  entailment/not_entailment, **official in-repo `onnx/model.onnx`** —
+  the strongest possible no-self-conversion provenance): p50 48.7
+  ms/pass; sanity correct (entail_p ≈ 0.000 on both non-entailment
+  triples); both templates above chance — 0.250 / **0.375** — mean
+  top-prob ≈ 0.24–0.28 (weak in probability, but ranking is what a
+  verifier sells; calibration sits above it). The entailment
+  probability is `softmax[0]` directly; the only renormalization is
+  over candidates.
+
+**Arm of record for 24j: `MoritzLaurer/deberta-v3-base-zeroshot-v2.0`.**
+The internal suite's choice items are constraint/metadata matching —
+the NLI family's weakest class and the relational solver's home turf
+— so the decisive quality read is the 231-split leg on natural
+language items, which is exactly what the later tranche runs. The
+latency risk is retired: the O(N) verify-band cost is ~0.2 s per
+4-candidate item at 4 threads on a loaded box.
+
 ### 15.7 Addendum (same day): dzhng/jevgrep — Jev as a code-search relevance judge
 
 `github.com/dzhng/jevgrep` (dzhng = the browser-use author; MIT,
