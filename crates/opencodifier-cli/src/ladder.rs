@@ -3,7 +3,7 @@
 //!
 //! Reads labeled Boolean evidence, fits the verdict boundary by grid
 //! sweep (F1 on the true class, ties toward the smallest threshold), and
-//! writes the [`LadderProfile`] document the engine loads with `--ladder`.
+//! writes the [`LadderProfile`](opencodifier_engine::LadderProfile) document the engine loads with `--ladder`.
 //! The fit is data, not a constant: what ships is a document the operator
 //! can inspect, diff, and version, and loading it runs every validation
 //! the D25 seam enforces.
