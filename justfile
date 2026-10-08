@@ -23,9 +23,12 @@ fmt-check:
 lint:
     cargo clippy --workspace --all-targets -- -D warnings
 
-# Run the full test suite (unit + integration).
+# Run the full test suite (unit + integration). The feature lane runs
+# the gated tests the default build never compiles: the llama.cpp
+# transport exchange and the reference-tokenizer agreement.
 test:
     cargo test --workspace
+    cargo test -p opencodifier-model --features llamacpp,tokenizers
 
 # Build and test documentation examples.
 doc:

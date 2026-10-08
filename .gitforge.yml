@@ -51,6 +51,8 @@ jobs:
     steps:
       - name: Unit and integration tests
         run: cargo test --workspace
+      - name: Feature-gated tests (llama.cpp transport, tokenizer agreement)
+        run: cargo test -p opencodifier-model --features llamacpp,tokenizers
       - name: Documentation tests
         run: cargo test --doc
 

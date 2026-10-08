@@ -732,4 +732,121 @@ mod tests {
         }
         assert!(UreqTransport::new("http://127.0.0.1:8080/", DEFAULT_TIMEOUT).is_ok());
     }
+
+    /// A one-shot loopback HTTP stub: accepts one connection, drains the
+    /// request head and announced body, answers once, and closes. This
+    /// is a test double for the HTTP contract, not a live model server —
+    /// D26's "no live server" bars the llama-server, not a socket.
+    #[cfg(feature = "llamacpp")]
+    fn stub(status_line: &str, body: &str) -> (String, std::thread::JoinHandle<()>) {
+        use std::io::{Read, Write};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let status_line = status_line.to_owned();
+        let body = body.to_owned();
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut received = Vec::new();
+            let mut buffer = [0u8; 4096];
+            let head_end = loop {
+                let read = stream.read(&mut buffer).unwrap();
+                assert!(read > 0, "peer closed before sending headers");
+                received.extend_from_slice(&buffer[..read]);
+                if let Some(position) = received.windows(4).position(|window| window == b"\r\n\r\n")
+                {
+                    break position + 4;
+                }
+            };
+            let head = String::from_utf8_lossy(&received[..head_end]).to_lowercase();
+            let content_length = head
+                .lines()
+                .find_map(|line| {
+                    line.strip_prefix("content-length:")
+                        .map(|value| value.trim().parse::<usize>().unwrap())
+                })
+                .unwrap_or(0);
+            while received.len() < head_end + content_length {
+                let read = stream.read(&mut buffer).unwrap();
+                assert!(read > 0, "peer closed before sending the body");
+                received.extend_from_slice(&buffer[..read]);
+            }
+            let response = format!(
+                "{status_line}\r\ncontent-type: application/json\r\ncontent-length: {}\r\n\
+                 connection: close\r\n\r\n{body}",
+                body.len()
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+        (format!("http://127.0.0.1:{port}"), handle)
+    }
+
+    /// The real transport exchanges JSON over loopback HTTP and
+    /// normalizes nothing — the value comes back exactly as sent.
+    #[cfg(feature = "llamacpp")]
+    #[test]
+    fn the_real_transport_exchanges_json_over_loopback_http() {
+        let (base_url, server) = stub("HTTP/1.1 200 OK", r#"{"results":[{"ok":true}]}"#);
+        let transport = UreqTransport::new(base_url, DEFAULT_TIMEOUT).unwrap();
+        let response = transport.post_json("/v1/decision", &json!({ "mode": "tree" })).unwrap();
+        assert_eq!(response["results"][0]["ok"], true);
+        server.join().unwrap();
+    }
+
+    /// A non-2xx answer keeps the status and truncates the body detail —
+    /// a hostile server cannot flood the error channel.
+    #[cfg(feature = "llamacpp")]
+    #[test]
+    fn a_non_2xx_answer_keeps_the_status_and_truncates_the_detail() {
+        let body = "x".repeat(300);
+        let (base_url, server) = stub("HTTP/1.1 503 busy", &body);
+        let transport = UreqTransport::new(base_url, DEFAULT_TIMEOUT).unwrap();
+        let error = transport.post_json("/v1/decision", &json!({})).unwrap_err();
+        assert_eq!(error.status, Some(503));
+        assert!(error.message.contains("server said 503"), "{error}");
+        assert!(error.message.contains(&"x".repeat(200)), "{error}");
+        assert!(!error.message.contains(&"x".repeat(201)), "{error}");
+        server.join().unwrap();
+    }
+
+    /// A 200 answer whose body is not JSON is a transport failure, not a
+    /// decision — status stays `None` because HTTP itself succeeded.
+    #[cfg(feature = "llamacpp")]
+    #[test]
+    fn a_non_json_body_is_a_transport_failure() {
+        let (base_url, server) = stub("HTTP/1.1 200 OK", "not json");
+        let transport = UreqTransport::new(base_url, DEFAULT_TIMEOUT).unwrap();
+        let error = transport.post_json("/v1/decision", &json!({})).unwrap_err();
+        assert_eq!(error.status, None);
+        assert!(error.message.contains("response body is not JSON"), "{error}");
+        server.join().unwrap();
+    }
+
+    /// A closed port is a transport failure without a status: nothing
+    /// answered.
+    #[cfg(feature = "llamacpp")]
+    #[test]
+    fn a_closed_port_is_a_transport_failure_without_a_status() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base_url = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+        drop(listener);
+        let transport = UreqTransport::new(base_url, Duration::from_secs(5)).unwrap();
+        let error = transport.post_json("/v1/decision", &json!({})).unwrap_err();
+        assert_eq!(error.status, None);
+    }
+
+    /// `loopback` maps a bad base URL to `engine.classifier_failed`
+    /// naming the model, and assembles without contacting anything on a
+    /// good one.
+    #[cfg(feature = "llamacpp")]
+    #[test]
+    fn loopback_maps_a_bad_base_url_to_classifier_failed() {
+        let error = LlamaDecisionClassifier::loopback("not a url", LlamaConfig::new("pd|m|v1"))
+            .unwrap_err();
+        assert_eq!(error.code(), "engine.classifier_failed");
+        assert!(error.to_string().contains("pd|m|v1"), "{error}");
+        assert!(
+            LlamaDecisionClassifier::loopback("http://127.0.0.1:9/", LlamaConfig::new("m")).is_ok()
+        );
+    }
 }

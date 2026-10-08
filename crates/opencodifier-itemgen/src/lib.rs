@@ -491,4 +491,106 @@ mod tests {
         assert!(manifest["distractors"].as_object().unwrap().len() >= 3);
         assert_eq!(manifest["families"].as_array().unwrap().len(), 4);
     }
+
+    /// Writes `(context, question)` pairs as a suite file and loads the
+    /// guard from it.
+    fn guard_from(dir: &std::path::Path, items: &[(String, String)]) -> SuiteGuard {
+        std::fs::create_dir_all(dir).unwrap();
+        let path = dir.join("suite.json");
+        let suite = serde_json::json!({
+            "items": items
+                .iter()
+                .map(|(context, question)| serde_json::json!({ "context": context, "question": question }))
+                .collect::<Vec<_>>(),
+        });
+        std::fs::write(&path, suite.to_string()).unwrap();
+        SuiteGuard::load(&path).unwrap()
+    }
+
+    /// A guard built from a run's own corpus blocks that run's
+    /// regeneration: identical seeds re-render identical first attempts,
+    /// so every base slot and every twin slot exact-matches the corpus
+    /// at least once before a re-roll escapes, and both rejection
+    /// counters say so.
+    #[test]
+    fn a_corpus_guard_blocks_its_own_regeneration() {
+        let seed = 0x0C0D_1F00_2026;
+        let cfg = GenConfig {
+            families: vec![Family::RootCauseChain],
+            pair_every: 2,
+            ..config(16, seed, 0)
+        };
+
+        // Run 1: collect every render (base and twin) the corpus holds.
+        let mut corpus = Vec::new();
+        generate(&cfg, None, |_, record, sampled| {
+            let state = record["request"]["state"].as_str().unwrap().to_owned();
+            let question = crate::sample::question_text(sampled).clone();
+            corpus.push((state, question));
+        })
+        .unwrap();
+
+        let dir = std::env::temp_dir().join(format!("itemgen-block-{}-regen", std::process::id()));
+        let guard = guard_from(&dir, &corpus);
+
+        // Run 2: the same seed against its own corpus — every first
+        // attempt is an exact collision by construction.
+        let stats = generate(&cfg, Some(&guard), |_, _, _| {}).unwrap();
+        // Twin attempts collide into the same counter (the pair's own
+        // `pairs_rejected` is the verification alarm, not the guard's).
+        assert!(stats.collisions >= cfg.n, "collisions {}", stats.collisions);
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A guard that holds every render a slot's retry budget can reach
+    /// refuses the run outright — the loud failure half of the §9.7 B3
+    /// guardrail, never a silent emit.
+    ///
+    /// The retry seeds are deterministic (`item_seed = seed + index *
+    /// GOLDEN`, attempt `a` renders from `item_seed + a`), so the guard
+    /// can cover the slot's whole reachable render space exactly: for
+    /// each slot and attempt, a one-item run at that seed renders the
+    /// very text the guarded run will try.
+    #[test]
+    fn a_saturated_guard_refuses_the_run_loudly() {
+        const GOLDEN: u64 = 0x9E37_79B9_7F4A_7C15;
+        let seed = 0x0C0D_1F00_2026_u64;
+        let cfg = GenConfig { families: vec![Family::RootCauseChain], ..config(4, seed, 0) };
+
+        let mut corpus = Vec::new();
+        for index in 0..cfg.n {
+            let item_seed = seed.wrapping_add((index as u64).wrapping_mul(GOLDEN));
+            for attempt in 0..MAX_ATTEMPTS as u64 {
+                let probe = GenConfig {
+                    families: vec![Family::RootCauseChain],
+                    ..config(1, item_seed.wrapping_add(attempt), 0)
+                };
+                generate(&probe, None, |_, record, sampled| {
+                    let state = record["request"]["state"].as_str().unwrap().to_owned();
+                    let question = crate::sample::question_text(sampled).clone();
+                    corpus.push((state, question));
+                })
+                .unwrap();
+            }
+        }
+
+        let dir =
+            std::env::temp_dir().join(format!("itemgen-block-{}-saturate", std::process::id()));
+        let guard = guard_from(&dir, &corpus);
+
+        match generate(&cfg, Some(&guard), |_, _, _| {}) {
+            Err(GenError::Unverifiable { family, index, last_error }) => {
+                assert_eq!(family, Family::RootCauseChain);
+                assert!(index < cfg.n, "slot {index} outside the run");
+                assert!(!last_error.is_empty(), "the refusal names its cause");
+            }
+            Ok(stats) => panic!(
+                "a saturated guard must refuse, not emit: {} collisions across {} items",
+                stats.collisions, cfg.n
+            ),
+        }
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
