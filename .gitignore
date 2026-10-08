@@ -43,6 +43,7 @@ lcov.info
 /benchmarks/decision-model/results/*.json
 !/benchmarks/decision-model/results/models.manifest.json
 !/benchmarks/decision-model/results/parity.json
+!/benchmarks/decision-model/results/corpus_v3_train.gates-manifest.json
 
 # Editor / OS noise
 .idea/

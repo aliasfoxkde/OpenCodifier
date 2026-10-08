@@ -1,0 +1,49 @@
+{
+ "config": {
+  "max_class_share": 1.0,
+  "max_family_share": 1.0,
+  "min_margin": 0.0,
+  "min_top_prob": 0.5
+ },
+ "created_utc": "20261008T143958Z",
+ "noise_histograms": {
+  "train.jsonl": {
+   "margin_deciles": {
+    "0": 207461,
+    "1": 63490,
+    "2": 48747,
+    "3": 51896,
+    "4": 39586,
+    "5": 40221,
+    "6": 39026,
+    "7": 35397,
+    "8": 31029,
+    "9": 98953
+   },
+   "top_prob_deciles": {
+    "1": 80,
+    "2": 4464,
+    "3": 27787,
+    "4": 49409,
+    "5": 228763,
+    "6": 77754,
+    "7": 73729,
+    "8": 67506,
+    "9": 126314
+   }
+  }
+ },
+ "splits": {
+  "train.jsonl": {
+   "gate_counts": {
+    "noise": 81740
+   },
+   "kept": 574066,
+   "quarantined": 81740,
+   "rows": 655806,
+   "schema_bad_at_census": 0,
+   "sha256": "71e3ac5080e7da7d80d0dc867e3b4ac0307e1c3eb2c0843d578417f8510af9d6"
+  }
+ },
+ "tool": "runner/corpus_gates.py"
+}
