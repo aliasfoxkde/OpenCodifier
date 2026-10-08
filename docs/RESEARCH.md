@@ -2310,6 +2310,29 @@ sized before commitment. Watch-list adds: mandu5/jevcompat
 conformance, jevland listing, LiteLLM-style frozen bundles as the
 standard run-output format.
 
+### 15.6.1 Items landed from the program (status ledger)
+
+- **Item 4 (label-overlap preflight)** — shipped 2026-10-08:
+  `DecisionPolicy::max_label_overlap`, Jaccard over candidate-id
+  tokens, terminal abstention with `label_overlap*` trace facts,
+  default byte-identical (commit `d5f4733`).
+- **Item 8 (reporting parity)** — shipped 2026-10-08: parity.py
+  (Brier/AUROC/reliability/p95–p99/tokens per rung over frozen run
+  JSONs), board.csv columns, BENCHMARKS.md parity table + dual cost
+  rows, frozen-evidence packaging with repro script.
+- **Item 9 (corpus-prep gates)** — shipped 2026-10-08:
+  `runner/corpus_gates.py` (schema, teacher-noise, per-class/
+  per-family caps, byte-exact label-fight majority; quarantine with
+  manifest, never silent delete) + the first corpus-v3 measurement
+  (TRAINING.md §11).
+- **Item 10 (dynamic-instruction leg)** — shipped 2026-10-08:
+  `tests/dynamic_instructions.rs` pins the counter to the MindStudio
+  axis end-to-end — per-request policy edits flip decisions with zero
+  retrain, the cache keeps edits from bleeding either direction, a
+  ladder swap names its source on the trace, and injected input text
+  cannot edit the policy the operator set. CI-enforced on every
+  commit.
+
 ### 15.7 Addendum (same day): dzhng/jevgrep — Jev as a code-search relevance judge
 
 `github.com/dzhng/jevgrep` (dzhng = the browser-use author; MIT,
