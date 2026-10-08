@@ -18,10 +18,11 @@
 //! are fitted offline (per question class, plus a default) from benchmark
 //! run data by `benchmarks/decision-model/runner/fit_calibration.py` and
 //! shipped as validated JSON artifacts. Loading enforces the fit's
-//! measured invariants: temperatures must be finite and positive, and a
+//! measured invariants: temperatures must be finite and positive, a
 //! fit that carries a risk–coverage measurement must not worsen it —
-//! ECE and selective prediction diverge, so both gate an artifact
-//! ([`CalibrationFit`]).
+//! ECE and selective prediction diverge, so both gate an artifact —
+//! and selective-prediction evidence is only evidence at the
+//! [`SELECTIVE_PREDICTION_MIN_ITEMS`] sample floor ([`CalibrationFit`]).
 //!
 //! Classes are keyed by question kind (`choice`, `boolean`, `score` —
 //! see [`question_class`]). The IR does not yet carry task-class tags;
@@ -35,6 +36,16 @@ use serde::Deserialize;
 use opencodifier_core::{DecisionQuestion, Distribution};
 
 use crate::error::EngineError;
+
+/// The sample size below which a fit's risk–coverage measurement is not
+/// acceptance evidence (RESEARCH.md §15.6 item 1). AURC deltas and
+/// accuracy-at-coverage on a handful of items swing with the draw; an
+/// artifact that presents the selective-prediction pair measured on
+/// fewer items is refused at load, and the reference fitter omits the
+/// pair below the floor (the values stay in its analysis output). The
+/// 231-item public split clears it; the 120-item internal suite does
+/// not, by construction.
+pub const SELECTIVE_PREDICTION_MIN_ITEMS: usize = 200;
 
 /// Maps a raw classifier distribution to calibrated confidence.
 ///
@@ -268,14 +279,28 @@ impl TemperatureCalibration {
         // quality for calibration is refused, not shipped with a
         // footnote. The `1e-9` slack absorbs fitter rounding (values are
         // written rounded to six decimals) — only a real worsening
-        // refuses.
-        if let (Some(before), Some(after)) = (artifact.fit.aurc_before, artifact.fit.aurc_after)
-            && after > before + 1e-9
-        {
-            return Err(invalid(format!(
-                "fit worsens selective prediction: AURC {before:.6} -> {after:.6}; a \
-                 calibration that trades the risk-coverage curve for ECE must not ship"
-            )));
+        // refuses. The evidence floor comes first: the comparison is
+        // only meaningful at [`SELECTIVE_PREDICTION_MIN_ITEMS`], so a
+        // fit presenting the pair on a smaller sample is refused even
+        // when it improves — the remedy is measuring on enough items
+        // (the public split) or shipping calibration-only without the
+        // pair, the historical shape.
+        if let (Some(before), Some(after)) = (artifact.fit.aurc_before, artifact.fit.aurc_after) {
+            if artifact.fit.items < SELECTIVE_PREDICTION_MIN_ITEMS {
+                return Err(invalid(format!(
+                    "selective-prediction evidence on {} items is below the {}-item floor; \
+                     fit on at least {} items or ship without the aurc pair",
+                    artifact.fit.items,
+                    SELECTIVE_PREDICTION_MIN_ITEMS,
+                    SELECTIVE_PREDICTION_MIN_ITEMS
+                )));
+            }
+            if after > before + 1e-9 {
+                return Err(invalid(format!(
+                    "fit worsens selective prediction: AURC {before:.6} -> {after:.6}; a \
+                     calibration that trades the risk-coverage curve for ECE must not ship"
+                )));
+            }
         }
         for (class, temperature) in
             std::iter::once((&"<default>".to_owned(), artifact.default_temperature)).chain(
@@ -679,8 +704,11 @@ mod tests {
     fn an_artifact_that_worsens_selective_prediction_is_refused() {
         // The §15.1 divergence, expressed as a refusal: this fit improves
         // ECE (0.5 -> 0.1) while worsening the risk-coverage curve. ECE
-        // alone would ship it; the AURC gate must not.
+        // alone would ship it; the AURC gate must not. The fit is sized
+        // above the evidence floor so the refusal is the worsening, not
+        // the sample size.
         let mut a = artifact(BTreeMap::new(), 2.0);
+        a.fit.items = 231;
         a.fit.aurc_before = Some(0.120_000);
         a.fit.aurc_after = Some(0.130_001);
         let error = TemperatureCalibration::from_artifact(a).expect_err("AURC worsens");
@@ -690,8 +718,33 @@ mod tests {
     }
 
     #[test]
+    fn selective_prediction_below_the_evidence_floor_is_refused_even_when_it_improves() {
+        // §15.6 item 1's floor: the paired comparison is only evidence at
+        // [`SELECTIVE_PREDICTION_MIN_ITEMS`]. An improving pair on 120
+        // items (the internal suite) must not ship as acceptance
+        // evidence — the remedy is a bigger sample or no pair.
+        let mut a = artifact(BTreeMap::new(), 2.0);
+        a.fit.aurc_before = Some(0.130_000);
+        a.fit.aurc_after = Some(0.118_000);
+        let error = TemperatureCalibration::from_artifact(a).expect_err("below the floor");
+        assert!(matches!(error, EngineError::InvalidCalibration { .. }));
+        assert_eq!(error.code(), "calibration.invalid");
+        let message = error.to_string();
+        assert!(message.contains("200-item floor"), "{message}");
+        assert!(message.contains("120 items"), "{message}");
+
+        // One item above the floor, the same improving pair: loads.
+        let mut a = artifact(BTreeMap::new(), 2.0);
+        a.fit.items = SELECTIVE_PREDICTION_MIN_ITEMS;
+        a.fit.aurc_before = Some(0.130_000);
+        a.fit.aurc_after = Some(0.118_000);
+        assert!(TemperatureCalibration::from_artifact(a).is_ok());
+    }
+
+    #[test]
     fn an_artifact_that_improves_or_holds_the_risk_coverage_curve_loads() {
         let mut a = artifact(BTreeMap::new(), 2.0);
+        a.fit.items = 231;
         a.fit.aurc_before = Some(0.130_000);
         a.fit.aurc_after = Some(0.129_999);
         let mut coverage = BTreeMap::new();
@@ -707,6 +760,7 @@ mod tests {
         // Values that differ by less than the fitter's rounding slack
         // (six decimals) must not refuse — only a real worsening does.
         let mut noise = artifact(BTreeMap::new(), 2.0);
+        noise.fit.items = 231;
         noise.fit.aurc_before = Some(0.100_000_000_4);
         noise.fit.aurc_after = Some(0.100_000_000_9);
         assert!(TemperatureCalibration::from_artifact(noise).is_ok());
