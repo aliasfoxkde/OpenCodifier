@@ -60,7 +60,7 @@ Remaining risks tracked in §6 below.
 | 17 | External anchor: JevBench public split | **done** (2026-10-04) — engine+bridge+vtx over the benchmark's own harness; `docs/BENCHMARKS.md` is the comparison page of record |
 | 18 | Hardening pass | **done** (2026-10-02) — coverage floor 98.5 in CI, §-items closed, D19–D28 |
 | 19 | Adoption + integration documentation | **done** (2026-10-04) — `docs/INTEGRATIONS.md` + D30/D31 + 19e Amortyx E2E |
-| 20 | Coverage restoration: the escalation core | **opened** (2026-10-06) — debt measured & attributed; 20a ratchet done (floor 89.0, D36); tranches 20b–20h pending |
+| 20 | Coverage restoration: the escalation core | **in progress** (2026-10-06) — 20a ratchet done (D36); 2026-10-07 census re-based the numbers on the pinned image: **98.03 % in-image DA** (350-line residual; the 980-line "executor debt" was a local-mapping artifact), floor 89.0 → 97.5, COVERAGE.md regenerated, 20h done; tranches 20b–20f re-scoped in-image, pending |
 | 21 | Site WCAG 2.1 AAA + progressive enhancement | **opened** (2026-10-06) — audit + fixes landed; deploy + X/Discord pending |
 | 22 | Docs freshness sweep | **opened** (2026-10-06) |
 | 23 | v0.5.0 release cut | **opened** (2026-10-06) — gated on Phase 20 floor policy |
@@ -1253,28 +1253,53 @@ host) were separated by experiment:
   a monotonic ledger. Rejected alternative: closing ~2.5k lines of
   core tests before anything else, which leaves the lane red for weeks
   and blocks every other signal.
-- **20b — executor.rs tranche** (980 missed): B6 cross-rung escalation
-  paths, candidate bookkeeping, deadline/cancellation branches. Target
-  ≥95% file coverage via table-driven tests over the rung escalation
-  fixtures.
-- **20c — ladder.rs + policy resolution** (424 missed).
-- **20d — classifier.rs / narrowing.rs / lexical.rs** (647 missed):
-  decision paths and their cache interactions.
-- **20e — engine.rs + handle.rs** (406 missed): `EngineHandle` arm
-  composition and the sync `Clock`/`Deadline` seams.
-- **20f — model crate residual** (256) and the http/runtime remainder
-  (~1,141 lines workspace-minus-engine-minus-model).
-- **20g — restore the floor to 98.5** and regenerate
-  `docs/COVERAGE.md` (per-crate table, with its documented
-  column-swap trap in mind) plus the waived-lines ledger.
-- **20h — CI observability**: the coverage lane must print its measured
-  number into the run log so a red lane is diagnosable without
-  GitForge job-API access (a GitForge limitation, recorded in D36).
+- **2026-10-07 census — the basis moved under Phase 20.** Measured
+  inside the pinned image (`opencodifier-ci-rust:2`, rustc 1.90.0),
+  twice (warm + cold target dir, identical to the line): workspace
+  **98.03 % on the lane's own `DA` basis (17,433/17,783; 350 lines
+  never executed)**. The local rustc 1.99.0 emits a finer-grained
+  mapping on the same tree — 1,512 extra never-hit records, 8.35
+  points lower — and that local mapping produced every number in the
+  preamble above: executor.rs is 36/973 `DA`-missed in-image (96.30 %),
+  not 980 lines dark. The expansion-era "escalation core debt" was
+  substantially a measurement artifact; the genuine residual is 350
+  lines, classified into six groups in the regenerated
+  `docs/COVERAGE.md`. En route the census found the tree had silently
+  stopped compiling under the pinned 1.90 (`itemgen/sample.rs`
+  `rng.pick` inference break — fixed; no local gate watches the pinned
+  toolchain). Floor ratcheted 89.0 → **97.5**. All tranche targets
+  below are re-based on the in-image residual.
+- **20b — executor.rs tranche** (36 in-image missed): escalation-walk
+  guards precluded by construction and deadline/cancellation arms.
+  Reachable fraction first; construction-precluded arms document
+  their guards.
+- **20c — itemgen crate tranche** (81 in-image missed, the largest
+  crate residual): sampling/verify failure arms are unit-reachable;
+  only the binary mains are not.
+- **20d — model crate tranche** (57 in-image missed): backend
+  transport-error arms (`kai`/`llamacpp`/`julia`/`embedding`) against
+  in-process fault seams.
+- **20e — schema + interface tranche** (47 + 42 in-image missed):
+  adapter refusal arms and http/ffi/cli error arms.
+- **20f — wasm + ffi reachable fraction** (33 + 14 in-image missed):
+  the JsValue-boundary class stays with the Node smoke test; only the
+  host-reachable halves count toward the floor.
+- **20g — restore the floor to 98.5** — **doc half DONE (2026-10-07)**:
+  `docs/COVERAGE.md` regenerated from the in-image measurement CI
+  uses, residual classified in six waiver groups; floor at 97.5 with
+  0.53 margin under the measured 98.03. The remaining 0.47 points
+  (~84 lines) are exactly tranches 20b–20f's reachable fraction.
+- **20h — CI observability — DONE (2026-10-07).** The lane's
+  `coverage_floor.py` prints `coverage_floor: <hit>/<found> lines hit
+  = NN.NN% (floor N%)` plus PASS/FAIL on both the pass and fail
+  paths (verified on real runs), so a red lane carries its own number
+  in the run log regardless of GitForge job-API access.
 
 Acceptance: coverage lane green at every push; workspace lines ≥ 98.5
-in CI (D36 ratchet schedule complete); COVERAGE.md regenerated from
-the same measurement CI uses; no test added solely to touch lines —
-each tranche names the behavior it pins.
+in CI (D36 ratchet schedule complete — 97.5 now, 98.03 measured,
+0.47 to go); COVERAGE.md regenerated from the same measurement CI
+uses (done 2026-10-07); no test added solely to touch lines — each
+tranche names the behavior it pins.
 
 ## Phase 21 — site WCAG 2.1 AAA + progressive enhancement (opened + fixes landed 2026-10-06)
 
@@ -1324,8 +1349,9 @@ The expansion changed the tree faster than the maps describing it:
   the shipped CLI/HTTP surface.
 - `docs/SPEC_COVERAGE.md` — re-walk §-item claims against the current
   routes/tools (same discipline as the 2026-09-30 refresh).
-- `docs/COVERAGE.md` — regenerated in Phase 20g; until then it carries
-  a banner pointing at Phase 20 so nobody quotes the stale 98.34%.
+- `docs/COVERAGE.md` — regenerated 2026-10-07 from the in-image
+  census (98.03 % DA, the basis CI measures); no banner, no stale
+  pre-expansion numbers.
 - `docs/BENCHMARKS.md` / `results/REPORT.md` cross-links — one number
   per surface, sources resolve.
 

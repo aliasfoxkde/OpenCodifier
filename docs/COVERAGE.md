@@ -1,176 +1,179 @@
-# Coverage (Phases 18a → 18j push)
+# Coverage (2026-10-07 census — basis re-anchored to the pinned CI image)
 
-> **STALE BELOW THE BANNER (2026-10-06).** Everything under this banner
-> describes the 2026-09-29 post-18j tree. The B5/B6/Kai/Julia expansion
-> (8,404 lines) moved the true numbers: workspace **89.28 % on the lcov
-> `DA` basis** (14,507/16,249 — the lane's own basis), 79.25 % lines /
-> 77.41 % functions / 80.59 % regions on the text basis; the debt is
-> concentrated in the escalation core (executor/ladder/classifier/
-> engine/narrowing/lexical/handle). The CI floor is ratcheted to 89.0
-> (D36) until the Phase 20 tranches restore 98.5; this document is
-> regenerated at Phase 20g. Do not quote the pre-expansion headline.
+Headline, number of record: **98.03 % on the lcov `DA` basis
+(17 433 / 17 783 hit; 350 lines never executed), measured inside the
+pinned CI image `opencodifier-ci-rust:2`** — confirmed by two
+independent in-image runs (warm target dir, then a cold
+`CARGO_TARGET_DIR`) agreeing to the line. The D36 ratchet moves the
+CI floor **89.0 → 97.5**, rising per tranche toward 98.5.
 
-Source of truth: `cargo llvm-cov --workspace --summary-only` (the
-`just coverage-summary` recipe), cross-checked one-for-one against a
-fresh `--lcov` export, 2026-09-29 on the post-18j tree.
+The same tree under the local rustc 1.99.0 reads **89.68 % DA
+(17 303 / 19 295; 1 992 never-hit records)** and 78.92 % lines /
+76.59 % functions / 79.71 % regions on the text basis. That 8.35-point
+spread is a **coverage-mapping artifact of the toolchain, not 1 600
+lines of untested code** — see "Two toolchains, two mappings" before
+quoting any percentage from a local run.
 
-Headline: **98.34 % lines text basis (201 / 12 134) — 98.97 % on the
-lcov `DA` basis (125 / 12 132) · 95.61 % functions (66 / 1 504) ·
-97.68 % regions (531 / 22 902)**.
+## Two toolchains, two mappings
 
-Acceptance is by the explicit per-gap waiver clause of PLAN.md: every
-line llvm-cov can still report missing is classified below with the
-reason and the enforcing source fact named. No gap was silently
-skipped; no test asserts fake behavior.
+The 18j note recorded local-vs-image divergence of ~0.2 points and
+concluded local runs "understate slightly". That held for the
+12k-line tree of 2026-10-02. It does **not** hold for the post-B5/B6
+expansion: on the identical commit, rustc 1.90.0 (image) emits 17 783
+`DA` records with 350 misses while rustc 1.99.0 (local stable) emits
+19 295 records with 1 992 misses — 1 512 extra never-hit records,
+concentrated in exactly the files the expansion added. The mechanism
+is mapping granularity: the newer rustc splits one-line regions
+(chained expressions, packed match arms) into separately-instrumented
+records whose unexecuted halves count as full misses; the older rustc
+fuses them, so a line touched by any region counts as hit. The stale
+profraw-pool explanation was ruled out first (pool audit showed only
+the measuring run's own records).
 
-> Column correction (2026-09-29, still in force): the text table's
-> wide first column is **regions**, the narrow third is **lines** —
-> the 18a census transcribed them swapped. The proof is the lcov
-> cross-check: the lines column (12 134 missed-201) matches the
-> export's `LF` total (12 132 instrumented lines) to within two
-> partial-line records, while the regions column (22 902) has no lcov
-> counterpart at all. Every number below uses the corrected reading.
+Ground-truthing the artifact: the escalation core that the
+pre-rewrite banner called "the debt" is **unchanged** — `executor.rs`
+shows 980 text-missed lines locally but only **36 `DA`-missed lines
+in-image (36/973 = 96.30 %)**; `classifier.rs` 24/439 in-image vs 424
+text-missed locally. Nothing regressed; the basis moved.
 
-## What the post-18j push added
+Standing rule (in force from this census on):
 
-Twelve tests and one test rewrite across six crates, written against
-the 18b gap table (203 `DA`-missed lines → 125):
+- **The pinned image is the number of record.** It is what the
+  coverage lane measures, so it is what the floor ratchets against.
+- **Local runs are for tranche targeting only** — finding *which*
+  behavior lacks a test — never for quoting percentages or for
+  comparing against any number in this document or in history.
+- Only same-toolchain deltas are meaningful. A cross-toolchain
+  percentage comparison is noise by construction.
 
-- `opencodifier-wasm`: the host tests now drive the **public**
-  `decide` / `validate_graph` / `run_graph` / `identity` /
-  `opencodifier_version` methods (the wrappers 18j left to the
-  `*_impl` fns), plus a semver shape test. Constraint discovered by
-  doing it: a host test cannot touch any `JsValue` — construction
-  calls a wasm import (`__wbindgen_string_new`) that has no host
-  implementation and SIGABRTs — so error paths stay on `*_impl` here,
-  and the boundary's error JSON `{"code","message"}` remains proven by
-  the Node smoke test over the real `pkg/` artifact.
-- `opencodifier-schema/registry`: the six decode-refusal arms (empty
-  id, version 0, choice with neither candidate source, empty `static`
-  list, score with candidates, score with one level) and the first
-  score-definition decode → instantiate → levels round trip.
-- `opencodifier-engine/graph`: the kind-name table completed (all 14
-  kinds) and the D21 knob-validation refusals (knob on the wrong kind,
-  `retrieve` without/with-zero `top_n`, floor outside [0, 1] or
-  non-finite, unknown reranker signal).
-- `opencodifier-engine/tests/semantic_nodes`: a **miscounting
-  embedding backend** (one-vector-per-text violation →
-  `engine.backend_failed` naming both counts) through both the
-  semantic node and `EmbeddingReranker`, a failing backend through the
-  reranker seam, and a `filter` → `embedding` → `retrieve` composition
-  proving semantic scoring sees rule-filtered survivors.
-- `opencodifier-http`: malformed batch and graph-run bodies refused at
-  the boundary with `schema.invalid_value` (handler-level, real
-  async).
-- `opencodifier-cli/recipes`: the two install-failure arms — a file
-  where the recipe directory belongs (destination untouched), and an
-  unwritable file slot (a directory planted at `graph.json`; chosen
-  over `chmod` because root in CI containers bypasses permission bits).
+## Where the 350-line residual lives (in-image `DA`, this census)
 
-Aegis note: the fmt pass shifted columns of pre-existing findings and
-this ledger's rewrite re-fingerprinted its own prose rows, so the
-baseline was regenerated wholesale after the gates
-(`.aegis/baseline.json`, 3 027 findings, gate = 0 new; the delta was
-exclusively documentation prose — marker/line-length/magic-number
-classes already saturating the baseline).
+Per crate (missed / instrumented → %):
 
-## Three measurement views (reconciliation)
+| crate | missed/total | % |
+|---|---:|---:|
+| core | 1 / 1 150 | 99.91 |
+| runtime | 1 / 489 | 99.80 |
+| mcp | 2 / 337 | 99.41 |
+| engine | 88 / 6 000 | 98.53 |
+| schema | 47 / 3 674 | 98.72 |
+| cli | 10 / 590 | 98.31 |
+| http | 16 / 739 | 97.83 |
+| model | 57 / 2 358 | 97.58 |
+| itemgen | 81 / 1 951 | 95.85 |
+| wasm | 33 / 352 | 90.62 |
+| ffi | 14 / 143 | 90.21 |
 
-The same run exports numbers that disagree by construction. Keep them
-straight before quoting any percentage:
+Heaviest files: `engine/executor.rs` 36/973 · `wasm/lib.rs` 33/352 ·
+`classifier.rs` 24/439 · `itemgen/main.rs` 23/87 ·
+`itemgen/sample.rs` 23/476 · `model/kai.rs` 20/926 ·
+`schema/macjev.rs` 20/496 · `http/routes.rs` 16/515 · `ffi/lib.rs`
+14/143 · `model/embedding.rs` 14/301 · `model/llamacpp.rs` 12/375 ·
+`schema/jev.rs` 11/833.
 
-| view | unit | this tree | use for |
-|---|---|---:|---|
-| lcov `DA` (count == 0) | instrumented lines never executed | 12 132 / 125 miss | **the per-line truth**; waiver targeting |
-| text table lines / regions columns | lines with any missed region; llvm-cov regions | 12 134 / 201 miss; 22 902 / 531 miss | headline percentages |
-| text table functions | function instantiations (per monomorphization) | 1 504 / 66 miss | API-shape review |
+## Residual classification (group level)
 
-The 201-vs-125 gap is exactly the ledger's standing subtlety: a line
-hosting both executed and unexecuted regions counts as missed in the
-text column but has a non-zero `DA` count (76 such lines this census).
-"Function" misses add uninstantiated generics and the binary
-entrypoints (`serve run`, `mcp serve`, `decide run`, `main`) whose
-coverage is proven by the e2e suite over the real binary — llvm-cov
-cannot see those executions; there is no unit test left to write for
-them.
+The pre-expansion ledger classified every one of 125 lines
+individually. The expanded tree's residual is 350 lines across 41
+files; this census classifies it at **group level** — per-line
+restoration is Phase 20g's exit criterion, once tranches 20b–20f
+shrink the residual below ~150 where line-by-line reasoning pays
+again. Groups, largest first:
 
-## Waiver table (all 125 remaining `DA`-missed lines)
+1. **Item-generation crate residual (81)** — the `corpus_merge` /
+   `main` binary entry points (arg-parse and IO-failure arms reached
+   only by running the real binaries, which the e2e corpus runs do
+   outside instrumentation), plus sampling/verify failure arms fed by
+   adversarial vocab inputs whose construction the in-crate fuzzer
+   targets rather than unit tests.
+2. **Wasm/JS boundary (33)** — the standing 18j class: any
+   `JsValue` construction SIGABRTs a host test, so error-boundary
+   JSON is proven by the Node smoke test over the real `pkg/`
+   artifact, which llvm-cov cannot see.
+3. **Model-backend failure arms (57)** — `kai`, `llamacpp`,
+   `julia`, `embedding` transport-error arms (connection refused,
+   mid-stream EOF, malformed JSON from a backend) exercised against
+   real servers in the model-eval harness, not under unit
+   instrumentation.
+4. **Schema adapter refusal arms (47)** — `#[non_exhaustive]`
+   future-variant wildcards (unchanged class from the 125-line
+   ledger) plus `unsupported_generation_field` / decode-refusal arms
+   in `macjev`/`jev`/`openai` reached only by wire shapes no adapter
+   test synthesizes.
+5. **Interface error arms (42)** — `http/routes.rs` server-fault
+   encode arms (engine-produced responses cannot fail to serialize),
+   `ffi/lib.rs` null/UTF-8 guard arms reachable only from a C caller
+   violating the contract, CLI arg-conflict arms, MCP node-limit
+   refuse arms.
+6. **Engine guards (88)** — escalation-walk guards implied by
+   earlier checks (cycle/no-root/starvation arms precluded by
+   construction, unchanged reasons from the 125-line ledger),
+   serde-infallibility degrade arms, and the `#[non_exhaustive]`
+   `Distribution::from_pairs` error arms fed by in-crate data.
 
-Groups, with the source fact that makes each group unreachable from a
-normal test. File paths under `crates/`.
-
-> Line drift (2026-10-02, in force): the line references below are as
-> of the 2026-09-29 census. The B2–B4 refactors shifted lines in
-> `executor.rs`, `calibration.rs`, and `model/embedding.rs` without
-> changing any group's membership — each group's *reason* column, not
-> its line range, is the durable claim, and the B5 census below
-> restates current numbers for the one new file.
-
-| lines | group | why no test can reach it |
-|---|---:|---|
-| engine/classifier.rs 72, 123–126, 201–203, 227–229, 248–250, 267–270; engine/calibration.rs 85; engine/executor.rs 1052, 1132–1135, 1387–1388, 1390; schema/jev.rs 310, 512, 546, 613, 703; schema/openai.rs 210, 521, 690, 713; schema/native.rs 179; model/embedding.rs 115–117, 136–138, 164–166, 179–182 (43) | `#[non_exhaustive]` future-variant arms, and `Distribution::from_pairs` error arms fed by in-crate data | the matched enums are `#[non_exhaustive]` in `opencodifier-core` with all current variants covered explicitly — no code outside core can construct a further variant; the `from_pairs` arms are precluded by construction (constructors validate uniqueness and ≥ 2 levels, softmax degrades to uniform on non-finite input, `cosine` never returns NaN) |
-| engine/executor.rs 328, 604–607, 751–754, 760–770; engine/graph.rs 404, 411–415, 565 (18) | guards implied by an earlier check | `run()`'s cycle arm cannot fire (`DecisionGraph::new` runs Kahn's algorithm, re-validated on deserialization); the no-root arm sits after that same acyclicity check; one root + acyclic mathematically implies reachability (checked defensively at 409–415, per its own comment); the Kahn `remaining` guard assumes duplicate edges, which construction rejects; assembly refuses backend-less semantic and embedding-rerank graphs and validation requires a known `reranker` before any node runs |
-| engine/executor.rs 779, 1008 (2) | starvation guards the pipeline cannot trigger | `retrieve` keeps top-1 and the lexical prune knob retains ≥ 1, so `candidates_in_play` cannot be empty when a rerank or decision stage runs |
-| engine/executor.rs 1075–1079; engine/handle.rs 108–110; mcp/lib.rs 294–296; engine/engine.rs 469; engine/cache.rs 210 (11) | serde infallibility / documented degrade arms | `serde_json` over already-validated IR types cannot fail (non-finite floats serialize as `null`); the cached-response rebuild and cache re-sort degrade arms are documented at the site as unreachable for validated inputs |
-| http/routes.rs 87–90, 142–145, 289–292 (12) | server-fault encode arms | encoding an **engine-produced** response cannot fail; the arm exists so a future bug surfaces as `engine.serialization`, not a bad-request |
-| wasm/lib.rs 216–220 (6, after B5) | platform-excluded: the error boundary | `wasm_error` builds a `JsValue` via an import that exists only under a JS runtime — host tests SIGABRT the moment one is constructed. The arm is exercised for real by the Node smoke test (`tests/node/smoke.cjs`) over the wasm-pack artifact, asserting `JSON.parse(thrown).code` for `schema.invalid_json`, `graph.cycle`, and `engine.missing_backend`; llvm-cov cannot see JS execution. (B5 split the row: `Display`'s three arms construct no `JsValue` and are now host-tested, 11 → 6 lines) |
-| schema/registry.rs 606–608 (3) | first-capture write path | the recipe request it writes is committed and pinned byte-for-byte by the drift test itself; deleting the capture to re-run the branch would be self-inflicted |
-| schema/registry.rs 426, 481, 576, 688; engine/optimize.rs 360 (5) | test-support panics | `panic!` in a test's `let-else`/failure message formatting — firing one means the harness itself broke, which is the desired state |
-| engine/rules.rs 387 (1) | error-mapping fall-through | rule application surfaces exactly one error constructor (`InvalidRule`); the `other => other` arm keeps the mapping total if that ever changes |
-| model/llamacpp.rs 250–255, 381, 391 (9, B5) | `#[non_exhaustive]` future-variant arms | same class as row 1: `DecisionQuestion` gains variants only in `opencodifier-core`, so no code outside core can reach the wildcard arms; the `else`-return and `_ => ""` are the one typed refusal path for a kind that does not exist yet |
-| model/llamacpp.rs 358–360 (3, B5) | `Distribution::from_pairs` error arm fed by in-crate data | same class as row 1: the pairs are normalized in the preceding statement (sum guard), so unit mass and key uniqueness hold by construction |
-| model/llamacpp.rs 676 (1, B5) | test-support panic | same class as the registry row: the `let-else` catch-all in the engine-escalation test only fires if the engine returns a non-choice answer for a choice question, which is the harness breaking |
-
-Cascading effect on the other columns: the wildcard arms above sit
-inside entered functions, and the functions column adds
-monomorphization duplicates and the e2e-covered binary entrypoints —
-the remaining 66 / 531 are the same construction facts viewed at
-coarser granularity, not separate gaps.
-
-## History
-
-- **18a** (2026-09-29): baseline census + gap classification; its
-  per-file table is retained in git history. Its headline carried the
-  regions/lines column swap corrected above.
-- **18b** (2026-09-29): 18 tests across five crates — calibration
-  artifact round-trip, relational transitive proofs, focus arms,
-  **mutex-poisoning fault injection** in `cache.rs`/`clock.rs` (real
-  panic under the held lock, then assert degraded-but-correct
-  service), IR last-line validation via a 1.5-returning `Calibration`
-  seam, MCP shape/node-limit refusals, and real-SIGINT tests for the
-  CLI `serve` and the HTTP shutdown signal. 121 → 78 `DA`-missed.
-- **Post-18j push** (2026-09-29): the twelve tests above; 203 → 125
-  `DA`-missed, every survivor classified in the table.
-- **B5** (2026-10-02): the llama.cpp model rung added
-  `model/llamacpp.rs` with 15 tests covering every transport-shaped
-  behavior; the residual 13 dark lines are classified in the table
-  above (future-variant arms, one `from_pairs` arm, one test panic).
-  `wasm`'s boundary row split: `Display` proved host-side, the
-  `JsValue` half stays with the Node smoke test. Toolchain note for
-  whoever chases the floor next: the pinned CI image
-  (`opencodifier-ci-rust:2`, rustc 1.90.0) and a local rustc 1.98.1
-  emit *different ghost-line sets* on the same tree — confirmed twice,
-  on 02ca24b (12 013/12 168 = 98.73 % in-image vs 12 011/12 188 =
-  98.55 % local) and on this commit (12 393/12 554 = 98.72 % in-image,
-  floor PASS, run inside the actual image via docker). Local runs
-  understate the percentage by ~0.2 points; CI's lane is the number
-  of record.
+No group is silently skipped; every group names the fact that makes
+unit instrumentation the wrong tool for it. Groups 1–5 are also the
+tranche-20b–20f worklist: each has testable cores (e.g. itemgen
+verify/sample arms *are* unit-reachable; only the binary mains are
+not), and closing the reachable fraction is what lifts the floor
+toward 98.5.
 
 ## Measurement integrity
 
 - **Ghost files**: a renamed source leaves stale instrumentation in
-  `target/llvm-cov-target` and llvm-cov merges 0 %-rows for files that
-  no longer exist. Warning sign at census start: `cargo clean ...
+  `target/llvm-cov-target` and llvm-cov merges 0 %-rows for files
+  that no longer exist. Warning sign at census start: `cargo clean ...
   cannot clean target/llvm-cov-target: missing or invalid CACHEDIR.TAG
   (exit status 101)` — recurring but harmless when no path was
   renamed: verify with (a) every reported path exists on disk,
   (b) consecutive runs report identical totals, (c) per-file numbers
   match a fresh lcov export. Purge recipe if a rename did happen:
   `find target/llvm-cov-target -mindepth 1 -depth -delete`, rerun.
-  Both post-18j censuses ran on a purged pool (the 18j renames made
-  the purge mandatory) and reconcile with the lcov export.
+  The 2026-10-07 in-image runs used cold and warm target dirs and
+  agreed to the line, so no ghost pollution is possible in this
+  census.
 - **Concurrent coverage runs pollute each other** through the shared
   `llvm-cov-target` profraw pool (bogus zero-count records; an `LF`
   count jumping for an untouched file is the symptom). Any coverage
   measurement must be the only one running; use an isolated
   `CARGO_TARGET_DIR` if a second build must proceed alongside.
+- **Per-file `DA` rollups across binaries are not a basis.** A source
+  file linked into N test binaries contributes its lines N times to
+  summed rollups; a `lib.rs` shim re-exported everywhere lands at
+  exactly 50.00 % (every line counted hit in one binary, missed in
+  another) and inflates denominators. Concentration analysis must use
+  a single lcov export (as this census does) or the text basis —
+  never summed per-file `DA` summaries.
+- **Column trap (text tables, historical)**: the wide first column is
+  regions, the narrow third is lines — the 18a census transcribed
+  them swapped; the lcov cross-check proved it. Any text-basis quote
+  must use the corrected reading.
+- **Cross-toolchain divergence**: recorded above; the reason the
+  census basis moved to the pinned image. Re-verify this section's
+  numbers only under the same image.
+
+## History
+
+- **18a → 18j, post-18j push** (2026-09-29): baseline census, 18b
+  fault-injection tests (mutex poisoning, SIGINT, IR last-line
+  validation), and the twelve-test push that closed the 18b gap
+  table (203 → 125 `DA`-missed, every line classified). Details in
+  git history; the standing waiver classes live on in groups 2, 4, 6
+  above.
+- **B5** (2026-10-02): llama.cpp model rung landed with 15 transport
+  tests; 13 residual dark lines classified; first in-image-vs-local
+  divergence note (~0.2 points, true of that tree).
+- **2026-10-06 ratchet** (D36): the B5/B6/Kai/Julia expansion (8 404
+  lines) read 89.28 % on the lane basis locally; floor ratcheted
+  98.5 → 89.0 to keep the lane honest while Phase 20 tranches ran.
+  Its banner's "debt concentrated in the escalation core" reading was
+  an artifact of the local mapping — corrected by this census.
+- **2026-10-07 census (this document)**: basis re-anchored to the
+  pinned image. Two independent in-image runs: 17 433/17 783 =
+  98.03 %, 350-line residual classified in six groups. Floor
+  ratcheted 89.0 → 97.5. Found and fixed en route: the tree had
+  silently stopped compiling under the pinned rustc 1.90.0
+  (`rng.pick` inference break in `itemgen/sample.rs`, fixed with an
+  explicit turbofish) — every in-image lane would have failed on
+  grounds unrelated to coverage; the local toolchain had drifted past
+  the pinned one without any local gate noticing.

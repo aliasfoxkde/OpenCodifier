@@ -1454,6 +1454,18 @@ ecosystem (and Fastino's GLiDE demo) convention is a
   clause is retired and the floor is again a fixed constant; any
   future intentional debt (e.g. generated code) gets a scoped waiver
   in `docs/COVERAGE.md`, never a lowered floor.
+- **Update (2026-10-07) — ratchet re-based on the pinned image.** The
+  89.28 % measurement this decision ratcheted from came from a local
+  rustc whose coverage mapping is finer-grained than the CI image's;
+  inside `opencodifier-ci-rust:2` the same tree measures **98.03 %
+  DA** (17,433/17,783, two independent runs agreeing to the line;
+  350-line residual classified in `docs/COVERAGE.md`, where the
+  "escalation core debt" reading above is corrected — executor.rs is
+  36/973 `DA`-missed in-image, not 980 lines dark). The schedule
+  becomes 89.0 → **97.5** (now, 0.53 under measured) → 98.5 (as the
+  Phase 20 tranches close the reachable residual). Standing rule
+  added: only an in-image measurement may move the floor; local
+  toolchains are for tranche targeting, never for floor arithmetic.
 
 ## D37 — Generated relational/contrastive items are solver-verified in-engine, never emitted unproven (2026-10-07)
 

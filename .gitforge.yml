@@ -89,13 +89,16 @@ jobs:
       - name: Security pattern scan (0 new findings)
         run: aegis --format json scan --file . --baseline .aegis/baseline.json
 
-  # Coverage floor on the lcov DA basis (the basis docs/COVERAGE.md reports
-  # its headline in — 98.97% at the Phase 18 close-out; the 125 waived
-  # residual lines carry their reasons there). The floor is a regression
-  # guard, deliberately under the 99% aspiration. Queue-cost note: this
-  # instrumented rebuild roughly doubles this run's wall time; it stays in
-  # the default graph because coverage regressions are exactly the kind of
-  # failure that is silent everywhere else.
+  # Coverage floor on the lcov DA basis, measured inside THIS image — the
+  # number of record (docs/COVERAGE.md 2026-10-07 census): local rustc
+  # versions emit a different, finer-grained mapping and read ~8 points
+  # lower on the same tree, so only an in-image measurement ratchets the
+  # floor. Measured 98.03% (17433/17783, two independent runs); floor
+  # ratcheted 89.0 -> 97.5 (D36), rising per tranche toward 98.5. The
+  # floor is a regression guard, deliberately under the measured value.
+  # Queue-cost note: this instrumented rebuild roughly doubles this run's
+  # wall time; it stays in the default graph because coverage regressions
+  # are exactly the kind of failure that is silent everywhere else.
   - name: coverage
     image: opencodifier-ci-rust:2
     needs: [lint]
@@ -103,5 +106,5 @@ jobs:
     steps:
       - name: Line coverage (lcov DA basis)
         run: cargo llvm-cov --workspace --lcov --output-path /tmp/lcov.info
-      - name: Floor assertion (D36 ratchet — 89.0 now, back to 98.5 per Phase 20)
-        run: python3 scripts/coverage_floor.py /tmp/lcov.info --floor 89.0
+      - name: Floor assertion (D36 ratchet — 97.5 now, 98.5 per Phase 20)
+        run: python3 scripts/coverage_floor.py /tmp/lcov.info --floor 97.5
