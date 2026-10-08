@@ -2485,8 +2485,27 @@ decider; it is the second opinion for entailment-shaped decision
 classes. The verify-band wiring stays an open rung-level decision (the
 artifact is 705 MB on a serving path the ladder does not yet route to);
 D14 registration is done (`results/models.manifest.json`). This closes
-item 6 of the ranked program; 24k (MLM single-pass, item 5) remains
-queued and is now the only unproven encoder use left.
+item 6 of the ranked program.
+
+**24k probe receipt (2026-10-08, NO-GO — item 5 rejected at probe):**
+`onnx-community/bert-base-uncased-ONNX` (fp32 + external weights,
+MLM head verified in-graph — "the capital of france is [MASK]" →
+`paris` #1) through the `[input] [anchor] [MASK]` single-pass template,
+each mask scored against its own candidate's label word-pieces, on a
+20-per-kind public slice. Four variants (2 templates ×
+logit/softmax scoring) all fail the gate: **score 0/15 vs chance 0.25
+in every variant** — the arm's supposed sweet spot is exactly where the
+verbalizer-echo readout collapses (after "It was"/"The answer is", the
+MLM prior never emits the suite's ordinal label words); choice
+0.15–0.25 vs chance 0.20 with 12/20 items not fitting 512 (N masks ×
+long states); noul 0.53–0.59 vs chance 0.50. Same verdict class as the
+`nli-deberta-v3-small` rejection: the readout family (verbalizer-token
+echo at a mask) does not match this decision surface, while the SAME
+backbone class with an entailment head clears the gate (24j) — the
+substrate was never the problem; the head was. Item 5 is closed NO-GO;
+the ranked program's model-rung options are now fully dispositioned
+(item 6 GO-and-landed, item 5 rejected), and no unproven encoder use
+remains queued.
 
 ### 15.7 Addendum (same day): dzhng/jevgrep — Jev as a code-search relevance judge
 
