@@ -965,6 +965,87 @@ ship:
   Ladders remain opt-in (F24: per-domain calibration precedes any
   default-on ladder).
 
+**Amendment (2026-10-08 — the fitted Boolean boundary rides the same
+seam).** RESEARCH §15.6 item 2 measured the largest single lever in the
+sweep: a Boolean verdict taken at the hard argmax is the wrong
+operating point for skewed tasks (tuned thresholds moved F1
+0.499 → 0.748 on UNFAIR-ToS, 0.243 → 0.353 on GoEmotions; median tuned
+threshold 0.86). The boundary is policy, not code:
+
+- **`DecisionPolicy::boolean_threshold: Option<f64>`** — the question
+  is answered true when `p_true >= threshold`. Validated strictly
+  inside `(0, 1)`; `None` — the default — is byte-identical
+  everywhere (serialization omits it, so canonical forms, cache keys,
+  and wire fixtures do not move). It composes through the existing
+  `RawDecisionPolicy` mirror, so profile documents carry it per-kind
+  like any other gate override.
+- **The executor never rewrites the distribution.** Agreement with the
+  argmax passes through untouched. A flip keeps the model's measured
+  distribution exactly as it is — no valid binary distribution can put
+  a minority verdict on top — and instead the *answer* describes the
+  verdict actually given: `value` follows the boundary, `probability`
+  is the verdict's own mass (e.g. answering false at `p_true = 0.6`
+  means 0.4), and calibrated confidence maps that mass through the
+  rung's calibration via `Calibration::calibrate_probability` (new
+  provided trait method, identity default, D15-consistent;
+  `TemperatureCalibration` applies the same per-entry rescale it
+  applies to the top; `ProofAwareCalibration` delegates). The gate
+  therefore reads the honest confidence: a threshold-overruled verdict
+  at minority mass routes to verify/abstain unless the rung's own
+  gates accept it. Statistical dimensions (entropy, margin, OOD,
+  top probability) stay the distribution's — they describe the
+  evidence, not the verdict.
+- **Traces disclose both facts**: the deciding node records
+  `boolean_threshold` whenever a boundary is configured, and
+  `boolean_flipped = true` when it overruled the argmax. Absent
+  otherwise — no hidden thresholds, no noise on unconfigured runs.
+- **The offline fitter is `opencodifier ladder fit-boolean`.**
+  `opencodifier-engine/src/ladder_fit.rs` sweeps `0.50..=0.99` in
+  0.01 steps, scores F1 on the true class, breaks ties toward the
+  smallest threshold, and emits the profile document (`id` +
+  `per_kind.boolean`) composed over a base policy. `id` empty or
+  `"none"` is refused at emit (the id decorates every cache key).
+  Every emitted document round-trips through the real
+  `LadderProfile` loader in tests, so a fitted profile can never
+  drift from what `--ladder` accepts. Evidence is JSONL
+  `{"p_true": f64, "label": bool}`; the grid uses integer-then-divide
+  arithmetic so emitted boundaries are clean decimals an operator can
+  diff across fits.
+
+**Amendment (2026-10-08 — the elicited-abstain candidate rides the
+same seam).** RESEARCH §15.6 item 3: an elected "none of these" was
+right in 17 of 18 research cases — a rung that cannot say "the state
+does not decide this" is forced to guess, and the guess ships with
+high confidence (E1-C measured relational mean top-prob 0.917 against
+0.610 accuracy). The escape hatch is policy, not code:
+
+- **`DecisionPolicy::abstain_candidate: Option<AbstainCandidate>`** —
+  a candidate id + description pair. The id *marks* the abstain
+  candidate: `prepare_question` appends the synthetic candidate last
+  (after rerank sort) to every choice question of a policy that
+  carries one, unless a declared candidate already owns the id — then
+  that declared candidate takes the abstain role and nothing is
+  appended. Construction refuses an empty id, the reserved id
+  `"none"`, and an empty description; the builder re-validates.
+- **Election is a terminal abstention.** When the top answer is the
+  marked candidate, the outcome is `Abstain` regardless of confidence
+  — the gate cascade and the escalation walk's outcome re-derivation
+  both defer to it (a 0.99-confidence "none of these" is not
+  re-derived into an acceptance). The answer is withheld from the
+  response, so the synthetic id can never leak into an accepted
+  answer set.
+- **Traces disclose both facts** on the deciding node:
+  `abstain_candidate` whenever a candidate rides a choice question,
+  `abstain_elicited = true` only when elected. Absent otherwise.
+- **Default byte-identity.** `None` — the default — serializes as
+  absent (canonical forms, cache keys, and wire fixtures do not
+  move), appends nothing, records no facts, and leaves every decision
+  byte-identical to the pre-field engine (integration-tested).
+- **Handoff note:** an appended candidate breaks the lexical
+  build-once handoff (D28) — the handing index has no score for the
+  synthetic — so the classifier builds its own index in that case
+  (bit-identical either way).
+
 ## D26 — The model rung is a prompt-shaped Classifier over llama.cpp, not a tensor backend (2026-10-02)
 
 The escalation ladder (D25) has one missing rung: the decision model

@@ -71,6 +71,8 @@ pub enum Command {
     Mcp(McpArgs),
     /// Model artifact operations.
     Models(ModelsCommand),
+    /// Ladder-profile operations (D25).
+    Ladder(LadderCommand),
     /// Built-in recipe fleet operations.
     Recipe(RecipeCommand),
 }
@@ -89,6 +91,7 @@ impl Command {
             Self::Serve(args) => crate::serve::run(&args),
             Self::Mcp(args) => crate::mcp::run(&args),
             Self::Models(models) => crate::models::run(&models.command),
+            Self::Ladder(ladder) => crate::ladder::run(&ladder.command),
             Self::Recipe(recipe) => crate::recipes::run(&recipe.command),
         }
     }
@@ -296,6 +299,42 @@ pub enum ModelsSubcommand {
         /// `decision.onnx`.
         #[arg(long, value_name = "PATH")]
         artifact: Option<PathBuf>,
+    },
+}
+
+/// `opencodifier ladder …`
+#[derive(Debug, Args)]
+pub struct LadderCommand {
+    /// The ladder operation to run.
+    #[command(subcommand)]
+    pub command: LadderSubcommand,
+}
+
+/// Ladder operations.
+#[derive(Debug, Subcommand)]
+pub enum LadderSubcommand {
+    /// Fit a Boolean verdict boundary from labeled evidence and emit the
+    /// ladder-profile document that carries it (RESEARCH §15.6 item 2).
+    FitBoolean {
+        /// Evidence as JSONL, one `{"p_true": <f64>, "label": <bool>}`
+        /// row per line — the model's probability for `true` and whether
+        /// `true` was actually correct.
+        #[arg(long, value_name = "PATH")]
+        evidence: PathBuf,
+
+        /// The emitted profile's id. Refused when empty or `"none"` —
+        /// the id decorates every cache key (D25).
+        #[arg(long, value_name = "ID")]
+        id: String,
+
+        /// Where to write the emitted profile document.
+        #[arg(long, value_name = "PATH")]
+        out: PathBuf,
+
+        /// Base `DecisionPolicy` JSON the profile overrides for Boolean
+        /// questions. Defaults to the policy defaults (§63).
+        #[arg(long, value_name = "PATH")]
+        base: Option<PathBuf>,
     },
 }
 
