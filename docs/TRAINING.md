@@ -592,6 +592,72 @@ Standing gates carried: no suite item in training data (all 240,
 checked mechanically); no non-Apache-2.0 corpora; ECE re-checked on
 every arm (accuracy alone is not acceptance).
 
+#### 9.7.1 E1-C pilot campaign executed (2026-10-07) — GATE FAIL, iterate B
+
+All six arms ran on the 5060 Ti in one chained night run
+(`e1c-chain`, ~30 min each). Suite = 120 rows (40 per class);
+relational column is the §9.7 Phase-C gate metric.
+
+| arm | mix | lr | suite acc | ECE | relational |
+|---|---|---|---|---|---|
+| p0-lr1e4 | r2 mix, instrumented | 1e-4 | 0.5417 | 0.167 | 0.300 |
+| p1-lr1e4 | +rebalance (B1/B2/B5) | 1e-4 | 0.6000 | 0.131 | 0.275 |
+| **p2-lr1e4** | +gen-relational+hard negs | 1e-4 | **0.6583** | 0.170 | **0.550** |
+| p3-lr1e4 | P2 minus negatives | 1e-4 | 0.5583 | 0.278 | 0.400 |
+| p2-lr5e5 | P2 | 5e-5 | 0.6167 | 0.243 | 0.375 |
+| p2-lr2e4 | P2 | 2e-4 | 0.6417 | 0.160 | 0.475 |
+
+**Gate verdict: FAIL on all three criteria for every P2 arm** —
+relational < 0.60, ECE > 0.15, per-class val curves absent from the
+manifests. Phase D does not open; iterate B.
+
+Lever readings, in order of confidence:
+
+1. **Hard negatives + generated relational items are the relational
+   lever.** P2 doubled P1's relational accuracy (0.275 → 0.550) and
+   the ablation isolates the contribution: P3 (no negatives) sits at
+   0.400. B3+B4 stay; the volume knob is what moves next.
+2. **lr 1e-4 is the sweet spot.** 5e-5 under-trains the relational
+   slice (0.375); 2e-4 produces the best training loss but worse
+   relational accuracy than 1e-4 (0.475 vs 0.550) — early overfit,
+   consistent with r2.
+3. **Rebalance alone does not touch relational** (P1 0.275 ≈ P0
+   0.300); it buys general suite accuracy (0.60) and the best ECE
+   (0.131). Mix effects are separable, as the phase design assumed.
+
+**Temperature probe — ECE is a training problem, not a calibration
+problem.** Post-hoc temperature on the top-2 pair
+(p1' = p1^(1/T)/(p1^(1/T)+p2^(1/T)), T fit on 20 relational rows
+minimizing 10-bin ECE, evaluated on the held 20): the fitted T pins
+at the search boundary (9.0–9.9 of a 0.1–9.9 grid) for the strong
+arms — the optimizer wants maximal flattening, i.e. it cannot find a
+temperature that keeps confidence on right answers while fixing the
+wrong ones. The slice's emblematic failure is p = 0.9585 on a wrong
+prediction (hC-0000, `catalog` vs `billing`); mean top-prob 0.779
+against 0.550 accuracy. The only arms where temperature "rescues"
+held-out ECE to ≤ 0.15 (p3, p2-lr5e5: 0.340→0.090, 0.305→0.090) are
+the near-chance ones — that is calibrated *ignorance* (the gate
+abstains everything), not calibrated knowledge. Held-half swings
+(±0.15 on 20 rows, sometimes worse after fitting: p2-lr2e4
+0.100→0.150) also settle a secondary point: 40 relational eval rows
+cannot support per-class temperature fitting. The existing D15 /
+ladder machinery remains the right home for calibration, but it gets
+engaged only after relational *accuracy* rises — more B3/B4 volume
+is the fix, on the eval slice as well as the corpus.
+
+**Instrumentation gap to close in the next pilot round:** per-family
+val curves (A2) were not present in the manifests, so the third gate
+criterion ("val relational curve still descending") was unjudgeable.
+Trainer v2 already computes them; the manifest writer must persist
+them. Fix before any further arm runs.
+
+Iterate-B actions, in order: (1) scale B3/B4 relational volume in
+the corpus (target ≥ 3× the pilot share) and regenerate the eval
+slice at ≥ 200 relational rows so ECE and gates are estimable;
+(2) persist per-family val curves to the manifest (A2 writer fix);
+(3) hold lr at 1e-4, drop the lr axis from future arms; (4) P4
+capacity knobs stay deferred until the volume lever saturates.
+
 ### 9.8 Research integration (2026-10-07) — Phase G findings, dispositioned
 
 Three research tracks ran against the §9.7 plan before Phase B/C
