@@ -658,6 +658,23 @@ slice at ≥ 200 relational rows so ECE and gates are estimable;
 (3) hold lr at 1e-4, drop the lr axis from future arms; (4) P4
 capacity knobs stay deferred until the volume lever saturates.
 
+**Iterate-B repo edits landed (2026-10-08).** Actions (1) and (2)
+are in the tree before any new arm runs:
+
+- **Trainer v3 (`opencodifier.e1-train/3`)**: every `run_val` call
+  appends `{step, loss, tok_acc, entropy, per_family}` to
+  `manifest["val_history"]` — the third gate criterion is now
+  judgeable from the manifest alone. The `VAL_LINE` log-scrape
+  fallback in `e1c_pilot_table.py` remains for v2 manifests; the
+  table prefers the manifest.
+- **`--holdout-rel200` suite slice** (`suite_holdout_rel200.json`,
+  seed 20261008, suite_version 1, ids prefixed `r`): 280 items =
+  40 metadata + 40 lexical + **200 relational**, ids disjoint from
+  suite/suite_holdout. `build_suite` gained a `class_c_count` param;
+  the default path reproduces suite.json and suite_holdout.json
+  byte-for-byte (verified pre-commit). Corpus share target for the
+  matching itemgen build: ~26% relational (3.0× the p2 share).
+
 ### 9.8 Research integration (2026-10-07) — Phase G findings, dispositioned
 
 Three research tracks ran against the §9.7 plan before Phase B/C
