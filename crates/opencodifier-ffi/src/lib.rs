@@ -399,3 +399,56 @@ pub extern "C" fn oc_last_error() -> *const c_char {
         borrow.as_ref().map_or(NO_ERROR.as_ptr(), |document| document.as_ptr())
     })
 }
+
+#[cfg(test)]
+mod tests {
+    //! The boundary contracts a C caller cannot probe without a hostile
+    //! host: the panic guard's three payload classes and the opaque
+    //! handle's deliberately content-free `Debug`.
+
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::{Boundary, OcEngine, guarded};
+
+    #[test]
+    fn the_opaque_handle_debugs_as_its_name_only() {
+        // The zero-sized private field is constructible only in-crate;
+        // the Debug output must stay content-free because nothing about
+        // the wrapped engine is reachable from the type C callers hold.
+        let engine = OcEngine { _opaque: [] };
+        assert_eq!(format!("{engine:?}"), "OcEngine");
+    }
+
+    #[test]
+    fn panic_boundaries_carry_the_ffi_panic_code() {
+        let boundary = Boundary::Panic("payload text".to_owned());
+        assert_eq!(boundary.code(), "ffi.panic");
+        assert_eq!(boundary.message(), "payload text");
+        let document = boundary.error_json();
+        assert!(document.contains(r#""code":"ffi.panic""#), "{document}");
+        assert!(document.contains(r#""message":"payload text""#), "{document}");
+    }
+
+    #[test]
+    fn guarded_maps_every_payload_class_to_an_ffi_panic() {
+        // The three payload shapes a panicking callee can produce:
+        // a `&str` literal, an owned `String`, and something else
+        // entirely. Each must land as `ffi.panic` — never an unwind
+        // into C, never a lossy guess at the text.
+        let borrowed = guarded(|| -> Result<(), Boundary> { panic!("borrowed boom") })
+            .expect_err("a panic is a refusal");
+        assert_eq!(borrowed.message(), "borrowed boom", "&str payloads carry their text");
+
+        let owned = guarded(|| -> Result<(), Boundary> { panic!("{}", "owned boom") })
+            .expect_err("a panic is a refusal");
+        assert_eq!(owned.message(), "owned boom", "String payloads carry their text");
+
+        let foreign = guarded(|| -> Result<(), Boundary> { std::panic::panic_any(7_u32) })
+            .expect_err("a panic is a refusal");
+        assert_eq!(
+            foreign.message(),
+            "non-string panic payload",
+            "non-string payloads fall back to the documented text"
+        );
+    }
+}

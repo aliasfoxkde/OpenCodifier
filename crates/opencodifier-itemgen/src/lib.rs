@@ -218,9 +218,11 @@ pub fn generate(
                         accepted_twin = Some(twin_text);
                         break;
                     }
-                    Err(error) => {
+                    // Twins are best-effort (§9.7 B4): the count is the
+                    // observable, and no downstream read can surface a
+                    // twin's rejection reason.
+                    Err(_) => {
                         stats.pairs_rejected += 1;
-                        last_error = error;
                     }
                 }
             }
