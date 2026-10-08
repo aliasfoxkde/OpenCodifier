@@ -128,10 +128,17 @@
     relational: 'Accuracy on the relational/dependency slice of our locked suite — the exact-proof family. This is the slice the deterministic engine is built for.',
     ece: 'Expected calibration error: how far stated confidence sits from observed correctness (0 = perfect, lower is better). Rows without a measured ECE show no Trust score either.',
     brier: 'Brier score over the outcome distribution — mean squared error of the probability assigned to the truth (lower is better).',
+    auroc: 'AUROC of the winner probability as the score for "answered correctly" — selective-classification discrimination: does higher confidence mean more often right? 0.5 = no discrimination, 1 = perfect. From runner/parity.py over the frozen run JSONs.',
     p50: 'Median decision latency in milliseconds on the row\'s hardware (CPU-only consumer desktop unless the qualifier says otherwise). Lower is better.',
     mean: 'Mean decision latency in milliseconds — the arithmetic average, which heavy-tail runs pull above the median.',
+    p95: '95th-percentile decision latency in milliseconds (nearest-index convention, same as p50). The tail a user actually feels.',
+    p99: '99th-percentile decision latency in milliseconds. Shown only where the frozen run recorded per-item wall clocks — nulls are honest, not missing.',
+    reliability: 'Compact 10-bin reliability curve, "mean-p/acc/n" per occupied bin — where stated confidence lands and how often it is right there. Full curves: results/RELIABILITY.md.',
+    tokens: 'Measured prompt tokens per decision plus the single verdict token (model rungs only). The input to the billed-equivalent cost columns.',
     cost1k: 'Modeled cost per 1,000 decisions in USD: the benchmarkheaven $0.0125/hour CPU rate applied to the row\'s measured p50 (self-hosted inference is amortized hardware, not invoices). Modeled, never invoiced — the docs of record carry the caveats.',
     cost1m: 'The same modeled cost scaled to one million decisions, the per-million unit the third-party board publishes for hosted arms.',
+    billed1k: 'Billed-equivalent per 1,000 decisions: the row\'s measured tokens priced at the parametric API rate ($0.10/1M in + $0.40/1M out) — a parameter, not a vendor quote. What the same workload bills for through an API.',
+    billed1m: 'The same billed-equivalent scaled to one million decisions.',
     size: 'Measured artifact size for the row: model file size for model rows; the static engine binary for engine rows (the engine ships no model weights). This is the denominator of Acc/GiB.',
     trust: 'Derived, not measured: accuracy − λ·ECE, λ yours to set above. Rows without ECE get no Trust score — never a guessed one.',
     ipg: 'Derived, not measured: accuracy ÷ artifact size in GiB — intelligence per gigabyte. Engine rows divide by their multi-MiB static binary, which is why they dominate this column.',
@@ -189,10 +196,17 @@
         relational: num(r[col.relational]),
         ece: num(r[col.ece]),
         brier: num(r[col.brier]),
+        auroc: num(r[col.auroc]),
         p50: num(r[col.p50_ms]),
         mean: num(r[col.mean_ms]),
+        p95: num(r[col.p95_ms]),
+        p99: num(r[col.p99_ms]),
+        reliability: (r[col.reliability] || '').trim(),
+        tokens: num(r[col.tokens_per_decision]),
         cost1k: num(r[col.cost_per_1k_usd]),
         cost1m: num(r[col.cost_per_1m_usd]),
+        billed1k: num(r[col.cost_billed_per_1k_usd]),
+        billed1m: num(r[col.cost_billed_per_1m_usd]),
         sizeMiB: parseMiB(r[col.size] || ''),
         sizeRaw: (r[col.size] || '').trim(),
         det: (r[col.determinism] || '').trim(),
@@ -439,9 +453,16 @@
     { key: 'ipg',   label: '%/GiB',     group: 'core', num: true, sortable: true, derived: true },
     { key: 'rank',  label: 'Rank',      group: 'more', num: true, sortable: false },
     { key: 'brier', label: 'Brier',     group: 'more', num: true, sortable: true },
+    { key: 'auroc', label: 'AUROC',     group: 'more', num: true, sortable: true },
     { key: 'mean',  label: 'mean ms',   group: 'more', num: true, sortable: true },
+    { key: 'p95',   label: 'p95 ms',    group: 'more', num: true, sortable: true },
+    { key: 'p99',   label: 'p99 ms',    group: 'more', num: true, sortable: true },
+    { key: 'reliability', label: 'Reliability', group: 'more', sortable: true },
     { key: 'cost1k', label: '$/1k',     group: 'more', num: true, sortable: true },
     { key: 'cost1m', label: '$/1M',     group: 'more', num: true, sortable: true },
+    { key: 'billed1k', label: '$/1k billed', group: 'more', num: true, sortable: true },
+    { key: 'billed1m', label: '$/1M billed', group: 'more', num: true, sortable: true },
+    { key: 'tokens', label: 'tokens/dec', group: 'more', num: true, sortable: true },
     { key: 'lexical', label: 'Lex %',   group: 'more', num: true, sortable: true },
     { key: 'metadata', label: 'Meta %', group: 'more', num: true, sortable: true },
     { key: 'relational', label: 'Rel %', group: 'more', num: true, sortable: true },
@@ -471,12 +492,19 @@
       case 'relational': return fmt(row.relational === null ? null : row.relational * 100, 1);
       case 'ece': return fmt(row.ece, 3);
       case 'brier': return fmt(row.brier, 3);
+      case 'auroc': return fmt(row.auroc, 3);
       case 'p50': return row.p50 === null ? '—' : (row.p50 >= 100 ? row.p50.toFixed(0) : row.p50.toFixed(1));
       case 'mean': return row.mean === null ? '—' : (row.mean >= 100 ? row.mean.toFixed(0) : row.mean.toFixed(1));
+      case 'p95': return row.p95 === null ? '—' : (row.p95 >= 100 ? row.p95.toFixed(0) : row.p95.toFixed(1));
+      case 'p99': return row.p99 === null ? '—' : (row.p99 >= 100 ? row.p99.toFixed(0) : row.p99.toFixed(1));
+      case 'reliability': return row.reliability || '—';
       /* cost keeps the docs' own significant figures — rounding $0.0000070 to
          $0.00 would erase the entire value */
       case 'cost1k': return row.cost1k === null ? '—' : '$' + row.cost1k;
       case 'cost1m': return row.cost1m === null ? '—' : '$' + row.cost1m;
+      case 'billed1k': return row.billed1k === null ? '—' : '$' + row.billed1k;
+      case 'billed1m': return row.billed1m === null ? '—' : '$' + row.billed1m;
+      case 'tokens': return row.tokens === null ? '—' : (row.tokens >= 100 ? row.tokens.toFixed(0) : row.tokens.toFixed(1));
       case 'size':
         if (row.sizeMiB === null) return '—';
         return row.sizeMiB >= 1024 ? (row.sizeMiB / 1024).toFixed(2) + ' GiB' : row.sizeMiB.toFixed(1) + ' MiB';
