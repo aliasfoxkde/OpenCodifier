@@ -2451,6 +2451,22 @@ language items, which is exactly what the later tranche runs. The
 latency risk is retired: the O(N) verify-band cost is ~0.2 s per
 4-candidate item at 4 threads on a loaded box.
 
+**Landing receipt (2026-10-08, Rust tranche):** the contract is in
+`opencodifier-model::nli` (feature-free; verbalizer templates explicit
+and cache-keyed, renormalization refuses zero mass, `NliVerifier`
+implements the engine `Classifier` with the template tag folded into
+the model id), the transport in `opencodifier_runtime::nli`
+(`NliOnnxBackend`, shared kai wire names), serving behind the `nli`
+cargo feature, and the live parity gate is the compute-host runner
+`nli-parity-rs` — measured: **10/10 frozen fixture rows reproduced
+within 1e-4** through the full Rust path (pair tokenization → graph →
+f64 softmax → entailment column), end-to-end argmax matching the
+fixture ranking. One structural finding: ORT's load-dynamic teardown
+segfaults the `cargo test` harness at exit (after all tests pass), so
+live ORT parity is runner-hosted — the same choice the kai and julia
+contracts made. Remaining for 24j: D14 SHA-256 manifest registration,
+executor wiring as the verify-band verifier, the 231-split leg.
+
 ### 15.7 Addendum (same day): dzhng/jevgrep — Jev as a code-search relevance judge
 
 `github.com/dzhng/jevgrep` (dzhng = the browser-use author; MIT,

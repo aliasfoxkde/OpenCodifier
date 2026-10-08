@@ -42,6 +42,8 @@ opencodifier/
 │   │     src/decision.rs, embedding.rs, manifest.rs — serving contract
 │   │     src/kai.rs + kai/     — kai contract + committed fixtures
 │   │     src/julia.rs + julia/ — julia contract + committed fixtures
+│   │     src/nli.rs + nli/     — NLI verbalization verifier contract + fixture (PLAN 24j, `nli` feature serves it)
+│   │     src/render.rs         — shared answer-key/question-text rendering (llamacpp + nli)
 │   │     src/llamacpp.rs       — llama.cpp loopback backend (D26, `llamacpp` feature)
 │   ├── opencodifier-http/      # axum 0.8 /v1 API (done)
 │   ├── opencodifier-cli/       # clap CLI binary `opencodifier` (done)
@@ -59,6 +61,9 @@ opencodifier/
 │   ├── decision-model/      # Phase 13 model-pick benchmark: byte-locked suite, arms, results
 │   │     results/REPORT.md  # comparison page of record; docs/BENCHMARKS.md links here
 │   └── validation/          # validation-campaign record (#104; VALIDATION.md summary)
+│       └── runner/          # compute-host parity runners (own workspaces; ORT via
+│                            #   runtime-onnx-dynamic + ORT_DYLIB_PATH): kai-parity-rs,
+│                            #   julia-parity-rs, nli-parity-rs (PLAN 24j)
 ├── site/                    # static marketing page (Cloudflare Pages direct-upload;
 │                            #   Tailwind runs as a dev-time pipeline only —
 │                            #   `npm run build:css` writes the committed tw.css)

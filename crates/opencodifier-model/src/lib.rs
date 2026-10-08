@@ -83,6 +83,8 @@ pub mod julia;
 pub mod kai;
 pub mod llamacpp;
 pub mod manifest;
+pub mod nli;
+pub mod render;
 
 pub use decision::{CANDIDATES_INPUT, CONTEXT_INPUT, CandidateConditionedModel, LOGITS_OUTPUT};
 pub use embedding::EmbeddingClassifier;
@@ -107,3 +109,12 @@ pub use llamacpp::{
     Transport,
 };
 pub use manifest::ModelManifest;
+// The NLI verbalization verifier (PLAN 24j). `nli::FIXTURE` stays
+// module-path — the plain `FIXTURE` name is the Kai contract's, and
+// the two files freeze different runs.
+#[cfg(feature = "nli")]
+pub use nli::serving::{OnnxNliScorer, verifier_from_dir};
+pub use nli::{
+    ENTAIL_INDEX, NliScorer, NliVerifier, Verbalizer, entailment_distribution, hypotheses, premise,
+    verify_fixture,
+};

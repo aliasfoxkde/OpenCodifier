@@ -77,6 +77,7 @@ pub mod error;
 pub mod julia;
 pub mod kai;
 pub mod mock;
+pub mod nli;
 pub mod tensor;
 
 pub use backend::{EmbeddingBackend, InferenceBackend};
@@ -90,6 +91,8 @@ pub use kai::{
     ANSWER_POS, ATTENTION_MASK, DEFAULT_GRAPH_FILE, INPUT_IDS, LOGITS_OUTPUT, MODEL_ID, OPTION_POS,
 };
 pub use mock::{MockEmbeddingBackend, MockInferenceBackend};
+#[cfg(feature = "onnx")]
+pub use nli::NliOnnxBackend;
 pub use tensor::{DenseTensor, MAX_TENSOR_ELEMENTS};
 
 #[cfg(test)]

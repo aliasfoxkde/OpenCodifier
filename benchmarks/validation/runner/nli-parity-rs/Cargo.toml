@@ -1,0 +1,15 @@
+[package]
+name = "nli-parity-rs"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Compute-host parity run: the Rust NLI verbalization contract + ONNX transport against the real arm of record (PLAN 24j)."
+
+[dependencies]
+opencodifier-model = { path = "../../../../crates/opencodifier-model", features = ["nli"] }
+opencodifier-runtime = { path = "../../../../crates/opencodifier-runtime", features = [
+    "runtime-onnx-dynamic",
+] }
+serde_json = "1"
+
+[workspace]
