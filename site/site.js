@@ -10,8 +10,8 @@
 "use strict";
 
 /* ---------- animated counters ---------- */
-const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-if (!prefersReduced) {
+const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+if (!prefersReducedMotion) {
   document.querySelectorAll(".count").forEach((el) => {
     el.textContent = (0).toFixed(parseInt(el.dataset.decimals || "0", 10));
   });
@@ -19,7 +19,7 @@ if (!prefersReduced) {
 function animateCount(el) {
   const target = parseFloat(el.dataset.target);
   const decimals = parseInt(el.dataset.decimals || "0", 10);
-  if (prefersReduced || target === 0) { el.textContent = target.toFixed(decimals); return; }
+  if (prefersReducedMotion || target === 0) { el.textContent = target.toFixed(decimals); return; }
   const t0 = performance.now(), dur = 1100;
   function tick(t) {
     const k = Math.min(1, (t - t0) / dur);
@@ -124,7 +124,7 @@ function renderChart(metric) {
     setTimeout(() => {
       const f = row.querySelector(".bar-fill");
       if (f) f.style.width = f.dataset.w + "%";
-    }, prefersReduced ? 0 : 60 + i * 70);
+    }, prefersReducedMotion ? 0 : 60 + i * 70);
   });
   chartNote.innerHTML = "<strong>" + cfg.title + ".</strong> " + cfg.note;
 }
@@ -250,7 +250,7 @@ const RUNGS = [
   },
 ];
 
-const ladderEl = document.getElementById("ladder");
+const ladderEl = document.getElementById("ladder-rungs");
 const detailEl = document.getElementById("ladder-detail");
 
 RUNGS.forEach((r, i) => {
@@ -428,7 +428,7 @@ document.querySelectorAll(".scenario").forEach((btn) => {
       const out = JSON.parse(eng.decide(buildRequest(SCENARIOS[btn.dataset.scenario])));
       const ms = performance.now() - t0;
       const rungs = litRungs(out.trace.entries);
-      const delays = rungs.map((_, i) => (prefersReduced ? 0 : 250 + i * 350));
+      const delays = rungs.map((_, i) => (prefersReducedMotion ? 0 : 250 + i * 350));
       scenarioTimer = rungs.map((r, i) => setTimeout(() => {
         const el = ladderEl.querySelector(".rung[data-i=\"" + r + "\"]");
         if (el) el.classList.add("lit");
@@ -436,11 +436,11 @@ document.querySelectorAll(".scenario").forEach((btn) => {
       scenarioTimer.push(setTimeout(() => {
         renderResult(SCENARIOS[btn.dataset.scenario], out, ms, identity);
         btn.disabled = false;
-      }, prefersReduced ? 0 : 250 + rungs.length * 350));
+      }, prefersReducedMotion ? 0 : 250 + rungs.length * 350));
     }).catch(() => {
       outEl.innerHTML = "";
       outEl.appendChild(line("The WASM engine could not start in this browser. " +
-        "The full playground — and the native binary — are on the <a href='try.html'>Try it</a> page."));
+        "The full playground — and the native binary — are on the <a href='playground.html'>Playground</a> page."));
       btn.disabled = false;
     });
   });
