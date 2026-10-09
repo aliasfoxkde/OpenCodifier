@@ -45,17 +45,16 @@
 
 <nav class="nav">
   <a class="brand" href="index.html">
-    <img src="assets/brand-mark.svg" alt="" width="22" height="22">
+    <img src="assets/logo.svg" alt="" width="22" height="22">
     opencodifier
   </a>
   <div class="nav-links">
-    <a href="index.html#numbers">Numbers</a>
-    <a href="benchmarks.html">The board</a>
-    <a href="try.html">Try it</a>
-    <a href="api.html" aria-current="page">API</a>
-    <a href="index.html#ladder">How it works</a>
-    <a href="index.html#integrity">Integrity</a>
-    <a href="index.html#faq">FAQ</a>
+    <a href="index.html">Home</a>
+    <a href="benchmarks.html">Benchmarks</a>
+    <a href="playground.html">Playground</a>
+    <a href="decide.html">Decide</a>
+    <a href="api.html">API</a>
+    <a href="docs.html">Docs</a>
   </div>
   <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Theme: system (matches your device) — activate for light">
     <svg class="tt-auto" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -65,18 +64,22 @@
   <a class="nav-gh" href="https://github.com/aliasfoxkde/OpenCodifier" aria-label="OpenCodifier on GitHub" rel="noopener">
     <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
   </a>
-  <a class="btn btn-small" href="try.html">Run it live</a>
+  <a class="btn btn-small nav-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+  <a class="btn btn-small" href="playground.html">Run it live</a>
   <details class="nav-menu">
     <summary aria-label="Open menu"><span></span><span></span><span></span></summary>
     <div class="nav-menu-panel">
-      <a href="index.html#numbers">Numbers</a>
-      <a href="benchmarks.html">The board</a>
-      <a href="try.html">Try it</a>
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">Benchmarks</a>
+      <a href="playground.html">Playground</a>
+    <a href="decide.html">Decide</a>
       <a href="api.html" aria-current="page">API</a>
-      <a href="index.html#ladder">How it works</a>
-      <a href="index.html#integrity">Integrity</a>
-      <a href="index.html#faq">FAQ</a>
+      <a href="docs.html">Docs</a>
       <a href="https://github.com/aliasfoxkde/OpenCodifier">GitHub ↗</a>
+      <div class="nav-menu-foot">
+        <a class="nav-menu-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+        <span class="nav-menu-themeslot" aria-hidden="true"></span>
+      </div>
     </div>
   </details>
 </nav>
@@ -103,7 +106,7 @@
   <div class="kicker">JavaScript / WASM</div>
   <h2>The engine as an ES module</h2>
   <p class="lede">
-    The same binary this site's <a href="try.html">playground</a> runs. Everything is synchronous
+    The same binary this site's <a href="playground.html">playground</a> runs. Everything is synchronous
     after <code>init()</code>; all methods take and return JSON strings, so there is no FFI
     surface to misuse and no worker required.
   </p>
@@ -175,7 +178,7 @@ opencodifier_version(); // crate version, independent of the engine identity</co
   <h2>Loopback server, decision-shaped routes</h2>
   <p class="body-text">
     <code>opencodifier serve</code> binds <code>127.0.0.1:8177</code> by default
-    (<code>--addr</code> to change; any non-loopback bind additionally requires
+    (<code>--bind</code> to change; any non-loopback bind additionally requires
     <code>--allow-remote</code>). Request and response bodies are UTF-8 JSON with a 1&nbsp;MiB cap.
   </p>
 
@@ -242,7 +245,7 @@ opencodifier_version(); // crate version, independent of the engine identity</co
   <p class="body-text">
     One envelope everywhere — <code>{"error": {"code": "…", "message": "…"}}</code> — and the
     same codes across WASM, HTTP, MCP, and CLI. Messages are typed, never an echo of your
-    payload. These are the codes the runtime can emit today:
+    payload. These are the codes the runtime can emit today — the complete table, including the graph.* structural family and the cli/mcp/model families, lives in the <a href="docs.html#refusals">refusal reference</a>:
   </p>
 
   <div class="api-code-grid">
@@ -294,7 +297,7 @@ opencodifier_version(); // crate version, independent of the engine identity</co
 opencodifier decide --input request.json
 
 # the same server the API docs describe
-opencodifier serve [--addr 127.0.0.1:8177] [--allow-remote]
+opencodifier serve [--bind 127.0.0.1:8177] [--allow-remote]
 
 # validate a declarative graph
 opencodifier graph validate --input graph.json</code></pre>
@@ -322,6 +325,54 @@ opencodifier graph validate --input graph.json</code></pre>
     then runs on this site's embedded WASM engine, entirely in your browser.</p>
 </section>
 
+
+<!-- ============ hosted API (coming soon) ============ -->
+<section id="cloud" class="section" data-toc-label="Hosted API">
+  <div class="kicker">Hosted API — coming soon</div>
+  <h2>Or skip the setup: <span class="grad">$1 per million decisions</span></h2>
+  <p class="lede">
+    The same engine and the same decision IR, hosted. No GPU, no warm-up, no weights to
+    babysit — decisions come back in milliseconds and cite the rung that answered them.
+    Join the waitlist; signup flows land when the endpoint ships.
+  </p>
+  <div class="cloud-wrap reveal">
+    <div class="cloud-card cloud-price">
+      <div class="cloud-flag">Coming soon</div>
+      <div class="cloud-amount"><span class="cloud-currency">$</span>1<span class="cloud-unit">per million decisions</span></div>
+      <ul class="checks">
+        <li>The full surface above as a hosted endpoint — one canonical decision IR</li>
+        <li>Honest abstention: &ldquo;not confident&rdquo; is a response, never a guess</li>
+        <li><strong>Decision telemetry built in</strong>: per-key dashboards for latency
+          percentiles, confidence distributions, refusal codes, and abstain rate — the
+          metrics the runtime already computes, surfaced per decision instead of buried</li>
+        <li>Alerting hooks: thresholds on refusal spikes or confidence drift, so a schema
+          change upstream shows up as a signal, not a support ticket</li>
+        <li>Usage export (CSV/JSON) for billing reconciliation and capacity planning</li>
+        <li>Deterministic replays: same decision ID, same inputs, same answer — audit a
+          production call bit-for-bit from the trace</li>
+        <li>CPU-only on our side too — the cheap rungs answer in milliseconds</li>
+        <li>Self-hosting stays free and Apache-2.0 either way</li>
+      </ul>
+      <a class="btn cloud-cta" href="mailto:api-waitlist@opencodifier.dev?subject=Hosted%20API%20waitlist">Join the waitlist</a>
+    </div>
+    <div class="cloud-card cloud-compare">
+      <h3>Hosted vs. self-hosted</h3>
+      <table class="cloud-table">
+        <thead><tr><th scope="col"></th><th scope="col">Hosted API</th><th scope="col">Self-hosted</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Price</th><td>$1 / 1M decisions</td><td>free, Apache-2.0</td></tr>
+          <tr><th scope="row">Setup</th><td>an API key</td><td>one binary, no API keys</td></tr>
+          <tr><th scope="row">Hardware</th><td>ours (CPU)</td><td>yours (CPU-only)</td></tr>
+          <tr><th scope="row">Data leaves your machine</th><td>the request</td><td>never</td></tr>
+          <tr><th scope="row">Decision telemetry</th><td>dashboards, alerts, exports included</td><td>read it yourself — every response carries per-decision <code>metrics</code> + <code>trace</code>; <code>/v1/healthz</code> and <code>/v1/capabilities</code> for liveness (no scrape endpoint)</td></tr>
+          <tr><th scope="row">Replay &amp; audit</th><td>decision IDs replayable from the hosted trace</td><td>full offline replay from your own logs</td></tr>
+          <tr><th scope="row">Status</th><td>waitlist</td><td>shipping today</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
 </main>
 
 <footer class="footer">
@@ -342,7 +393,8 @@ opencodifier graph validate --input graph.json</code></pre>
       <div class="foot-head">Site</div>
       <a href="index.html">Home</a>
       <a href="benchmarks.html">The measured board</a>
-      <a href="try.html">Playground</a>
+      <a href="playground.html">Playground</a>
+    <a href="decide.html">Decide</a>
       <a href="index.html#faq">FAQ</a>
     </nav>
     <nav class="foot-col" aria-label="Source and data">
@@ -357,14 +409,16 @@ opencodifier graph validate --input graph.json</code></pre>
       <a href="https://www.amortyx.com" rel="noopener">Amortyx ↗</a>
       <a href="https://www.mcpmanage.com" rel="noopener">MCPManage ↗</a>
       <a href="https://github.com/aliasfoxkde/aegis" rel="noopener">Aegis ↗</a>
+      <a href="https://github.com/aliasfoxkde/GitForge" rel="noopener">GitForge ↗</a>
     </nav>
   </div>
   <p class="foot-links">Apache-2.0 · local-first · no telemetry · no external requests</p>
 </footer>
 
 <script src="site-core.js"></script>
+<script src="toc.js"></script>
 <script>
-/* "Run it" buttons stage a preset for try.html via sessionStorage — the
+/* "Run it" buttons stage a preset for decide.html via sessionStorage — the
    same fixture ids demo.js owns. No engine here; just the handoff. */
 (function () {
   "use strict";
@@ -372,7 +426,7 @@ opencodifier graph validate --input graph.json</code></pre>
     btn.addEventListener("click", function () {
       try { sessionStorage.setItem("oc-preset", JSON.stringify({ request: btn.dataset.preset })); }
       catch (e) { /* storage unavailable: the playground still boots on defaults */ }
-      location.href = "try.html#playground";
+      location.href = "decide.html";
     });
   });
 })();

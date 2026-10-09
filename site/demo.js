@@ -1,5 +1,5 @@
-/* try.html playground — runs the REAL deterministic engine compiled to
-   WASM, in your tab. No server, no network, no model: the zero-ML stack
+/* Shared engine glue for every page that runs the WASM engine in your tab
+   (decide.html console, playground.html, api.html examples). No server, no network, no model: the zero-ML stack
    (rules → cache → filter → lexical) plus graph validation/execution.
    Every engine-derived string is escaped before it reaches the DOM —
    editor content is user input and is treated as hostile, exactly like
@@ -109,6 +109,7 @@
 
   /* ---------- shorthand ---------- */
   function $(id) { return document.getElementById(id); }
+  function byId(id) { return document.getElementById(id); }
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (ch) {
       return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
@@ -163,7 +164,8 @@
       const dist = (a.distribution && a.distribution.entries ? a.distribution.entries : [])
         .map(function (e) { return esc(e.key) + " " + (e.probability * 100).toFixed(1) + "%"; })
         .join(" · ");
-      const choice = a.choice === true ? "true" : a.choice === false ? "false" : String(a.choice);
+      const raw = a.choice !== undefined && a.choice !== null ? a.choice : a.value;
+      const choice = raw === true ? "true" : raw === false ? "false" : String(raw);
       html += "<tr><td>" + esc(a.question_id) + "</td><td>" + esc(a.type) + "</td><td><strong>" +
         esc(choice) + "</strong></td><td>" + (a.confidence * 100).toFixed(2) + "%</td><td>" +
         dist + "</td></tr>";
@@ -308,9 +310,11 @@
         out.innerHTML = "<p>Engine ready. Pick a preset or paste your own request JSON, then " +
           "<strong>Decide</strong>. Everything runs in this tab — the Network chip below counts " +
           "cross-origin requests, live.</p>";
-        document.querySelectorAll(".pg-actions button").forEach(function (b) { b.disabled = false; });
+        document.querySelectorAll(".pg-actions button, .bd-actions button")
+          .forEach(function (b) { b.disabled = false; });
 
-        /* Deep link: try.html?run=<preset|batch> loads that preset and
+        /* Deep link: decide.html?run=<preset|batch> loads that preset and
+           (legacy try.html?run=… bookmarks redirect here)
            decides immediately — same fixture ids as the select; "batch"
            fires the batch action on the current editor contents. */
         const runPreset = new URLSearchParams(location.search).get("run");
@@ -380,8 +384,288 @@
     });
   }
 
+  /* ---------- Try-a-Decision builder ----------
+     A form that compiles into the same request JSON the console decides.
+     Pure composition lives in TryDecision.buildRequest so tests can pin it
+     without a DOM; this section only wires the form to that function. */
+  const BD_POLICY = { min_confidence: 0.8, verify_below: 0.65, abstain_below: 0.5, risk: "low" };
+  const BD_LIMITS = LIMITS;
+
+  const TryDecision = {
+    /* Mirror of NEGATORS in crates/opencodifier-engine/src/lexical.rs —
+       the lexical boolean rung counts these tokens and flips polarity on
+       an odd count. A test pins this list against the Rust source. */
+    NEGATORS: ["not", "no", "never", "without", "cannot", "neither", "nor"],
+    countNegators: function (text) {
+      const tokens = String(text).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+      return tokens.filter(function (t) { return this.NEGATORS.indexOf(t) !== -1; }, this).length;
+    },
+    /* criteria are composed into the question text: the wire carries a
+       boolean as {id, text}, and the zero-ML rungs read text — this is the
+       honest way to express "what counts as yes/no" today. The template
+       itself must stay negator-free: a bare "no" would flip the rung's
+       polarity read (countNegators exists so the page can say so). */
+    composeBooleanText: function (question, yesWhen, noWhen) {
+      let text = question.trim();
+      if (yesWhen.trim()) text += " Criteria — satisfied when: " + yesWhen.trim() + ".";
+      if (noWhen.trim()) text += " fail when: " + noWhen.trim() + ".";
+      return text;
+    },
+    looksLikeJson: function (state) {
+      return /^\s*[\[{]/.test(state) && tryParse(state) !== null;
+    },
+    buildRequest: function (input) {
+      const cat = input.category;
+      let q;
+      if (cat === "yes-no") {
+        q = {
+          type: "boolean", id: "q1",
+          text: this.composeBooleanText(input.question, input.yesWhen || "", input.noWhen || ""),
+        };
+      } else if (cat === "choice") {
+        q = {
+          type: "choice", id: "q1", text: input.question.trim(),
+          candidates: (input.candidates || [])
+            .map(function (c) { return { id: String(c.id || "").trim(), description: String(c.description || "").trim() }; })
+            .filter(function (c) { return c.id; }),
+        };
+      } else if (cat === "score") {
+        q = {
+          type: "score", id: "q1", text: input.question.trim(),
+          levels: String(input.levels || "").split(",")
+            .map(function (l) { return { label: l.trim() }; })
+            .filter(function (l) { return l.label; }),
+        };
+      } else {
+        return null;
+      }
+      return {
+        state: { text: input.state, facts: {} },
+        questions: [q],
+        policy: BD_POLICY,
+        metadata: { request_id: "try-a-decision", limits: BD_LIMITS },
+      };
+    },
+    /* best-effort reverse mapping for the JSON→Form switch; null when the
+       JSON was shaped by hand and cannot populate the form */
+    parseRequest: function (req) {
+      if (!req || !req.state || typeof req.state.text !== "string") return null;
+      if (!Array.isArray(req.questions) || req.questions.length !== 1) return null;
+      const q = req.questions[0];
+      if (q.type === "yes-no" || q.type === "boolean") return { category: "yes-no", state: req.state.text, question: q.text, yesWhen: "", noWhen: "" };
+      if (q.type === "choice" && Array.isArray(q.candidates)) {
+        return { category: "choice", state: req.state.text, question: q.text, candidates: q.candidates };
+      }
+      if (q.type === "score" && Array.isArray(q.levels)) {
+        return { category: "score", state: req.state.text, question: q.text,
+          levels: q.levels.map(function (l) { return l.label; }).join(", ") };
+      }
+      return null;
+    },
+  };
+  window.TryDecision = TryDecision;
+
+  const BD_EXAMPLES = {
+    "yes-no": {
+      state: "replicas must be 2. prod-03 currently runs 2 replicas.",
+      question: "Is prod-03 compliant with the replica rule?",
+      yesWhen: "the service runs at least the replica count the rule requires",
+      noWhen: "the service runs fewer replicas than the rule requires",
+    },
+    choice: {
+      state: "api depends on billing. billing depends on catalog. api is down. billing is down.",
+      question: "Which service is the root cause of the outage?",
+      candidates: [
+        { id: "api", description: "The public API tier" },
+        { id: "billing", description: "The billing service" },
+        { id: "catalog", description: "The product catalog" },
+      ],
+    },
+    score: {
+      state: "Service latency p99 is 2400ms. The SLO says p99 must stay under 500ms.",
+      question: "How severe is this SLO breach?",
+      levels: "trivial, minor, major, critical",
+    },
+  };
+  const BD_PRESETS = [
+    { id: "yes-no", label: "replica rule" },
+    { id: "yes-no", label: "door policy", ex: {
+      state: "Visitor has a valid day pass: yes. Pass expires at 18:00. Current time is 17:20.",
+      question: "Should the visitor be admitted now?",
+      yesWhen: "the pass is valid and the current time is before its expiry",
+      noWhen: "the pass is expired, invalid, or missing",
+    } },
+    { id: "choice", label: "outage root cause" },
+    { id: "choice", label: "cheapest tier", ex: {
+      state: "Workload: 40k decisions/day, bursty, no GPU on site, data stays local.",
+      question: "Which deployment tier fits this workload best?",
+      candidates: [
+        { id: "local-cpu", description: "Runs on existing CPUs, data never leaves" },
+        { id: "hosted-api", description: "Per-decision cost, no local hardware" },
+        { id: "gpu-box", description: "Fastest tail, wasted on this volume" },
+      ],
+    } },
+    { id: "score", label: "SLO severity" },
+    { id: "score", label: "support ticket", ex: {
+      state: "Customer reports every login attempt fails since this morning. Paid tier, 200 seats affected.",
+      question: "How should this ticket be prioritized?",
+      levels: "low, normal, high, urgent",
+    } },
+  ];
+  function bdRenderPresets() {
+    const wrap = $("bd-presets");
+    BD_PRESETS.forEach(function (pr) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "bd-preset-chip";
+      b.textContent = pr.label;
+      b.addEventListener("click", function () {
+        $("bd-category").value = pr.id;
+        bdLoadExample(pr.id, pr.ex);
+        wrap.querySelectorAll(".bd-preset-chip").forEach(function (c) { c.classList.remove("on"); });
+        b.classList.add("on");
+      });
+      wrap.appendChild(b);
+    });
+  }
+  const BD_CATNOTE = {
+    "yes-no": "A boolean question carries no candidates — the engine returns true or false.",
+    choice: "A choice question lists its candidates; the engine may only answer with one of them.",
+    score: "A score question ranks its labels — the answer is the top level, with a distribution. In this zero-ML tab a score needs state/label word overlap or a fired rule; with neither, the runtime abstains rather than guessing.",
+  };
+
+  let bdCandSeq = 0;
+  function bdCandRow(cid, cdesc) {
+    const id = "bd-cand-" + (++bdCandSeq);
+    const wrap = document.createElement("div");
+    wrap.className = "bd-cand";
+    wrap.innerHTML =
+      '<input type="text" class="bd-cid" id="' + id + '" placeholder="id" value="' + esc(cid || "") + '" aria-label="candidate id">' +
+      '<input type="text" class="bd-cdesc" placeholder="description (what makes it the answer)" value="' + esc(cdesc || "") + '" aria-label="candidate description">' +
+      '<button type="button" class="bd-cand-remove" title="remove candidate" aria-label="remove candidate">✕</button>';
+    wrap.querySelector(".bd-cand-remove").addEventListener("click", function () {
+      wrap.remove(); bdSyncJson();
+    });
+    wrap.addEventListener("input", bdSyncJson);
+    return wrap;
+  }
+
+  function bdFormInput() {
+    return {
+      category: $("bd-category").value,
+      state: $("bd-state").value,
+      question: $("bd-question").value,
+      yesWhen: $("bd-yes-when").value,
+      noWhen: $("bd-no-when").value,
+      levels: $("bd-levels").value,
+      candidates: Array.prototype.map.call(
+        document.querySelectorAll("#bd-cands .bd-cand"),
+        function (row) {
+          return { id: row.querySelector(".bd-cid").value, description: row.querySelector(".bd-cdesc").value };
+        }),
+    };
+  }
+
+  function bdCurrentJson() {
+    if ($("bd-jsonpane").hidden) {
+      return JSON.stringify(TryDecision.buildRequest(bdFormInput()), null, 2) + "\n";
+    }
+    return $("bd-json").value;
+  }
+
+  function bdSyncJson() {
+    const note = $("bd-state-note");
+    const state = $("bd-state").value;
+    if (TryDecision.looksLikeJson(state)) {
+      note.textContent = "JSON detected — sent to the engine as text (state.text). Structure belongs in facts, via the console JSON below.";
+      note.classList.add("bd-note-bad");
+    } else {
+      note.textContent = "Plain text is sent as-is. JSON pasted here is also sent as text — the engine reads text.";
+      note.classList.remove("bd-note-bad");
+    }
+    const crit = $("bd-crit-note");
+    if (crit) {
+      const composed = TryDecision.composeBooleanText(
+        $("bd-question").value, $("bd-yes-when").value, $("bd-no-when").value);
+      const n = TryDecision.countNegators(composed);
+      const odd = n % 2 === 1;
+      crit.textContent = "negation words in the composed question: " + n +
+        (odd ? " — an ODD count inverts how the lexical rung reads polarity (not / no / never / without / cannot / neither / nor)"
+             : " (even — polarity reads as asked)");
+      crit.classList.toggle("bd-note-bad", odd);
+    }
+    if (!$("bd-jsonpane").hidden) $("bd-json").value = bdCurrentJson();
+  }
+
+  function bdLoadExample(cat, ex) {
+    if (typeof ex === "undefined") ex = BD_EXAMPLES[cat];
+    $("bd-state").value = ex.state;
+    $("bd-question").value = ex.question;
+    $("bd-yes-when").value = ex.yesWhen || "";
+    $("bd-no-when").value = ex.noWhen || "";
+    $("bd-levels").value = ex.levels || "";
+    const cands = $("bd-cands");
+    cands.textContent = "";
+    (ex.candidates && ex.candidates.length ? ex.candidates : [{ id: "", description: "" }])
+      .forEach(function (c) { cands.appendChild(bdCandRow(c.id, c.description)); });
+    $("bd-catnote").textContent = BD_CATNOTE[cat] || "";
+    bdSyncJson();
+  }
+
+  function bdSetView(json) {
+    const showJson = !!json;
+    $("bd-formpane").hidden = showJson;
+    $("bd-jsonpane").hidden = !showJson;
+    $("bd-view-form").classList.toggle("on", !showJson);
+    $("bd-view-json").classList.toggle("on", showJson);
+    $("bd-view-form").setAttribute("aria-pressed", String(!showJson));
+    $("bd-view-json").setAttribute("aria-pressed", String(showJson));
+    if (showJson) $("bd-json").value = JSON.stringify(TryDecision.buildRequest(bdFormInput()), null, 2) + "\n";
+  }
+
+  function bdDecide() {
+    reqEditor.value = bdCurrentJson();
+    $("act-decide").click();          /* one dispatch path: same renderers */
+    document.querySelector(".pg-results").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function bindBuilder() {
+    $("bd-category").addEventListener("change", function (e) { bdLoadExample(e.target.value); });
+    ["bd-state", "bd-question", "bd-yes-when", "bd-no-when", "bd-levels"].forEach(function (id) {
+      byId(id).addEventListener("input", bdSyncJson);
+    });
+    $("bd-add-cand").addEventListener("click", function () {
+      $("bd-cands").appendChild(bdCandRow("", ""));
+    });
+    $("bd-view-form").addEventListener("click", function () {
+      /* leaving JSON: populate the form only when the JSON matches its shape */
+      if (!$("bd-jsonpane").hidden) {
+        const parsed = tryParse($("bd-json").value);
+        const fromJson = parsed ? TryDecision.parseRequest(parsed) : null;
+        if (fromJson) {
+          $("bd-category").value = fromJson.category;
+          $("bd-state").value = fromJson.state;
+          $("bd-question").value = fromJson.question;
+          if (fromJson.category === "score") $("bd-levels").value = fromJson.levels;
+          if (fromJson.category === "choice" && fromJson.candidates.length) {
+            const cands = $("bd-cands");
+            cands.textContent = "";
+            fromJson.candidates.forEach(function (c) { cands.appendChild(bdCandRow(c.id, c.description)); });
+          }
+        }
+      }
+      bdSetView(false);
+      bdSyncJson();
+    });
+    $("bd-view-json").addEventListener("click", function () { bdSetView(true); });
+    $("bd-decide").addEventListener("click", bdDecide);
+    bdRenderPresets();
+    bdLoadExample("yes-no");
+  }
+
   /* ---------- boot ---------- */
   function boot() {
+    bindBuilder();
     reqEditor.value = JSON.stringify(PRESETS.proof.request, null, 2) + "\n";
     graphEditor.value = JSON.stringify(GRAPHS.minimal.graph, null, 2) + "\n";
 

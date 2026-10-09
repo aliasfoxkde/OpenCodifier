@@ -47,18 +47,16 @@
 
 <nav class="nav">
   <a class="brand" href="#top">
-    <img src="assets/brand-mark.svg" alt="" width="22" height="22">
+    <img src="assets/logo.svg" alt="" width="22" height="22">
     opencodifier
   </a>
   <div class="nav-links">
-    <a href="#numbers">Numbers</a>
-    <a href="benchmarks.html">The board</a>
-    <a href="try.html">Try it</a>
+    <a href="index.html">Home</a>
+    <a href="benchmarks.html">Benchmarks</a>
+    <a href="playground.html">Playground</a>
+    <a href="decide.html">Decide</a>
     <a href="api.html">API</a>
-    <a href="#ladder">How it works</a>
-    <a href="#integrity">Integrity</a>
-    <a href="#platform">Ecosystem</a>
-    <a href="#faq">FAQ</a>
+    <a href="docs.html">Docs</a>
   </div>
   <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Theme: system (matches your device) — activate for light">
     <svg class="tt-auto" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -68,43 +66,68 @@
   <a class="nav-gh" href="https://github.com/aliasfoxkde/OpenCodifier" aria-label="OpenCodifier on GitHub" rel="noopener">
     <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
   </a>
+  <a class="btn btn-small nav-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
   <a class="btn btn-small" href="#build">Start building</a>
   <details class="nav-menu">
     <summary aria-label="Open menu"><span></span><span></span><span></span></summary>
     <div class="nav-menu-panel">
-      <a href="#numbers">Numbers</a>
-      <a href="benchmarks.html">The board</a>
-      <a href="try.html">Try it</a>
+      <a href="index.html" aria-current="page">Home</a>
+      <a href="benchmarks.html">Benchmarks</a>
+      <a href="playground.html">Playground</a>
+    <a href="decide.html">Decide</a>
       <a href="api.html">API</a>
-      <a href="#ladder">How it works</a>
-      <a href="#calibration">Calibration</a>
-      <a href="#integrity">Integrity</a>
-      <a href="#platform">Ecosystem</a>
-      <a href="#roadmap">Roadmap</a>
-      <a href="#faq">FAQ</a>
+      <a href="docs.html">Docs</a>
       <a href="https://github.com/aliasfoxkde/OpenCodifier">GitHub ↗</a>
+      <div class="nav-menu-foot">
+        <a class="nav-menu-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+        <span class="nav-menu-themeslot" aria-hidden="true"></span>
+      </div>
     </div>
   </details>
 </nav>
 
 <header class="hero" id="top">
-  <img class="hero-mark" src="assets/brand-mark.png" alt="" width="112" height="112">
-  <div class="hero-badges">
-    <span class="pill">Apache-2.0</span>
-    <span class="pill">local-first</span>
-    <span class="pill">no API keys</span>
-    <span class="pill">CPU-only</span>
-  </div>
-  <h1>Decisions,<br><span class="grad">not paragraphs.</span></h1>
-  <p class="hero-sub">
-    OpenCodifier turns unstructured state into typed, machine-actionable decisions —
-    choice, boolean, score — with <strong>calibrated confidence</strong> and honest abstention,
-    on hardware you already own. A large language model is the expensive last resort here,
-    not the default.
-  </p>
-  <div class="hero-ctas">
-    <a class="btn" href="#numbers">See the measured numbers</a>
-    <a class="btn btn-ghost" href="#ladder">How the ladder works</a>
+  <div class="hero-grid">
+    <div class="hero-copy">
+      <h1>Decisions,<br><span class="grad">not paragraphs.</span></h1>
+      <div class="hero-badges">
+        <span class="pill">Apache-2.0</span>
+        <span class="pill">local-first</span>
+        <span class="pill">no API keys</span>
+        <span class="pill">CPU-only</span>
+      </div>
+      <p class="hero-sub">
+        OpenCodifier turns unstructured state into typed, machine-actionable decisions —
+        choice, boolean, score — with <strong>calibrated confidence</strong> and honest abstention,
+        on hardware you already own. A large language model is the expensive last resort here,
+        not the default.
+      </p>
+      <div class="hero-ctas">
+        <a class="btn" href="playground.html">Try it in the Playground</a>
+        <a class="btn btn-ghost" href="#numbers">See the measured numbers</a>
+        <a class="btn btn-ghost" href="#ladder">How the ladder works</a>
+        <a class="btn btn-ghost" href="#cloud">Hosted API — $1/1M decisions</a>
+      </div>
+    </div>
+
+    <div class="hero-visual">
+      <div class="hero-decision">
+        <div class="hd-head">
+          <span class="hd-live"><span class="hd-dot" aria-hidden="true"></span>runtime · decide</span>
+          <span class="hd-ms">p50&nbsp;2.0&nbsp;ms</span>
+        </div>
+        <pre class="hd-code"><span class="hd-p">{</span>
+  <span class="hd-k">type</span><span class="hd-p">:</span>        <span class="hd-s">"choice"</span><span class="hd-p">,</span>
+  <span class="hd-k">id</span><span class="hd-p">:</span>         <span class="hd-s">"vendor-select"</span><span class="hd-p">,</span>
+  <span class="hd-k">choice</span><span class="hd-p">:</span>     <span class="hd-s">"rule.exit"</span><span class="hd-p">,</span>
+  <span class="hd-k">confidence</span><span class="hd-p">:</span> <span class="hd-n">0.94</span><span class="hd-p">,</span>
+  <span class="hd-k">gate</span><span class="hd-p">:</span>       <span class="hd-p">{</span> <span class="hd-k">outcome</span><span class="hd-p">:</span> <span class="hd-s">"accept"</span><span class="hd-p">,</span> <span class="hd-k">top_probability</span><span class="hd-p">:</span> <span class="hd-n">0.94</span> <span class="hd-p">},</span>
+  <span class="hd-k">rung</span><span class="hd-p">:</span>       <span class="hd-s">"exact-rule"</span>  <span class="hd-c">← relational proof, no model</span>
+<span class="hd-p">}</span></pre>
+        <div class="hd-foot">typed · calibrated · bit-for-bit replayable</div>
+      </div>
+      <p class="hero-visual-note">Illustrative output — the real envelope, in the <a href="api.html">API docs</a>.</p>
+    </div>
   </div>
 
   <div class="stat-strip">
@@ -220,7 +243,7 @@
   </div>
 
   <div class="ladder-wrap reveal">
-    <div class="ladder" id="ladder"></div>
+    <div class="ladder" id="ladder-rungs"></div>
     <div class="ladder-detail card" id="ladder-detail" aria-live="polite"></div>
     <noscript><p class="fineprint">The clickable rung explorer needs JavaScript. The mechanism, in plain terms: exact rule → cached decision → metadata filter → lexical match → embedding similarity → decision model → verifier, each rung accepting only above its calibrated confidence gate.</p></noscript>
   </div>
@@ -372,7 +395,7 @@ systemctl --user enable --now opencodifier
 systemctl --user status opencodifier</code></pre>
       <p class="fineprint">Logs: <code>journalctl --user -u opencodifier -f</code>. The service binds
         <code>127.0.0.1:8177</code> — expose it beyond loopback only deliberately
-        (<code>serve --addr 0.0.0.0:8177</code>) and behind a firewall; the local-first default is
+        (<code>serve --bind 0.0.0.0:8177</code>) and behind a firewall; the local-first default is
         the product, not a limitation.</p>
     </div>
 
@@ -392,7 +415,7 @@ systemctl --user status opencodifier</code></pre>
 &lt;/script&gt;</code></pre>
       <p class="fineprint">The WASM build ships the zero-ML stack — rules, cache, metadata filters,
         lexical scoring — the same rungs that decide most items on the server, running in the
-        browser. <a href="try.html">try.html</a> is the working example; its source is the
+        browser. <a href="playground.html">playground.html</a> is the working example; its source is the
         integration guide. No network calls, ever.</p>
     </div>
 
@@ -436,77 +459,276 @@ systemctl --user status opencodifier</code></pre>
   </div>
 </section>
 
+
+<!-- ============ HOSTED API ============ -->
+<section id="cloud" class="section" data-toc-label="Hosted API">
+  <div class="kicker">Hosted API — coming soon</div>
+  <h2>Don't want to run it yourself?<br>Pay per decision, not per token.</h2>
+  <p class="lede">
+    The same engine that runs in your tab, hosted. No GPU, no warm-up, no model weights to
+    babysit — decisions come back in milliseconds and cite the rung that answered them.
+  </p>
+
+  <div class="cloud-wrap reveal">
+    <div class="cloud-card cloud-price">
+      <div class="cloud-flag">Coming soon</div>
+      <div class="cloud-amount"><span class="cloud-currency">$</span>1<span class="cloud-unit">per million decisions</span></div>
+      <ul class="checks">
+        <li>Typed decisions — choice, boolean, score — with calibrated confidence</li>
+        <li>Honest abstention: &ldquo;not confident&rdquo; is a response, never a guess</li>
+        <li>Sub-10&nbsp;ms at the cheap rungs; the model pays only for the hard tail</li>
+        <li>Same canonical decision IR as the WASM module and the CLI</li>
+      </ul>
+      <a class="btn cloud-cta" href="mailto:api-waitlist@opencodifier.dev?subject=Hosted%20API%20waitlist">Join the waitlist</a>
+      <p class="fineprint">The waitlist is an email, not a form — signup flows land when the hosted
+      endpoint ships. Self-hosting stays free and Apache-2.0 either way.</p>
+    </div>
+    <div class="cloud-card cloud-compare">
+      <h3>Hosted vs. self-hosted</h3>
+      <table class="cloud-table">
+        <thead><tr><th scope="col"></th><th scope="col">Hosted API</th><th scope="col">Self-hosted</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Price</th><td>$1 / 1M decisions</td><td>free, Apache-2.0</td></tr>
+          <tr><th scope="row">Setup</th><td>an API key</td><td>one binary, no API keys</td></tr>
+          <tr><th scope="row">Hardware</th><td>ours (CPU)</td><td>yours (CPU-only)</td></tr>
+          <tr><th scope="row">Data leaves your machine</th><td>the request</td><td>never</td></tr>
+          <tr><th scope="row">Decision telemetry</th><td>dashboards, alerts, usage exports included</td><td>read it yourself — every response carries per-decision <code>metrics</code> + <code>trace</code> (no scrape endpoint)</td></tr>
+          <tr><th scope="row">Status</th><td>waitlist</td><td><a href="#build">shipping today</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
 <!-- ============ ECOSYSTEM ============ -->
 <section id="platform" class="section">
   <div class="kicker">Ecosystem</div>
   <h2>One workshop. Many tools.</h2>
   <p class="lede">
     OpenCodifier is the decision rung of a wider platform built by the same people with the same
-    discipline — deterministic-first, local-first, measured or it didn't happen. Sibling parts below,
-    with their honest status: what's open source, what's commercial, and what stays private.
+    discipline — deterministic-first, local-first, measured or it didn't happen. Grouped honestly
+    below: what's <strong>open source</strong>, what's <strong>commercial</strong>, and what's
+    <strong>still coming</strong>. Flip a card — the details and the link ride on the back.
   </p>
 
-  <div class="eco-grid reveal">
-    <a class="eco-card" href="https://vivere-5we.pages.dev/" rel="noopener">
-      <div class="eco-head">VIVERE <span class="eco-tag">research lab</span></div>
-      <p>Knowledge extraction &amp; transfer — labels, not weights. The research lab behind the
-        training corpora our compact decision models learn from.</p>
-      <span class="eco-link">vivere-5we.pages.dev ↗</span>
-    </a>
-    <a class="eco-card" href="https://www.amortyx.com" rel="noopener">
-      <div class="eco-head">Amortyx <span class="eco-tag">commercial · free to use</span></div>
-      <p>More work from every token — request and token optimization, compression, and routing for
-        LLM workloads. Spend less, keep the output.</p>
-      <span class="eco-link">amortyx.com ↗</span>
-    </a>
-    <a class="eco-card" href="https://www.mcpmanage.com" rel="noopener">
-      <div class="eco-head">MCPManage <span class="eco-tag">commercial · community</span></div>
-      <p>Give your AI control over the MCP tooling layer — manage, secure and audit the servers your
-        agents use. A commercial product with community roots, being reworked.</p>
-      <span class="eco-link">mcpmanage.com ↗</span>
-    </a>
-    <a class="eco-card" href="https://github.com/aliasfoxkde/aegis" rel="noopener">
-      <div class="eco-head">Aegis <span class="eco-tag">open source</span></div>
-      <p>Ultra-fast secrets &amp; pattern scanner — the gate that audits every commit in
-        this repository before it ships. It watches us; we ship it.</p>
-      <span class="eco-link">github.com/aliasfoxkde/aegis ↗</span>
-    </a>
-    <a class="eco-card" href="https://github.com/aliasfoxkde/AgentVerify" rel="noopener">
-      <div class="eco-head">AgentVerify <span class="eco-tag">open source</span></div>
-      <p>Verification for agent outputs — the same confidence-gated, prove-it-first instinct this
-        runtime applies to decisions, applied to agent work.</p>
-      <span class="eco-link">github.com/aliasfoxkde/AgentVerify ↗</span>
-    </a>
-    <div class="eco-card">
-      <div class="eco-head">GitForge <span class="eco-tag">open source</span></div>
-      <p>Low-latency CI/CD — repos, pipelines, runners and releases. The pipeline of record for
-        this repository: every push runs its gate there.</p>
-      <span class="eco-link">public mirror pending</span>
+  <div class="eco-group reveal">
+    <h3 class="eco-group-title">Open source</h3>
+    <div class="eco-grid">
+      <a class="eco-card" href="https://github.com/aliasfoxkde/aegis" rel="noopener">
+        <span class="eco-inner">
+          <span class="eco-face eco-front">
+            <span class="eco-head">Aegis <span class="eco-tag">open source</span></span>
+            <span class="eco-sum">Ultra-fast secrets &amp; pattern scanner — the gate that audits
+              every commit in this repository.</span>
+            <span class="eco-hint">↻ details</span>
+          </span>
+          <span class="eco-face eco-back">
+            <span class="eco-head">Aegis</span>
+            <span class="eco-sum">Scans files and diffs for secrets, keys and risky patterns with a
+              committed, line-anchored baseline — and a gate mode that fails on new findings. It
+              watches every commit we ship, including its own baseline.</span>
+            <span class="eco-link">github.com/aliasfoxkde/aegis ↗</span>
+          </span>
+        </span>
+      </a>
+      <a class="eco-card" href="https://github.com/aliasfoxkde/AgentVerify" rel="noopener">
+        <span class="eco-inner">
+          <span class="eco-face eco-front">
+            <span class="eco-head">AgentVerify <span class="eco-tag">open source</span></span>
+            <span class="eco-sum">Verification for agent outputs — confidence-gated, prove-it-first.</span>
+            <span class="eco-hint">↻ details</span>
+          </span>
+          <span class="eco-face eco-back">
+            <span class="eco-head">AgentVerify</span>
+            <span class="eco-sum">The same instinct this runtime applies to decisions, applied to
+              agent work: outputs are checked against evidence before they're trusted, and
+              unverified claims say so.</span>
+            <span class="eco-link">github.com/aliasfoxkde/AgentVerify ↗</span>
+          </span>
+        </span>
+      </a>
+      <a class="eco-card" href="https://github.com/aliasfoxkde/GitForge" rel="noopener">
+        <span class="eco-inner">
+          <span class="eco-face eco-front">
+            <span class="eco-head">GitForge <span class="eco-tag">open source</span></span>
+            <span class="eco-sum">Low-latency CI/CD — repos, pipelines, runners and releases.</span>
+            <span class="eco-hint">↻ details</span>
+          </span>
+          <span class="eco-face eco-back">
+            <span class="eco-head">GitForge</span>
+            <span class="eco-sum">A single-binary forge with an API gateway, HTTP + SSH git and a
+              runner fleet. The pipeline of record for this repository: every push runs its gate
+              there.</span>
+            <span class="eco-link">github.com/aliasfoxkde/GitForge ↗</span>
+          </span>
+        </span>
+      </a>
     </div>
-    <div class="eco-card">
-      <div class="eco-head">CodeReview <span class="eco-tag">open source · coming soon</span></div>
-      <p>Deterministic-first code review — the quality-gate instinct of this workshop pointed at
-        pull requests. In development.</p>
-      <span class="eco-link">in development</span>
+  </div>
+
+  <div class="eco-group reveal">
+    <h3 class="eco-group-title">Commercial</h3>
+    <div class="eco-grid">
+      <a class="eco-card" href="https://www.amortyx.com" rel="noopener">
+        <span class="eco-inner">
+          <span class="eco-face eco-front">
+            <span class="eco-head">Amortyx <span class="eco-tag">commercial · free to use</span></span>
+            <span class="eco-sum">More work from every token — compression, routing, request
+              optimization for LLM workloads.</span>
+            <span class="eco-hint">↻ details</span>
+          </span>
+          <span class="eco-face eco-back">
+            <span class="eco-head">Amortyx</span>
+            <span class="eco-sum">Lossless-first compression before context is spent, provider
+              routing with circuit breakers, and savings you can audit in your own logs. Spend
+              less, keep the output.</span>
+            <span class="eco-link">amortyx.com ↗</span>
+          </span>
+        </span>
+      </a>
+      <a class="eco-card" href="https://www.mcpmanage.com" rel="noopener">
+        <span class="eco-inner">
+          <span class="eco-face eco-front">
+            <span class="eco-head">MCPManage <span class="eco-tag">commercial · community</span></span>
+            <span class="eco-sum">Control plane for the MCP tooling layer your agents use.</span>
+            <span class="eco-hint">↻ details</span>
+          </span>
+          <span class="eco-face eco-back">
+            <span class="eco-head">MCPManage</span>
+            <span class="eco-sum">Manage, secure and audit the MCP servers your agents rely on from
+              one place. A commercial product with community roots, being reworked.</span>
+            <span class="eco-link">mcpmanage.com ↗</span>
+          </span>
+        </span>
+      </a>
+      <a class="eco-card" href="https://vivere-5we.pages.dev/" rel="noopener">
+        <span class="eco-inner">
+          <span class="eco-face eco-front">
+            <span class="eco-head">VIVERE <span class="eco-tag">research lab</span></span>
+            <span class="eco-sum">Knowledge extraction &amp; transfer — labels, not weights.</span>
+            <span class="eco-hint">↻ details</span>
+          </span>
+          <span class="eco-face eco-back">
+            <span class="eco-head">VIVERE</span>
+            <span class="eco-sum">The research lab behind the training corpora our compact decision
+              models learn from: extraction and transfer machinery that turns raw text into
+              supervised signal. Public site; the machinery stays in the lab.</span>
+            <span class="eco-link">vivere-5we.pages.dev ↗</span>
+          </span>
+        </span>
+      </a>
+      <div class="eco-card" tabindex="0">
+        <span class="eco-inner">
+          <span class="eco-face eco-front">
+            <span class="eco-head">BigData <span class="eco-tag">commercial · private</span></span>
+            <span class="eco-sum">The knowledge fabric — vector store, embeddings, semantic
+              retrieval.</span>
+            <span class="eco-hint">↻ details</span>
+          </span>
+          <span class="eco-face eco-back">
+            <span class="eco-head">BigData</span>
+            <span class="eco-sum">Fast knowledge access across the stack — the fabric every sibling
+              product reads from. Private infrastructure, so no landing page: it's plumbing, not
+              product.</span>
+            <span class="eco-link">private repository</span>
+          </span>
+        </span>
+      </div>
+      <div class="eco-card" tabindex="0">
+        <span class="eco-inner">
+          <span class="eco-face eco-front">
+            <span class="eco-head">The Harness <span class="eco-tag">commercial · private</span></span>
+            <span class="eco-sum">The agent harness that builds all of this — hooks, skills, rules,
+              MCP registry.</span>
+            <span class="eco-hint">↻ details</span>
+          </span>
+          <span class="eco-face eco-back">
+            <span class="eco-head">The Harness</span>
+            <span class="eco-sum">Disciplined engineering as software: code-based quality gates run
+              before AI output is accepted, hooks that enforce them, skills that compose. It wrote
+              the page you're reading.</span>
+            <span class="eco-link">private</span>
+          </span>
+        </span>
+      </div>
+      <a class="eco-card" href="https://www.taskwizer.com" rel="noopener">
+        <span class="eco-inner">
+          <span class="eco-face eco-front">
+            <span class="eco-head">TaskWizer Stack <span class="eco-tag">commercial</span></span>
+            <span class="eco-sum">Chat, CLI, VS&nbsp;Code integration and the TaskWizer command
+              center — one stack.</span>
+            <span class="eco-hint">↻ details</span>
+          </span>
+          <span class="eco-face eco-back">
+            <span class="eco-head">TaskWizer Stack</span>
+            <span class="eco-sum">The TaskWizer product stack — AI assistance from chat to editor
+              to command line, under one roof.</span>
+            <span class="eco-chips">
+              <span class="eco-chip">Chat · soon</span>
+              <span class="eco-chip">CLI · soon</span>
+              <span class="eco-chip">VS Code · soon</span>
+              <span class="eco-chip">more · soon</span>
+            </span>
+            <span class="eco-link">taskwizer.com ↗</span>
+          </span>
+        </span>
+      </a>
     </div>
-    <div class="eco-card">
-      <div class="eco-head">BigData <span class="eco-tag">commercial · private</span></div>
-      <p>The knowledge fabric — vector store, embeddings and semantic retrieval for fast
-        knowledge access across the stack.</p>
-      <span class="eco-link">private repository</span>
+  </div>
+
+  <div class="eco-group reveal">
+    <h3 class="eco-group-title">Coming soon</h3>
+    <div class="eco-grid">
+      <div class="eco-card" tabindex="0">
+        <span class="eco-inner">
+          <span class="eco-face eco-front">
+            <span class="eco-head">CodeReview <span class="eco-tag">open source · soon</span></span>
+            <span class="eco-sum">Deterministic-first code review, pointed at pull requests.</span>
+            <span class="eco-hint">↻ details</span>
+          </span>
+          <span class="eco-face eco-back">
+            <span class="eco-head">CodeReview</span>
+            <span class="eco-sum">The quality-gate instinct of this workshop as a review product:
+              prove it before it merges, and say what stayed unverified. In development; lands
+              open source.</span>
+            <span class="eco-link">in development</span>
+          </span>
+        </span>
+      </div>
+      <div class="eco-card" tabindex="0">
+        <span class="eco-inner">
+          <span class="eco-face eco-front">
+            <span class="eco-head">FlexStack <span class="eco-tag">commercial · soon</span></span>
+            <span class="eco-sum">AI-powered eCommerce platform and website builder.</span>
+            <span class="eco-hint">↻ details</span>
+          </span>
+          <span class="eco-face eco-back">
+            <span class="eco-head">FlexStack</span>
+            <span class="eco-sum">Storefronts, catalog and checkout where AI does the heavy lifting
+              — generation, enrichment, merchandising — under the same deterministic-first
+              discipline. In development.</span>
+            <span class="eco-link">in development</span>
+          </span>
+        </span>
+      </div>
+      <div class="eco-card" tabindex="0">
+        <span class="eco-inner">
+          <span class="eco-face eco-front">
+            <span class="eco-head">OpenWebOS <span class="eco-tag">open source · soon</span></span>
+            <span class="eco-sum">An AI-first productivity WebOS — one monolithic, modern
+              platform.</span>
+            <span class="eco-hint">↻ details</span>
+          </span>
+          <span class="eco-face eco-back">
+            <span class="eco-head">OpenWebOS</span>
+            <span class="eco-sum">A monolithic open-source project: an AI-first productivity
+              operating system for the browser, built on modern web standards with deep
+              integrations between apps, agents and your files. In design.</span>
+            <span class="eco-link">repository to follow</span>
+          </span>
+        </span>
+      </div>
     </div>
-    <div class="eco-card">
-      <div class="eco-head">The Harness <span class="eco-tag">commercial · private</span></div>
-      <p>The agent harness that builds all of this — hooks, skills, rules, and the MCP tool
-        registry that turns AI sessions into disciplined engineering.</p>
-      <span class="eco-link">private</span>
-    </div>
-    <a class="eco-card" href="https://github.com/WizerAI" rel="noopener">
-      <div class="eco-head">TaskWizer / WizerAI <span class="eco-tag">commercial · private</span></div>
-      <p>The stack organizations — the TaskWizer command center, CLI tooling and the WizerAI
-        platform pieces that tie the workshop together.</p>
-      <span class="eco-link">github.com/WizerAI ↗</span>
-    </a>
   </div>
 
   <div class="grid-2">
@@ -520,8 +742,9 @@ systemctl --user status opencodifier</code></pre>
       <h3>Where the stack is heading</h3>
       <p>Convergence, not acquisition: a local decision runtime (this project), token savings
         (Amortyx), knowledge extraction and transfer (VIVERE), a knowledge fabric (BigData),
-        fast CI (GitForge), early detection (Aegis) and MCP tooling control (MCPManage) — plus a
-        light local AI stack that respects your GPU. Shared philosophy: cheapest reliable mechanism
+        fast CI (GitForge), early detection (Aegis) and MCP tooling control (MCPManage) — plus an
+        AI-native commerce builder (FlexStack), an AI-first web desktop (OpenWebOS) and a light
+        local AI stack that respects your GPU. Shared philosophy: cheapest reliable mechanism
         first, measured claims only, your hardware stays yours.</p>
     </div>
   </div>
@@ -625,7 +848,7 @@ systemctl --user status opencodifier</code></pre>
       <div class="foot-head">Site</div>
       <a href="#numbers">Numbers</a>
       <a href="benchmarks.html">The measured board</a>
-      <a href="try.html">Try it in your browser</a>
+      <a href="playground.html">Try it in your browser</a>
       <a href="api.html">API documentation</a>
       <a href="#ladder">How it works</a>
       <a href="#faq">FAQ</a>
@@ -644,6 +867,7 @@ systemctl --user status opencodifier</code></pre>
       <a href="https://www.amortyx.com" rel="noopener">Amortyx ↗</a>
       <a href="https://www.mcpmanage.com" rel="noopener">MCPManage ↗</a>
       <a href="https://github.com/aliasfoxkde/aegis" rel="noopener">Aegis ↗</a>
+      <a href="https://github.com/aliasfoxkde/GitForge" rel="noopener">GitForge ↗</a>
       <a href="https://github.com/aliasfoxkde/AgentVerify" rel="noopener">AgentVerify ↗</a>
     </nav>
   </div>
@@ -651,6 +875,7 @@ systemctl --user status opencodifier</code></pre>
 </footer>
 
 <script src="site-core.js"></script>
+<script src="toc.js"></script>
 <script src="site.js"></script>
 </body>
 </html>
