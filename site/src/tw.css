@@ -67,31 +67,71 @@
     .nav-gh { @apply hidden; }
   }
 
-  /* ---------- ecosystem cards ---------- */
+  /* ---------- ecosystem: grouped 3D flip cards ----------
+     Front = name + tag + one-line summary + flip hint; back = details and
+     the link. Faces stack in one grid cell so the taller face sets the
+     height — no fixed card heights anywhere. The flip is transform-only
+     (compositor), keeps perspective depth, and collapses to no-transition
+     under prefers-reduced-motion. */
+  .eco-group { @apply mt-9; }
+  .eco-group-title {
+    @apply flex items-center gap-3 m-0 mb-4 text-oc-green font-bold
+      text-[0.78rem] tracking-[0.16em] uppercase;
+  }
+  .eco-group-title::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--color-oc-line), transparent);
+  }
   .eco-grid {
-    @apply grid grid-cols-1 gap-5 mt-7 md:grid-cols-3;
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3;
   }
   .eco-card {
-    @apply flex flex-col gap-2.5 rounded-oc p-7 no-underline text-inherit
-      border border-solid border-oc-line bg-oc-card
-      transition-[border-color,transform,box-shadow] duration-200;
+    @apply relative block no-underline text-inherit rounded-oc outline-none;
+    perspective: 1400px;
   }
-  .eco-card:hover {
-    @apply border-oc-teal/40 -translate-y-[3px];
-    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.35);
+  .eco-card:focus-visible {
+    box-shadow: 0 0 0 2px var(--color-oc-teal);
   }
-  .eco-card p { @apply text-oc-dim text-[0.9rem] m-0; }
-  .eco-head {
-    @apply flex items-baseline gap-2 flex-wrap font-bold text-[1.02rem]
-      text-oc-ink tracking-[-0.01em];
+  .eco-inner {
+    @apply relative grid h-full w-full rounded-oc;
+    transform-style: preserve-3d;
+    transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.25, 1);
   }
-  .eco-tag {
-    @apply text-[0.66rem] font-semibold tracking-[0.06em] uppercase
-      text-oc-faint rounded-full px-2 py-0.5
-      border border-solid border-oc-line;
+  .eco-card:hover .eco-inner,
+  .eco-card:focus .eco-inner,
+  .eco-card:focus-visible .eco-inner { transform: rotateY(180deg); }
+  .eco-face {
+    @apply flex flex-col gap-2.5 rounded-oc p-6 border border-solid border-oc-line bg-oc-card;
+    grid-area: 1 / 1;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    transition: border-color 0.3s, box-shadow 0.6s;
   }
-  .eco-link {
-    @apply mt-auto pt-1.5 text-[0.78rem] text-oc-teal;
+  .eco-card:hover .eco-face,
+  .eco-card:focus .eco-face,
+  .eco-card:focus-visible .eco-face {
+    @apply border-oc-teal/40;
+    box-shadow: 0 26px 60px rgba(0, 0, 0, 0.5);
+  }
+  .eco-back {
+    @apply bg-oc-card2 border-oc-teal/25;
+    transform: rotateY(180deg) translateZ(1px); /* translateZ: no z-fighting */
+  }
+  .eco-front { transform: translateZ(1px); }
+  .eco-sum { @apply text-oc-dim text-[0.9rem] leading-relaxed; }
+  .eco-hint {
+    @apply mt-auto pt-1.5 text-[0.7rem] tracking-[0.1em] uppercase text-oc-faint;
+  }
+  .eco-back .eco-link { @apply mt-auto pt-1.5 text-[0.82rem] text-oc-teal; }
+  .eco-chips { @apply flex flex-wrap gap-1.5; }
+  .eco-chip {
+    @apply text-[0.68rem] rounded-full px-2 py-0.5 border border-solid border-oc-line
+      text-oc-dim bg-oc-teal/5;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .eco-inner { transition: none; }
   }
 
   /* ---------- footer socials ---------- */
