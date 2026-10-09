@@ -927,6 +927,102 @@ Tasks" (2025); arXiv:2602.22107 (validation criteria study);
 PyTorch SDPA / Volta capability matrix (FA2 Ampere+; no bf16, no
 compile, no Triton).
 
+### 9.8.2 #124 quarantine arm B: treatment, knob, build (2026-10-09)
+
+The measured-A/B directive (2026-10-06) executes as a **one-variable
+arm B** against the pinned arm A (r2): identical recipe and row order,
+plus the merged-v2 quarantine rows arm A actually DROPPED, re-admitted
+at `_train_weight = 0.05` through the new `--row-weight-field` knob.
+
+**Pool accounting (why the remainder, not the whole file).** The
+quarantine pool holds 38,747 mixed-label cluster members; merged-v3
+already re-admitted 28,937 of them at weight 1.0 (qradj-v1). Re-adding
+those at 0.05 would up-weight them to an effective 1.05 — a second,
+unintended variable. Arm B therefore admits only pool records whose
+`record_id` is absent from the arm-A rows; overlaps are skipped and
+counted in the build manifest.
+
+**The knob** (`e1_train.py --row-weight-field`): per-row loss weight
+read from a jsonl field; the micro-batch loss scales by the mean row
+weight (`loss = raw · fw · rw`). **Val loss stays unweighted**, so
+checkpoint selection and cross-arm val comparison are unaffected (same
+contract as fam_weights). The cache split tag carries the field name
+(fam2 → fam3), so the same file read with and without the flag cannot
+serve one cache. Flag empty ⇒ every row weighs 1.0 and the loss
+op-order is unchanged.
+
+**Build** (`build_quarantine_arm.py`, manifest version
+`opencodifier.e1-quarx-build/1`): gates input shas against the pinned
+arm-A rows (4750dd8d…) and pool (289e97c3…); segments pool records with
+the SAME prep code (`decision_sft_prep`) and skip counters; excludes
+pool states colliding with any suite state in the parent corpus (the
+v2 gate covered surviving train rows only — the pool was never
+suite-checked); asserts arm-A rows pass through untouched and carry no
+`_train_weight`. Output `e1-quarx005.rows.jsonl` sha
+`13968f047da29169209914b812c64a05b7abb877255be3a294b1b6b63a251d85`.
+
+**Chain** (`e1-quarx.sh`, fedora): stage 0 build → stage 1a
+knob-inertness smoke → stage 1b weighted-path smoke (`train_nonunit` >
+0 asserted) → stage 2 full train → stage 3 pinned-suite evals
+(holdout + rel200, best/last, fixed reader) → stage 4 pre-registered
+gate line (suite ≥ 0.68 ⇒ JevBench leg next; < 0.68 ⇒ correctly not
+run).
+
+### 9.8.3 Torch-RNG seeding defect caught by the inertness gate (2026-10-09)
+
+The first inertness run **failed correctly**: flag-off vs
+field-named-but-absent diverged from the first logged step (step-20 win
+0.5247 vs 0.4959; final cum 0.3398 vs 0.3343) with identical LR
+schedules and identical seeded data selection. Root cause: `--seed`
+governed only the data pipeline (`random.Random` for shuffle/split/
+bucketing) — **torch's RNG was never seeded**, so LoRA init (random
+Gaussian) and dropout (0.05) drew fresh weights in every process. Every
+manifest to date records `seed: 42` that truthfully covered the row
+order only. Runs before this fix keep their recorded numbers; the
+noise this injects into any same-recipe re-run is now measured: ~1.6 %
+final loss at smoke scale (the failed pair itself is the measurement).
+
+Fix: `torch.manual_seed(seed)` (+ `manual_seed_all`) at trainer start,
+recorded as `"torch_seeded": true` in the manifest. Re-run result:
+**INERT OK — flag-off == field-with-unit-weights, bit-for-bit after
+stripping tok/s** (07:12:53Z). One gate now proves two things: the row
+weighting is math-inert when unset, and torch-seeded runs are
+bit-reproducible end-to-end. Consequence for arm B vs arm A: the init
+draw differs (arm A predates seeding) exactly as it would between any
+two unseeded runs — the paired suite analysis remains the decision
+instrument, and the 1.6 % smoke-scale noise floor is its context.
+
+### 9.9 E1-E staged bundle for the T5500 (2026-10-09)
+
+Per the staged-bundle rule: **data + pilot protocol + eval hookup
+validated BEFORE the node powers on**, so powered-on time is pure
+training. Bundle: `/nas/Temp/work/oc-model-eval/t5500-bundle/`
+(transfer hub; self-contained — data, suites, reader, trainer, base
+model, integrity manifest).
+
+- **Arm**: Qwen3.5-2B, e1-iterb corpus (177,999 rows — the exact 0.8B
+  iterate-B corpus, so capacity is the only variable), r2 recipe knobs
+  otherwise (lr 1e-4, LoRA r16/α32/drop 0.05 q,k,v,o, batch 2 × accum
+  8, max-len 2048, warmup 0.03, seed 42, 1 epoch), **fp16 + GradScaler
+  (Volta has no bf16; scaler path pre-existing and smoke-exercised),
+  sdpa default** (CUTLASS mem-efficient below Ampere; FA2 is Ampere+
+  only), grad checkpointing on.
+- **stage0_env.sh**: bundle sha verification → venv → torch from the
+  cu126 channel → **Volta probe** (CUDA 13 dropped sm_70; a cu13x wheel
+  fails loudly with the fix in the error text) → 400-row fp16 GPU smoke
+  (NaN gate, steps > 0, peak-memory + attn recorded from the manifest).
+- **train_e1e_2b.sh**: 2k smoke → full train (~11k steps, 8–16 h
+  single-GPU estimate) → holdout + rel200 evals (best/last, fixed
+  reader) → pre-registered **2B gate ≥ 0.75** (§7 E3). GATE_PASS →
+  JevBench leg next (wired after review); GATE_FAIL → correctly not
+  run; no benchmark number from a sub-gate arm.
+- **Honest staging state**: pipeline end-to-end validated on the
+  staging host (0.8B); actual V100 execution, fp16 loss-scale behavior
+  at 2B, and wall-clock step time validate at power-on — that is what
+  stage 0 is for. **DDP deliberately absent** (single-GPU-first; plain
+  DDP only on Volta, no FSDP/device_mesh — §9.8) and recorded as the
+  first power-on validation item.
+
 ## 10. Transfer pathways into a small decision model (taxonomy, 2026-10-06)
 
 Recorded because it disciplines which experiment buys what. Four distinct

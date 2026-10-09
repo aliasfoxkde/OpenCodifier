@@ -47,6 +47,19 @@ r2 trainer and why:
 - **Family weighting** (B5 knob): --family-weight ``noul=0.7``
   scales each micro-batch loss by the mean family weight of its
   rows; recorded in the manifest.
+- **Row weighting** (--row-weight-field): rows may carry a per-row
+  loss weight (the #124 quarantine A/B re-admits its pool at 0.05
+  through ``_train_weight``). The micro-batch loss scales by the mean
+  row weight; val loss stays unweighted so checkpoint selection and
+  cross-arm val comparison are unaffected. The cache key carries the
+  field name (fam3 split tag) — the same file read with and without
+  the flag cannot serve one cache.
+- **Torch RNG seeded** (--seed): seed now covers LoRA init and
+  dropout too, not just the data pipeline — the #124 inertness
+  smoke caught two identical-recipe runs diverging from step 20
+  because torch drew unseeded adapter weights in every process
+  (TRAINING.md §9.7.3). Runs before this fix keep their recorded
+  numbers; their seed=42 manifest claim covered the row order only.
 - **sdpa attention default** (A7, research-integrated): PyTorch SDPA
   dispatches to the memory-efficient CUTLASS backend below Ampere
   (V100) and flash on Ampere+; eager is available via --attn eager
@@ -267,6 +280,16 @@ def main() -> int:
                     help="optimizer steps between val evals")
     ap.add_argument("--family-weight", default="",
                     help="per-family loss weights, noul=0.7,score=1.0")
+    ap.add_argument("--row-weight-field", default="",
+                    help="row field carrying a per-row training-loss "
+                         "weight (e.g. _train_weight): the micro-batch "
+                         "loss scales by the mean row weight, so a 0.05 "
+                         "field re-admits near-dup rows at 5%% strength "
+                         "(the #124 quarantine A/B). Val loss stays "
+                         "unweighted -- checkpoint selection and "
+                         "cross-arm val comparisons are unaffected. "
+                         "Empty = every row weighs 1.0 and the op-order "
+                         "of the loss is unchanged")
     ap.add_argument("--length-bucket", action="store_true",
                     help="length-homogeneous batching experiment")
     ap.add_argument("--profile-steps", type=int, default=0,
@@ -287,6 +310,17 @@ def main() -> int:
     except ImportError as e:
         sys.stderr.write(f"torch stack unavailable on this host: {e}\n")
         return 1
+
+    # Seed torch's RNG, not just python's: --seed previously governed
+    # only the data pipeline (shuffle/split/bucketing via random.Random),
+    # while LoRA init and dropout drew from an unseeded torch RNG — so
+    # every process started from different adapter weights and
+    # bit-reproducibility was impossible (caught by the #124 inertness
+    # smoke: identical recipes diverged from step 20). With this,
+    # seed=42 means the whole run.
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
 
     rows_path = args.data / "e1-sft-v1.rows.jsonl"
     rows = [json.loads(line) for line in rows_path.open(encoding="utf-8")
@@ -368,17 +402,22 @@ def main() -> int:
     # Families travel with the feats so loud-skips cannot desync
     # row<->family.
     cache_dir = args.data / ".cache"
-    # fam2: split_tag carries the family-rule version — fams are cached
-    # alongside the feats, so a rule change must invalidate the cache or
-    # a re-run silently serves qtype-tagged families.
+    # fam3: split_tag carries the family-rule AND row-weight version —
+    # fams and per-row weights are cached alongside the feats, so a rule
+    # change must invalidate the cache or a re-run silently serves
+    # qtype-tagged families / stale weights. The field name is in the
+    # key: the same file read with and without --row-weight-field has
+    # different rws arrays.
     split_tag = (f"l{args.limit_rows or 0}-s{args.seed}"
-                 f"-vf{args.val_frac:g}-vc{args.val_cap}-fam2")
+                 f"-vf{args.val_frac:g}-vc{args.val_cap}"
+                 f"-rwf{args.row_weight_field or '0'}-fam3")
     cache_path = cache_dir / (f"e1-train-{data_sha[:12]}-"
                               f"ml{args.max_len}-{split_tag}.npz")
 
     def encode_all(split_rows: list[dict], tag: str):
         feats: list[tuple[list[int], list[int]]] = []
         fams: list[str] = []
+        rws: list[float] = []
         skipped = 0
         for row in split_rows:
             enc = encode_row(row["segments"], tok.encode, eos_id,
@@ -388,9 +427,14 @@ def main() -> int:
                 continue
             feats.append(enc)
             fams.append(row_family(row))
+            # Per-row loss weight: the field's value, else 1.0. Missing
+            # field in a field-named run means "unweighted", loudly 1.0
+            # — never an error, so mixed corpora stay expressible.
+            rws.append(float(row.get(args.row_weight_field, 1.0))
+                       if args.row_weight_field else 1.0)
         say(f"{tag}: feats={len(feats)} loud_skipped_over_maxlen="
             f"{skipped}")
-        return feats, fams, skipped
+        return feats, fams, rws, skipped
 
     if cache_path.exists():
         z = np.load(cache_path, allow_pickle=False)
@@ -405,10 +449,13 @@ def main() -> int:
             feats = [(ids_flat[offs[i]:offs[i + 1]].tolist(),
                       lab_flat[offs[i]:offs[i + 1]].tolist())
                      for i in range(n_feats)]
+            rws_all = [float(w) for w in z["rws"]]
             train_feats = feats[:counts["train_n"]]
             train_fams = fams_all[:counts["train_n"]]
+            train_rws = rws_all[:counts["train_n"]]
             val_feats = feats[counts["train_n"]:]
             val_fams = fams_all[counts["train_n"]:]
+            val_rws = rws_all[counts["train_n"]:]
             skipped_train = counts["skipped_train"]
             skipped_val = counts.get("skipped_val", 0)
             say(f"cache hit {cache_path.name} train={len(train_feats)} "
@@ -417,14 +464,14 @@ def main() -> int:
             say(f"cache stale {cache_path.name} (row-count mismatch) "
                 f"— re-encoding")
             cache_path.unlink()
-            train_feats, train_fams, skipped_train = encode_all(
-                [rows[i] for i in train_idx], "train")
-            val_feats, val_fams, skipped_val = encode_all(
+            train_feats, train_fams, train_rws, skipped_train = \
+                encode_all([rows[i] for i in train_idx], "train")
+            val_feats, val_fams, val_rws, skipped_val = encode_all(
                 [rows[i] for i in val_idx], "val")
     else:
-        train_feats, train_fams, skipped_train = encode_all(
+        train_feats, train_fams, train_rws, skipped_train = encode_all(
             [rows[i] for i in train_idx], "train")
-        val_feats, val_fams, skipped_val = encode_all(
+        val_feats, val_fams, val_rws, skipped_val = encode_all(
             [rows[i] for i in val_idx], "val")
 
     if not cache_path.exists():
@@ -442,9 +489,13 @@ def main() -> int:
                                   for i in ls], dtype=np.int32),
                  offsets=np.array(offs, dtype=np.int64),
                  fams=np.array(train_fams + val_fams),
+                 rws=np.array(train_rws + val_rws, dtype=np.float64),
                  counts=np.frombuffer(json.dumps(counts).encode(),
                                       dtype=np.uint8))
         say(f"cache written {cache_path.name}")
+
+    train_nonunit = sum(1 for w in train_rws if w != 1.0)
+    val_nonunit = sum(1 for w in val_rws if w != 1.0)
 
     lengths = [len(ids) for ids, _ in train_feats]
     val_order = sorted(range(len(val_feats)),
@@ -587,7 +638,11 @@ def main() -> int:
                 fams = [train_fams[i] for i in sel_idx]
                 fw = sum(fam_weights.get(f, 1.0) for f in fams) \
                     / max(1, len(fams))
-            loss = raw * fw
+            rw = 1.0
+            if args.row_weight_field:
+                rw = sum(train_rws[i] for i in sel_idx) \
+                    / max(1, len(sel_idx))
+            loss = raw * fw * rw
             scaler.scale(loss / args.accum).backward()
             n_tok = sum(1 for _, ls in batch for l in ls if l != -100)
             loss_f = float(raw.detach())
@@ -655,6 +710,12 @@ def main() -> int:
                  "val": len(val_feats),
                  "loud_skipped_over_maxlen_train": skipped_train,
                  "loud_skipped_over_maxlen_val": skipped_val},
+        "row_weight": {"field": args.row_weight_field,
+                       "train_rows": len(train_rws),
+                       "train_nonunit": train_nonunit,
+                       "train_mean": round(sum(train_rws)
+                                           / max(1, len(train_rws)), 6),
+                       "val_nonunit": val_nonunit},
         "knobs": {"epochs": args.epochs, "lr": args.lr,
                   "lora_r": args.lora_r, "lora_alpha": args.lora_alpha,
                   "lora_dropout": args.lora_dropout,
@@ -663,7 +724,8 @@ def main() -> int:
                   "batch": args.batch, "accum": args.accum,
                   "max_len": args.max_len, "dtype": args.dtype,
                   "attn": args.attn, "warmup": args.warmup,
-                  "seed": args.seed, "val_frac": args.val_frac,
+                  "seed": args.seed, "torch_seeded": True,
+                  "val_frac": args.val_frac,
                   "val_cap": args.val_cap, "val_every": args.val_every,
                   "family_weight": fam_weights,
                   "length_bucket": args.length_bucket,
