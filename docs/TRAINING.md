@@ -992,6 +992,54 @@ draw differs (arm A predates seeding) exactly as it would between any
 two unseeded runs — the paired suite analysis remains the decision
 instrument, and the 1.6 % smoke-scale noise floor is its context.
 
+### 9.8.4 Arm B executed: gate result and paired-analysis caveat (2026-10-09)
+
+The chain restarted 02:16 local (post-reboot) and **completed**: full
+train 02:16–09:14 (11,615/11,615 steps, final cum 0.0511, val loss
+0.0296, tok_acc 0.9880), evals 09:14–09:19. Manifest checks: corpus
+sha `13968f04…` matches the pinned build; `torch_seeded: true` (§9.8.3
+fix active); row-weight contract verified live — 9,718 non-unit train
+rows, mean 0.9503 (the dropped-pool remainder at 0.05).
+
+**Gate result (pre-registered):** suite holdout **0.65** (best; ECE
+0.1512; last identical 0.65, ECE 0.1617) **< 0.68 → GATE_FAIL —
+JevBench leg correctly NOT run.** rel200: 0.55 both variants (ECE
+0.2066 / 0.1921). Notably, holdout ECE 0.1512 is the closest any arm
+has come to the ≤ 0.15 calibration line (E1-C pilot blocker: 0.2411).
+
+**Instrument caveat before any A/B verdict.** Arm A r2's recorded gate
+number (0.5667, §9.7) was scored on suite sha `9f0afaf6…` — the
+instrument changed when the readout fix + rel200 slice landed (current
+shas `6e9b6e0f…` / `afe6770c…`). Comparing 0.65 against 0.5667 across
+instruments is invalid. The pre-registered decision instrument is the
+**paired suite analysis**: arm A's adapter (still on disk at
+`runs/e1-a-qwen08b-r2`) re-scored on the CURRENT suites, same reader,
+same base.
+
+**Paired result (arm A `eval-curinst-*`, 12:38–12:39 local): arm B
+wins on both slices.**
+
+| slice | arm A (curinst, last) | arm B (last) | Δ |
+|---|---|---|---|
+| suite_holdout (120) | 0.6333 (ECE 0.0761) | 0.65 (ECE 0.1617) | **+1.7** |
+| rel200 (280) | 0.5036 (ECE 0.1246) | 0.55 (ECE 0.1921) | **+4.6** |
+
+Arm A had no `adapter-best` artifact (best-checkpointing postdates r2),
+so the comparison is last-vs-last on both sides — and arm B's
+best≈last (0.65/0.65, 0.55/0.55) makes it insensitive to checkpoint
+choice anyway. The rel200 delta (+4.6, on the weakest slice) is well
+above the §9.8.3 noise floor (~1.6 % at smoke scale); the holdout delta
+(+1.7) is marginal. **Verdict: re-admitting the dropped quarantine
+rows at weight 0.05 is net-positive — the pool carries real signal.**
+Design consequence for the merged-v4 corpus (#124): keep pool rows in
+at low weight rather than dropping them.
+
+The trade is calibration: arm A ECE 0.0761 vs arm B 0.1512 on holdout.
+Arm B buys accuracy and spends calibration — acceptable for the ladder
+(post-hoc per-rung calibration is the planned B3/B4 lever), but it
+means the pool re-admission is not free. Gate stays **GATE_FAIL**
+either way — 0.65 < 0.68, JevBench leg correctly withheld.
+
 ### 9.9 E1-E staged bundle for the T5500 (2026-10-09)
 
 Per the staged-bundle rule: **data + pilot protocol + eval hookup
