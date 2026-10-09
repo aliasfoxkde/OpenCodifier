@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Pre-paint theme resolution — mirrors index.html; owned by site-core.js. -->
+<script>
+(function () {
+  "use strict";
+  var mode = "system";
+  try {
+    var v = localStorage.getItem("oc-theme");
+    if (v === "light" || v === "dark" || v === "system") mode = v;
+  } catch (e) { /* storage unavailable: system default */ }
+  var resolved = mode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : mode;
+  document.documentElement.setAttribute("data-theme", resolved);
+  document.documentElement.setAttribute("data-theme-mode", mode);
+})();
+</script>
+<title>OpenCodifier — the playground: play the engine</title>
+<meta name="description" content="Play the real OpenCodifier decision engine, live in your tab: a fog-of-war maze solved by the decision ladder, the full request → decision → trace loop, and a library of games in the workshop. No server, no network, no model.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:site_name" content="OpenCodifier">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://opencodifier.pages.dev/playground.html">
+<meta property="og:title" content="OpenCodifier — the playground: play the engine">
+<meta property="og:description" content="A fog-of-war maze solved by the decision ladder, the full request → decision → trace loop, and a library of engine-driven games. All local, all auditable.">
+<meta property="og:image" content="https://opencodifier.pages.dev/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The OpenCodifier mark — a hexagonal C around a code glyph — over the wordmark.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://opencodifier.pages.dev/assets/og-image.png">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="tw.css">
+<style>
+/* playground-local layout (game card grid); everything else reuses site tokens */
+.pg-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 1rem; margin-top: 1.4rem; }
+.pg-card { display: flex; flex-direction: column; gap: 0.55rem; padding: 1.1rem 1.2rem; }
+.pg-card h3 { margin: 0; font-size: 1.02rem; }
+.pg-card p { margin: 0; font-size: 0.86rem; color: var(--ink-dim); line-height: 1.55; }
+.pg-card .pg-where { margin-top: auto; padding-top: 0.4rem; font-size: 0.78rem; }
+.pg-card h3 a { color: inherit; text-decoration: none; }
+.pg-card h3 a:hover, .pg-where a:hover { color: var(--teal); }
+.pg-where a { color: var(--teal); text-decoration: none; }
+.pg-badge {
+  align-self: flex-start; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px;
+  padding: 0.12rem 0.55rem; color: var(--ink-dim);
+}
+.pg-badge.live { color: var(--green); border-color: var(--green); }
+.pg-badge.soon { color: var(--amber); border-color: var(--amber); }
+</style>
+</head>
+<body class="page-wide">
+<a class="skip-link" href="#games">Skip to the games</a>
+
+<div class="bg-mesh" aria-hidden="true"></div>
+
+<nav class="nav">
+  <a class="brand" href="index.html">
+    <img src="assets/logo.svg" alt="" width="22" height="22">
+    opencodifier
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="benchmarks.html">Benchmarks</a>
+    <a href="playground.html" aria-current="page">Playground</a>
+    <a href="decide.html">Decide</a>
+    <a href="api.html">API</a>
+    <a href="docs.html">Docs</a>
+  </div>
+  <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Theme: system (matches your device) — activate for light">
+    <svg class="tt-auto" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.2 14.5A8.3 8.3 0 0 1 9.5 3.8a8.3 8.3 0 1 0 10.7 10.7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+  <a class="nav-gh" href="https://github.com/aliasfoxkde/OpenCodifier" aria-label="OpenCodifier on GitHub" rel="noopener">
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+  </a>
+  <a class="btn btn-small nav-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+  <a class="btn btn-small" href="api.html">API docs</a>
+  <details class="nav-menu">
+    <summary aria-label="Open menu"><span></span><span></span><span></span></summary>
+    <div class="nav-menu-panel">
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">Benchmarks</a>
+      <a href="playground.html" aria-current="page">Playground</a>
+    <a href="decide.html">Decide</a>
+      <a href="api.html">API</a>
+      <a href="docs.html">Docs</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier">GitHub ↗</a>
+      <div class="nav-menu-foot">
+        <a class="nav-menu-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+        <span class="nav-menu-themeslot" aria-hidden="true"></span>
+      </div>
+    </div>
+  </details>
+</nav>
+
+<!-- Compact header: the games start immediately — no tall hero pushing
+     them below the fold. The chips are measured live by demo.js. -->
+<header class="hero hero-slim" id="top">
+  <h1>The <span class="grad">playground</span></h1>
+  <p class="hero-sub">
+    The real engine, compiled to WASM, running in your tab — zero ML, zero
+    network, zero server. Pick a game from the library, or open the
+    <a href="decide.html">Decide console</a> and decide something yourself.
+  </p>
+  <dl class="chips" aria-label="Runtime facts">
+    <div class="chip-item"><dt>Engine</dt><dd>WASM, in your tab</dd></div>
+    <div class="chip-item"><dt>Network</dt><dd>zero cross-origin</dd></div>
+    <div class="chip-item"><dt>Server</dt><dd>none — static files</dd></div>
+    <div class="chip-item"><dt>LLM</dt><dd>none — zero-ML stack (rungs 1–4)</dd></div>
+    <div class="chip-item"><dt>Leaderboards</dt><dd>session-only — nothing leaves the tab</dd></div>
+  </dl>
+</header>
+
+<main>
+<!-- ============ GAMES — first thing on the page ============ -->
+<section id="games" class="section">
+  <div class="kicker">Play</div>
+  <h2>Games the engine plays</h2>
+  <p class="lede">
+    Every bot names the mechanism that moved it; every leaderboard lives only
+    in your tab; every claim about what the engine decides is checkable in
+    the trace panel. Pick a scenario below — or grab the keyboard.
+  </p>
+
+  <details class="card mz-about pg-about">
+    <summary>Maze Solver &amp; Dungeon Crawler — what you are actually watching</summary>
+    <p>
+      Every step the bot takes is a decision made the same way the runtime makes
+      them: <strong>cheapest reliable mechanism first</strong>. There is no neural
+      network in this maze. The scout checks a rule (fight is forced, exit is
+      one step away, a monster is too close), then falls back to breadth-first
+      searches over <em>only what it has seen</em> — exit route, loot, chest,
+      nearest unexplored frontier. When two frontier routes cost exactly the
+      same, and you have the engine checkbox on, that genuine tie becomes a real
+      <code>choice</code> request to the same WASM engine the panel below runs.
+      The chip next to the canvas names the rung that decided every single step.
+      Two map types — classic corridors, or rooms-and-hallways dungeons — and
+      two ways to see: a full disc, or a facing torch cone where turning matters.
+    </p>
+    <p>
+      <strong>How to play:</strong> pick <em>play</em> (WASD / arrows, or the
+      d-pad), or <em>versus</em> to race a glowing ghost of the bot that runs its
+      own identical maze with its own fog — it gains no information from you, and
+      you none from it. Loot piles score, chests open in one second (coins 0–5…
+      or something with teeth), monsters chase what they can see along a ray and
+      cost you a two-second static fight on contact, and the optional timer ends
+      the run when it expires — unless you switch on <em>avoid monsters</em>,
+      which routes the walker around every threat it has actually seen (and
+      nothing it hasn't; the fog stays honest). Found everything? The exit is
+      the one opening in the outer wall — usually as far from the middle as it
+      can be.
+    </p>
+    <p>
+      <strong>Why it is here:</strong> to show the methodology moving. Real maze
+      games hand the AI omniscience; this one hands the bot the same darkness you
+      get, and you can audit every choice it made in the trace panel. The
+      leaderboard is session-only — nothing you do here is stored, sent, or
+      scored anywhere but your tab.
+    </p>
+    <div class="mz-legend">
+      <span><i class="lg lg-you"></i> you</span>
+      <span><i class="lg lg-bot"></i> the bot (ghost in versus)</span>
+      <span><i class="lg lg-exit"></i> exit</span>
+      <span><i class="lg lg-loot"></i> loot</span>
+      <span><i class="lg lg-chest"></i> chest — 1 s, coins or teeth</span>
+      <span><i class="lg lg-monster"></i> monster — 2 s fight</span>
+      <span><i class="lg lg-fog"></i> unseen</span>
+      <span><i class="lg lg-remembered"></i> remembered</span>
+    </div>
+    <p class="fineprint">
+      Honest footnotes: vision is generalized Bresenham line-of-sight per cell,
+      walls stop the ray. The maze itself, the bot's exploration ladder, and the
+      scoring arithmetic are plain, tested JavaScript (<code>site/maze-core.js</code>,
+      70 headless tests) — only the tie-breaks go to WASM. God view is a
+      spectator cheat: any run finished while it is on is marked
+      <em>assisted</em> and scores nothing. Thinking about more than a demo —
+      progression, real combat, multiplayer — is sketched in
+      <code>docs/planning/maze-solver/STANDALONE-GAME.md</code>.
+    </p>
+  </details>
+
+  <div id="maze-root" aria-label="Maze Solver game"></div>
+</section>
+
+<!-- ============ GAME LIBRARY — searchable flip cards ============ -->
+<section id="library" class="section">
+  <div class="kicker">Library</div>
+  <h2>The game library</h2>
+  <p class="lede">
+    Every game runs on the same shared runtime — the <strong>Decisions SDK</strong> —
+    under the same honesty rules: rules that never ask, scored candidates with the
+    weights on screen, genuine ties to the engine, and refusals that fall to a
+    named rung on the record. Filter by kind or search; click a card for the details.
+  </p>
+
+  <div class="pg-toolbar">
+    <input id="pg-search" type="search" placeholder="search the library…"
+      aria-label="Search the game library" autocomplete="off">
+    <div class="pg-chips" role="group" aria-label="Filter games by kind">
+      <button class="pg-chip is-on" data-cat="all" type="button">all</button>
+      <button class="pg-chip" data-cat="decide" type="button">decisions on display</button>
+      <button class="pg-chip" data-cat="worlds" type="button">living worlds</button>
+      <button class="pg-chip" data-cat="arcade" type="button">arcade &amp; action</button>
+      <button class="pg-chip" data-cat="puzzle" type="button">puzzles &amp; classics</button>
+    </div>
+  </div>
+  <p id="pg-empty" class="fineprint" hidden>nothing matches that — clear the search or pick another kind.</p>
+
+  <div class="pg-cards" id="pg-cards">
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="worlds" data-name="microworld ecosystem creatures colony think simulation flagship fox predator pack stores births">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="microworld.html">MicroWorld</a></h3>
+          <p>The flagship: one tiny world where a whole colony thinks out loud.</p>
+          <a class="pg-open" href="microworld.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>One tiny deterministic world where dozens of creatures each re-score ten actions every ~0.75 s — eat, drink, flee, fight, explore, rest, gather, go home, follow, ignore — from their own meters and an eight-cell view. Near-ties go to the engine over just the tied candidates; the fox, births, deaths and stores are rules. Click a creature to pin its decision table to the trace line.</p>
+          <a class="pg-play" href="microworld.html">watch a colony think →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="decide" data-name="choose your door monty hall abstain personalities policy coward greedy brave">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="door.html">Choose Your Door</a></h3>
+          <p>Three-to-five doors, one pick, and the whole decision on the table.</p>
+          <a class="pg-open" href="door.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>One decision, fully shown: three-to-five doors, one character, and the inputs, candidate scores, confidence, and trace behind the pick. Personalities are policy, not code paths — coward, greedy, brave, and steady are the same engine with different weights, and balancing the doors makes the engine abstain on the record.</p>
+          <a class="pg-play" href="door.html">look behind the decision →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="decide" data-name="rpsls rock paper scissors lizard spock move graph markov bot">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="rpsls.html">RPSLS++</a></h3>
+          <p>Rock-paper-scissors-lizard-spock on a move graph you can extend mid-match.</p>
+          <a class="pg-open" href="rpsls.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>Add a move mid-match and watch the graph reorient. The bot blends frequency and markov tables over your history into expected values, explores just enough to stay unreadable, and hands genuinely close calls to the engine with your history table on the wire.</p>
+          <a class="pg-play" href="rpsls.html">try to out-pattern it →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="decide" data-name="prisoners dilemma tit for tat grim trigger pavlov tournament cooperate defect">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="dilemma.html">The Prisoner's Dilemma</a></h3>
+          <p>The engine agent plays tit-for-tat, grim trigger, and pavlov at the table.</p>
+          <a class="pg-open" href="dilemma.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>Tit-for-tat, grim trigger, pavlov and friends on the other side, a hard per-match ask budget, refusals falling to the mood rule on the record, and transmission noise that makes opponents retaliate against moves that never happened. Editable R/S/T/P matrix and a seeded round-robin tournament.</p>
+          <a class="pg-play" href="dilemma.html">sit down at the table →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="decide" data-name="spacecraft emergency ship captain abstain refusal telemetry cockpit">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="spacecraft.html">Spacecraft Emergency</a></h3>
+          <p>A stricken ship, six scored actions, and an engine that can abstain — then you fly.</p>
+          <a class="pg-open" href="spacecraft.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>The flight computer scores six actions, gates the hard ones off as rules, and — when telemetry conflicts or scores dead-heat — abstains: the sim freezes and you decide as the captain. An engine refusal escalates the same way. The refusal-is-a-feature demo, as a game.</p>
+          <a class="pg-play" href="spacecraft.html">open the cockpit →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="decide" data-name="quiz trivia deck questions confidence trace audit speedrun">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="quiz.html">Ask the Engine</a></h3>
+          <p>Every answer is a real engine choice request with its confidence and trace.</p>
+          <a class="pg-open" href="quiz.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>A quiz where every answer is a real engine <code>choice</code> request — pick, confidence report, execution trace — scored honestly against the keyed deck. Speed-run, audit, compete; bring your own questions in the validated JSON deck editor.</p>
+          <a class="pg-play" href="quiz.html">ask it something →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="worlds" data-name="ant colony ants pheromone swarm trail emergence ants">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="antcolony.html">Ant Colony</a></h3>
+          <p>A thousand deciding ants, and a trail network nobody designed.</p>
+          <a class="pg-open" href="antcolony.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>Up to a thousand ants deciding at one hertz — RETURN and GATHER are rules that never reach the engine, the rest is scored and near-ties go to the engine under a batching budget. A trail network nobody designed emerges from the pheromones; the decisions/s counter keeps the scale honest.</p>
+          <a class="pg-play" href="antcolony.html">start the colony →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="worlds" data-name="civ civilization 60 seconds citizens city hunger farm build trade shortage">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="civ60.html">AI Civilization in 60 Seconds</a></h3>
+          <p>A tiny city of deciding citizens; inject a shortage and watch the cascade.</p>
+          <a class="pg-open" href="civ60.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>Sleep, urgent eating and childbirth are rules that never reach the engine; farm vs work vs build vs trade vs explore is scored, and near-ties go to the engine under a batching budget. Inject a shortage and watch the cascade: hunger up, farming up, building down, homelessness growing.</p>
+          <a class="pg-play" href="civ60.html">found the city →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="worlds" data-name="traffic lights signals cars intersection congestion throughput preemption">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="traffic.html">Traffic Simulator</a></h3>
+          <p>Every car is a rule; the signal lights are the deciders.</p>
+          <a class="pg-open" href="traffic.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>Stop, go, wait, turn, reroute are rules. The signal lights are the decision agents: near-tie phase calls go to the engine over keep/switch under a city-wide ask budget, and emergency preemption is a rule that is never a question. Throughput and wait percentiles make the congestion slider honest.</p>
+          <a class="pg-play" href="traffic.html">open the city →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="worlds" data-name="tower defense waves enemies targeting policy sabotage defense">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="tower.html">Tower Defense</a></h3>
+          <p>Enemies and towers both decide out loud, on seeded deterministic waves.</p>
+          <a class="pg-open" href="tower.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>Enemies run the rule ladder (advance, divert, retreat, regroup, sabotage) while towers score six targeting policies per shot and hand genuine near-ties to the engine. Seeded deterministic waves, a decisions/s counter, and click-to-take-over tower policies.</p>
+          <a class="pg-play" href="tower.html">raise the towers →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="puzzle" data-name="maze solver dungeon crawler torch los monsters loot search bresenham">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="maze.html">Maze Solver &amp; Dungeon Crawler</a></h3>
+          <p>A dungeon crawler where the search sees only what it has seen.</p>
+          <a class="pg-open" href="maze.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>Classic corridors or room-and-hallway dungeons with two vision models, monsters with a real line-of-sight ray, loot to gather and an exit to find. The solver solves only from what has been seen, genuine ties go to the engine, and the god view is a declared cheat that scores nothing.</p>
+          <a class="pg-play" href="maze.html">enter the maze →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="puzzle" data-name="rubiks cube 3d solver layer by layer scramble orbit plan">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="cube.html">Rubik's Cube</a></h3>
+          <p>A real 3D cube with a layer-by-layer solver that shows its plan step by step.</p>
+          <a class="pg-open" href="cube.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>Drag to orbit, turn faces by hand, scramble, and ask for the plan: a deterministic layer-by-layer solver where every move is simulation-verified before it plays. The genuine ties (which equal-length setup) go to the engine, and each step's rung chip says rule, roster, or engine.</p>
+          <a class="pg-play" href="cube.html">scramble it and ask for the plan →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="puzzle" data-name="game of life conway cellular automata glider oscillator spaceship patterns">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="life.html">Game of Life</a></h3>
+          <p>Conway's automaton with variants — and the engine proposes the next seed.</p>
+          <a class="pg-open" href="life.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>Rule variants and a pattern library: the engine reads the board (still, oscillator, spaceship, exploding) and proposes the next interesting seed; ties on equal-interest seeds escalate to it. Paint cells while it runs.</p>
+          <a class="pg-play" href="life.html">run life →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="arcade" data-name="pacman pac-maze arcade ghosts pellets power pellets fright maze">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="pacman.html">Pac-maze</a></h3>
+          <p>Pellets, power pellets, and six ghost personalities deciding every turn.</p>
+          <a class="pg-open" href="pacman.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>The maze generator reused as an arcade: pellets, power pellets, and six ghost personalities whose chase/ambush/flee weight vectors decide every turn — genuine ties escalate to the engine, fright and eaten-eyes are rules you can watch run. Play yourself or flip on the bot.</p>
+          <a class="pg-play" href="pacman.html">enter the maze →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="arcade" data-name="pong paddle tennis reward weights incentives intercept">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="pong.html">Pong</a></h3>
+          <p>Two engine-driven paddles; edit the reward weights and watch the incentives.</p>
+          <a class="pg-open" href="pong.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>The paddles score candidate targets — intercept, edge-spin, rest-center, mirror-the-opponent — against five reward weights you edit live, and watch the incentives play out. Genuine ties escalate to the engine.</p>
+          <a class="pg-play" href="pong.html">play pong →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="arcade" data-name="racing racer apex line track 2.5d slipstream suggested line">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="racing.html">Apex Line</a></h3>
+          <p>A 2.5D racer where AI opponents score four candidate lines every stretch.</p>
+          <a class="pg-open" href="racing.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>Seeded, hilly tracks: AI racers score apex, inside, outside, slipstream with personality weights; genuine ties go to the engine, and your suggested-line chip shows which rung answered it. Traffic is a rule.</p>
+          <a class="pg-play" href="racing.html">take the flag →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="arcade" data-name="gridwars twin stick arena shooter neon geometry warping grid waves deterministic">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="gridwars.html">GridWars</a></h3>
+          <p>A twin-stick neon arena where every geometry decides out loud on a warping grid.</p>
+          <a class="pg-open" href="gridwars.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>Diamonds jink off your fire line, squares flee and split into three, rockets charge and brake, snakes eat your trail, wells swallow fire until they burst. Every enemy picks a labelled tag five times a second and the state panel counts each one; waves are seeded and deterministic, and the engine names which geometry enters next.</p>
+          <a class="pg-play" href="gridwars.html">enter the grid →</a>
+        </div>
+      </div>
+    </div>
+    <div class="pg-flip" tabindex="0" role="button" aria-pressed="false" aria-label="Game card — press Enter to flip for details" data-cat="arcade" data-name="fighter sparring partner boxing predict habits histogram learning">
+      <div class="pg-flip-inner">
+        <div class="pg-face pg-front card">
+          <span class="pg-badge playable">playable live</span>
+          <h3><a href="fighter.html">Sparring Partner</a></h3>
+          <p>An opponent that keeps a decayed histogram of your habits and predicts your next attack.</p>
+          <a class="pg-open" href="fighter.html">▶ Play</a>
+          <span class="pg-where">click the card for details →</span>
+        </div>
+        <div class="pg-face pg-back card">
+          <p>A side-view fighter whose opponent predicts from your recorded moves per situation and escalates near-tie answers to the engine — with your habits in the question. Inspect and reset the learning anytime.</p>
+          <a class="pg-play" href="fighter.html">enter the ring →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 2.6rem;">
+    <h3>One runtime under all of it</h3>
+    <p>
+      The games share a small SDK — seeded RNG, fixed-timestep loop, config
+      normalization, rubric scoring, the engine adapter, and the UI shell — so a
+      new game is mostly its own map, rules, and rendering. The same SDK doubles
+      as the honest way to use the engine outside games: deterministic seeds as
+      test fixtures, verdict gates in CI, and plain typed decisions with
+      calibrated confidence anywhere a choice needs an audit trail. The maze's
+      methodology is documented end to end in
+      <code>docs/planning/playground/DECISIONS-SDK-PLAN.md</code>.
+    </p>
+  </div>
+</section>
+
+<!-- ============ DECIDE CONSOLE — its own page ============ -->
+<section id="decide" class="section">
+  <div class="kicker">Decide</div>
+  <h2>The Decide console lives on <span class="grad">its own page</span></h2>
+  <p class="lede">
+    The full request → decision → trace loop — the real WASM engine, honest refusals,
+    byte-checkable traces, a declarative graph runner — with room to breathe.
+    These presets load <em>and decide</em> the moment the console boots.
+  </p>
+  <div class="pg-actions">
+    <a class="btn" href="decide.html?run=proof">Run the accept case</a>
+    <a class="btn btn-ghost" href="decide.html?run=lexical">Run the verify case</a>
+    <a class="btn btn-ghost" href="decide.html?run=hard">Run the abstain case</a>
+    <a class="btn btn-ghost" href="decide.html?run=invalid">Run the refusal case</a>
+    <a class="btn btn-ghost" href="decide.html">Open the console →</a>
+  </div>
+  <p class="fineprint">Prefer the terminal? The same decisions from
+    <code>cargo run --bin opencodifier-cli -- decide</code>, or serve the HTTP API and hit
+    <a href="api.html">the documented endpoints</a>.</p>
+</section>
+</main>
+
+<footer class="footer">
+  <div class="footer-grid">
+    <div class="foot-about">
+      <div class="foot-brand">opencodifier</div>
+      <p>A local-first decision runtime: typed decisions with calibrated confidence, a
+        deterministic execution trace instead of chain-of-thought, and refusal as a
+        first-class outcome. The module this page runs is built from the same commit as the
+        <a href="benchmarks.html">measured board</a>.</p>
+      <!-- Ecosystem-wide tag: every site in the workshop carries this. -->
+      <a class="foot-tag" href="https://github.com/TaskWizer" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><path d="M7.5 12.2l3 3L16.5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Built with TaskWizer AI technologies
+      </a>
+    </div>
+    <nav class="foot-col" aria-label="Site">
+      <div class="foot-head">Site</div>
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">The measured board</a>
+      <a href="playground.html">Playground</a>
+    <a href="decide.html">Decide</a>
+      <a href="api.html">API documentation</a>
+      <a href="index.html#faq">FAQ</a>
+    </nav>
+    <nav class="foot-col" aria-label="Source and data">
+      <div class="foot-head">Source &amp; data</div>
+      <a href="board.csv">board.csv (raw)</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier" rel="noopener">GitHub</a>
+      <a href="https://huggingface.co/TaskWizerAI" rel="noopener">Hugging Face ↗</a>
+    </nav>
+    <nav class="foot-col" aria-label="Ecosystem">
+      <div class="foot-head">Ecosystem</div>
+      <a href="https://vivere-5we.pages.dev/" rel="noopener">VIVERE ↗</a>
+      <a href="https://www.amortyx.com" rel="noopener">Amortyx ↗</a>
+      <a href="https://www.mcpmanage.com" rel="noopener">MCPManage ↗</a>
+      <a href="https://github.com/aliasfoxkde/aegis" rel="noopener">Aegis ↗</a>
+      <a href="https://github.com/aliasfoxkde/GitForge" rel="noopener">GitForge ↗</a>
+    </nav>
+  </div>
+  <p class="foot-links">Apache-2.0 · local-first · no telemetry · no external requests</p>
+</footer>
+
+<script src="site-core.js"></script>
+<script src="toc.js"></script>
+<script src="sdk/decisions-sdk.js"></script>
+<script>
+/* ?run= deep links belong to the console now (demo.js owns them there). */
+(function () {
+  "use strict";
+  if (new URLSearchParams(location.search).get("run")) {
+    location.replace("decide.html" + location.search + location.hash);
+  }
+})();
+</script>
+<script src="maze-core.js"></script>
+<script src="maze.js"></script>
+<script>
+/* library filter: chips + search combine; cards flip on click/tap/Enter */
+(function () {
+  var cards = Array.prototype.slice.call(document.querySelectorAll(".pg-flip"));
+  var chips = Array.prototype.slice.call(document.querySelectorAll(".pg-chip"));
+  var search = document.getElementById("pg-search");
+  var empty = document.getElementById("pg-empty");
+  var cat = "all";
+  function apply() {
+    var q = (search.value || "").trim().toLowerCase();
+    var shown = 0;
+    cards.forEach(function (c) {
+      var ok = (cat === "all" || c.getAttribute("data-cat") === cat) &&
+        (!q || (c.getAttribute("data-name") || "").indexOf(q) !== -1);
+      c.hidden = !ok;
+      if (ok) shown++;
+    });
+    empty.hidden = shown !== 0;
+  }
+  chips.forEach(function (ch) {
+    ch.addEventListener("click", function () {
+      cat = ch.getAttribute("data-cat");
+      chips.forEach(function (o) { o.classList.toggle("is-on", o === ch); });
+      apply();
+    });
+  });
+  if (search) search.addEventListener("input", apply);
+  cards.forEach(function (c) {
+    function flip() {
+      var on = c.classList.toggle("is-flipped");
+      c.setAttribute("aria-pressed", String(on));
+    }
+    c.addEventListener("click", function (e) {
+      if (e.target.closest("a") || e.target.closest("button")) return;
+      flip();
+    });
+    c.addEventListener("keydown", function (e) {
+      if (e.target !== c) return;   /* links and buttons keep their own keys */
+      if (e.key === "Enter" || e.key === " ") { flip(); e.preventDefault(); }
+    });
+  });
+  /* card height = tallest face, so no copy is clipped at any width */
+  function sizeFlips() {
+    cards.forEach(function (f) {
+      var a = f.querySelector(".pg-front"), b = f.querySelector(".pg-back");
+      var border = a.offsetHeight - a.clientHeight;   /* .card's 1px top+bottom */
+      f.style.height = (Math.max(a.scrollHeight, b.scrollHeight) + border) + "px";
+    });
+  }
+  sizeFlips();
+  window.addEventListener("resize", sizeFlips);
+  window.addEventListener("load", sizeFlips);
+})();
+</script>
+</body>
+</html>
