@@ -2592,3 +2592,33 @@ redundant-guard pass found exactly one provably-implied guard
 other 35 missed lines are `#[non_exhaustive]` totality arms or
 boundary-honesty guards behind cross-module validation, each now
 documented in place rather than deleted.
+
+### §15.9 Addendum (2026-10-08): third-party 2B decision models measured — the 2B tier replicated (task #125)
+
+Task #125 put two independently trained 2B-class Jev-contract decision
+models through the authors' harness on the public 231, each under its
+own authors' protocol (JEVBENCH.md arm 6). §14.7's landscape gains two
+measured points:
+
+| system | public acc | protocol | source |
+|---|---:|---|---|
+| decider-2b-v11 (Mapika, Q4_K_M) | 0.7576 (our run) | serial single-pass letter readout, authors' temperatures (noul 1.624 / choice 1.164) | this program |
+| imajev-2b (mindchain, Q4_K_M) | 0.7359 (our run) | serial single-pass, shipped T=1.646, unknown→abstain scored incorrect | this program |
+| decider-2b | 71.0 % | board row | anchor |
+| imajev-2b | 78.8 % | card: 4 rotations + calibration (raw single-pass 77.9 %) | self-reported |
+
+Reads that hold after the leg:
+
+1. **The 2B tier is real and replicable** — both arms land 0.73–0.76
+   under our single-pass protocol, bracketing the Jev-Style-2B anchor
+   (73.6 %) and the 0.8B bridge (0.6494), below the 4B fork (0.7662).
+2. **The hard split is the 2B wall** (easy 0.96–1.00, original
+   0.88–0.90, hard 0.53–0.58) — composition-heavy items, the same
+   profile the nli arm showed; scale, not verbalization, moves it.
+3. **Shipped calibrations hold single-pass**: ECE 0.032 (imajev) /
+   0.058 (decider) — the third and fourth trained arms under 0.1 ECE
+   on this suite (bridge 0.080, fork d15 0.070), against the engine's
+   raw 0.393.
+4. **No serving case**: 2.5–3.8 s p50 serial vs the fork's 2.28 s at
+   higher accuracy — the fork keeps the rung; these rows are the
+   independent-replication receipts the board submission cites.

@@ -546,6 +546,8 @@ scoring drift against every published row is zero by construction.
 | **vtx** (VTX-JEV-3 LF2 via vendor `JevClient`) | 231 | 0.4113 | 0.4318 | 0.126 | 0.684 | **7.9 ms** | done, det 231/231 |
 | **fork_4b** (tree mode, D16 config, fork-default T — **fedora anchor**, 2026-10-02) | 231 | **0.7662** | **0.7571** | 0.070 ¹ | 0.305 ¹ | 2.28 s | done, det 231/231 (labels) |
 | **nli-zeroshot** (deberta-v3-base-zeroshot-v2.0 `onnx/model.onnx`, entailment renorm, 2026-10-08) | 231 | 0.5325 | 0.4904 | 0.232 | 0.648 | 0.57 s | done, det 231/231 |
+| **gguf: imajev-2b** (mindchain Q4_K_M, authors' standard prompt, shipped T=1.646 letter readout, unknown→abstain scored incorrect, 2026-10-08) | 231 | 0.7359 | 0.7449 | 0.032 | 0.315 | 3.83 s | done, det 231/231 (226 valid + 5 abst) |
+| **gguf: decider-2b-v11** (Mapika Q4_K_M, authors' `prompt.build` + temperature module, 2026-10-08) | 231 | 0.7576 | 0.7632 | 0.058 | 0.332 | 2.54 s | done, det 231/231 |
 
 ¹ ECE/Brier come from the decision-identical build-`d15` arm
 (`fork_4b-d15-v1`, same host/build/split, predictions verified equal on
@@ -624,6 +626,31 @@ item at 4 threads (the premise is encoded once per option), p95 6.9 s on
 long_policy items. D14 registration: graph/tokenizer/config digests are
 in `../results/models.manifest.json`; per-run hashes recorded in the
 run's own manifest.
+
+**Reading the gguf rows (task #125).** Two third-party 2B decision
+models, each measured under its own author's protocol (JEVBENCH.md
+arm 6): decider-2b-v11 Q4_K_M **0.7576** / macro 0.7632, imajev-2b
+Q4_K_M **0.7359** / macro 0.7449 (226 valid native+unknown
+distributions, 5 unknown-argmax abstentions scored incorrect per the
+authors' own rule; decider 231/231 valid). Both land between the 0.8B
+bridge (0.6494) and the 4B fork (0.7662) — the first independent
+replication of the 2B tier on this suite. The anchor deltas are
+protocol-shaped, not harness-shaped: decider's +4.8 pp over its 71.0 %
+board row and imajev's 4–5 pp deficit to its card record (0.788 under
+4-rotation + calibration pooling; 0.779 raw single-pass) bracket a
+harness that measured the bridge at +0.9 pp vs self-report. Per-split,
+the 2B wall is identical on both — easy 1.000 / 0.958, original 0.875 /
+0.903, hard 0.577 / 0.532 — composition-heavy items, the same families
+where the engine abstains honestly. The calibration receipts are the
+second product: both shipped temperatures hold single-pass (ECE 0.058
+under the authors' noul 1.624 / choice 1.164 split; 0.032 at a flat
+1.646) — the third and fourth trained arms under 0.1 ECE on this
+suite, against the engine's raw 0.393. No serving wiring: 2.5–3.8 s
+p50 serial CPU under a co-tenant load window (load 20–54; p95 spikes
+are load artifacts) buys no dominance over the fork's 2.28 s at higher
+accuracy. D14 hashes registered (`../results/models.manifest.json`);
+per-run manifests and raw evidence outside both repos
+(`runs/jevbench/{imajev,decider}-2b-gguf/`).
 
 **Reading the bridge row.** 0.6494 (150/231) vs the published 64.1 %
 (148/231) is a +0.9 pp reproduction delta on the authors' own harness —

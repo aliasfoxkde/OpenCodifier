@@ -148,6 +148,29 @@ channel, and the raw evidence records the exact rendered request.
    point the field lacked: what a generic entailment cross-encoder —
    no Jev training at all — scores on the suite.
 
+6. **Third-party 2B GGUF decision models (task #125, 2026-10-08).**
+   Two independently trained 2B-class decision models through one
+   shared letter-code readout (`run_jevbench.py --arm gguf
+   --gguf-family {imajev,decider}`), each under its authors' own
+   protocol: **imajev-2b** (mindchain Q4_K_M of `mohit67890/imajev-2b`)
+   — the standard prompt layout from the authors'
+   `vision_decision/scoring.py` (header + JSON state + question +
+   `code: description` lines, the fixed unknown candidate last), the
+   base Qwen3.5-2B chat template with thinking off, the 255
+   single-token option codes derived with the authors' own algorithm
+   and binding-verified against the shipped `decision_readout.json`
+   (codes AND token ids) before any scoring, divided by the shipped
+   calibration temperature 1.646; unknown-argmax is scored incorrect
+   (the authors' own JevBench rule) with surviving option masses
+   renormalized for Brier/ECE. **decider-2b-v11** (Mapika Q4_K_M) —
+   the authors' own vendored `decider.prompt.build()` plain
+   state-first layout with `decider.temperature` (noul 1.624 / choice
+   1.164); score items render as one choice row over levels
+   (jev_native/vtx convention — a recorded divergence from the
+   authors' isolated-level protocol). Both: serial decode (the
+   decider card measures batching shifting Q4 probs by up to 0.16),
+   letter logits at the answer slot.
+
 Anchor rows published for the public split (sources: jev-style repo README;
 JevBench RESULTS; jev.page):
 
@@ -157,6 +180,7 @@ JevBench RESULTS; jev.page):
 | llm-qwen3.5-4b (jev.page) | 80.5 % / 651 ms p50 | self-reported |
 | Jev-Style-2B v3 | 73.6 % | self-run, GGUF F16 |
 | decider-2b | 71.0 % | board |
+| imajev-2b | 78.8 % | self-reported, HF card (4 rotations + calibration; raw single-pass 77.9 %) |
 | **Jev-Style-0.8B v3** | **64.1 % (148/231)** | **self-run, official harness — our bridge** |
 | open-jev-zefan-2b | 64.5 % | board |
 | Laya | 58.4 % | official |
@@ -206,9 +230,32 @@ milliseconds. Acceptance criteria:
 | **jev_native bridge (0.8B-v3 Q4_K_M)** | **0.6494** | 0.6378 | **0.080** | 0.425 | 6.72 s / 103.8 s | 231/231 (labels + probs) | native |
 | vtx (VTX-JEV-3 LF2, vendor client) | 0.4113 | 0.4318 | 0.126 | 0.684 | 7.9 ms | 231/231 | native |
 | nli-zeroshot (deberta-v3-base-zeroshot-v2.0, entailment renorm, 2026-10-08) | 0.5325 | 0.4904 | 0.232 | 0.648 | 0.57 s / 6.9 s | 231/231 (labels + probs) | native |
+| imajev-2b (mindchain Q4_K_M, authors' prompt + shipped T=1.646, unknown→abstain scored incorrect, 2026-10-08) | 0.7359 | 0.7449 | 0.032 | 0.315 | 3.83 s / 68.7 s | 231/231 (labels) | native + unknown (226 valid / 5 abst) |
+| decider-2b-v11 (Mapika Q4_K_M, authors' `prompt.build` + temperature module, 2026-10-08) | 0.7576 | 0.7632 | 0.058 | 0.332 | 2.54 s / 27.9 s | 231/231 (labels + probs) | native |
 | engine + 4B rung, fusion-v2 gate (2026-10-05) | 0.5584 | 0.5622 | 0.335 | 0.734 | 1.2 ms / 0.73 s | 231/231 | native |
 | engine + 4B rung, proofs-only posture (2026-10-05) | **0.6883** | 0.6622 | 0.171 | 0.431 | 0.58 s / 14.0 s | 231/231 | native |
 | engine + 4B rung, proofs-only posture (2026-10-06 D35 rerun) | 0.6840 | 0.6593 | 0.170 | 0.436 | 0.82 s / 18.7 s | 231/231 | native |
+
+**The third-party 2B GGUF rows (task #125, 2026-10-08).** Two
+independently trained 2B decision models, each under its authors' own
+protocol (arm 6 above), on the same harness and split. decider-2b-v11
+Q4_K_M scores **0.7576** (ECE 0.058) — +4.8 pp above its 71.0 % board
+anchor; imajev-2b Q4_K_M scores **0.7359** (ECE 0.032; 5
+unknown-argmax abstentions scored incorrect per the authors' own rule)
+— 4–5 pp below its card's self-record, which pools 4 rotations +
+calibration (the card's raw single-pass: 0.779). The bridge measured
++0.9 pp vs self-report on this harness, so neither delta implicates
+scoring drift; both are protocol-shaped. Per-split: decider easy
+1.000 / original 0.875 / hard 0.577; imajev easy 0.958 / original
+0.903 / hard 0.532 — the hard split is the 2B-class wall on both
+(the 4B fork takes the suite at 0.766). Both arms replay 231/231
+label-identical; p50 2.5–3.8 s CPU serial under a co-tenant load
+window (load 20–54 recorded). Ladder read: a 2B letter-readout rung
+would slot between the 0.8B bridge (0.6494) and the 4B fork (0.7662)
+with no dominance case over the fork (2.28 s, higher accuracy) — the
+rows are independent replication and calibration receipts, not
+serving candidates. Raw evidence: `runs/jevbench/{imajev,decider}-2b-gguf/`
+outside both repos; D14 hashes in `results/models.manifest.json`.
 
 The engine row was re-measured on the shipped build
 (`runs/jevbench/engine-only-fedora-v1/`, archived on the compute host):
