@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Pre-paint theme resolution — mirrors index.html; owned by site-core.js. -->
+<script>
+(function () {
+  "use strict";
+  var mode = "system";
+  try {
+    var v = localStorage.getItem("oc-theme");
+    if (v === "light" || v === "dark" || v === "system") mode = v;
+  } catch (e) { /* storage unavailable: system default */ }
+  var resolved = mode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : mode;
+  document.documentElement.setAttribute("data-theme", resolved);
+  document.documentElement.setAttribute("data-theme-mode", mode);
+})();
+</script>
+<title>OpenCodifier — Maze Solver &amp; Dungeon Crawler</title>
+<meta name="description" content="A fog-of-war maze crawler where every step the bot takes is a decision made the same way the runtime makes them: cheapest reliable mechanism first. Rules, then breadth-first searches over only what has been seen, and genuine ties go to the WASM engine. Play yourself (WASD) or race the ghost in versus.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:site_name" content="OpenCodifier">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://opencodifier.pages.dev/maze.html">
+<meta property="og:title" content="OpenCodifier — Maze Solver &amp; Dungeon Crawler">
+<meta property="og:description" content="Fog-of-war maze crawler: the bot gets the same darkness you get, and every step lands on a labeled rung — rule, search, or engine tie. Two map types, two vision modes, session-only leaderboard.">
+<meta property="og:image" content="https://opencodifier.pages.dev/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="tw.css">
+</head>
+<body class="page-wide">
+<a class="skip-link" href="#maze">Skip to the maze</a>
+
+<div class="bg-mesh" aria-hidden="true"></div>
+
+<nav class="nav">
+  <a class="brand" href="index.html">
+    <img src="assets/logo.svg" alt="" width="22" height="22">
+    opencodifier
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="benchmarks.html">Benchmarks</a>
+    <a href="playground.html" aria-current="page">Playground</a>
+    <a href="decide.html">Decide</a>
+    <a href="api.html">API</a>
+    <a href="docs.html">Docs</a>
+  </div>
+  <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Theme: system (matches your device) — activate for light">
+    <svg class="tt-auto" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.2 14.5A8.3 8.3 0 0 1 9.5 3.8a8.3 8.3 0 1 0 10.7 10.7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+  <a class="nav-gh" href="https://github.com/aliasfoxkde/OpenCodifier" aria-label="OpenCodifier on GitHub" rel="noopener">
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+  </a>
+  <a class="btn btn-small nav-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+  <a class="btn btn-small" href="api.html">API docs</a>
+  <details class="nav-menu">
+    <summary aria-label="Open menu"><span></span><span></span><span></span></summary>
+    <div class="nav-menu-panel">
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">Benchmarks</a>
+      <a href="playground.html" aria-current="page">Playground</a>
+    <a href="decide.html">Decide</a>
+      <a href="api.html">API</a>
+      <a href="docs.html">Docs</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier">GitHub ↗</a>
+      <div class="nav-menu-foot">
+        <a class="nav-menu-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+        <span class="nav-menu-themeslot" aria-hidden="true"></span>
+      </div>
+    </div>
+  </details>
+</nav>
+
+<header class="hero hero-slim" id="top">
+  <h1><span class="grad">Maze Solver</span> &amp; Dungeon Crawler</h1>
+  <p class="hero-sub">
+    A fog-of-war crawler where <strong>every step is a decision made the same
+    way the runtime makes them: cheapest reliable mechanism first</strong>. No
+    neural network anywhere: the scout checks rules (fight is forced, exit one
+    step away, monster too close), falls back to breadth-first searches over
+    <em>only what it has seen</em>, and when two frontier routes cost exactly
+    the same the genuine tie goes to the same WASM engine the whole playground
+    runs. The rung chip beside the canvas names what decided every single step.
+    Play yourself (WASD / arrows), or race a ghost of the bot that runs its own
+    identical maze under its own fog.
+  </p>
+  </header>
+
+<main>
+<section id="maze" class="section" data-toc-label="Maze Solver">
+  <div id="maze-root" aria-label="Maze Solver game"></div>
+
+  <div class="grid-2 game-about">
+    <div class="card">
+      <h3>What decides what</h3>
+      <ul class="checks">
+        <li><strong>Rules fire first, always.</strong> Forced fights, an exit
+          one step away, a monster inside its chase radius — the scout never
+          puts a rule on the wire. The trace panel shows every step's rung,
+          so &ldquo;the engine decided this&rdquo; is always a checkable
+          claim, never a vibe.</li>
+        <li><strong>Search sees only what the bot has seen.</strong> Exit
+          route, loot, chests, nearest unexplored frontier — all breadth-first
+          over the <em>remembered</em> map. The fog is honest: avoid-monsters
+          routes around every threat it has actually seen, and nothing it
+          hasn't.</li>
+        <li><strong>Genuine ties go to the engine.</strong> Two frontier
+          routes costing exactly the same becomes a real <code>choice</code>
+          request when the engine checkbox is on — the same WASM runtime the
+          rest of the playground uses. Switch it off and the tie falls back
+          to plain roster order.</li>
+        <li><strong>God view is a declared cheat.</strong> Any run finished
+          while the god view is on is marked <em>assisted</em> and scores
+          nothing on the session board.</li>
+      </ul>
+    </div>
+    <div class="card card-honest">
+      <h3>Honest edges</h3>
+      <ul class="crosses">
+        <li>Two map types (classic corridors, rooms-and-hallways dungeons) and
+          two vision modes (full disc, facing torch cone). Bigger maps are
+          genuinely more cells, not the same map scaled up.</li>
+        <li>Monsters chase along a real line-of-sight ray (Bresenham per cell,
+          walls stop it) and cost a two-second static fight on contact. Chests
+          take one second and hold coins 0&ndash;5&hellip; or something with
+          teeth.</li>
+        <li>Found everything? The exit is the one opening in the outer wall —
+          usually as far from the middle as it can be.</li>
+        <li>The leaderboard is session-only: nothing you do is stored, sent,
+          or scored anywhere but this tab.</li>
+      </ul>
+    </div>
+  </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer-grid">
+    <div class="foot-about">
+      <div class="foot-brand">opencodifier</div>
+      <p>A local-first decision runtime: typed decisions with calibrated confidence, a
+        deterministic execution trace instead of chain-of-thought, and refusal as a
+        first-class outcome. Pong, Life, Pac-maze, Apex Line, Sparring Partner, Ask the Engine,
+        Tower Defense, Ant Colony, the Rubik's Cube, and this maze run on the same Decisions SDK — the scoreboard lives in this tab and nowhere else.</p>
+      <a class="foot-tag" href="https://github.com/TaskWizer" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><path d="M7.5 12.2l3 3L16.5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Built with TaskWizer AI technologies
+      </a>
+    </div>
+    <nav class="foot-col" aria-label="Site">
+      <div class="foot-head">Site</div>
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">The measured board</a>
+      <a href="playground.html">Playground</a>
+    <a href="decide.html">Decide</a>
+      <a href="api.html">API documentation</a>
+    </nav>
+    <nav class="foot-col" aria-label="Source and data">
+      <div class="foot-head">Source &amp; data</div>
+      <a href="board.csv">board.csv (raw)</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier" rel="noopener">GitHub</a>
+      <a href="https://huggingface.co/TaskWizerAI" rel="noopener">Hugging Face ↗</a>
+    </nav>
+    <nav class="foot-col" aria-label="Ecosystem">
+      <div class="foot-head">Ecosystem</div>
+      <a href="https://vivere-5we.pages.dev/" rel="noopener">VIVERE ↗</a>
+      <a href="https://www.amortyx.com" rel="noopener">Amortyx ↗</a>
+      <a href="https://www.mcpmanage.com" rel="noopener">MCPManage ↗</a>
+      <a href="https://github.com/aliasfoxkde/aegis" rel="noopener">Aegis ↗</a>
+      <a href="https://github.com/aliasfoxkde/GitForge" rel="noopener">GitForge ↗</a>
+    </nav>
+  </div>
+  <p class="foot-links">Apache-2.0 · local-first · no telemetry · no external requests</p>
+</footer>
+
+<script src="site-core.js"></script>
+<script src="toc.js"></script>
+<script src="sdk/decisions-sdk.js"></script>
+<script src="maze-core.js"></script>
+<script src="maze.js"></script>
+</body>
+</html>
