@@ -67,13 +67,18 @@ opencodifier/
 ├── site/                    # static marketing page (Cloudflare Pages direct-upload;
 │                            #   Tailwind runs as a dev-time pipeline only —
 │                            #   `npm run build:css` writes the committed tw.css)
-│   ├── maze-core.js         # maze demo pure logic (seeded RNG, generation,
-│   │                        #   Bresenham FOV, bot ladder, entities, rubric
-│   │                        #   scoring) — DOM-free, node-testable
-│   ├── maze.js              # maze demo shell: DPR canvas renderer, input,
-│   │                        #   rAF loop, modes (bot/play/versus), session
-│   │                        #   leaderboard, rubric editor, WASM tie-breaks
-│   └── tests/               # node --test suites (board page + maze core/shell/deep-link)
+│   ├── sdk/decisions-sdk.js # the Decisions SDK the playground games share:
+│   │                        #   seeded rng, wire-contract builders, engine
+│   │                        #   bridge (WASM), session boards, meters, shell kit
+│   ├── *-core.js            # one DOM-free, node-testable core per game
+│   │                        #   (pong, life, pacman, racing, fighter, quiz,
+│   │                        #   tower, antcolony, civ60, traffic, spacecraft,
+│   │                        #   dilemma, rpsls, door) — seeded, deterministic
+│   ├── <game>.js            # per-game rendering shells (canvas/DOM chrome;
+│   │                        #   rendering never touches an rng stream)
+│   ├── playground.html      # merged playground: maze demo + game library
+│   └── tests/               # node --test suites: board page, maze
+│                            #   core/shell/deep-link, SDK games (20 files)
 └── docs/                    # PLANNING.md (founding), PLAN.md (live plan), …
                              #   RELEASE_NOTES_TEMPLATE.md is the release-notes
                              #   skeleton; `just release-notes` fills its
