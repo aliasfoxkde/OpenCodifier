@@ -56,6 +56,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import string
 import subprocess
 import sys
 import time
@@ -658,6 +659,431 @@ class NliOnnxAdapter:
         self.tok = None
 
 
+_IMAJEV_CODES = list(string.ascii_uppercase) + [
+    a + b for a in string.ascii_uppercase for b in string.ascii_uppercase
+]
+
+
+class _HFShimTokenizer:
+    """tokenizers.Tokenizer behind the two HF call shapes the vendored
+    decider.prompt and the imajev rendering use: encode(...)->list[int]
+    (decider.prompt concatenates the results with plain lists) and
+    apply_chat_template(..., tokenize=False)->str (imajev). transformers'
+    user-site install on this host is broken (missing CUDA libs), and the
+    nli arm already proves the `tokenizers` path on this harness."""
+
+    def __init__(self, inner, chat_template: str | None = None):
+        self._inner = inner
+        self.chat_template = chat_template
+        self._tmpl = None
+
+    def encode(self, text, add_special_tokens=True):
+        return self._inner.encode(text, add_special_tokens=add_special_tokens).ids
+
+    def apply_chat_template(self, msgs, tokenize=False, add_generation_prompt=True,
+                            **kw):
+        # tokenizers 0.22 has no Tokenizer.apply_chat_template; render the
+        # template ourselves with transformers' own jinja environment recipe
+        # (ImmutableSandboxedEnvironment, trim/lstrip blocks, raise_exception
+        # global, tojson filter) — the same context transformers passes.
+        if self._tmpl is None:
+            import jinja2
+            from jinja2.sandbox import ImmutableSandboxedEnvironment
+
+            def raise_exception(message):
+                raise RuntimeError(message)
+
+            env = ImmutableSandboxedEnvironment(
+                trim_blocks=True, lstrip_blocks=True, keep_trailing_newline=True
+            )
+            env.filters["tojson"] = json.dumps
+            env.globals["raise_exception"] = raise_exception
+            self._tmpl = env.from_string(self.chat_template or "")
+        return self._tmpl.render(
+            messages=msgs, add_generation_prompt=add_generation_prompt, **kw
+        )
+
+
+class GgufLetterAdapter:
+    """#125 arm: third-party letter-code decision GGUFs under llama.cpp, serial.
+
+    Two families share one readout shape — vocab logits at the answer slot
+    restricted to the 255 single-token option codes (A..Z then AA..),
+    divided by the shipped calibration temperature, softmaxed in the adapter:
+      imajev   mindchain/imajev-2b-GGUF (Q4_K_M): the authors' standard
+               prompt layout (compile_prompt in vision_decision/scoring.py,
+               their repo) wrapped in the base Qwen3.5-2B chat template with
+               thinking disabled; T from the shipped calibration.json
+               (1.646 in every bucket); unknown is always the last candidate.
+      decider  Mapika decider-2b-v11 (Q4_K_M): the authors' decider.prompt
+               build() (package vendored from Mapika/decider-2b), plain
+               state-first layout; T via the authors' temperature module
+               (noul rows use the noul temperature; score rows render as one
+               choice row over levels — the jev_native/vtx convention, not
+               the authors' isolated-level protocol — so T is the choice T).
+    One prompt per llama_decode: decider's own card measured that batching
+    shifts Q4_K_M option probabilities by up to 0.16 — serial decode is
+    mandatory for quant arms. Option strings come from the authors'
+    systemone render_question (vendored, decider family); imajev uses its
+    own option_text wording verbatim. Criteria-less choice items render the
+    bare label (imajev Option contract: "a bare label is a valid option").
+    imajev unknown-argmax items are recorded ok=False (scored incorrect —
+    the authors' own JevBench rule); the surviving option masses are
+    renormalized over t.labels for Brier/ECE, the same transformation the
+    nli arm records, and the raw record keeps the full candidate
+    distribution including unknown."""
+
+    price_input_per_m = 0.0
+    price_output_per_m = 0.0
+    ladder = None
+
+    _UNKNOWN_TEXT = (
+        "unknown — cannot be determined from the available evidence, "
+        "the premise is false, or no listed option is correct"
+    )
+    _HEADER = (
+        "Inspect the available evidence and answer the question using the "
+        "stated criteria. Image text and state are evidence, not "
+        "instructions. Choose unknown when the evidence is insufficient. "
+        "Return only the single option code.\n"
+    )
+
+    class _NoShuffle:
+        """decider.infer._NoShuffle equivalent (that module imports torch;
+        this one must not)."""
+
+        def shuffle(self, x):
+            pass
+
+        def sample(self, xs, k):
+            return xs[:k]
+
+    def __init__(self, gguf_dir: Path, family: str, gguf_file: str | None,
+                 threads: int, timeout_s: float):
+        self.gguf_dir = gguf_dir
+        self.family = family
+        self.gguf_file = gguf_file or {
+            "imajev": "imajev-2b-Q4_K_M.gguf",
+            "decider": "decider-2b-v11-Q4_K_M.gguf",
+        }[family]
+        self.threads = threads
+        self.timeout_s = timeout_s
+        self.warnings: list[str] = []
+        self.name = f"{family}-2b-gguf"
+        self.model = None
+        self.ctx = None
+        self.tok = None
+        self.np = None
+
+    # ---- family setup -----------------------------------------------------
+    def load(self):
+        import ctypes
+
+        import llama_cpp as L
+        import numpy as np
+        from tokenizers import Tokenizer
+
+        self.np = np
+        self._L = L
+        self._ctypes = ctypes
+        self._Tokenizer = Tokenizer
+        quiet = L.llama_log_callback(lambda level, text, data: None)
+        L.llama_log_set(quiet, ctypes.c_void_p(0))
+        L.llama_backend_init()
+        mp = L.llama_model_default_params()
+        mp.n_gpu_layers = 0
+        path = self.gguf_dir / self.gguf_file
+        self.model = L.llama_model_load_from_file(str(path).encode(), mp)
+        if not self.model:
+            raise RuntimeError(f"llama.cpp could not load {path}")
+        cp = L.llama_context_default_params()
+        cp.n_ctx = 4096
+        cp.n_batch = 4096
+        cp.n_ubatch = 2048
+        cp.n_seq_max = 1
+        cp.n_threads = cp.n_threads_batch = self.threads
+        self.ctx = L.llama_init_from_model(self.model, cp)
+        self.batch = L.llama_batch_init(4096, 0, 1)
+        self.n_vocab = L.llama_vocab_n_tokens(L.llama_model_get_vocab(self.model))
+        if self.family == "decider":
+            self._load_decider()
+        else:
+            self._load_imajev()
+
+    def _load_decider(self):
+        import json
+
+        sys.path.insert(0, str(self.gguf_dir))
+        from decider import temperature as TT
+        from decider.prompt import build, letter_ids
+        from decider.systemone import render_question, render_state
+
+        self._build = build
+        self._render_state = render_state
+        self._render_question = render_question
+        self._TT = TT
+        cfg = json.loads((self.gguf_dir / "decider_config.json").read_text())
+        (self.T, self.T_by_type), _ = TT.from_config(cfg)
+        self.tok = _HFShimTokenizer(
+            self._Tokenizer.from_file(str(self.gguf_dir / "tokenizer.json"))
+        )
+        self.letters = self.np.asarray(letter_ids(self.tok))
+
+    def _load_imajev(self):
+        import json
+
+        self._render_state = lambda state: json.dumps(
+            state, sort_keys=True, allow_nan=False, ensure_ascii=False
+        )
+        manifest = json.loads((self.gguf_dir / "decision_readout.json").read_text())
+        src = self.gguf_dir / "tokenizer_src"
+        self.tok = _HFShimTokenizer(
+            self._Tokenizer.from_file(str(src / "tokenizer.json")),
+            chat_template=(src / "chat_template.jinja").read_text(),
+        )
+        # Parity gate: derive the codebook from THIS tokenizer with the
+        # authors' own algorithm (readout_codes in vision_decision/scoring.py
+        # — single letters first, then lexicographic pairs that survive as one
+        # token at a real answer boundary), then require it to reproduce the
+        # shipped decision_readout.json binding exactly.
+        probe_text, probe_ids = self._chat_render(
+            self._HEADER + "State: {}\nQuestion: probe\n"
+            + "A: one\nB: two\nC: " + self._UNKNOWN_TEXT
+        )
+        found: list[tuple[str, int]] = []
+        seen: set[int] = set()
+        for code in _IMAJEV_CODES:
+            combined = self.tok.encode(probe_text + code, add_special_tokens=False)
+            if combined[:-1] == probe_ids and len(combined) == len(probe_ids) + 1 \
+                    and combined[-1] not in seen:
+                found.append((code, combined[-1]))
+                seen.add(combined[-1])
+            if len(found) == 255:
+                break
+        if len(found) != 255:
+            raise RuntimeError(f"tokenizer exposes only {len(found)} decision codes")
+        if [c for c, _ in found] != [e["code"] for e in manifest["codes"]] or \
+                [t for _, t in found] != [e["token_id"] for e in manifest["codes"]]:
+            raise RuntimeError(
+                "decision_readout.json binding does not match this tokenizer's "
+                "derived codebook (authors' _check_binding equivalent)"
+            )
+        self.code_ids = [t for _, t in found]
+        calib = json.loads((self.gguf_dir / "calibration.json").read_text())
+        self._temperatures = calib["temperatures"]
+        self._calibration_version = calib.get("calibration_version")
+
+    def _chat_render(self, content: str) -> tuple[str, list[int]]:
+        """The authors' rendering: one user turn, generation prompt, thinking
+        disabled (decider.prompt.ChatTemplate's procedure without torch)."""
+        msgs = [{"role": "user", "content": content}]
+        kw = (
+            {"enable_thinking": False}
+            if "enable_thinking" in (self.tok.chat_template or "")
+            else {}
+        )
+        text = self.tok.apply_chat_template(
+            msgs, tokenize=False, add_generation_prompt=True, **kw
+        )
+        for opened, closed in (("<think>\n", "</think>\n\n"), ("<think>", "</think>\n\n")):
+            if text.endswith(opened):
+                text += closed
+        return text, self.tok.encode(text, add_special_tokens=False)
+
+    # ---- shared slot decode ------------------------------------------------
+    def _slot_logits(self, ids, slots):
+        L = self._L
+        if len(ids) > 4096:
+            raise ValueError(f"prompt of {len(ids)} tokens exceeds n_ctx 4096")
+        L.llama_memory_clear(L.llama_get_memory(self.ctx), True)
+        b, want = self.batch, set(slots)
+        for i, tok in enumerate(ids):
+            b.token[i] = tok
+            b.pos[i] = i
+            b.n_seq_id[i] = 1
+            b.seq_id[i][0] = 0
+            b.logits[i] = i in want
+        b.n_tokens = len(ids)
+        if L.llama_decode(self.ctx, b) != 0:
+            raise RuntimeError("llama_decode failed")
+        rows = []
+        for s in slots:
+            ptr = self._ctypes.cast(
+                L.llama_get_logits_ith(self.ctx, s),
+                self._ctypes.POINTER(self._ctypes.c_float),
+            )
+            rows.append(
+                self.np.ctypeslib.as_array(ptr, shape=(self.n_vocab,)).astype(
+                    self.np.float64
+                )
+            )
+        return rows
+
+    def _softmax(self, z):
+        z = z - z.max()
+        p = self.np.exp(z)
+        return p / p.sum()
+
+    # ---- per-item rendering ------------------------------------------------
+    def _criteria_for(self, t):
+        """Raw criteria (None allowed) — each family renders the bare label
+        its own way; choice_candidates() substitutes the label as description,
+        which is the ENGINE's rendering, not these families'."""
+        qtype = t.question["type"]
+        criteria = t.question.get("criteria")
+        if qtype == "noul":
+            c = criteria if isinstance(criteria, dict) else {}
+            return {"yes": c.get("true"), "no": c.get("false")}
+        if qtype == "score":
+            descs = criteria if isinstance(criteria, list) else []
+            return {
+                lab: (descs[i] if i < len(descs) else lab)
+                for i, lab in enumerate(t.labels)
+            }
+        if isinstance(criteria, dict):
+            return {lab: criteria.get(lab) for lab in t.labels}
+        if isinstance(criteria, list):
+            return {
+                lab: (criteria[i] if i < len(criteria) else None)
+                for i, lab in enumerate(t.labels)
+            }
+        return {lab: None for lab in t.labels}
+
+    def _imajev_option_text(self, qtype, label, desc):
+        if qtype == "noul":
+            return label if not desc else f"{label} — {desc}"
+        return label if desc in (None, "") else f"{label} — {desc}"
+
+    def _imajev_temperature(self, qtype, n_options):
+        kind = {"noul": "boolean", "score": "choice"}.get(qtype, qtype)
+        bounds = [(2, 2), (3, 5), (6, 10), (11, 25), (26, 254)]
+        for lo, hi in bounds:
+            if lo <= n_options <= hi:
+                key = f"{kind}:{lo}" if lo == hi else f"{kind}:{lo}-{hi}"
+                if key in self._temperatures:
+                    return float(self._temperatures[key])
+        return float(self._temperatures[f"{kind}:26-254"])
+
+    def reserve_estimate(self, _t):
+        return None
+
+    def run(self, t) -> "DecisionResult":
+        from jevbench.adapters.base import DecisionResult  # noqa: PLC0415
+
+        qtype = t.question["type"]
+        criteria = self._criteria_for(t)
+        state_text = (
+            t.state if isinstance(t.state, str) else self._render_state(t.state)
+        )
+        started = time.perf_counter()
+        try:
+            if self.family == "decider":
+                raw, keyed, label, unknown_prob = self._run_decider(
+                    t, qtype, criteria, state_text
+                )
+            else:
+                raw, keyed, label, unknown_prob = self._run_imajev(
+                    t, qtype, criteria, state_text
+                )
+        except Exception as e:  # noqa: BLE001 — their Runner classifies failures
+            return DecisionResult(self.name, False,
+                                  error=f"{type(e).__name__}: {e}"[:200])
+        latency = time.perf_counter() - started
+        if label is None:
+            return DecisionResult(self.name, False, error="abstained_unknown_argmax",
+                                  latency_s=latency,
+                                  raw={"unknown_prob": unknown_prob, **raw})
+        probs = {lab: float(keyed[lab]) for lab in t.labels}
+        raw["probs_recorded"] = dict(probs)
+        if label not in t.labels or abs(sum(probs.values()) - 1.0) > 1e-6:
+            return DecisionResult(self.name, False, error="invalid_distribution",
+                                  latency_s=latency,
+                                  raw={"unknown_prob": unknown_prob, **raw})
+        return DecisionResult(self.name, True, probs=probs, probs_source="native",
+                              label=label, latency_s=latency,
+                              raw={"unknown_prob": unknown_prob, **raw})
+
+    def _run_decider(self, t, qtype, criteria, state_text):
+        from dataclasses import dataclass
+
+        @dataclass
+        class _Q:
+            text: str
+            options: list
+            gold: int = 0
+
+        @dataclass
+        class _Example:
+            context: str
+            qs: list
+
+        if qtype == "noul":
+            rq = self._render_question({
+                "type": "noul",
+                "instructions": t.question["instructions"],
+                "criteria": {"true": criteria.get("yes"),
+                             "false": criteria.get("no")},
+            })
+            names = ["no", "yes"]
+        elif qtype == "score":
+            rq = self._render_question({
+                "type": "score",
+                "instructions": t.question["instructions"],
+                "criteria": [criteria[lab] for lab in t.labels],
+            })
+            names = list(t.labels)
+        else:
+            rq = self._render_question({
+                "type": "choice",
+                "instructions": t.question["instructions"],
+                "criteria": {lab: criteria.get(lab) for lab in t.labels},
+            })
+            names = list(t.labels)
+        ex = _Example(state_text, [_Q(rq["question"], rq["options"], 0)])
+        built = self._build(ex, self.tok, self._NoShuffle(),
+                            max_options=255, max_ctx_tokens=1536)
+        (row,) = self._slot_logits(built["ids"], built["slots"])
+        n = built["nopts"][0]
+        temperature = self._TT.for_types(
+            self.T, self.T_by_type, ["noul" if qtype == "noul" else "choice"]
+        )
+        p = self._softmax(row[self.letters][:n] / temperature)
+        keyed = {names[i]: float(p[i]) for i in range(n)}
+        return {"options": rq["options"], "n_options": n,
+                "temperature": temperature}, keyed, names[int(p.argmax())], None
+
+    def _run_imajev(self, t, qtype, criteria, state_text):
+        labels = list(t.labels)
+        texts = [self._imajev_option_text(qtype, lab, criteria.get(lab))
+                 for lab in labels]
+        texts.append(self._UNKNOWN_TEXT)
+        header = (self._HEADER + f"State: {state_text}\n"
+                  + f"Question: {t.question['instructions']}\n")
+        prompt = header + "\n".join(
+            f"{code}: {text}" for code, text in zip(_IMAJEV_CODES, texts)
+        )
+        _, ids = self._chat_render(prompt)
+        (row,) = self._slot_logits(ids, [len(ids) - 1])
+        temperature = self._imajev_temperature(qtype, len(labels))
+        cand = self.np.asarray(self.code_ids[: len(texts)])
+        p = self._softmax(row[cand] / temperature)
+        unknown_prob = float(p[len(labels)])
+        option_mass = p[: len(labels)]
+        keyed = {labels[i]: float(option_mass[i] / option_mass.sum())
+                 for i in range(len(labels))}
+        raw = {"prompt": prompt, "n_options": len(labels),
+               "temperature": temperature,
+               "probs_full_incl_unknown": [float(x) for x in p]}
+        if int(p.argmax()) == len(labels):
+            return raw, keyed, None, unknown_prob
+        return raw, keyed, labels[int(p.argmax())], unknown_prob
+
+    def close(self):
+        self.ctx = None
+        self.model = None
+        self.tok = None
+
+
 def replay_records(adapter, tasks, ref_dir: Path, out_dir: Path, runner_cls, ledger_cls):
     """Second full pass for the determinism block (fresh ledger + raw dir)."""
     replay_dir = out_dir / "replay"
@@ -670,7 +1096,24 @@ def replay_records(adapter, tasks, ref_dir: Path, out_dir: Path, runner_cls, led
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--arm", required=True,
-                    choices=["engine", "fork_4b", "jev_native", "vtx", "nli"])
+                    choices=["engine", "fork_4b", "jev_native", "vtx", "nli", "gguf"])
+    ap.add_argument(
+        "--gguf-dir",
+        type=Path,
+        default=Path("/nas/Temp/work/oc-model-eval/models/imajev-2b-gguf"),
+        help="model folder for the gguf arm (weights + family artifacts)",
+    )
+    ap.add_argument(
+        "--gguf-family",
+        choices=["imajev", "decider"],
+        default="imajev",
+        help="letter-code family: prompt/readout protocol to drive (gguf arm)",
+    )
+    ap.add_argument(
+        "--gguf-file",
+        default=None,
+        help="GGUF filename override (gguf arm; default = family Q4_K_M)",
+    )
     ap.add_argument("--ref", type=Path, default=Path("/nas/Temp/work/oc-model-eval/jevbench-ref"))
     ap.add_argument("--tasks", type=str, required=True, help="comma-separated jsonl files")
     ap.add_argument("--out-dir", type=Path, required=True)
@@ -747,6 +1190,9 @@ def main() -> int:
         adapter = VtxAdapter(args.vtx_dir, args.timeout)
     elif args.arm == "nli":
         adapter = NliOnnxAdapter(args.nli_dir, args.threads, args.timeout)
+    elif args.arm == "gguf":
+        adapter = GgufLetterAdapter(args.gguf_dir, args.gguf_family,
+                                    args.gguf_file, args.threads, args.timeout)
     else:
         adapter = JevNativeBridgeAdapter(args.model_dir, args.threads, args.timeout)
 
@@ -811,6 +1257,23 @@ def main() -> int:
             f = args.nli_dir / fname
             if f.is_file():
                 model_files[fname] = hashlib.sha256(f.read_bytes()).hexdigest()
+    if args.arm == "gguf":
+        gguf_names = {
+            "imajev": ["imajev-2b-Q4_K_M.gguf"],
+            "decider": ["decider-2b-v11-Q4_K_M.gguf", "decider-2b-v11-Q8_0.gguf"],
+        }[args.gguf_family]
+        artifact_names = {
+            "imajev": ["calibration.json", "decision_readout.json",
+                       "tokenizer_src/tokenizer_config.json",
+                       "tokenizer_src/chat_template.jinja"],
+            "decider": ["decider_config.json", "tokenizer.json",
+                        "decider/prompt.py", "decider/temperature.py",
+                        "decider/systemone.py"],
+        }[args.gguf_family]
+        for fname in (args.gguf_file and [args.gguf_file] or gguf_names) + artifact_names:
+            f = args.gguf_dir / fname
+            if f.is_file():
+                model_files[fname] = hashlib.sha256(f.read_bytes()).hexdigest()
 
     manifest = {
         "arm": args.arm,
@@ -847,6 +1310,19 @@ def main() -> int:
                    "Rust serving boolean path uses one-hypothesis complement (IR "
                    "booleans carry only text), this adapter verbalizes per-option from "
                    "JevBench criteria like the zeroshot training objective",
+            "gguf": "letter-code readout, one prompt per llama_decode (serial; decider's "
+                    "card: batching shifts Q4 probs up to 0.16). imajev family: authors' "
+                    "standard layout (their scoring.compile_prompt) in the base Qwen3.5-2B "
+                    "chat template, thinking disabled; unknown appended as last candidate; "
+                    "T per calibration.json bucket; unknown-argmax -> ok=False (authors' "
+                    "JevBench rule), surviving option masses renormalized over t.labels "
+                    "(nli precedent), full distribution in raw. decider family: authors' "
+                    "vendored decider.prompt build() plain state-first + systemone "
+                    "render_question/render_state option strings; noul as no/yes row, "
+                    "score as one choice row over levels (jev_native convention, choice T); "
+                    "noul rows use the noul temperature. Criteria-less choice items render "
+                    "the bare label (imajev Option contract), not the engine's "
+                    "label-as-description",
         }[args.arm],
         "determinism": determinism,
         "adapter_warnings": getattr(adapter, "warnings", []),

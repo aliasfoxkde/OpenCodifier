@@ -1604,6 +1604,31 @@ record says otherwise, criterion/suite validation, docs of record.
   entailment head (24j) on the same backbone class clears the gate.
   The staged arm stays in the eval tree unregistered (never an arm of
   record; no D14 entry).
+- **24l — Third-party 2B GGUF arms (task #125). — UNIT COMPLETE
+  (2026-10-08).** Two independently trained 2B decision models on the
+  authors' harness, each under its own authors' protocol, via one new
+  shared adapter family (`run_jevbench.py --arm gguf --gguf-family
+  {imajev,decider}`; letter-code readout, serial decode — batching
+  shifts Q4 probs). imajev-2b (mindchain Q4_K_M): the authors'
+  standard layout from `vision_decision/scoring.py`, the 255-code
+  codebook derived with the authors' algorithm and binding-verified
+  against the shipped `decision_readout.json` (codes AND token ids)
+  before scoring, shipped T=1.646, unknown-argmax scored incorrect per
+  the authors' JevBench rule with surviving masses renormalized —
+  **0.7359** / macro 0.7449, ECE 0.032, Brier 0.315, p50 3.83 s, 226
+  valid + 5 abstentions, replay 231/231. decider-2b-v11 (Mapika
+  Q4_K_M): vendored `decider.prompt.build()` + `decider.temperature`
+  (noul 1.624 / choice 1.164), score-as-one-choice-row (jev_native
+  convention; recorded divergence from the authors' isolated-level
+  protocol) — **0.7576** / macro 0.7632, ECE 0.058, Brier 0.332, p50
+  2.54 s, 231/231 valid, replay 231/231. Reads: decider +4.8 pp over
+  its 71.0 % board anchor, imajev 4–5 pp under its card record
+  (rotation+calibration pooling vs our single-pass) — both
+  protocol-shaped; the hard split is the 2B wall (0.53–0.58 vs the 4B
+  fork's 0.766); no dominance case over the fork at 2.28 s, so no
+  serving wiring — the rows are independent replication + calibration
+  receipts. D14: all artifact hashes in
+  `results/models.manifest.json`; raw evidence outside both repos.
 - Item 10 (dynamic-instruction leg) shipped as 24i above; items 5/6
   carry their sizing in §15.6.2 and queue as 24j/24k.
 
