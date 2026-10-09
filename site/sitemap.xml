@@ -11,13 +11,103 @@
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://opencodifier.pages.dev/try.html</loc>
-    <changefreq>monthly</changefreq>
+    <loc>https://opencodifier.pages.dev/playground.html</loc>
+  <url><loc>https://opencodifier.pages.dev/decide.html</loc></url>
+<url><loc>https://opencodifier.pages.dev/microworld.html</loc></url>
+    <changefreq>weekly</changefreq>
     <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/pong.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/life.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/pacman.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/racing.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/fighter.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/quiz.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/tower.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/antcolony.html</loc>
+    <loc>https://opencodifier.pages.dev/cube.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/maze.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/civ60.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/docs.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/gridwars.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
   </url>
   <url>
     <loc>https://opencodifier.pages.dev/api.html</loc>
     <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/traffic.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/spacecraft.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://opencodifier.pages.dev/dilemma.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://opencodifier.pages.dev/rpsls.html</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencodifier.pages.dev/door.html</loc>
+    <changefreq>weekly</changefreq>
     <priority>0.8</priority>
   </url>
 </urlset>

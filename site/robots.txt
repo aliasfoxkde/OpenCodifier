@@ -1,4 +1,4 @@
-# opencodifier.pages.dev — static site, permissive crawl
+# opencodifier.pages.dev -- static site, permissive crawl
 User-agent: *
 Allow: /
 
