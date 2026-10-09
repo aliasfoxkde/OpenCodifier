@@ -164,16 +164,21 @@
   }
 
   /* ---------- boot ---------- */
-  fetch('board.csv').then(function (r) {
-    if (!r.ok) throw new Error('board.csv HTTP ' + r.status);
-    return r.text();
-  }).then(function (text) {
-    boot(parseCsv(text));
-  }).catch(function (err) {
-    var tbody = document.getElementById('tbody');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="' + visibleColumns().length + '">Failed to load board.csv — ' +
-      esc(err.message) + '. The raw file is at <a href="board.csv">board.csv</a>.</td></tr>';
-  });
+  /* lazy: the board sits below the fold — fetch + parse when it nears view */
+  function loadBoard() {
+    fetch('board.csv').then(function (r) {
+      if (!r.ok) throw new Error('board.csv HTTP ' + r.status);
+      return r.text();
+    }).then(function (text) {
+      boot(parseCsv(text));
+    }).catch(function (err) {
+      var tbody = document.getElementById('tbody');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="' + visibleColumns().length + '">Failed to load board.csv — ' +
+        esc(err.message) + '. The raw file is at <a href="board.csv">board.csv</a>.</td></tr>';
+    });
+  }
+  if (window.ocLazyBoot) window.ocLazyBoot(document.getElementById('board'), loadBoard);
+  else loadBoard();
 
   function boot(rows) {
     var header = rows[0].map(function (h) { return h.trim(); });

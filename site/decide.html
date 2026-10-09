@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Pre-paint theme resolution — mirrors index.html; owned by site-core.js. -->
+<script>
+(function () {
+  "use strict";
+  var mode = "system";
+  try {
+    var v = localStorage.getItem("oc-theme");
+    if (v === "light" || v === "dark" || v === "system") mode = v;
+  } catch (e) { /* storage unavailable: system default */ }
+  var resolved = mode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : mode;
+  document.documentElement.setAttribute("data-theme", resolved);
+  document.documentElement.setAttribute("data-theme-mode", mode);
+})();
+</script>
+<title>OpenCodifier — the Decide console</title>
+<meta name="description" content="The full request → decision → trace loop against the real OpenCodifier engine, compiled to WASM: presets for accept, verify, honest abstain and canonical refusal, plus a declarative graph runner. No server, no network, no model.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:site_name" content="OpenCodifier">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://opencodifier.pages.dev/decide.html">
+<meta property="og:title" content="OpenCodifier — the Decide console">
+<meta property="og:description" content="Decide against the real WASM engine: accept at proof, verify under the gate, honest abstention, canonical refusals — every trace byte-checkable.">
+<meta property="og:image" content="https://opencodifier.pages.dev/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The OpenCodifier mark — a hexagonal C around a code glyph — over the wordmark.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://opencodifier.pages.dev/assets/og-image.png">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="tw.css">
+<style>
+/* playground-local layout (game card grid); everything else reuses site tokens */
+.pg-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 1rem; margin-top: 1.4rem; }
+.pg-card { display: flex; flex-direction: column; gap: 0.55rem; padding: 1.1rem 1.2rem; }
+.pg-card h3 { margin: 0; font-size: 1.02rem; }
+.pg-card p { margin: 0; font-size: 0.86rem; color: var(--ink-dim); line-height: 1.55; }
+.pg-card .pg-where { margin-top: auto; padding-top: 0.4rem; font-size: 0.78rem; }
+.pg-card h3 a { color: inherit; text-decoration: none; }
+.pg-card h3 a:hover, .pg-where a:hover { color: var(--teal); }
+.pg-where a { color: var(--teal); text-decoration: none; }
+.pg-badge {
+  align-self: flex-start; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; border: 1px solid var(--line); border-radius: 999px;
+  padding: 0.12rem 0.55rem; color: var(--ink-dim);
+}
+.pg-badge.live { color: var(--green); border-color: var(--green); }
+.pg-badge.soon { color: var(--amber); border-color: var(--amber); }
+
+/* ---- Try-a-Decision builder (wired by demo.js) ---- */
+.bd-card { margin-top: 1.6rem; padding: 1.2rem 1.3rem 1.1rem; }
+.bd-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+.bd-head h3 { margin: 0; }
+.bd-viewtoggle { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.bd-viewbtn { border: 0; background: transparent; color: var(--ink-dim); font: inherit; font-size: 0.8rem; font-weight: 700; padding: 0.28rem 0.9rem; cursor: pointer; }
+.bd-viewbtn.on { background: var(--teal); color: #052e26; }
+.bd-grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.8rem; }
+@media (max-width: 640px) { .bd-grid2 { grid-template-columns: minmax(0, 1fr); } }
+.bd-cand { display: grid; grid-template-columns: minmax(90px, 160px) minmax(0, 1fr) auto; gap: 0.5rem; margin-bottom: 0.5rem; }
+.bd-cand .bd-cid, .bd-cand .bd-cdesc, .ctl input[type="text"], .ctl select, .ctl textarea {
+  width: 100%; box-sizing: border-box;
+}
+.bd-cand-remove { border: 1px solid var(--line); background: transparent; color: var(--ink-dim); border-radius: var(--radius-sm); cursor: pointer; font: inherit; font-size: 0.8rem; padding: 0 0.6rem; }
+.bd-actions { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; margin-top: 0.9rem; }
+.bd-note-bad { color: var(--amber); }
+.bd-presets { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.bd-preset-chip {
+  border: 1px solid var(--line); background: var(--tint-sm); color: var(--ink-dim);
+  font: inherit; font-size: 0.78rem; font-weight: 700;
+  border-radius: 999px; padding: 0.26rem 0.85rem; cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.bd-preset-chip:hover { color: var(--teal); border-color: var(--teal); }
+.bd-preset-chip.on { color: var(--teal); border-color: var(--teal); background: var(--tint-md); }
+    .bd-graphcard { margin-top: 1.1rem; }
+    .bd-graphcard h3 { margin: 0 0 0.75rem; font-size: 1rem; }
+    .bd-graphcard .ctl + .ctl, .bd-graphcard .pg-actions { margin-top: 0.75rem; }
+    .bd-refusal { margin-top: 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+    .bd-refusal summary { cursor: pointer; padding: 0.65rem 0.9rem; font-weight: 600; font-size: 0.92rem; }
+    .bd-refusal-list { margin: 0; padding: 0.1rem 0.9rem 0.8rem; }
+    .bd-refusal-list dt { font-family: var(--mono); font-size: 0.82rem; margin-top: 0.55rem; }
+    .bd-refusal-list dd { margin: 0.15rem 0 0; font-size: 0.86rem; color: var(--ink-dim); }
+</style>
+</head>
+<body class="page-wide">
+<a class="skip-link" href="#decide">Skip to the console</a>
+
+<div class="bg-mesh" aria-hidden="true"></div>
+
+<nav class="nav">
+  <a class="brand" href="index.html">
+    <img src="assets/logo.svg" alt="" width="22" height="22">
+    opencodifier
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="benchmarks.html">Benchmarks</a>
+    <a href="playground.html">Playground</a>
+    <a href="decide.html" aria-current="page">Decide</a>
+    <a href="api.html">API</a>
+    <a href="docs.html">Docs</a>
+  </div>
+  <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Theme: system (matches your device) — activate for light">
+    <svg class="tt-auto" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.2 14.5A8.3 8.3 0 0 1 9.5 3.8a8.3 8.3 0 1 0 10.7 10.7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+  <a class="nav-gh" href="https://github.com/aliasfoxkde/OpenCodifier" aria-label="OpenCodifier on GitHub" rel="noopener">
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+  </a>
+  <a class="btn btn-small nav-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+  <a class="btn btn-small" href="api.html">API docs</a>
+  <details class="nav-menu">
+    <summary aria-label="Open menu"><span></span><span></span><span></span></summary>
+    <div class="nav-menu-panel">
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">Benchmarks</a>
+      <a href="playground.html">Playground</a>
+      <a href="decide.html" aria-current="page">Decide</a>
+      <a href="api.html">API</a>
+      <a href="docs.html">Docs</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier">GitHub ↗</a>
+      <div class="nav-menu-foot">
+        <a class="nav-menu-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+        <span class="nav-menu-themeslot" aria-hidden="true"></span>
+      </div>
+    </div>
+  </details>
+</nav>
+
+<!-- Compact header: the console starts immediately. The live chips are
+     measured by demo.js (engine identity, WASM state, cross-origin count). -->
+<header class="hero hero-slim" id="top">
+  <h1>The <span class="grad">Decide console</span></h1>
+  <p class="hero-sub">
+    The real engine, compiled to WASM, running in your tab — zero ML, zero
+    network, zero server. Send a request, read the decision, audit the trace.
+  </p>
+  <dl class="chips" aria-label="Live runtime status">
+    <div class="chip-item"><dt>Engine</dt><dd id="chip-engine">loading…</dd></div>
+    <div class="chip-item"><dt>WASM</dt><dd id="chip-wasm">loading…</dd></div>
+    <div class="chip-item"><dt>Network</dt><dd id="chip-network">measuring…</dd></div>
+    <div class="chip-item"><dt>Server</dt><dd>none — this page is static files</dd></div>
+    <div class="chip-item"><dt>LLM</dt><dd>none — zero-ML stack (rungs 1–4)</dd></div>
+  </dl>
+</header>
+
+<main>
+
+<section id="decide" class="section">
+  <div class="kicker">Decide</div>
+  <h2>The full request → decision → trace loop</h2>
+  <p class="lede">
+    A request carries state, questions, and policy. The engine returns a decision per question
+    with a multi-dimensional confidence report, execution metrics, and a deterministic trace.
+    Refusals are rendered as the outcomes they are — the gate working, not an error.
+  </p>
+
+  <div class="card bd-card" id="try-decision">
+    <div class="bd-head">
+      <h3>Try a decision</h3>
+      <div class="bd-presets" id="bd-presets" role="group" aria-label="Presets"></div>
+      <div class="bd-viewtoggle" role="group" aria-label="Request format">
+        <button type="button" class="bd-viewbtn on" id="bd-view-form" aria-pressed="true">Form</button>
+        <button type="button" class="bd-viewbtn" id="bd-view-json" aria-pressed="false">JSON</button>
+      </div>
+    </div>
+    <div id="bd-formpane">
+      <div class="ctl">
+        <label for="bd-category">Category</label>
+        <select id="bd-category">
+          <option value="yes-no">Yes / no</option>
+          <option value="choice">Choice</option>
+          <option value="score">Score</option>
+        </select>
+        <p class="fineprint" id="bd-catnote"></p>
+      </div>
+      <div class="ctl">
+        <label for="bd-state">State — the text to decide on (plain text or JSON)</label>
+        <textarea id="bd-state" rows="4" spellcheck="false"></textarea>
+        <p class="fineprint" id="bd-state-note">Plain text is sent as-is. JSON pasted here is also sent as text — the engine reads text.</p>
+      </div>
+      <div class="ctl">
+        <label for="bd-question">Question — what should be decided?</label>
+        <input type="text" id="bd-question" spellcheck="false">
+      </div>
+      <div id="bd-crit-yesno">
+        <div class="bd-grid2">
+          <div class="ctl">
+            <label for="bd-yes-when">Criteria (optional) — yes when</label>
+            <input type="text" id="bd-yes-when" spellcheck="false">
+          </div>
+          <div class="ctl">
+            <label for="bd-no-when">…and no when</label>
+            <input type="text" id="bd-no-when" spellcheck="false">
+          </div>
+        </div>
+        <p class="fineprint">Criteria are composed into the question text — the wire format carries
+          a boolean as text, and the zero-ML rungs read text. The JSON view shows the exact composition.</p>
+        <p class="fineprint" id="bd-crit-note"></p>
+      </div>
+      <div id="bd-crit-choice" hidden>
+        <label class="fineprint" style="display:block">Candidates — the only answers the engine may return</label>
+        <div id="bd-cands"></div>
+        <button type="button" class="btn btn-ghost btn-small" id="bd-add-cand">+ candidate</button>
+      </div>
+      <div id="bd-crit-score" hidden>
+        <div class="ctl">
+          <label for="bd-levels">Levels — comma-separated labels</label>
+          <input type="text" id="bd-levels" spellcheck="false">
+        </div>
+      </div>
+    </div>
+    <div id="bd-jsonpane" hidden>
+      <div class="ctl">
+        <label for="bd-json">Request JSON — exactly what the form builds; edits here are live</label>
+        <textarea id="bd-json" rows="14" spellcheck="false"></textarea>
+        <p class="fineprint" id="bd-json-note">Valid JSON decides as-is. Switching back to Form keeps the form's last state unless the JSON matches its shape.</p>
+      </div>
+    </div>
+    <div class="bd-actions">
+      <button type="button" class="btn" id="bd-decide" disabled>Decide</button>
+      <span class="fineprint">Same engine, same confidence gate, same refusal codes as the console below — the built request lands there verbatim.</span>
+    </div>
+  </div>
+
+  <div class="pg-grid">
+    <div class="pg-inputs">
+      <div class="ctl">
+        <label for="preset-select">Request preset</label>
+        <select id="preset-select">
+          <option value="proof">Proof — relational root cause (accepts at 1.0)</option>
+          <option value="lexical">Lexical — ticket routing (winner under the gate → verify)</option>
+          <option value="hard">Hard — no evidence (honest abstain)</option>
+          <option value="boolean">Boolean — threshold question</option>
+          <option value="invalid">Invalid — zero candidates (canonical refusal)</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label for="req-editor">Request JSON</label>
+        <textarea id="req-editor" spellcheck="false" rows="16" aria-describedby="req-help"></textarea>
+        <p class="fineprint" id="req-help">Anything you type stays in this tab — there is no
+          server to send it to. Invalid JSON or invalid requests return the same canonical
+          error codes the HTTP API returns.</p>
+      </div>
+      <div class="pg-actions">
+        <button type="button" class="btn" id="act-decide" disabled>Decide</button>
+        <button type="button" class="btn btn-ghost" id="act-batch" disabled>Decide batch ×3</button>
+      </div>
+      <details class="bd-refusal" id="bd-refusal">
+        <summary>Refusal codes — every way this engine says no</summary>
+        <dl class="bd-refusal-list">
+          <dt><code>ir.empty_candidates</code></dt><dd>Request carried an empty candidates set — there is nothing to choose between.</dd>
+          <dt><code>schema.*</code></dt><dd>The request did not match the canonical IR schema — the family covers invalid_json, missing_field, invalid_type, invalid_value, limit_exceeded.</dd>
+          <dt><code>graph.cycle</code></dt><dd>The declarative DAG contains a cycle; run it after breaking the loop.</dd>
+          <dt><code>engine.missing_backend</code></dt><dd>Graph needs a rung 5–7 backend (embedding / model / verifier) this tab does not ship.</dd>
+          <dt><strong>below the gate</strong> (no code)</dt><dd>Not a refusal — when calibrated confidence lands under the gate the answer ships as an HTTP 200 abstain, not an error.</dd>
+        </dl>
+      </details>
+    </div>
+
+    <div class="pg-results">
+      <div class="pg-statusline">
+        <span id="pg-badge" class="pg-badge pg-abstain" role="status">loading</span>
+      </div>
+      <div id="pg-output" aria-live="polite">
+        <p>Booting the WASM engine…</p>
+      </div>
+      <div class="card bd-graphcard">
+        <h3>Graph mode — declarative DAG</h3>
+        <div class="ctl">
+          <label for="graph-select">Graph preset</label>
+          <select id="graph-select">
+            <option value="minimal">Minimal — normalize → choice → threshold → output</option>
+            <option value="cyclic">Invalid — cyclic (graph.cycle refusal)</option>
+          </select>
+        </div>
+        <div class="ctl">
+          <label for="graph-editor">Graph JSON (declarative DAG)</label>
+          <textarea id="graph-editor" spellcheck="false" rows="9"></textarea>
+        </div>
+        <div class="pg-actions">
+          <button type="button" class="btn btn-ghost" id="act-validate-graph" disabled>Validate graph</button>
+          <button type="button" class="btn btn-ghost" id="act-run-graph" disabled>Run graph</button>
+        </div>
+        <p class="fineprint">A graph chains steps — normalize, decide, gate, output — in one request.
+          Validation checks shape and acyclicity locally; running feeds it through the same WASM engine.</p>
+      </div>
+  </div>
+
+  <div class="card card-honest pg-note">
+    <h3>What this is — and what it is not</h3>
+    <ul>
+      <li><strong>Real:</strong> the WASM module is built from this repo's
+        <code>opencodifier-wasm</code> crate — the identical IR, rule engine, narrowing, lexical
+        scorer, cache, and calibration code the CLI and HTTP server run.</li>
+      <li><strong>Real:</strong> the zero-ML stack only. Rungs 5–7 (embedding, decision model,
+        verifier) need backends this tab deliberately does not ship; a graph that needs one
+        returns <code>engine.missing_backend</code> instead of pretending.</li>
+      <li><strong>Not here:</strong> network calls, telemetry, or model downloads. The Network
+        chip counts cross-origin requests from the Performance API — if it ever reads anything
+        but zero, the page is broken, and the chip will say so.</li>
+    </ul>
+    <p class="fineprint">Prefer a terminal? The same decisions from
+      <code>cargo run --bin opencodifier-cli -- decide</code>, or serve the HTTP API and hit
+      <a href="api.html">the documented endpoints</a>.</p>
+  </div>
+</section>
+
+</main>
+
+  <footer class="footer">
+  <div class="footer-grid">
+    <div class="foot-about">
+      <div class="foot-brand">opencodifier</div>
+      <p>A local-first decision runtime: typed, machine-actionable decisions with calibrated
+        confidence and honest abstention — on hardware you already own.</p>
+      <p>Every figure on this site traces to a committed, deterministic benchmark run
+        (<code>docs/BENCHMARKS.md</code>, <code>benchmarks/decision-model/results/REPORT.md</code>,
+        <code>docs/RESEARCH.md §14</code>).</p>
+      <!-- Ecosystem-wide tag: every site in the workshop carries this.
+           Keep the wording and the target in sync across sites. -->
+      <a class="foot-tag" href="https://github.com/TaskWizer" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><path d="M7.5 12.2l3 3L16.5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Built with TaskWizer AI technologies
+      </a>
+    </div>
+    <nav class="foot-col" aria-label="Site">
+      <div class="foot-head">Site</div>
+      <a href="#numbers">Numbers</a>
+      <a href="benchmarks.html">The measured board</a>
+      <a href="playground.html">Try it in your browser</a>
+      <a href="api.html">API documentation</a>
+      <a href="#ladder">How it works</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <nav class="foot-col" aria-label="Source and data">
+      <div class="foot-head">Source &amp; data</div>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier" rel="noopener">GitHub</a>
+      <a href="board.csv">board.csv (raw)</a>
+      <a href="https://huggingface.co/TaskWizerAI" rel="noopener">Hugging Face ↗</a>
+      <a href="https://github.com/TaskWizer" rel="noopener">TaskWizer org ↗</a>
+      <a href="https://github.com/WizerAI" rel="noopener">WizerAI org ↗</a>
+    </nav>
+    <nav class="foot-col" aria-label="Ecosystem">
+      <div class="foot-head">Ecosystem</div>
+      <a href="https://vivere-5we.pages.dev/" rel="noopener">VIVERE (research lab) ↗</a>
+      <a href="https://www.amortyx.com" rel="noopener">Amortyx ↗</a>
+      <a href="https://www.mcpmanage.com" rel="noopener">MCPManage ↗</a>
+      <a href="https://github.com/aliasfoxkde/aegis" rel="noopener">Aegis ↗</a>
+      <a href="https://github.com/aliasfoxkde/GitForge" rel="noopener">GitForge ↗</a>
+      <a href="https://github.com/aliasfoxkde/AgentVerify" rel="noopener">AgentVerify ↗</a>
+    </nav>
+  </div>
+  <p class="foot-links">Apache-2.0 · local-first · no telemetry · no external requests · built as a Rust workspace</p>
+</footer>
+
+<script src="site-core.js"></script>
+<script src="toc.js"></script>
+<script src="demo.js"></script>
+<script src="sdk/decisions-sdk.js"></script>
+</body>
+</html>
