@@ -15,6 +15,7 @@ import { byId, pumpFrames } from './maze_dom_stub.mjs';
 globalThis.window.location.search = '?maze=pinned-seed-77&mode=play';
 
 const siteDir = path.dirname(fileURLToPath(import.meta.url));
+await import(path.join(siteDir, '..', 'sdk', 'decisions-sdk.js'));
 await import(path.join(siteDir, '..', 'maze-core.js'));
 await import(path.join(siteDir, '..', 'maze.js'));
 

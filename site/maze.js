@@ -1,12 +1,18 @@
-/* Maze Solver — Fog of War (the try.html playground's playable demo).
+/* Maze Solver — Fog of War (the playground's playable demo; also reached
+ * from games.html as "Maze Solver" and "Dungeon Crawler").
  *
  * Shell over site/maze-core.js (pure logic, node-testable). This file owns
- * everything the DOM implies: DPR canvas, cyber-grid fog renderer, keyboard
+ * everything the DOM implies: DPR canvas, themed fog renderer, keyboard
  * + d-pad input, the rAF loop, mode lifecycle (bot / play / versus), the
- * session-only leaderboard, the drag-and-drop rubric editor, and the one
- * place the real WASM engine is consulted — junction tie-breaks between
- * equal-cost frontier choices. Everything else the bot does is the local
- * decision ladder; the trace panel says which rung decided every step.
+ * session-only leaderboard (an overlay floated over the map), the
+ * drag-and-drop rubric editor, and the one place the real WASM engine is
+ * consulted — junction tie-breaks between equal-cost frontier choices.
+ * Everything else the bot does is the local decision ladder; the trace
+ * panel says which rung decided every step.
+ *
+ * Layout: options live in a single-open accordion on the LEFT, the map and
+ * quick controls hold the CENTER, and in-game info (field notes / engine /
+ * scoring rubric) sits in tabs on the RIGHT.
  *
  * Honesty rules mirrored from the page copy: the leaderboard never persists
  * (page memory only), god-mode runs are marked assisted and excluded from
@@ -101,26 +107,72 @@
     actx: null,
     msgRng: M.makeRng("shell-messages"),
     lastFrame: 0,
+    theme: "vault",         /* canvas palette (cosmetic — never in the stamp) */
+    gridOn: true,           /* cyber grid lines (cosmetic) */
+    boardOpen: false,       /* leaderboard overlay over the map */
+    statsOpen: false,       /* live-metrics overlay over the map */
+    /* measured meters — EMA averages plus decayed maxima, session-only */
+    meters: {
+      fps: 0, frameMs: 0, frameMax: 0,
+      simMs: 0, simMax: 0, renderMs: 0, renderMax: 0,
+      tickMs: 0, tickMax: 0, ticks: 0,
+      engineCalls: 0, engineMs: 0, engineMax: 0, engineLastMs: null,
+      lastDraw: 0,
+    },
   };
 
-  /* ---------- canvas palette (fixed dungeon theme — the maze screen stays
-     dark in both site themes, like a terminal; DOM text uses site tokens) --- */
+  /* wall-clock in ms; the stub and old browsers fall back to Date.now */
+  function nowMs() {
+    return (typeof performance !== "undefined" && performance.now)
+      ? performance.now() : Date.now();
+  }
+  /* exponential moving average + slowly-decaying max: "recent typical" and
+     "recent worst" without unbounded history */
+  function meter(avgKey, maxKey, ms) {
+    const m = S.meters;
+    m[avgKey] = m[avgKey] ? m[avgKey] * 0.9 + ms * 0.1 : ms;
+    m[maxKey] = Math.max(ms, (m[maxKey] || 0) * 0.995);
+  }
 
-  const PAL = {
-    bg: "#060d0c",          /* the void: never seen */
-    floorLit: "#0e211f",    /* currently visible floor */
-    floorMem: "#0a1716",    /* remembered floor */
-    wallLit: "#134e4a",     /* visible wall face */
-    wallMem: "#0e2a30",     /* remembered wall */
-    grid: "rgba(94, 234, 212, 0.05)",
-    ink: "#d8e6e0",
-    teal: "#5eead4",
-    you: "#67e8f9",
-    exit: "#5eead4",
-    loot: "#fbbf24",
-    chest: "#f59e0b",
-    monster: "#f87171",
+  /* ---------- canvas palettes (the maze screen stays dark in both site
+     themes, like a terminal; DOM text uses site tokens) ------------------- */
+
+  const PALETTES = {
+    vault: {
+      label: "vault — teal",
+      bg: "#060d0c",
+      floorLit: "#0e211f", floorMem: "#0a1716",
+      wallLit: "#134e4a", wallMem: "#0e2a30",
+      grid: "rgba(94, 234, 212, 0.05)",
+      ink: "#d8e6e0", teal: "#5eead4", you: "#67e8f9",
+      exit: "#5eead4", loot: "#fbbf24", chest: "#f59e0b", monster: "#f87171",
+      veil: "rgba(6, 13, 12, 0.55)", bubble: "rgba(6, 13, 12, 0.85)",
+      flashRGB: "94, 234, 212", dangerRGB: "248, 113, 113",
+    },
+    ember: {
+      label: "ember — torchlight",
+      bg: "#0d0805",
+      floorLit: "#241407", floorMem: "#180e05",
+      wallLit: "#8a4a17", wallMem: "#43240e",
+      grid: "rgba(251, 191, 36, 0.06)",
+      ink: "#f3e3cd", teal: "#fbbf24", you: "#fdba74",
+      exit: "#fcd34d", loot: "#fde047", chest: "#d97706", monster: "#f87171",
+      veil: "rgba(13, 8, 5, 0.55)", bubble: "rgba(13, 8, 5, 0.85)",
+      flashRGB: "251, 191, 36", dangerRGB: "248, 113, 113",
+    },
+    frost: {
+      label: "frost — deep blue",
+      bg: "#04070f",
+      floorLit: "#0b1626", floorMem: "#080f1c",
+      wallLit: "#1d4e89", wallMem: "#112c4e",
+      grid: "rgba(147, 197, 253, 0.06)",
+      ink: "#dbeafe", teal: "#93c5fd", you: "#a5b4fc",
+      exit: "#93c5fd", loot: "#fde047", chest: "#f59e0b", monster: "#fb7185",
+      veil: "rgba(4, 7, 15, 0.55)", bubble: "rgba(4, 7, 15, 0.85)",
+      flashRGB: "147, 197, 253", dangerRGB: "251, 113, 133",
+    },
   };
+  let PAL = PALETTES.vault;
 
   /* ---------- audio (lazy, off by default) ---------- */
 
@@ -259,7 +311,23 @@
   }
 
   function hooks() {
-    return { tiebreak: engineTiebreak };
+    /* the engine call site, metered: every WASM ask is timed and counted for
+       the stats overlay — the maze never stalls either way */
+    return {
+      tiebreak: (cands, decision, state) => {
+        const t0 = nowMs();
+        try {
+          return engineTiebreak(cands, decision, state);
+        } finally {
+          const m = S.meters;
+          const ms = nowMs() - t0;
+          m.engineCalls += 1;
+          m.engineMs = m.engineMs ? m.engineMs * 0.9 + ms * 0.1 : ms;
+          m.engineMax = Math.max(ms, m.engineMax * 0.995);
+          m.engineLastMs = ms;
+        }
+      },
+    };
   }
 
   /* ---------- run lifecycle ---------- */
@@ -267,11 +335,18 @@
   function readConfig() {
     return {
       seed: byId("mz-seed").value.trim() || "opencodifier",
-      cells: parseInt(byId("mz-cells").value, 10),
+      cells: parseInt(byId("mz-size").value, 10) || 17,
+      mapType: byId("mz-maptype").value === "dungeon" ? "dungeon" : "maze",
+      rooms: parseInt(byId("mz-rooms").value, 10),
+      roomMin: parseInt(byId("mz-room-min").value, 10),
+      roomMax: parseInt(byId("mz-room-max").value, 10),
       braidPct: parseInt(byId("mz-braid").value, 10),
       vision: parseInt(byId("mz-vision").value, 10),
+      visionShape: byId("mz-vshape").value === "cone" ? "cone" : "disc",
+      visionHalf: parseInt(byId("mz-vhalf").value, 10),
       botSpeed: parseInt(byId("mz-bot-speed").value, 10),
       timeLimitS: parseInt(byId("mz-timer").value, 10) || 0,
+      fastMode: byId("mz-fast").checked,
       lootEnabled: byId("mz-loot-on").checked,
       lootCount: parseInt(byId("mz-loot-count").value, 10),
       chestsEnabled: byId("mz-chest-on").checked,
@@ -281,12 +356,14 @@
       monsterSpeed: parseInt(byId("mz-mon-speed").value, 10),
       aggroRange: parseInt(byId("mz-aggro").value, 10),
       wanderRandomness: parseInt(byId("mz-wander").value, 10),
+      avoidMonsters: byId("mz-avoid").checked,
     };
   }
 
   function newGame(keepSeed) {
     const cfg = readConfig();
-    if (!keepSeed && !cfg.seed) byId("mz-seed").value = cfg.seed = randomSeed();
+    /* the seed is always a number; an emptied box gets a fresh one */
+    if (!cfg.seed) byId("mz-seed").value = cfg.seed = randomSeed();
     S.maze = M.generateMaze(cfg);
     S.bot = M.createRunState(S.maze, cfg, "bot");
     S.human = M.createRunState(S.maze, cfg, "human");
@@ -305,12 +382,19 @@
     renderTrace();
     byId("mz-verdict").textContent = "";
     byId("mz-verdict").className = "mz-verdict";
-    log("New maze “" + cfg.seed + "” — " + S.maze.w + "×" + S.maze.h +
-      ", optimal " + S.maze.optimalSteps + " steps.");
+    log("New " + (S.maze.mapType === "dungeon" ? "dungeon" : "maze") + " “" + cfg.seed +
+      "” — " + S.maze.w + "×" + S.maze.h + ", optimal " + S.maze.optimalSteps + " steps.");
   }
 
   function randomSeed() {
-    return "mz-" + Math.random().toString(36).slice(2, 8);
+    return String(100000 + Math.floor(Math.random() * 900000)); /* 6-digit numeric */
+  }
+
+  /* "new map" = roll a fresh seed (shown in the box, still shareable);
+     "restart" = same seed. The seed box stays the source of truth. */
+  function generateMap() {
+    byId("mz-seed").value = randomSeed();
+    newGame(true);
   }
 
   function activeRuns() {
@@ -356,16 +440,23 @@
       } else if (e.type === "fight-end") {
         log("The denizen slinks off. Fight " + e.fights + " settled.");
       } else if (e.type === "escaped") {
-        log(state === S.human && S.mode !== "bot"
+        const who = state === S.human && S.mode !== "bot"
           ? "YOU found the exit in " + fmtTime(state.timeS) + "!"
-          : "The bot found the exit in " + fmtTime(state.timeS) + ".");
+          : "The bot found the exit in " + fmtTime(state.timeS) + ".";
+        log(state.config.timeLimitS > 0
+          ? who + " Objective met — beat the " + fmtTime(state.config.timeLimitS) +
+            " limit by " + fmtTime(state.config.timeLimitS - state.timeS) + "."
+          : who);
         if (state === viewRun()) { S.escapeFlash = 1; SFX.escape(); }
         recordRun(state);
       } else if (e.type === "abstain") {
         log("The bot abstains — no honest route left. Refusing to guess is the point.");
         recordRun(state);
       } else if (e.type === "game-over") {
-        log(pickLine(LOSE_LINES, S.msgRng));
+        log(e.reason === "time" && state.config.timeLimitS > 0
+          ? "The " + fmtTime(state.config.timeLimitS) + " limit ran out first. " +
+            pickLine(LOSE_LINES, S.msgRng)
+          : pickLine(LOSE_LINES, S.msgRng));
         if (state === viewRun()) SFX.over();
         recordRun(state);
       }
@@ -415,7 +506,8 @@
     const tl = byId("mz-time-left");
     if (tl) {
       if (view.config.timeLimitS > 0) {
-        tl.textContent = "time left " + fmtTime(view.config.timeLimitS - view.timeS);
+        tl.textContent = (view.config.fastMode ? "beat the clock — " : "time left ") +
+          fmtTime(view.config.timeLimitS - view.timeS) + " left";
         tl.dataset.low = String(view.config.timeLimitS - view.timeS < 30);
       } else {
         tl.textContent = "elapsed " + fmtTime(view.timeS);
@@ -494,13 +586,40 @@
     }
   }
 
-  /* ---------- leaderboard ---------- */
+  /* ---------- leaderboard (overlay over the map; session-only) ---------- */
+
+  function resultKind(s) {
+    return s.escaped ? "escaped"
+      : s.abstained ? "abstained"
+      : s.timedOut ? "timeup"
+      : "unfinished";
+  }
+
+  function filteredRows() {
+    /* defensive defaults: a stale/absent filter control must not hide rows */
+    const who = (byId("mz-f-who") && byId("mz-f-who").value) || "all";
+    const res = (byId("mz-f-result") && byId("mz-f-result").value) || "all";
+    const sort = (byId("mz-f-sort") && byId("mz-f-sort").value) || "new";
+    let rows = S.rows.slice();
+    if (who === "human" || who === "bot") rows = rows.filter((r) => r.summary.runner === who);
+    if (res !== "all") rows = rows.filter((r) => resultKind(r.summary) === res);
+    if (sort === "time") rows.sort((a, b) => a.summary.timeS - b.summary.timeS);
+    else if (sort === "score") rows.sort((a, b) => b.score.score - a.score.score);
+    return rows;
+  }
 
   function renderBoard() {
     const body = byId("mz-board-body");
     if (!body) return;
     body.textContent = "";
-    for (const row of S.rows) {
+    const rows = filteredRows();
+    if (!rows.length) {
+      body.appendChild(h("tr", { class: "mz-dim" },
+        h("td", { colspan: "10" }, S.rows.length
+          ? "no runs match these filters"
+          : "finish a run to land a row here")));
+    }
+    for (const row of rows) {
       const s = row.summary;
       const badge = s.runner === "bot" ? "BOT" : "YOU";
       const result = s.escaped ? (s.assisted ? "escaped (god)" : "escaped")
@@ -516,6 +635,75 @@
         h("td", null, s.chestsEnabled ? s.chestOpened + "/" + s.chestTotal : "0"),
         h("td", null, s.monstersEnabled || s.chestsEnabled ? String(s.fights) : "0"),
         h("td", { class: "mz-score-cell" }, String(row.score.score))));
+    }
+  }
+
+  function setBoardOpen(open) {
+    S.boardOpen = open;
+    if (open && S.statsOpen) setStatsOpen(false); /* one overlay at a time */
+    const overlay = byId("mz-overlay");
+    const btn = byId("mz-board-btn");
+    if (overlay) {
+      overlay.classList.toggle("open", open);
+      overlay.setAttribute("aria-hidden", String(!open));
+    }
+    if (btn) btn.setAttribute("aria-pressed", String(open));
+  }
+
+  function setStatsOpen(open) {
+    S.statsOpen = open;
+    if (open && S.boardOpen) setBoardOpen(false); /* one overlay at a time */
+    const overlay = byId("mz-stats-overlay");
+    const btn = byId("mz-stats-btn");
+    if (overlay) {
+      overlay.classList.toggle("open", open);
+      overlay.setAttribute("aria-hidden", String(!open));
+    }
+    if (btn) btn.setAttribute("aria-pressed", String(open));
+    if (open) renderStats();
+  }
+
+  function fmtMs(ms) {
+    if (ms === null || ms === undefined || !isFinite(ms)) return "—";
+    return ms >= 100 ? Math.round(ms) + " ms" : ms.toFixed(2) + " ms";
+  }
+
+  function statsRows() {
+    const m = S.meters;
+    const sum = S.bot ? M.runSummary(S.bot) : null;
+    const rate = sum && sum.timeS > 0 ? sum.steps / sum.timeS : 0;
+    return [
+      ["frames/s", m.fps ? m.fps.toFixed(0) : "—"],
+      ["frame time", fmtMs(m.frameMs) + " (worst " + fmtMs(m.frameMax) + ")"],
+      ["sim tick — decisions + physics", fmtMs(m.tickMs) + " (worst " + fmtMs(m.tickMax) + ")"],
+      ["whole sim step / frame", fmtMs(m.simMs) + " (worst " + fmtMs(m.simMax) + ")"],
+      ["render", fmtMs(m.renderMs) + " (worst " + fmtMs(m.renderMax) + ")"],
+      ["engine calls", String(m.engineCalls)],
+      ["engine latency", fmtMs(m.engineLastMs) + " last · " + fmtMs(m.engineMs) +
+        " avg · " + fmtMs(m.engineMax) + " worst"],
+      ["bot pace", sum ? sum.steps + " steps · " + rate.toFixed(1) + " steps/s" : "—"],
+      ["route efficiency", sum && sum.steps
+        ? Math.round((sum.optimalSteps / sum.steps) * 100) + "% — optimal escape is " +
+          sum.optimalSteps + " steps, run took " + sum.steps
+        : "—"],
+      ["beat-the-clock", sum && sum.fastMode
+        ? sum.plans + " routes planned · " + sum.planSteps + " steps on plan · " +
+          sum.planReplans + " replans" + (sum.planCount
+            ? " · " + Math.round((sum.planSteps / Math.max(1, sum.steps)) * 100) + "% of steps predicted"
+            : "")
+        : "off"],
+    ];
+  }
+
+  function renderStats() {
+    const body = byId("mz-stats-body");
+    if (!body) return;
+    S.meters.lastDraw = S.lastFrame;
+    body.textContent = "";
+    for (const [label, value] of statsRows()) {
+      body.appendChild(h("div", { class: "mz-stats-row" },
+        h("span", { class: "mz-stats-label" }, label),
+        h("span", { class: "mz-stats-value" }, value)));
     }
   }
 
@@ -616,8 +804,16 @@
   });
   const ctx = canvas.getContext("2d");
 
+  /* map size drives map complexity: the select names a cell count, the
+     canvas is sized from it so bigger maps are genuinely bigger, not just
+     scaled up */
+  function boardPx() {
+    const cells = parseInt(byId("mz-size").value, 10) || 17;
+    return Math.max(420, Math.min(1080, cells * 44));
+  }
+
   function sizeCanvas() {
-    const px = parseInt(byId("mz-size").value, 10);
+    const px = boardPx();
     const dpr = window.devicePixelRatio || 1;
     canvas.style.width = px + "px";
     canvas.style.height = px + "px";
@@ -633,7 +829,7 @@
 
   function render() {
     if (!S.maze) return;
-    const px = canvas.clientWidth || parseInt(byId("mz-size").value, 10);
+    const px = canvas.clientWidth || boardPx();
     const cell = px / S.maze.w;
     const view = viewRun();
     const god = S.god;
@@ -669,18 +865,20 @@
     }
 
     /* cyber-grid over remembered/visible floor */
-    ctx.strokeStyle = PAL.grid;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let x = 0; x <= S.maze.w; x++) {
-      ctx.moveTo(x * cell, 0);
-      ctx.lineTo(x * cell, px);
+    if (S.gridOn) {
+      ctx.strokeStyle = PAL.grid;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = 0; x <= S.maze.w; x++) {
+        ctx.moveTo(x * cell, 0);
+        ctx.lineTo(x * cell, px);
+      }
+      for (let y = 0; y <= S.maze.h; y++) {
+        ctx.moveTo(0, y * cell);
+        ctx.lineTo(px, y * cell);
+      }
+      ctx.stroke();
     }
-    for (let y = 0; y <= S.maze.h; y++) {
-      ctx.moveTo(0, y * cell);
-      ctx.lineTo(px, y * cell);
-    }
-    ctx.stroke();
 
     const visibleOrGod = (x, y) => {
       if (god) return true;
@@ -730,7 +928,7 @@
     if (view.fight) {
       const m = view.monsters.find((x) => x.id === view.fight.monsterId) || view.pos;
       const fx = m.x !== undefined ? m : view.pos;
-      pulse(fx.x, fx.y, cell, REDUCED ? 0.4 : (0.5 + 0.5 * Math.sin(Date.now() / 60)), "#f87171");
+      pulse(fx.x, fx.y, cell, REDUCED ? 0.4 : (0.5 + 0.5 * Math.sin(Date.now() / 60)), PAL.monster);
       drawBubble(view.pos.x, view.pos.y, cell, " fight " + Math.ceil(view.fight.remaining) + "s ");
     }
     if (view.chest) {
@@ -748,8 +946,8 @@
       }
       if (danger > 0) {
         const g = ctx.createRadialGradient(px / 2, px / 2, px * 0.3, px / 2, px / 2, px * 0.72);
-        g.addColorStop(0, "rgba(248,113,113,0)");
-        g.addColorStop(1, "rgba(248,113,113," + (0.16 * danger * (0.6 + 0.4 * Math.sin(Date.now() / 300))).toFixed(3) + ")");
+        g.addColorStop(0, "rgba(" + PAL.dangerRGB + ",0)");
+        g.addColorStop(1, "rgba(" + PAL.dangerRGB + "," + (0.16 * danger * (0.6 + 0.4 * Math.sin(Date.now() / 300))).toFixed(3) + ")");
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, px, px);
       }
@@ -757,14 +955,14 @@
 
     /* escape flash */
     if (S.escapeFlash > 0) {
-      ctx.fillStyle = "rgba(94,234,212," + (0.22 * S.escapeFlash).toFixed(3) + ")";
+      ctx.fillStyle = "rgba(" + PAL.flashRGB + "," + (0.22 * S.escapeFlash).toFixed(3) + ")";
       ctx.fillRect(0, 0, px, px);
       S.escapeFlash = Math.max(0, S.escapeFlash - 0.02);
     }
 
     /* paused veil */
     if (S.paused) {
-      ctx.fillStyle = "rgba(6,13,12,0.55)";
+      ctx.fillStyle = PAL.veil;
       ctx.fillRect(0, 0, px, px);
       ctx.fillStyle = PAL.ink;
       ctx.font = "600 " + Math.max(16, px / 22) + "px system-ui, sans-serif";
@@ -774,7 +972,7 @@
 
     /* god badge */
     if (god) {
-      ctx.fillStyle = "rgba(248,113,113,0.85)";
+      ctx.fillStyle = PAL.monster;
       ctx.font = "700 " + Math.max(10, px / 46) + "px system-ui, sans-serif";
       ctx.textAlign = "left";
       ctx.fillText("GOD VIEW — runs while this is on score nothing", 8, px - 8);
@@ -810,7 +1008,7 @@
     } else {
       const w = cell * 0.5;
       ctx.fillRect(cx - w / 2, cy - w * 0.32, w, w * 0.64);
-      ctx.strokeStyle = "rgba(6,13,12,0.9)";
+      ctx.strokeStyle = PAL.bg;
       ctx.lineWidth = 1;
       ctx.strokeRect(cx - w / 2, cy - w * 0.05, w, 1.5);
     }
@@ -820,7 +1018,7 @@
     const [cx, cy] = cellCenter(mo.x, mo.y, cell);
     const r = cell * 0.32;
     if (mo.aggro && !REDUCED) {
-      ctx.fillStyle = "rgba(248,113,113," + (0.2 + 0.15 * Math.sin(Date.now() / 140)).toFixed(3) + ")";
+      ctx.fillStyle = "rgba(" + PAL.dangerRGB + "," + (0.2 + 0.15 * Math.sin(Date.now() / 140)).toFixed(3) + ")";
       ctx.beginPath();
       ctx.arc(cx, cy, r * 1.9, 0, Math.PI * 2);
       ctx.fill();
@@ -829,7 +1027,7 @@
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#060d0c";
+    ctx.fillStyle = PAL.bg;
     ctx.beginPath();
     ctx.arc(cx - r * 0.35, cy - r * 0.15, r * 0.18, 0, Math.PI * 2);
     ctx.arc(cx + r * 0.35, cy - r * 0.15, r * 0.18, 0, Math.PI * 2);
@@ -855,7 +1053,7 @@
     ctx.fill();
     /* facing tick */
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = "#060d0c";
+    ctx.strokeStyle = PAL.bg;
     ctx.lineWidth = Math.max(1, cell * 0.08);
     ctx.beginPath();
     ctx.moveTo(cx, cy);
@@ -865,7 +1063,7 @@
     ctx.lineTo(cx + dx * r * 1.4, cy + dy * r * 1.4);
     ctx.stroke();
     if (!ghost) {
-      ctx.fillStyle = "#060d0c";
+      ctx.fillStyle = PAL.bg;
       ctx.beginPath();
       ctx.arc(cx - r * 0.3, cy - r * 0.2, r * 0.16, 0, Math.PI * 2);
       ctx.arc(cx + r * 0.3, cy - r * 0.2, r * 0.16, 0, Math.PI * 2);
@@ -890,7 +1088,7 @@
     ctx.font = "600 " + Math.max(10, cell * 0.9) + "px system-ui, sans-serif";
     ctx.textAlign = "center";
     const w = ctx.measureText(text).width + 10;
-    ctx.fillStyle = "rgba(6,13,12,0.85)";
+    ctx.fillStyle = PAL.bubble;
     ctx.fillRect(cx - w / 2, cy - cell * 1.4, w, cell * 0.9);
     ctx.fillStyle = PAL.ink;
     ctx.fillText(text, cx, cy - cell * 0.75);
@@ -901,8 +1099,11 @@
   function frame(t) {
     const dt = Math.min(0.1, Math.max(0, (t - S.lastFrame) / 1000));
     S.lastFrame = t;
+    if (dt > 0) S.meters.fps = S.meters.fps ? S.meters.fps * 0.9 + (1 / dt) * 0.1 : 1 / dt;
+    const tFrame = nowMs();
     if (!S.paused && S.maze) {
       const hk = hooks();
+      const tSim = nowMs();
       for (const run of activeRuns()) {
         if (run.finished) continue;
         let humanMove = null;
@@ -916,11 +1117,19 @@
           }
           S.queuedDir = null; /* taps fire once; holds re-arm via key repeat */
         }
+        const tTick = nowMs();
         const evs = M.tickRun(run, dt, humanMove, hk);
+        meter("tickMs", "tickMax", nowMs() - tTick);
+        S.meters.ticks += 1;
         if (evs.length) handleEvents(run, evs);
       }
+      meter("simMs", "simMax", nowMs() - tSim);
     }
+    const tRender = nowMs();
     render();
+    meter("renderMs", "renderMax", nowMs() - tRender);
+    meter("frameMs", "frameMax", nowMs() - tFrame);
+    if (S.statsOpen && t - S.meters.lastDraw > 250) renderStats();
     requestAnimationFrame(frame);
   }
 
@@ -948,10 +1157,16 @@
   function onKeyDown(e) {
     const tag = (e.target && e.target.tagName) || "";
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) return;
+    if (e.key === "Escape") {
+      if (S.boardOpen) { setBoardOpen(false); e.preventDefault(); }
+      else if (S.statsOpen) { setStatsOpen(false); e.preventDefault(); }
+      return;
+    }
     const dirName = dirNameFromEvent(e);
     if (e.code === "Space" && tag === "BUTTON") return; /* let the button have it */
     if (dirName) {
       e.preventDefault();
+      if (S.boardOpen) setBoardOpen(false); /* moving closes the board */
       if (S.mode === "bot") return;
       const dir = dirByName(dirName);
       S.heldDir = dir;
@@ -967,9 +1182,13 @@
     } else if (e.code === "KeyG") {
       toggleGod();
     } else if (e.code === "KeyR") {
-      newGame(true);
-    } else if (e.code === "KeyB") {
-      setMode("bot");
+      newGame(true); /* restart: same seed */
+    } else if (e.code === "KeyN") {
+      generateMap(); /* new map: fresh seed */
+    } else if (e.code === "KeyL") {
+      setBoardOpen(!S.boardOpen);
+    } else if (e.code === "KeyI") {
+      setStatsOpen(!S.statsOpen);
     }
   }
 
@@ -1026,22 +1245,124 @@
 
   /* ---------- UI construction ---------- */
 
+  function accItem(id, label, open, ...kids) {
+    return h("div", { class: "mz-acc-item" + (open ? " open" : ""), "data-acc-item": id },
+      h("button", {
+        class: "mz-acc-head", type: "button", "aria-expanded": String(open), "data-acc": id,
+      },
+      h("span", { class: "mz-acc-label" }, label),
+      h("span", { class: "mz-acc-chev", "aria-hidden": "true" }, "▾")),
+      h("div", { class: "mz-acc-body" }, ...kids));
+  }
+
+  function tabBtn(name, label) {
+    return h("button", {
+      class: "mz-tab" + (name === "notes" ? " on" : ""), type: "button", role: "tab",
+      "aria-selected": name === "notes" ? "true" : "false", "data-tab": name,
+    }, label);
+  }
+
+  function tabPane(name, ...kids) {
+    return h("div", {
+      class: "mz-tabpane" + (name === "notes" ? " on" : ""), role: "tabpanel", "data-pane": name,
+    }, ...kids);
+  }
+
+  function filterSelect(id, label, options) {
+    return h("label", { class: "mz-field mz-filter" }, label + " ",
+      h("select", { id },
+        ...options.map(([v, text]) => h("option", { value: v }, text))));
+  }
+
   function buildUI() {
     const wrap = h("div", { class: "mz" });
 
-    /* scoreboard bar */
+    /* scoreboard bar + the leaderboard button that floats the overlay */
     const scorebar = h("div", { class: "mz-scorebar", id: "mz-scorebar" },
       h("span", { class: "mz-score mz-you", id: "mz-score-you" }, "YOU 0"),
       h("span", { class: "mz-verdict", id: "mz-verdict" }),
-      h("span", { class: "mz-score mz-bot muted", id: "mz-score-bot" }, "versus mode: off"));
+      h("span", { class: "mz-score mz-bot muted", id: "mz-score-bot" }, "versus mode: off"),
+      h("button", {
+        id: "mz-board-btn", class: "ctl", type: "button",
+        "aria-pressed": "false", "aria-controls": "mz-overlay",
+      }, "leaderboard (L)"),
+      h("button", {
+        id: "mz-stats-btn", class: "ctl", type: "button",
+        "aria-pressed": "false", "aria-controls": "mz-stats-overlay",
+      }, "stats (I)"));
 
-    /* canvas column */
-    const stage = h("div", { class: "mz-stage" }, canvas,
+    /* ---- center: the map, its overlay, live readouts, quick controls ---- */
+
+    const overlay = h("div", {
+      id: "mz-overlay", class: "mz-overlay", role: "dialog",
+      "aria-label": "session leaderboard", "aria-hidden": "true",
+    },
+    h("div", { class: "mz-board-card" },
+      h("div", { class: "mz-overlay-head" },
+        h("span", { class: "mz-overlay-title" }, "leaderboard — this session only"),
+        h("button", {
+          id: "mz-board-close", class: "ctl ctl-small", type: "button",
+          "aria-label": "close the leaderboard", onclick: () => setBoardOpen(false),
+        }, "close ×")),
+      h("div", { class: "mz-overlay-filters" },
+        filterSelect("mz-f-who", "who", [["all", "everyone"], ["human", "you"], ["bot", "bot"]]),
+        filterSelect("mz-f-result", "result", [
+          ["all", "any"], ["escaped", "escaped"], ["abstained", "abstained"],
+          ["timeup", "time up"], ["unfinished", "unfinished"]]),
+        filterSelect("mz-f-sort", "sort", [["new", "newest"], ["time", "best time"], ["score", "top score"]])),
+      h("div", { class: "mz-overlay-scroll" },
+        h("table", { class: "mz-board" },
+          h("thead", null, h("tr", null,
+            h("th", null, "who"), h("th", null, "result"), h("th", null, "time"),
+            h("th", null, "steps"), h("th", null, "explored"), h("th", null, "loot"),
+            h("th", null, "coins"), h("th", null, "chests"), h("th", null, "fights"),
+            h("th", null, "score"))),
+          h("tbody", { id: "mz-board-body" }))),
+      h("div", { class: "mz-overlay-foot" },
+        h("span", { class: "mz-note" }, "god-view runs score nothing. Disabled objectives report 0. Nothing here leaves this tab."),
+        h("button", { id: "mz-board-clear", class: "ctl ctl-small", type: "button" }, "clear"))));
+
+    /* live-metrics overlay: everything measured, nothing asserted */
+    const statsOverlay = h("div", {
+      id: "mz-stats-overlay", class: "mz-overlay", role: "dialog",
+      "aria-label": "live performance stats", "aria-hidden": "true",
+    },
+    h("div", { class: "mz-board-card" },
+      h("div", { class: "mz-overlay-head" },
+        h("span", { class: "mz-overlay-title" }, "live stats — measured, this session"),
+        h("button", {
+          id: "mz-stats-close", class: "ctl ctl-small", type: "button",
+          "aria-label": "close the stats", onclick: () => setStatsOpen(false),
+        }, "close ×")),
+      h("div", { id: "mz-stats-body", class: "mz-stats-grid" }),
+      h("p", { class: "mz-note" },
+        "Frame, decision, and engine latencies are measured in your tab as the ",
+        "game runs — the same numbers any visitor sees. Nothing here is stored ",
+        "or sent anywhere.")));
+
+    const view = h("div", { class: "mz-view" }, canvas, overlay, statsOverlay);
+
+    const quick = h("div", { class: "mz-quick", "aria-label": "quick controls" },
+      h("div", { class: "mz-btnrow" },
+        h("button", { id: "mz-mode-bot", class: "ctl on", type: "button" }, "watch bot"),
+        h("button", { id: "mz-mode-play", class: "ctl", type: "button" }, "play"),
+        h("button", { id: "mz-mode-versus", class: "ctl", type: "button" }, "versus")),
+      h("div", { class: "mz-btnrow" },
+        h("button", { id: "mz-restart", class: "ctl", type: "button" }, "restart (R)"),
+        h("button", { id: "mz-generate", class: "ctl", type: "button" }, "new map (N)"),
+        h("button", { id: "mz-pause", class: "ctl", type: "button" }, "pause"),
+        h("button", { id: "mz-god", class: "ctl", type: "button", "aria-pressed": "false" }, "god (G)"),
+        h("button", { id: "mz-reset-params", class: "ctl", type: "button",
+          title: "restore default parameters" }, "reset params"),
+        h("button", { id: "mz-fs", class: "ctl", type: "button" }, "⛶ full screen")));
+
+    const stage = h("div", { class: "mz-stage" }, view,
       h("div", { class: "mz-under" },
         h("span", { id: "mz-coords", class: "mz-kv" }, "x 0 · y 0"),
         h("span", { id: "mz-status", class: "mz-kv", "data-state": "live" }, "idle"),
         h("span", { id: "mz-time-left", class: "mz-kv" }, "elapsed 0:00"),
-        h("span", { id: "mz-rung", class: "mz-chip mz-rung-chip" }, "—")));
+        h("span", { id: "mz-rung", class: "mz-chip mz-rung-chip" }, "—")),
+      quick);
 
     /* d-pad (touch) */
     const dpad = h("div", { class: "mz-dpad", "aria-label": "movement pad" },
@@ -1050,103 +1371,126 @@
       h("button", { class: "ctl", "data-dir": "S", type: "button", "aria-label": "move south" }, "▼"),
       h("button", { class: "ctl", "data-dir": "E", type: "button", "aria-label": "move east" }, "▶"));
 
-    /* ---- control panel ---- */
-    const panel = h("div", { class: "mz-panel" });
+    /* ---- left: options accordion (one group open at a time) ---- */
 
-    /* modes + core actions */
-    panel.appendChild(h("div", { class: "mz-group" },
-      h("div", { class: "mz-group-title" }, "run"),
-      h("div", { class: "mz-btnrow" },
-        h("button", { id: "mz-mode-bot", class: "ctl on", type: "button" }, "watch bot"),
-        h("button", { id: "mz-mode-play", class: "ctl", type: "button" }, "play"),
-        h("button", { id: "mz-mode-versus", class: "ctl", type: "button" }, "versus")),
-      h("div", { class: "mz-btnrow" },
-        h("button", { id: "mz-generate", class: "ctl", type: "button" }, "generate map"),
-        h("button", { id: "mz-restart", class: "ctl", type: "button" }, "restart (R)"),
-        h("button", { id: "mz-pause", class: "ctl", type: "button" }, "pause"),
-        h("button", { id: "mz-god", class: "ctl", type: "button", "aria-pressed": "false" }, "god (G)")),
-      h("label", { class: "mz-field" }, "seed ",
-        h("input", { id: "mz-seed", type: "text", value: "opencodifier", spellcheck: "false" })),
-      h("label", { class: "mz-field" }, "preset ",
-        h("select", { id: "mz-preset" },
-          h("option", { value: "" }, "— pick a difficulty —"),
-          h("option", { value: "cozy" }, "cozy — small, safe"),
-          h("option", { value: "standard" }, "standard — the demo default"),
-          h("option", { value: "hard" }, "hard — 5 hunters, 5 min"),
-          h("option", { value: "night" }, "maze night — 25×25, 4 min")))));
+    const acc = h("div", { class: "mz-acc", "aria-label": "game options" },
 
-    /* world knobs */
-    panel.appendChild(h("div", { class: "mz-group" },
-      h("div", { class: "mz-group-title" }, "world"),
-      rangeField("mz-vision", "line of sight", 5, 15, 9, 1, " grids"),
-      rangeField("mz-cells", "maze size", 9, 29, 17, 2, " cells"),
-      rangeField("mz-braid", "loopiness (braiding)", 0, 30, 10, 5, "%"),
-      rangeField("mz-bot-speed", "bot speed", 2, 60, 14, 1, " steps/s"),
-      numberField("mz-timer", "time limit (s, 0 = off)", 0, 3600, 0),
-      h("label", { class: "mz-field" }, "canvas ",
-        h("select", { id: "mz-size" },
-          h("option", { value: "480" }, "480 × 480"),
-          h("option", { value: "600", selected: "selected" }, "600 × 600"),
-          h("option", { value: "720" }, "720 × 720")))));
+      accItem("map", "map", true,
+        h("label", { class: "mz-field" }, "preset ",
+          h("select", { id: "mz-preset" },
+            h("option", { value: "" }, "— pick a setup —"),
+            h("option", { value: "cozy" }, "cozy — small, safe"),
+            h("option", { value: "standard" }, "standard — the demo default"),
+            h("option", { value: "hard" }, "hard — 5 hunters, 5 min"),
+            h("option", { value: "night" }, "maze night — colossal, 4 min"),
+            h("option", { value: "crawler" }, "dungeon crawler — rooms, torch cone"))),
+        h("label", { class: "mz-field" }, "seed ",
+          h("input", { id: "mz-seed", type: "number", min: "0", step: "1",
+            title: "the map's number — restart keeps it, new map rolls a fresh one",
+            spellcheck: "false" }),
+          h("button", { class: "mz-chip", id: "mz-dice", type: "button",
+            title: "new random seed" }, "🎲")),
+        h("label", { class: "mz-field" }, "map type ",
+          h("select", { id: "mz-maptype" },
+            h("option", { value: "maze" }, "maze — classic corridors"),
+            h("option", { value: "dungeon" }, "dungeon — rooms + hallways"))),
+        h("div", { id: "mz-maze-params" },
+          rangeField("mz-braid", "loopiness (braiding)", 0, 30, 10, 5, "%")),
+        h("div", { id: "mz-dungeon-params", class: "hidden" },
+          rangeField("mz-rooms", "rooms", 3, 12, 7, 1, ""),
+          rangeField("mz-room-min", "room min size", 3, 6, 3, 1, ""),
+          rangeField("mz-room-max", "room max size", 3, 9, 6, 1, "")),
+        h("label", { class: "mz-field" }, "map size ",
+          h("select", { id: "mz-size" },
+            h("option", { value: "13" }, "compact — 13×13 cells"),
+            h("option", { value: "17", selected: "selected" }, "standard — 17×17 cells"),
+            h("option", { value: "21" }, "grand — 21×21 cells"),
+            h("option", { value: "25" }, "colossal — 25×25 cells"))),
+        h("p", { class: "mz-note" },
+          "bigger maps are denser, not just larger: more cells, longer optimal " +
+          "routes, more places to hide loot. Changing size regenerates.")),
 
-    /* objectives */
-    panel.appendChild(h("div", { class: "mz-group" },
-      h("div", { class: "mz-group-title" }, "objectives"),
-      checkField("mz-loot-on", "loot", true),
-      rangeField("mz-loot-count", "loot piles", 0, 16, 8, 1, ""),
-      checkField("mz-chest-on", "chests (1 s to open: coins 0–5 or a fight)", true),
-      rangeField("mz-chest-count", "chests", 0, 8, 3, 1, ""),
-      checkField("mz-mon-on", "monsters (2 s static fight on contact)", true),
-      rangeField("mz-mon-count", "monsters", 0, 10, 3, 1, ""),
-      rangeField("mz-mon-speed", "monster speed", 1, 5, 2, 1, " cells/s"),
-      rangeField("mz-aggro", "aggro range", 2, 10, 5, 1, " cells"),
-      rangeField("mz-wander", "wander randomness", 0, 100, 40, 10, "%")));
+      accItem("vision", "vision & pace", false,
+        rangeField("mz-vision", "line of sight", 5, 15, 9, 1, " grids"),
+        h("label", { class: "mz-field" }, "vision shape ",
+          h("select", { id: "mz-vshape" },
+            h("option", { value: "disc" }, "disc — all around"),
+            h("option", { value: "cone" }, "cone — facing torchlight"))),
+        rangeField("mz-vhalf", "cone half-angle", 15, 85, 45, 5, "°"),
+        rangeField("mz-bot-speed", "bot speed", 2, 90, 14, 1, " steps/s"),
+        numberField("mz-timer", "time limit (s, 0 = off)", 0, 3600, 0),
+        checkField("mz-fast",
+          "beat the clock — plans whole routes ahead, prefers informative " +
+          "frontiers, drops loot/chests at half-time (needs a time limit)", false),
+        h("p", { class: "mz-note" },
+          "cone vision only shows what the runner faces — blocked steps become " +
+          "turns in place, and the bot gets a turn rung when it must sweep the " +
+          "dark. Vision applies live to both runners.")),
 
-    /* engine */
-    panel.appendChild(h("div", { class: "mz-group" },
-      h("div", { class: "mz-group-title" }, "engine"),
-      h("label", { class: "mz-check" },
-        h("input", { id: "mz-engine-on", type: "checkbox" }),
-        h("span", null, "WASM engine breaks junction ties"),
-        h("span", { id: "mz-engine-status", class: "mz-engine-status", "data-kind": "off" }, "engine off — local ties")),
-      h("div", { class: "mz-trace", id: "mz-trace", "aria-live": "polite" })));
+      accItem("objectives", "objectives", false,
+        checkField("mz-loot-on", "loot", true),
+        rangeField("mz-loot-count", "loot piles", 0, 16, 8, 1, ""),
+        checkField("mz-chest-on", "chests (1 s to open: coins 0–5 or a fight)", true),
+        rangeField("mz-chest-count", "chests", 0, 8, 3, 1, ""),
+        checkField("mz-mon-on", "monsters (2 s static fight on contact)", true),
+        rangeField("mz-mon-count", "monsters", 0, 10, 3, 1, ""),
+        checkField("mz-avoid", "avoid monsters (route around known threats)", false),
+        rangeField("mz-mon-speed", "monster speed", 1, 5, 2, 1, " cells/s"),
+        rangeField("mz-aggro", "aggro range", 2, 10, 5, 1, " cells"),
+        rangeField("mz-wander", "wander randomness", 0, 100, 40, 10, "%")),
 
-    /* log */
-    panel.appendChild(h("div", { class: "mz-group" },
-      h("div", { class: "mz-group-title" }, "field notes"),
-      h("div", { id: "mz-log", class: "mz-log", "aria-live": "polite" })));
+      accItem("style", "style & sound", false,
+        h("label", { class: "mz-field" }, "palette ",
+          h("select", { id: "mz-theme" },
+            h("option", { value: "vault" }, "vault — teal"),
+            h("option", { value: "ember" }, "ember — torchlight"),
+            h("option", { value: "frost" }, "frost — deep blue"))),
+        checkField("mz-gridlines", "grid lines", true),
+        checkField("mz-audio", "sound effects (off by default)", false),
+        h("p", { class: "mz-note" },
+          "palettes and grid lines are cosmetic — they never change a map, " +
+          "a score, or what the bot knows.")));
 
-    /* rubric editor */
-    panel.appendChild(h("div", { class: "mz-group" },
-      h("div", { class: "mz-group-title" }, "scoring rubric (drag or click)"),
-      h("div", { id: "mz-palette", class: "mz-palette" }),
-      h("div", { id: "mz-rubric-list", class: "mz-rubric-list" }),
-      h("textarea", { id: "mz-rubric-json", class: "mz-json", rows: "7", spellcheck: "false",
-        "aria-label": "scoring rubric as JSON" }),
-      h("div", { class: "mz-btnrow" },
-        h("button", { id: "mz-rubric-apply", class: "ctl", type: "button" }, "apply JSON"),
-        h("button", { id: "mz-rubric-reset", class: "ctl", type: "button" }, "reset")),
-      h("p", { class: "mz-note" },
-        "score = round(100 · Σ weightᵢ · normᵢ / Σ |weightᵢ|); norms are per-map pars; ",
-        "negative weights are penalty axes (fights is a badness norm: f/(1+f)).")));
+    /* ---- right: in-game info tabs ---- */
 
-    /* leaderboard */
-    panel.appendChild(h("div", { class: "mz-group" },
-      h("div", { class: "mz-group-title" }, "leaderboard (this session only)"),
-      h("table", { class: "mz-board" },
-        h("thead", null, h("tr", null,
-          h("th", null, "who"), h("th", null, "result"), h("th", null, "time"),
-          h("th", null, "steps"), h("th", null, "explored"), h("th", null, "loot"),
-          h("th", null, "coins"), h("th", null, "chests"), h("th", null, "fights"),
-          h("th", null, "score"))),
-        h("tbody", { id: "mz-board-body" })),
-      h("p", { class: "mz-note" }, "god-view runs score nothing. Disabled objectives report 0."),
-      h("label", { class: "mz-check" },
-        h("input", { id: "mz-audio", type: "checkbox" }),
-        h("span", null, "sound effects (off by default)"))));
+    const tabs = h("div", { class: "mz-tabs", role: "tablist", "aria-label": "game info" },
+      tabBtn("notes", "field notes"),
+      tabBtn("engine", "engine"),
+      tabBtn("rubric", "scoring rubric"));
+
+    const panes = h("div", { class: "mz-tabpanes" },
+
+      tabPane("notes",
+        h("div", { id: "mz-log", class: "mz-log", "aria-live": "polite" }),
+        h("p", { class: "mz-note" },
+          "loot, chests, fights, escapes — everything that happens lands here.")),
+
+      tabPane("engine",
+        h("label", { class: "mz-check" },
+          h("input", { id: "mz-engine-on", type: "checkbox" }),
+          h("span", null, "WASM engine breaks junction ties"),
+          h("span", { id: "mz-engine-status", class: "mz-engine-status", "data-kind": "off" }, "engine off — local ties")),
+        h("div", { class: "mz-trace", id: "mz-trace", "aria-live": "polite" }),
+        h("p", { class: "mz-note" },
+          "every bot step is the cheapest reliable rung: forced rules first, then " +
+          "breadth-first searches over only what it has seen. The WASM engine is " +
+          "consulted only when two frontier routes cost exactly the same — a " +
+          "genuine tie.")),
+
+      tabPane("rubric",
+        h("div", { id: "mz-palette", class: "mz-palette" }),
+        h("div", { id: "mz-rubric-list", class: "mz-rubric-list" }),
+        h("textarea", { id: "mz-rubric-json", class: "mz-json", rows: "7", spellcheck: "false",
+          "aria-label": "scoring rubric as JSON" }),
+        h("div", { class: "mz-btnrow" },
+          h("button", { id: "mz-rubric-apply", class: "ctl", type: "button" }, "apply JSON"),
+          h("button", { id: "mz-rubric-reset", class: "ctl", type: "button" }, "reset")),
+        h("p", { class: "mz-note" },
+          "score = round(100 · Σ weightᵢ · normᵢ / Σ |weightᵢ|); norms are per-map pars; ",
+          "negative weights are penalty axes (fights is a badness norm: f/(1+f)).")));
 
     wrap.appendChild(scorebar);
-    const main = h("div", { class: "mz-main" }, stage, panel);
+    const main = h("div", { class: "mz-main" }, acc, stage, h("div", { class: "mz-info" }, tabs, panes));
     wrap.appendChild(main);
     wrap.appendChild(dpad);
     return wrap;
@@ -1169,17 +1513,66 @@
       h("span", null, label));
   }
 
+  /* ---------- panel helpers ---------- */
+
+  function setTab(name) {
+    for (const b of root.querySelectorAll(".mz-tab")) {
+      const on = b.getAttribute("data-tab") === name;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-selected", String(on));
+    }
+    for (const p of root.querySelectorAll(".mz-tabpane")) {
+      p.classList.toggle("on", p.getAttribute("data-pane") === name);
+    }
+  }
+
+  function syncMapParams() {
+    const dungeon = byId("mz-maptype").value === "dungeon";
+    const mazeBox = byId("mz-maze-params");
+    const dungBox = byId("mz-dungeon-params");
+    if (mazeBox) mazeBox.classList.toggle("hidden", dungeon);
+    if (dungBox) dungBox.classList.toggle("hidden", !dungeon);
+  }
+
+  function applyTheme(name) {
+    S.theme = PALETTES[name] ? name : "vault";
+    PAL = PALETTES[S.theme];
+    render();
+  }
+
   /* ---------- wiring ---------- */
 
   function wire() {
-    byId("mz-generate").addEventListener("click", () => newGame(false));
+    byId("mz-generate").addEventListener("click", generateMap);
+    byId("mz-dice").addEventListener("click", generateMap); /* 🎲 = roll seed + fresh map */
     byId("mz-restart").addEventListener("click", () => newGame(true));
     byId("mz-pause").addEventListener("click", togglePause);
     byId("mz-god").addEventListener("click", toggleGod);
     for (const m of ["bot", "play", "versus"]) {
       byId("mz-mode-" + m).addEventListener("click", () => setMode(m));
     }
-    byId("mz-size").addEventListener("change", () => { sizeCanvas(); render(); });
+    byId("mz-board-btn").addEventListener("click", () => setBoardOpen(!S.boardOpen));
+    byId("mz-board-close").addEventListener("click", () => setBoardOpen(false));
+    byId("mz-stats-btn").addEventListener("click", () => setStatsOpen(!S.statsOpen));
+    byId("mz-stats-close").addEventListener("click", () => setStatsOpen(false));
+    byId("mz-board-clear").addEventListener("click", () => {
+      S.rows = [];
+      renderBoard();
+      log("Leaderboard cleared — still session-only, still nothing stored.");
+    });
+    for (const f of ["mz-f-who", "mz-f-result", "mz-f-sort"]) {
+      byId(f).addEventListener("change", renderBoard);
+    }
+
+    /* map size = map complexity: regenerate the same seed at the new size */
+    byId("mz-size").addEventListener("change", () => { sizeCanvas(); newGame(true); });
+
+    /* cosmetics */
+    byId("mz-theme").addEventListener("change", (e) => applyTheme(e.target.value));
+    byId("mz-gridlines").addEventListener("change", (e) => {
+      S.gridOn = e.target.checked;
+      render();
+    });
     byId("mz-audio").addEventListener("change", (e) => {
       S.audioOn = e.target.checked;
       if (S.audioOn) beep(440, 0.08, "triangle", 0.03);
@@ -1189,14 +1582,50 @@
       if (S.engineOn) ensureEngine();
     });
 
+    /* accordion: exactly one group open at a time; clicking the open head
+       collapses everything */
+    for (const head of root.querySelectorAll(".mz-acc-head")) {
+      head.addEventListener("click", () => {
+        const id = head.getAttribute("data-acc");
+        for (const item of root.querySelectorAll(".mz-acc-item")) {
+          const wasOpen = item.classList.contains("open");
+          const on = item.getAttribute("data-acc-item") === id && !wasOpen;
+          item.classList.toggle("open", on);
+          const h2 = item.querySelector(".mz-acc-head");
+          if (h2) h2.setAttribute("aria-expanded", String(on));
+        }
+      });
+    }
+
+    /* info tabs */
+    for (const b of root.querySelectorAll(".mz-tab")) {
+      b.addEventListener("click", () => setTab(b.getAttribute("data-tab")));
+    }
+
+    /* map type swaps which generation params show */
+    byId("mz-maptype").addEventListener("change", syncMapParams);
+
     /* live knobs: vision applies to both runs mid-flight (it is in the fair
        stamp); bot speed is the bot's playback clock */
+    function applyVisionShape() {
+      const shape = byId("mz-vshape").value === "cone" ? "cone" : "disc";
+      const half = parseInt(byId("mz-vhalf").value, 10);
+      for (const run of [S.bot, S.human]) {
+        if (!run) continue;
+        run.config.visionShape = shape;
+        run.config.visionHalf = half;
+      }
+      syncOutputs();
+      if (S.maze) { for (const run of [S.bot, S.human]) M.updateVision(run); }
+    }
     byId("mz-vision").addEventListener("input", () => {
       const v = parseInt(byId("mz-vision").value, 10);
       for (const run of [S.bot, S.human]) if (run) run.config.vision = v;
       syncOutputs();
       if (S.maze) { for (const run of [S.bot, S.human]) M.updateVision(run); }
     });
+    byId("mz-vshape").addEventListener("change", applyVisionShape);
+    byId("mz-vhalf").addEventListener("input", applyVisionShape);
     byId("mz-bot-speed").addEventListener("input", () => {
       if (S.bot) S.bot.config.botSpeed = parseInt(byId("mz-bot-speed").value, 10);
       syncOutputs();
@@ -1219,7 +1648,7 @@
       btn.addEventListener("pointercancel", stop);
     }
 
-    /* presets */
+    /* presets — a preset is a starting point, not a rule: same seed */
     const PRESETS = {
       cozy: { cells: 13, braidPct: 10, vision: 11, botSpeed: 12, timeLimitS: 0,
         lootEnabled: true, lootCount: 6, chestsEnabled: true, chestCount: 2,
@@ -1227,28 +1656,35 @@
       standard: { cells: 17, braidPct: 10, vision: 9, botSpeed: 14, timeLimitS: 0,
         lootEnabled: true, lootCount: 8, chestsEnabled: true, chestCount: 3,
         monstersEnabled: true, monsterCount: 3, monsterSpeed: 2, aggroRange: 5, wanderRandomness: 40 },
-      hard: { cells: 21, braidPct: 15, vision: 9, botSpeed: 16, timeLimitS: 300,
+      hard: { cells: 21, braidPct: 15, vision: 9, botSpeed: 16, timeLimitS: 300, fastMode: true,
         lootEnabled: true, lootCount: 10, chestsEnabled: true, chestCount: 4,
-        monstersEnabled: true, monsterCount: 5, monsterSpeed: 3, aggroRange: 6, wanderRandomness: 50 },
-      night: { cells: 25, braidPct: 20, vision: 7, botSpeed: 18, timeLimitS: 240,
+        monstersEnabled: true, monsterCount: 5, monsterSpeed: 3, aggroRange: 6, wanderRandomness: 50,
+        avoidMonsters: true },
+      night: { cells: 25, braidPct: 20, vision: 7, botSpeed: 18, timeLimitS: 240, fastMode: true,
         lootEnabled: true, lootCount: 12, chestsEnabled: true, chestCount: 5,
-        monstersEnabled: true, monsterCount: 7, monsterSpeed: 3, aggroRange: 7, wanderRandomness: 60 },
+        monstersEnabled: true, monsterCount: 7, monsterSpeed: 3, aggroRange: 7, wanderRandomness: 60,
+        avoidMonsters: true },
+      crawler: { mapType: "dungeon", rooms: 8, roomMin: 3, roomMax: 6, cells: 21, braidPct: 0,
+        vision: 12, visionShape: "cone", visionHalf: 60, botSpeed: 12, timeLimitS: 0,
+        lootEnabled: true, lootCount: 10, chestsEnabled: true, chestCount: 4,
+        monstersEnabled: true, monsterCount: 4, monsterSpeed: 2, aggroRange: 6, wanderRandomness: 45,
+        avoidMonsters: true },
     };
-    byId("mz-preset").addEventListener("change", (e) => {
-      const p = PRESETS[e.target.value];
-      if (!p) return;
-      applyControls(p);
-      newGame(true);
-      log("Preset applied — same seed, new parameters.");
-    });
-
     function applyControls(p) {
       const set = (id, v) => { byId(id).value = String(v); };
-      if (p.cells !== undefined) set("mz-cells", p.cells);
+      if (p.mapType !== undefined) set("mz-maptype", p.mapType);
+      if (p.rooms !== undefined) set("mz-rooms", p.rooms);
+      if (p.roomMin !== undefined) set("mz-room-min", p.roomMin);
+      if (p.roomMax !== undefined) set("mz-room-max", p.roomMax);
+      if (p.cells !== undefined) set("mz-size", p.cells);
       if (p.braidPct !== undefined) set("mz-braid", p.braidPct);
       if (p.vision !== undefined) set("mz-vision", p.vision);
+      if (p.visionShape !== undefined) set("mz-vshape", p.visionShape);
+      if (p.visionHalf !== undefined) set("mz-vhalf", p.visionHalf);
       if (p.botSpeed !== undefined) set("mz-bot-speed", p.botSpeed);
       if (p.timeLimitS !== undefined) set("mz-timer", p.timeLimitS);
+      if (p.fastMode !== undefined) byId("mz-fast").checked = p.fastMode;
+      if (p.avoidMonsters !== undefined) byId("mz-avoid").checked = p.avoidMonsters;
       if (p.lootEnabled !== undefined) byId("mz-loot-on").checked = p.lootEnabled;
       if (p.lootCount !== undefined) set("mz-loot-count", p.lootCount);
       if (p.chestsEnabled !== undefined) byId("mz-chest-on").checked = p.chestsEnabled;
@@ -1258,12 +1694,21 @@
       if (p.monsterSpeed !== undefined) set("mz-mon-speed", p.monsterSpeed);
       if (p.aggroRange !== undefined) set("mz-aggro", p.aggroRange);
       if (p.wanderRandomness !== undefined) set("mz-wander", p.wanderRandomness);
+      syncMapParams();
       syncOutputs();
     }
+    byId("mz-preset").addEventListener("change", (e) => {
+      const p = PRESETS[e.target.value];
+      if (!p) return;
+      applyControls(p);
+      newGame(true);
+      log("Preset applied — same seed, new parameters.");
+    });
 
     function syncOutputs() {
       for (const out of root.querySelectorAll("output[data-for]")) {
         const inp = byId(out.dataset.for);
+        if (!inp) continue;
         const suffix = (out.textContent.match(/[^\d\-+]+$/) || [""])[0];
         out.textContent = inp.value + suffix;
       }
@@ -1276,21 +1721,47 @@
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("resize", () => { sizeCanvas(); });
 
-    /* deep link: ?maze=<seed> (and optional &mode=bot|play|versus) */
+    /* deep links: ?maze=<seed>, &mode=bot|play|versus, &game=<preset name>
+       (games.html links here with ?game=crawler and ?game=maze) */
     try {
       const q = new URLSearchParams(window.location.search);
       const seed = q.get("maze");
       if (seed) byId("mz-seed").value = seed;
+      const game = q.get("game");
+      if (game && PRESETS[game]) {
+        byId("mz-preset").value = game;
+        applyControls(PRESETS[game]);
+      }
       const mode = q.get("mode");
       if (mode && ["bot", "play", "versus"].includes(mode)) setMode(mode);
     } catch (err) { /* query parsing is best-effort */ }
-
-    /* theme can flip at runtime (site toggle); re-read periodically, cheap */
   }
 
   /* ---------- boot ---------- */
 
   root.appendChild(buildUI());
+
+  /* reset-params: restore every config control to its boot value (the seed
+     box keeps its current number — reset is about parameters, not maps) */
+  const paramSel = '.mz select, .mz input[type="range"], .mz input[type="number"],'
+    + ' .mz input[type="checkbox"]';
+  const bootParams = Array.from(root.querySelectorAll(paramSel)).map((el) => [el, el.value, el.checked]);
+  byId("mz-reset-params").addEventListener("click", () => {
+    for (const [el, v, c] of bootParams) { el.value = v; el.checked = c; }
+    sizeCanvas();
+    newGame(true);
+    log("Parameters restored to defaults.");
+  });
+  const DKFS = globalThis.DecisionsSDK;
+  if (DKFS && DKFS.shell && DKFS.shell.fullscreen) {
+    DKFS.shell.fullscreen(root.querySelector(".mz"), byId("mz-fs"));
+  } else {
+    byId("mz-fs").addEventListener("click", () => {
+      const el = root.querySelector(".mz");
+      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+      else if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    });
+  }
   sizeCanvas();
   wire();
   renderPalette();

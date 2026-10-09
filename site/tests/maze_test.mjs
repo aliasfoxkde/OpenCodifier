@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
+await import(path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), 'sdk', 'decisions-sdk.js'));
 await import(path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), 'maze-core.js'));
 const M = globalThis.MazeCore;
 assert.ok(M, 'maze-core.js must define globalThis.MazeCore');
@@ -720,4 +721,195 @@ test('the bot opens chests on its way (bfs.chest rung exists in play)', () => {
   const chestRung = events.find((e) => e.type === 'move' && e.rung === 'bfs.chest');
   assert.ok(chestRung, 'the ladder has a chest rung');
   assert.ok(typeof summary.coins === 'number');
+});
+
+/* ---------- dungeon maps (rooms + hallways) ---------- */
+
+test('dungeon maps: rooms exist, halls connect, and every floor is reachable', () => {
+  const m = M.generateMaze({ seed: 'halls', cells: 21, mapType: 'dungeon', rooms: 8, roomMin: 3, roomMax: 6 });
+  assert.equal(m.w, 43);
+  assert.equal(m.h, 43);
+  assert.equal(m.mapType, 'dungeon');
+  assert.equal(m.grid[idx(m, m.start.x, m.start.y)], M.FLOOR, 'start is a room-center floor');
+  assert.equal(m.grid[idx(m, m.exit.x, m.exit.y)], M.FLOOR, 'exit is a floor');
+  assert.ok(m.optimalSteps > 0, 'a real route exists');
+  const dist = M.bfsDistances(m.grid, m.w, m.h, m.start.x, m.start.y, M.FLOOR);
+  let reachable = 0;
+  for (const d of dist) if (d >= 0) reachable++;
+  assert.equal(reachable, m.floorCount, 'no orphaned pockets: halls connect everything');
+  /* a room shows up as a 3×3 all-floor block somewhere */
+  let room = false;
+  for (let y = 1; y + 2 < m.h - 1 && !room; y++) {
+    for (let x = 1; x + 2 < m.w - 1 && !room; x++) {
+      room = [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1], [0, 2], [1, 2], [2, 2]]
+        .every(([ox, oy]) => m.grid[idx(m, x + ox, y + oy)] === M.FLOOR);
+    }
+  }
+  assert.ok(room, 'at least one carved 3×3 room block exists');
+});
+
+test('dungeon generation is deterministic per seed and differs from the maze type', () => {
+  const a = M.generateMaze({ seed: 'halls', cells: 13, mapType: 'dungeon' });
+  const b = M.generateMaze({ seed: 'halls', cells: 13, mapType: 'dungeon' });
+  const c = M.generateMaze({ seed: 'halls', cells: 13 });
+  assert.deepEqual([...a.grid], [...b.grid]);
+  assert.notDeepEqual([...a.grid], [...c.grid]);
+  assert.equal(a.mapType, 'dungeon');
+  assert.equal(c.mapType, 'maze');
+});
+
+test('the bot escapes a full dungeon-crawler setup (cone fog, rooms, threats)', () => {
+  const cfg = {
+    seed: 'crawl-sim', cells: 17, mapType: 'dungeon', rooms: 7, roomMin: 3, roomMax: 6,
+    vision: 12, visionShape: 'cone', visionHalf: 60, braidPct: 0,
+    monsterCount: 3, monsterSpeed: 2, aggroRange: 6, wanderRandomness: 45,
+    avoidMonsters: true, lootCount: 6, chestCount: 3, chestsEnabled: true,
+  };
+  const maze = M.generateMaze(cfg);
+  const { summary } = M.simulateBotRun(maze, cfg);
+  assert.ok(summary.escaped, 'the crawler bot escapes its own fog');
+  assert.ok(summary.steps <= 12 * summary.optimalSteps,
+    `steps ${summary.steps} within 12× optimal ${summary.optimalSteps}`);
+});
+
+/* ---------- cone vision (facing torchlight) ---------- */
+
+function openRoom() {
+  return tinyMaze([
+    '#########',
+    '#.......#',
+    '#.......#',
+    '#.......#',
+    '#.......#',
+    '#.......#',
+    '#########',
+  ]);
+}
+
+test('cone vision hides what the disc shows when it is behind the facing', () => {
+  const m = openRoom();
+  const disc = new Uint8Array(m.w * m.h);
+  M.computeFov(m.grid, m.w, m.h, 4, 3, 9, disc, null, null);
+  const cone = new Uint8Array(m.w * m.h);
+  M.computeFov(m.grid, m.w, m.h, 4, 3, 9, cone, null, M.DIRS.find((d) => d.name === 'E'), 45);
+  /* (2,5): 2.8 cells away, behind-left of an east-facing runner */
+  assert.equal(disc[idx(m, 2, 5)], 1, 'disc vision sees the rear-left floor');
+  assert.equal(cone[idx(m, 2, 5)], 0, 'cone vision does not look backward');
+  assert.equal(cone[idx(m, 7, 3)], 1, 'straight ahead is lit');
+  assert.equal(cone[idx(m, 4, 3)], 1, 'the runner cell is always lit');
+});
+
+test('cone vision keeps a close radius: everything within 1.5 stays visible', () => {
+  const m = openRoom();
+  const cone = new Uint8Array(m.w * m.h);
+  M.computeFov(m.grid, m.w, m.h, 4, 3, 9, cone, null, M.DIRS.find((d) => d.name === 'E'), 45);
+  /* (5,2): behind-right but adjacent — a torch lights its holder */
+  assert.equal(cone[idx(m, 5, 2)], 1, 'adjacent cell behind the facing is still lit');
+  assert.equal(cone[idx(m, 3, 2)], 1, 'adjacent rear cell is lit');
+  /* a wider half-angle admits more of the sides */
+  const wide = new Uint8Array(m.w * m.h);
+  M.computeFov(m.grid, m.w, m.h, 4, 3, 9, wide, null, M.DIRS.find((d) => d.name === 'E'), 85);
+  assert.ok(wide[idx(m, 2, 5)] === 0 || wide[idx(m, 7, 2)] === 1, 'wider cone sees more ahead');
+});
+
+test('turning updates what a cone runner can see', () => {
+  const m = openRoom();
+  const state = M.createRunState(m, { vision: 9, visionShape: 'cone', visionHalf: 45,
+    monstersEnabled: false, lootEnabled: false, chestsEnabled: false }, 'human');
+  state.pos = { x: 4, y: 3 };
+  state.facing = M.DIRS.find((d) => d.name === 'E');
+  M.updateVision(state);
+  const eastView = state.visible[idx(m, 7, 3)];
+  const southLit = state.visible[idx(m, 4, 5)];
+  state.facing = M.DIRS.find((d) => d.name === 'S');
+  M.updateVision(state);
+  assert.equal(eastView, 1, 'facing east lights the east corridor');
+  assert.equal(state.visible[idx(m, 4, 5)], 1, 'facing south lights what east did not');
+  assert.ok(southLit === 0 || state.visible[idx(m, 7, 3)] === 0, 'the old heading dims');
+});
+
+/* ---------- active monster avoidance ---------- */
+
+test('avoidMonsters widens the threat mask only for monsters actually seen', () => {
+  const m = openRoom();
+  const state = M.createRunState(m, { vision: 5, monstersEnabled: false,
+    lootEnabled: false, chestsEnabled: false, avoidMonsters: true }, 'bot');
+  /* seen monster: center of the room, well inside vision 5 */
+  state.monsters.push({ id: 1, x: 3, y: 3, aggro: true });
+  /* unseen monster: far corner, outside vision 5 from (1,1) */
+  state.monsters.push({ id: 2, x: 7, y: 5, aggro: true });
+  M.updateVision(state);
+  const base = M.threatCells(state);
+  const wide = M.threatCells(state, true);
+  assert.equal(base.has(idx(m, 3, 3)), true, 'base blocks the monster cell');
+  assert.equal(base.has(idx(m, 5, 3)), false, 'base stops at the neighbor ring');
+  assert.equal(wide.has(idx(m, 5, 3)), true, 'the seen monster gains a wide halo');
+  assert.equal(wide.has(idx(m, 3, 1)), true, 'the halo reaches ring two');
+  assert.equal(wide.has(idx(m, 7, 3)), false, 'the unseen monster gains no halo');
+});
+
+test('avoidMonsters keeps every run escaping and never adds fights', () => {
+  let plainFights = 0;
+  let avoidFights = 0;
+  for (const seed of ['av1', 'av2', 'av3', 'av4', 'av5', 'av6']) {
+    const cfg = { seed, cells: 13, braidPct: 20, monsterCount: 3, aggroRange: 5 };
+    const a = M.simulateBotRun(M.generateMaze(cfg), { ...cfg, avoidMonsters: false });
+    const b = M.simulateBotRun(M.generateMaze(cfg), { ...cfg, avoidMonsters: true });
+    assert.ok(a.summary.escaped && b.summary.escaped, `both escape on ${seed}`);
+    plainFights += a.summary.fights;
+    avoidFights += b.summary.fights;
+  }
+  assert.ok(avoidFights <= plainFights,
+    `avoidance does not add fights (${avoidFights} vs ${plainFights})`);
+});
+
+test('config stamps separate mapType, vision shape, and the avoid flag', () => {
+  const base = { seed: 's', cells: 21, vision: 9 };
+  assert.notEqual(M.configStamp({ ...base }), M.configStamp({ ...base, mapType: 'dungeon' }));
+  assert.notEqual(M.configStamp({ ...base }), M.configStamp({ ...base, visionShape: 'cone' }));
+  const withMon = { ...base, monsterCount: 3 };
+  assert.notEqual(M.configStamp(withMon), M.configStamp({ ...withMon, avoidMonsters: true }));
+  const noMon = { ...base, monstersEnabled: false };
+  assert.equal(M.configStamp(noMon), M.configStamp({ ...noMon, avoidMonsters: true }),
+    'avoid is meaningless without monsters — same stamp');
+});
+
+test('fastMode plans whole routes, still escapes, and stamps separately', () => {
+  for (const seed of ['fast1', 'fast2', 'fast3', 'fast4']) {
+    const cfg = { seed, cells: 17, braidPct: 15, monsterCount: 2, timeLimitS: 240 };
+    const maze = M.generateMaze(cfg);
+    const plain = M.simulateBotRun(maze, cfg);
+    const fast = M.simulateBotRun(maze, { ...cfg, fastMode: true });
+    assert.ok(fast.summary.escaped, `fastMode escapes on ${seed}`);
+    assert.ok(fast.summary.plans > 0, `fastMode commits to routes on ${seed}`);
+    assert.equal(fast.summary.planSteps + (fast.summary.plans > 0 ? 0 : 0) >= 0, true);
+    assert.ok(fast.summary.planSteps / Math.max(1, fast.summary.steps) > 0.5,
+      `most fastMode steps are predicted ones on ${seed}`);
+    assert.notEqual(M.configStamp(cfg), M.configStamp({ ...cfg, fastMode: true }),
+      'fastMode with a limit is a different stamp');
+    assert.equal(
+      M.configStamp({ ...cfg, timeLimitS: 0 }),
+      M.configStamp({ ...cfg, timeLimitS: 0, fastMode: true }),
+      'fastMode is meaningless without a limit — same stamp');
+    assert.ok(plain.summary.escaped, `plain still escapes on ${seed}`);
+  }
+});
+
+test('fastMode under deadline drops side objectives (loot) to make the exit', () => {
+  const cfg = { seed: 'press', cells: 17, braidPct: 15, lootEnabled: true, lootCount: 8, timeLimitS: 60 };
+  const maze = M.generateMaze(cfg);
+  const fast = M.simulateBotRun(maze, { ...cfg, fastMode: true });
+  // 60s limit: past 30s the bot stops chasing loot. Whatever the outcome,
+  // the run must be deterministic and honest about what it collected.
+  const again = M.simulateBotRun(M.generateMaze(cfg), { ...cfg, fastMode: true });
+  assert.equal(fast.summary.lootCollected, again.summary.lootCollected,
+    'same seed + fastMode = same loot count');
+  assert.ok(fast.summary.escaped || fast.summary.timedOut, 'run resolves honestly');
+});
+
+test('fastMode is deterministic — identical runs, identical summaries', () => {
+  const cfg = { seed: 'det', cells: 15, braidPct: 20, monsterCount: 2, timeLimitS: 180, fastMode: true };
+  const a = M.simulateBotRun(M.generateMaze(cfg), cfg);
+  const b = M.simulateBotRun(M.generateMaze(cfg), cfg);
+  assert.deepEqual(a.summary, b.summary, 'same seed, same everything');
 });

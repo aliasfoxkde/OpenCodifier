@@ -23,9 +23,14 @@ function makeCtx() {
    itself builds — ids set via setAttribute register + absorb these) */
 const DEFAULTS = {
   'mz-seed': { value: 'shell-test' },
-  'mz-size': { value: '600' },
+  'mz-size': { value: '17' },
+  'mz-maptype': { value: 'maze' },
+  'mz-rooms': { value: '7' },
+  'mz-room-min': { value: '3' },
+  'mz-room-max': { value: '6' },
   'mz-vision': { value: '9' },
-  'mz-cells': { value: '13' },
+  'mz-vshape': { value: 'disc' },
+  'mz-vhalf': { value: '45' },
   'mz-braid': { value: '10' },
   'mz-bot-speed': { value: '30' },
   'mz-timer': { value: '0' },
@@ -38,9 +43,16 @@ const DEFAULTS = {
   'mz-loot-on': { checked: true },
   'mz-chest-on': { checked: true },
   'mz-mon-on': { checked: false },
+  'mz-avoid': { checked: false },
   'mz-engine-on': { checked: false },
   'mz-audio': { checked: false },
+  'mz-gridlines': { checked: true },
+  'mz-theme': { value: 'vault' },
   'mz-preset': { value: '' },
+  /* leaderboard overlay filters must default to show-everything */
+  'mz-f-who': { value: 'all' },
+  'mz-f-result': { value: 'all' },
+  'mz-f-sort': { value: 'new' },
 };
 
 const registry = new Map();

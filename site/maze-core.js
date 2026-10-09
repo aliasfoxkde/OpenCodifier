@@ -1,4 +1,4 @@
-/* Maze Solver core — pure logic for the try.html #maze demo. No DOM, no
+/* Maze Solver core — pure logic for the maze.html + pacman.html #maze demos. No DOM, no
    canvas, no timers: everything here is deterministic given (seed, config)
    and unit-testable under `node --test` the same way benchmarks.js is
    (import for side effect, read the global).
@@ -53,44 +53,19 @@
     "Coins? It has teeth.",
   ];
 
-  /* ---------- rng: string seed → mulberry32 ---------- */
+  /* ---------- shared runtime (Decisions SDK) ----------
+     rng and config clamping moved verbatim into sdk/decisions-sdk.js — the
+     maze now re-exports them; the SDK must be loaded/imported first. */
 
-  function hashSeed(str) {
-    /* FNV-1a 32-bit — stable across engines, no Math.random anywhere */
-    let h = 0x811c9dc5;
-    const s = String(str);
-    for (let i = 0; i < s.length; i++) {
-      h ^= s.charCodeAt(i);
-      h = Math.imul(h, 0x01000193);
-    }
-    return h >>> 0;
-  }
-
-  function mulberry32(a) {
-    let t = a >>> 0;
-    return function () {
-      t = (t + 0x6d2b79f5) | 0;
-      let r = Math.imul(t ^ (t >>> 15), 1 | t);
-      r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
-      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-    };
-  }
-
-  function makeRng(seedStr) {
-    return mulberry32(hashSeed(seedStr));
-  }
-
-  function pick(rng, arr) {
-    return arr[Math.floor(rng() * arr.length)];
-  }
+  const DK = globalThis.DecisionsSDK;
+  const hashSeed = DK.hashSeed;
+  const mulberry32 = DK.mulberry32;
+  const makeRng = DK.makeRng;
+  const pick = DK.pick;
 
   /* ---------- config ---------- */
 
-  function clamp(v, lo, hi, dflt) {
-    const n = Number(v);
-    if (!isFinite(n)) return dflt;
-    return Math.min(hi, Math.max(lo, Math.round(n)));
-  }
+  const clamp = DK.clamp;
 
   function normalizeConfig(raw) {
     const c = raw || {};
@@ -98,8 +73,14 @@
     return {
       seed: String(c.seed || "oc-maze"),
       cells: cells,
+      mapType: c.mapType === "dungeon" ? "dungeon" : "maze",
+      rooms: clamp(c.rooms, 3, 12, 7),
+      roomMin: clamp(c.roomMin, 3, 6, 3),
+      roomMax: clamp(c.roomMax, 3, 9, 6),
       braidPct: clamp(c.braidPct, 0, 40, 10),
       vision: clamp(c.vision, 5, 15, 9),
+      visionShape: c.visionShape === "cone" ? "cone" : "disc",
+      visionHalf: clamp(c.visionHalf, 15, 85, 45),
       lootEnabled: c.lootEnabled !== false,
       lootCount: clamp(c.lootCount, 0, 16, 8),
       chestsEnabled: c.chestsEnabled === true,
@@ -109,16 +90,42 @@
       monsterSpeed: clamp(c.monsterSpeed, 1, 5, 2),
       aggroRange: clamp(c.aggroRange, 2, 10, 5),
       wanderRandomness: clamp(c.wanderRandomness, 0, 100, 60),
-      botSpeed: clamp(c.botSpeed, 2, 60, 12),
+      avoidMonsters: c.avoidMonsters === true,
+      botSpeed: clamp(c.botSpeed, 2, 90, 12),
       timeLimitS: clamp(c.timeLimitS, 0, 1800, 0), /* 0 = no limit */
+      fastMode: c.fastMode === true,
       godMode: c.godMode === true,
     };
   }
 
-  /* ---------- maze generation ---------- */
+  /* ---------- map generation ---------- */
 
+  /* Two map types share one representation (walls-as-cells grid):
+     - "maze": recursive-backtracker corridors + braiding;
+     - "dungeon": rectangular rooms connected by L-shaped hallways, with a
+       few extra loop corridors so patrols and escapes have options.
+     Both are fully deterministic given (seed, config). */
   function generateMaze(rawConfig) {
     const cfg = normalizeConfig(rawConfig);
+    return cfg.mapType === "dungeon" ? generateDungeonMap(cfg) : generateMazeMap(cfg);
+  }
+
+  function finishMap(cfg, w, h, grid, startX, startY, exitX, exitY, optimalSteps, extra) {
+    let floorCount = 0;
+    for (let i = 0; i < grid.length; i++) if (grid[i] === FLOOR) floorCount++;
+    return Object.assign({
+      w, h, grid,
+      start: { x: startX, y: startY },
+      exit: { x: exitX, y: exitY },
+      optimalSteps,
+      floorCount,
+      seed: cfg.seed,
+      cells: cfg.cells,
+      mapType: cfg.mapType,
+    }, extra || {});
+  }
+
+  function generateMazeMap(cfg) {
     const w = 2 * cfg.cells + 1;
     const h = w;
     const grid = new Uint8Array(w * h).fill(WALL);
@@ -201,19 +208,104 @@
       exitX = 1; exitY = 1;
     }
 
-    let floorCount = 0;
-    for (let i = 0; i < grid.length; i++) if (grid[i] === FLOOR) floorCount++;
+    return finishMap(cfg, w, h, grid, startX, startY, exitX, exitY, bestD + 1,
+      { braidPct: cfg.braidPct });
+  }
 
-    return {
-      w, h, grid,
-      start: { x: startX, y: startY },
-      exit: { x: exitX, y: exitY },
-      optimalSteps: bestD + 1,
-      floorCount,
-      seed: cfg.seed,
-      cells: cfg.cells,
-      braidPct: cfg.braidPct,
+  function generateDungeonMap(cfg) {
+    const w = 2 * cfg.cells + 1;
+    const h = w;
+    const grid = new Uint8Array(w * h).fill(WALL);
+    const rng = makeRng(cfg.seed + ":dungeon");
+    const idx = (x, y) => y * w + x;
+
+    const lo = Math.max(3, cfg.roomMin);
+    const hi = Math.min(Math.max(lo, cfg.roomMax), Math.floor(w / 3));
+    const rooms = [];
+    const overlaps = (r) => rooms.some((o) =>
+      r.x - 1 < o.x + o.w && r.x + r.w + 1 > o.x &&
+      r.y - 1 < o.y + o.h && r.y + r.h + 1 > o.y);
+    let attempts = cfg.rooms * 30;
+    while (rooms.length < cfg.rooms && attempts-- > 0) {
+      const rw = lo + Math.floor(rng() * (hi - lo + 1));
+      const rh = lo + Math.floor(rng() * (hi - lo + 1));
+      const rx = 1 + Math.floor(rng() * (w - rw - 2));
+      const ry = 1 + Math.floor(rng() * (h - rh - 2));
+      const r = { x: rx, y: ry, w: rw, h: rh };
+      if (overlaps(r)) continue;
+      for (let y = ry; y < ry + rh; y++) {
+        for (let x = rx; x < rx + rw; x++) grid[idx(x, y)] = FLOOR;
+      }
+      rooms.push(r);
+    }
+
+    /* hallway between two points: horizontal leg then vertical leg (the
+       corner order is rng-chosen so layouts vary without losing determinism) */
+    const carveHall = (ax, ay, bx, by) => {
+      if (rng() < 0.5) {
+        carveRun(ax, ay, bx, ay);
+        carveRun(bx, ay, bx, by);
+      } else {
+        carveRun(ax, ay, ax, by);
+        carveRun(ax, by, bx, by);
+      }
     };
+    const carveRun = (x0, y0, x1, y1) => {
+      const sx = Math.sign(x1 - x0);
+      const sy = Math.sign(y1 - y0);
+      let x = x0;
+      let y = y0;
+      grid[idx(x, y)] = FLOOR;
+      while (x !== x1) { x += sx; grid[idx(x, y)] = FLOOR; }
+      while (y !== y1) { y += sy; grid[idx(x, y)] = FLOOR; }
+    };
+
+    const center = (r) => ({ x: r.x + (r.w >> 1), y: r.y + (r.h >> 1) });
+    for (let i = 1; i < rooms.length; i++) {
+      const a = center(rooms[i - 1]);
+      const b = center(rooms[i]);
+      carveHall(a.x, a.y, b.x, b.y);
+    }
+    /* loop corridors: every ~3 rooms adds one shortcut elsewhere on the
+       chain, so the dungeon is not a tree and monsters can be dodged */
+    if (rooms.length >= 2) {
+      const loops = Math.floor(rooms.length / 3);
+      for (let i = 0; i < loops; i++) {
+        const a = center(pick(rng, rooms));
+        const b = center(pick(rng, rooms));
+        if (a.x === b.x && a.y === b.y) continue;
+        carveHall(a.x, a.y, b.x, b.y);
+      }
+    }
+
+    /* start: center of the room nearest the middle of the map */
+    let start = rooms.length ? center(rooms[0]) : { x: 1, y: 1 };
+    let bestRoomDist = Infinity;
+    for (const r of rooms) {
+      const c = center(r);
+      const d = Math.abs(c.x - (w >> 1)) + Math.abs(c.y - (h >> 1));
+      if (d < bestRoomDist) { bestRoomDist = d; start = c; }
+    }
+
+    /* exit: the farthest reachable floor cell from the start — same "hardest
+       race" rule as the maze, but interior: a vault door, not a border gap */
+    const dist = bfsDistances(grid, w, h, start.x, start.y, FLOOR);
+    let exitX = start.x;
+    let exitY = start.y;
+    let bestD = -1;
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        if (grid[idx(x, y)] !== FLOOR || dist[idx(x, y)] < 0) continue;
+        if ((x === start.x && y === start.y) || dist[idx(x, y)] <= bestD) continue;
+        bestD = dist[idx(x, y)];
+        exitX = x;
+        exitY = y;
+      }
+    }
+    if (bestD < 0) { exitX = start.x; exitY = start.y; bestD = 0; }
+
+    return finishMap(cfg, w, h, grid, start.x, start.y, exitX, exitY, bestD,
+      { rooms: rooms.length });
   }
 
   /* ---------- generalized Bresenham (all octants, integer only) ---------- */
@@ -270,14 +362,28 @@
     }
   }
 
-  /* Vision: one Bresenham ray per destination cell inside the radius disc.
-     Marks `visible` (this frame) and folds into `revealed` (memory). */
-  function computeFov(grid, w, h, px, py, radius, visible, revealed) {
+  /* Vision: one Bresenham ray per destination cell inside the view shape.
+     Default shape is the full disc (radius). `facing` (a DIR) + `halfDeg`
+     switch to the crawler cone: only cells within the angular span of the
+     facing direction get a ray — the same wall-stop and corner rules apply
+     per ray. Immediate neighbors (≤ 1.5 cells) always count as seen, so a
+     corner-facing spawn is never fully blind. Marks `visible` (this frame)
+     and folds into `revealed` (memory). */
+  function computeFov(grid, w, h, px, py, radius, visible, revealed, facing, halfDeg) {
     visible.fill(0);
     const r2 = radius * radius;
+    const cone = !!facing;
+    const cosHalf = cone ? Math.cos((halfDeg || 45) * Math.PI / 180) : 0;
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
         if (dx * dx + dy * dy > r2) continue;
+        if (cone) {
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d > 1.5) {
+            const dot = (dx * facing.dx + dy * facing.dy) / d;
+            if (dot < cosHalf) continue;
+          }
+        }
         const x = px + dx;
         const y = py + dy;
         if (x < 0 || y < 0 || x >= w || y >= h) continue;
@@ -374,6 +480,42 @@
     }
   }
 
+  /* the WHOLE route, not just the first hop: BFS from the target, then walk
+     the descent back up. Deterministic — the same DIRS order breaks every
+     equal-distance tie, so a given (map, target) always yields one route.
+     Returns [] when the target is unreachable over the passable set. */
+  function bfsFullPath(grid, w, h, sx, sy, tx, ty, passable) {
+    if (sx === tx && sy === ty) return [];
+    /* distance map from the SOURCE, then climb down from the target:
+       each hop lands on a cell one step closer to the source, so the
+       collected directions (target→source) reverse into the route */
+    const dist = bfsDistances(grid, w, h, sx, sy, passable);
+    let d = dist[ty * w + tx];
+    if (d < 0) return [];
+    const path = [];
+    let x = tx;
+    let y = ty;
+    while (d > 0) {
+      let advanced = false;
+      for (const dd of DIRS) {
+        const nx = x + dd.dx;
+        const ny = y + dd.dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        if (dist[ny * w + nx] === d - 1) {
+          path.push({ name: dd.name, dx: -dd.dx, dy: -dd.dy });
+          x = nx;
+          y = ny;
+          d--;
+          advanced = true;
+          break;
+        }
+      }
+      if (!advanced) return []; /* defensive: distance map desync */
+    }
+    path.reverse();
+    return path;
+  }
+
   /* ---------- run state (shared by the live shell and headless sim) ---------- */
 
   function createRunState(maze, rawConfig, runnerType) {
@@ -387,10 +529,13 @@
       visible: new Uint8Array(n),
       known: new Uint8Array(n),
       pos: { x: maze.start.x, y: maze.start.y },
+      facing: openFacing(maze), /* cone vision: the way the runner looks */
       steps: 0,
       timeS: 0,
       cool: 0,
       escaped: false,
+      botPlan: null, /* beat-the-clock: the committed route {kind,x,y,path,rung,note} */
+      planCount: 0, planSteps: 0, planReplans: 0,
       finished: false,
       assisted: false,
       abstained: false,
@@ -496,9 +641,25 @@
     return state;
   }
 
+  /* cone spawn: face the first open neighbor (N,E,S,W order) so a runner
+     never starts staring into solid rock; E is the fallback */
+  function openFacing(maze) {
+    const idx = (x, y) => y * maze.w + x;
+    for (const d of DIRS) {
+      const nx = maze.start.x + d.dx;
+      const ny = maze.start.y + d.dy;
+      if (nx >= 0 && ny >= 0 && nx < maze.w && ny < maze.h && maze.grid[idx(nx, ny)] === FLOOR) {
+        return d;
+      }
+    }
+    return DIRS[1];
+  }
+
   function updateVision(state) {
+    const cone = state.config.visionShape === "cone";
     computeFov(state.maze.grid, state.maze.w, state.maze.h,
-      state.pos.x, state.pos.y, state.config.vision, state.visible, state.revealed);
+      state.pos.x, state.pos.y, state.config.vision, state.visible, state.revealed,
+      cone ? state.facing : null, state.config.visionHalf);
     const idx = (x, y) => y * state.maze.w + x;
     for (let dy = -state.config.vision; dy <= state.config.vision; dy++) {
       for (let dx = -state.config.vision; dx <= state.config.vision; dx++) {
@@ -521,13 +682,33 @@
      its 4-neighbors so the bot routes around, not through. Driven by the
      monster list, not the monsters toggle — chest-spawned monsters exist
      even on monster-free maps. */
-  function threatCells(state) {
+  /* cells the ladder refuses to route through. Base: every monster's own
+     cell plus an aggro monster's four neighbors. `wide` (avoidMonsters on)
+     adds a two-ring halo around every monster the runner can actually SEE —
+     route planning bends around known threats instead of through them. */
+  function threatCells(state, wide) {
     const blocked = new Set();
-    const idx = (x, y) => y * state.maze.w + x;
+    const maze = state.maze;
+    const idx = (x, y) => y * maze.w + x;
+    const inside = (x, y) => x >= 0 && y >= 0 && x < maze.w && y < maze.h;
     for (const m of state.monsters) {
+      if (!inside(m.x, m.y)) continue;
       blocked.add(idx(m.x, m.y));
       if (!m.aggro) continue;
-      for (const d of DIRS) blocked.add(idx(m.x + d.dx, m.y + d.dy));
+      for (const d of DIRS) {
+        if (inside(m.x + d.dx, m.y + d.dy)) blocked.add(idx(m.x + d.dx, m.y + d.dy));
+      }
+    }
+    if (wide && state.config.avoidMonsters) {
+      const r = 2;
+      for (const m of state.monsters) {
+        if (!inside(m.x, m.y) || state.visible[idx(m.x, m.y)] !== 1) continue;
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            if (inside(m.x + dx, m.y + dy)) blocked.add(idx(m.x + dx, m.y + dy));
+          }
+        }
+      }
     }
     return blocked;
   }
@@ -553,7 +734,7 @@
       return { rung: "rule.exit", dir: null, note: "standing on the exit" };
     }
 
-    const threats = threatCells(state);
+    const threats = threatCells(state, true);
     const threatened = threats.has(idx(state.pos.x, state.pos.y));
 
     /* exit revealed → beeline over the known map */
@@ -579,10 +760,50 @@
       if (safe) return { rung: "rule.flee", dir: safe, note: "monster too close — retreating" };
     }
 
+    /* beat-the-clock deadline: past half the limit, side objectives lose to
+       the exit (fastMode only — plain runs keep collecting) */
+    const pressing = state.config.fastMode && state.config.timeLimitS > 0 &&
+      state.timeS >= 0.5 * state.config.timeLimitS;
+
+    /* committed-route follow: the plan was decided once, whole path and all
+       (moves predicted ahead of time); each tick only re-checks that it
+       still holds. No per-step re-decision, no frontier ping-pong, none of
+       the retrace churn a greedy re-planner pays on every branch. */
+    if (state.config.fastMode && state.botPlan) {
+      const plan = state.botPlan;
+      const wants = plan.kind === "loot"
+        ? state.loot.some((l) => !l.taken && l.x === plan.x && l.y === plan.y)
+        : plan.kind === "chest"
+          ? state.chests.some((c) => !c.opened && c.x === plan.x && c.y === plan.y)
+          : state.known[idx(plan.x, plan.y)] === KNOWN_FLOOR &&
+            DIRS.some((d) => {
+              const nx = plan.x + d.dx;
+              const ny = plan.y + d.dy;
+              return nx >= 0 && ny >= 0 && nx < maze.w && ny < maze.h &&
+                state.known[idx(nx, ny)] === KNOWN_UNK;
+            });
+      if (!wants || (state.pos.x === plan.x && state.pos.y === plan.y)) {
+        state.botPlan = null; /* served — pick the next objective below */
+      } else if (!plan.path.length) {
+        state.botPlan = null; /* route ran dry without landing — re-decide */
+      } else {
+        const d = plan.path[0];
+        const nx = state.pos.x + d.dx;
+        const ny = state.pos.y + d.dy;
+        if (passableKnown(nx, ny) && !threats.has(idx(nx, ny))) {
+          plan.path.shift();
+          state.planSteps++;
+          return { rung: plan.rung, dir: d, note: plan.note };
+        }
+        state.botPlan = null; /* interrupted (threat grew onto the route) */
+        state.planReplans++;
+      }
+    }
+
     /* revealed loot (objective on) → nearest safe pickup. One distance map
        over the threat-free known map, then min-dist target (x/y tie-break) —
        never a direction-order pick, which can flip-flop between two piles. */
-    if (state.config.lootEnabled) {
+    if (state.config.lootEnabled && !pressing) {
       const ldist = bfsDistances(maze.grid, maze.w, maze.h, state.pos.x, state.pos.y,
         (x, y) => passableKnown(x, y) && !threats.has(idx(x, y)));
       let target = null;
@@ -597,15 +818,30 @@
         }
       }
       if (target) {
+        const pass = (x, y) => passableKnown(x, y) && !threats.has(idx(x, y));
         const dir = bfsFirstStep(maze.grid, maze.w, maze.h, state.pos.x, state.pos.y,
-          target.x, target.y, (x, y) => passableKnown(x, y) && !threats.has(idx(x, y)));
-        if (dir) return { rung: "bfs.loot", dir, note: "loot spotted — collecting" };
+          target.x, target.y, pass);
+        if (dir) {
+          if (state.config.fastMode) {
+            const path = bfsFullPath(maze.grid, maze.w, maze.h,
+              state.pos.x, state.pos.y, target.x, target.y, pass);
+            if (path.length) {
+              state.botPlan = { kind: "loot", x: target.x, y: target.y, path,
+                rung: "bfs.loot", note: "planned route — " + path.length + " steps to loot" };
+              state.planCount++;
+              const d0 = state.botPlan.path.shift();
+              state.planSteps++;
+              return { rung: "bfs.loot", dir: d0, note: state.botPlan.note };
+            }
+          }
+          return { rung: "bfs.loot", dir, note: "loot spotted — collecting" };
+        }
       }
     }
 
     /* revealed unopened chests (objective on) → nearest safe chest, same
        nearest-by-distance selection as loot */
-    if (state.config.chestsEnabled) {
+    if (state.config.chestsEnabled && !pressing) {
       const cdist = bfsDistances(maze.grid, maze.w, maze.h, state.pos.x, state.pos.y,
         (x, y) => passableKnown(x, y) && !threats.has(idx(x, y)));
       let target = null;
@@ -620,9 +856,24 @@
         }
       }
       if (target) {
+        const pass = (x, y) => passableKnown(x, y) && !threats.has(idx(x, y));
         const dir = bfsFirstStep(maze.grid, maze.w, maze.h, state.pos.x, state.pos.y,
-          target.x, target.y, (x, y) => passableKnown(x, y) && !threats.has(idx(x, y)));
-        if (dir) return { rung: "bfs.chest", dir, note: "chest spotted — opening it" };
+          target.x, target.y, pass);
+        if (dir) {
+          if (state.config.fastMode) {
+            const path = bfsFullPath(maze.grid, maze.w, maze.h,
+              state.pos.x, state.pos.y, target.x, target.y, pass);
+            if (path.length) {
+              state.botPlan = { kind: "chest", x: target.x, y: target.y, path,
+                rung: "bfs.chest", note: "planned route — " + path.length + " steps to chest" };
+              state.planCount++;
+              const d0 = state.botPlan.path.shift();
+              state.planSteps++;
+              return { rung: "bfs.chest", dir: d0, note: state.botPlan.note };
+            }
+          }
+          return { rung: "bfs.chest", dir, note: "chest spotted — opening it" };
+        }
       }
     }
 
@@ -635,26 +886,39 @@
     const fdistUnsafe = threats.size
       ? bfsDistances(maze.grid, maze.w, maze.h, state.pos.x, state.pos.y, passableKnown)
       : null;
+    /* fastMode pattern logic: a frontier that borders MORE unknown is worth
+       more per step — count unknown borders and score value = cost minus an
+       information bonus (bigger under deadline). Plain runs keep pure
+       nearest-frontier, so classic behavior and old replays are untouched. */
+    const infoMode = state.config.fastMode;
     for (let y = 0; y < maze.h; y++) {
       for (let x = 0; x < maze.w; x++) {
         if (state.known[idx(x, y)] !== KNOWN_FLOOR) continue;
-        const bordersUnknown = DIRS.some((d) => {
+        let unknownBorders = 0;
+        for (const d of DIRS) {
           const nx = x + d.dx;
           const ny = y + d.dy;
-          return nx >= 0 && ny >= 0 && nx < maze.w && ny < maze.h &&
-            state.known[idx(nx, ny)] === KNOWN_UNK;
-        });
-        if (!bordersUnknown) continue;
+          if (nx >= 0 && ny >= 0 && nx < maze.w && ny < maze.h &&
+            state.known[idx(nx, ny)] === KNOWN_UNK) unknownBorders++;
+        }
+        if (!unknownBorders) continue;
         const d = fdist[idx(x, y)];
         const du = fdistUnsafe ? fdistUnsafe[idx(x, y)] : d;
         if (d < 0 && (du < 0 || threats.size === 0)) continue;
         const useD = d >= 0 ? d : du;
         if (useD < 0) continue;
-        if (!bestFrontier || useD < bestFrontier.d ||
-          (useD === bestFrontier.d && (x < bestFrontier.x || (x === bestFrontier.x && y < bestFrontier.y)))) {
-          bestFrontier = { x, y, d: useD };
+        const score = infoMode
+          ? useD - (unknownBorders - 1) * (pressing ? 1.5 : 0.5)
+          : useD;
+        const better = !bestFrontier ||
+          score < bestFrontier.score ||
+          (score === bestFrontier.score &&
+            (useD < bestFrontier.d ||
+              (useD === bestFrontier.d && (x < bestFrontier.x || (x === bestFrontier.x && y < bestFrontier.y)))));
+        if (better) {
+          bestFrontier = { x, y, d: useD, score, ub: unknownBorders };
           tied = [[x, y, useD]];
-        } else if (useD === bestFrontier.d) {
+        } else if (score === bestFrontier.score && useD === bestFrontier.d) {
           tied.push([x, y, useD]);
         }
       }
@@ -684,11 +948,78 @@
             note: "junction: " + cands.length + " equal-cost frontiers",
           };
         }
-        return { rung: "bfs.frontier", dir: step, note: "exploring nearest frontier" };
+        /* fastMode: commit to the whole route NOW — moves predicted ahead of
+           time, then followed without re-deliberation */
+        if (infoMode) {
+          const pass = (x, y) => passableKnown(x, y) && !threats.has(idx(x, y)) && fdist[idx(x, y)] >= 0;
+          const path = bfsFullPath(maze.grid, maze.w, maze.h, state.pos.x, state.pos.y,
+            bestFrontier.x, bestFrontier.y, pass) ||
+            bfsFullPath(maze.grid, maze.w, maze.h, state.pos.x, state.pos.y,
+              bestFrontier.x, bestFrontier.y, passableKnown);
+          if (path.length) {
+            state.botPlan = {
+              kind: "frontier", x: bestFrontier.x, y: bestFrontier.y,
+              path, rung: "bfs.frontier",
+              note: "planned route — " + path.length + " steps to frontier" +
+                (pressing ? " (deadline)" : ""),
+            };
+            state.planCount++;
+            const d0 = state.botPlan.path.shift();
+            state.planSteps++;
+            return { rung: "bfs.frontier", dir: d0, note: state.botPlan.note };
+          }
+        }
+        return { rung: "bfs.frontier", dir: step,
+          note: infoMode ? "exploring best-value frontier" : "exploring nearest frontier" };
+      }
+    }
+
+    /* crawler fog: the known map is fully explored but unknown cells remain —
+       the frontier is behind the runner. Rotate toward the densest unknown
+       fan (a real action, visible in the trace) rather than abstaining. */
+    if (state.config.visionShape === "cone") {
+      let hasUnknown = false;
+      for (let i = 0; i < state.known.length; i++) {
+        if (state.known[i] === KNOWN_UNK) { hasUnknown = true; break; }
+      }
+      if (hasUnknown) {
+        let best = null;
+        for (const d of DIRS) {
+          const n = countUnknownInFan(state, d);
+          if (!best || n > best.n) best = { d, n };
+        }
+        return {
+          rung: "turn", dir: best.d,
+          note: "no reachable frontier — turning (" + best.n + " unknown ahead)",
+        };
       }
     }
 
     return { rung: "abstain", dir: null, note: "no known route — refusing to guess" };
+  }
+
+  /* how much unexplored area lies in the cone around direction d — the
+     bot's lookahead for the turn rung. Scans the vision disc once per
+     candidate; grid sizes here make that trivial. */
+  function countUnknownInFan(state, d) {
+    const maze = state.maze;
+    const r = state.config.vision;
+    const cosHalf = Math.cos((state.config.visionHalf || 45) * Math.PI / 180);
+    let n = 0;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy > r * r) continue;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 1.5) {
+          if ((dx * d.dx + dy * d.dy) / dist < cosHalf) continue;
+        }
+        const x = state.pos.x + dx;
+        const y = state.pos.y + dy;
+        if (x < 0 || y < 0 || x >= maze.w || y >= maze.h) continue;
+        if (state.known[y * maze.w + x] === KNOWN_UNK) n++;
+      }
+    }
+    return n;
   }
 
   function evade(state, threats) {
@@ -902,13 +1233,21 @@
           events.push({ type: "abstain" });
           return events;
         }
-        if (decision.dir) {
+        if (decision.rung === "turn" && decision.dir) {
+          /* crawler fog: nothing unexplored is reachable on the known map —
+             spend the tick rotating in place; the new heading may reveal one */
+          state.facing = decision.dir;
+          updateVision(state);
+          events.push({ type: "turn", to: decision.dir.name });
+          state.lastDecision = decision;
+        } else if (decision.dir) {
           prevPos = { x: state.pos.x, y: state.pos.y };
           const nx = state.pos.x + decision.dir.dx;
           const ny = state.pos.y + decision.dir.dy;
           if (state.known[idx(nx, ny)] === KNOWN_FLOOR) {
             state.pos = { x: nx, y: ny };
             state.steps++;
+            state.facing = decision.dir;
             moved = true;
             events.push({ type: "move", from: prevPos, to: state.pos, rung: decision.rung, note: decision.note });
           }
@@ -922,8 +1261,14 @@
         prevPos = { x: state.pos.x, y: state.pos.y };
         state.pos = { x: nx, y: ny };
         state.steps++;
+        state.facing = humanMove;
         moved = true;
         events.push({ type: "move", from: prevPos, to: state.pos, rung: "human", note: "player move" });
+      } else if (state.config.visionShape === "cone") {
+        /* walking into a wall under cone vision = turning to look at it */
+        state.facing = humanMove;
+        updateVision(state);
+        events.push({ type: "turn", to: humanMove.name });
       }
     }
 
@@ -1014,6 +1359,13 @@
       chestTotal: state.config.chestsEnabled ? state.chests.length : 0,
       fights: state.fights,
       optimalSteps: state.maze.optimalSteps,
+      fastMode: state.config.fastMode,
+      plans: state.planCount,
+      planSteps: state.planSteps,
+      planReplans: state.planReplans,
+      stepEfficiency: state.steps > 0
+        ? Math.round((state.maze.optimalSteps / state.steps) * 100)
+        : 0,
       monstersEnabled: state.config.monstersEnabled,
       lootEnabled: state.config.lootEnabled,
       chestsEnabled: state.config.chestsEnabled,
@@ -1049,28 +1401,18 @@
     tiebreakers: ["time", "steps"],
   };
 
+  /* sanitization moved into the SDK; the maze supplies its own weighted
+     DEFAULT_RUBRIC as the empty-criteria fallback (the generic default
+     weights every tag 1, which would change live scoring) */
   function normalizeRubric(raw) {
-    const src = raw && typeof raw === "object" ? raw : {};
-    const seen = new Set();
-    const criteria = [];
-    const arr = Array.isArray(src.criteria) ? src.criteria : [];
-    for (const c of arr) {
-      if (!c || typeof c !== "object") continue;
-      if (!TAGS.includes(c.tag) || seen.has(c.tag)) continue;
-      seen.add(c.tag);
-      criteria.push({ tag: c.tag, weight: clamp(c.weight, -3, 5, 1) });
-    }
-    if (!criteria.length) return JSON.parse(JSON.stringify(DEFAULT_RUBRIC));
-    const tieSeen = new Set();
-    const tiebreakers = [];
-    for (const t of (Array.isArray(src.tiebreakers) ? src.tiebreakers : [])) {
-      if (TAGS.includes(t) && !tieSeen.has(t)) { tieSeen.add(t); tiebreakers.push(t); }
-    }
-    return {
-      version: 1,
-      criteria,
-      tiebreakers: tiebreakers.length ? tiebreakers : ["time", "steps"],
-    };
+    return DK.rubric.normalize(raw, {
+      tags: TAGS,
+      minW: -3,
+      maxW: 5,
+      defWeight: 1,
+      defRubric: DEFAULT_RUBRIC,
+      defTie: ["time", "steps"],
+    });
   }
 
   /* per-tag 0..1 normalization; pars derive from the map itself. A disabled
@@ -1094,23 +1436,19 @@
     }
   }
 
+  /* the arithmetic lives in the SDK; the maze owns its metric normalization
+     (pars derive from the map) and maps its run semantics onto the SDK's
+     dnf/assisted sentinels (no escape = did not finish; assisted = excluded) */
+  const MAZE_NORMS = {};
+  for (const t of TAGS) MAZE_NORMS[t] = (s) => metricNorm(t, s);
+
   function scoreRun(s, rubric) {
     const r = normalizeRubric(rubric);
-    if (!s.escaped || s.assisted) {
-      return { score: 0, dnf: !s.escaped, assisted: !!s.assisted, breakdown: [] };
-    }
-    let num = 0;
-    let den = 0;
-    const breakdown = [];
-    for (const c of r.criteria) {
-      const norm = metricNorm(c.tag, s);
-      if (c.weight === 0) { breakdown.push({ tag: c.tag, weight: 0, norm, contrib: 0 }); continue; }
-      num += c.weight * norm;
-      den += Math.abs(c.weight);
-      breakdown.push({ tag: c.tag, weight: c.weight, norm: Math.round(norm * 1000) / 1000, contrib: Math.round(c.weight * norm * 1000) / 1000 });
-    }
-    const score = den > 0 ? Math.round((100 * num) / den) : 0;
-    return { score: Math.max(0, score), dnf: false, assisted: false, breakdown };
+    return DK.rubric.score(
+      { ...s, __dnf: !s.escaped, __assisted: !!s.assisted },
+      r,
+      MAZE_NORMS,
+    );
   }
 
   function tagNorm(tag, s) { return metricNorm(tag, s); }
@@ -1152,13 +1490,20 @@
     return scoreRun(s, rubric).score;
   }
 
-  /* config stamp — winner verdicts only compare runs with identical stamps */
+  /* config stamp — winner verdicts only compare runs with identical stamps.
+     Everything that changes the map or the information game is in; cosmetics
+     (palette, gridlines, canvas size) are deliberately not. */
   function configStamp(cfg) {
     const c = normalizeConfig(cfg);
-    return [c.seed, c.cells, c.braidPct, c.vision, c.lootEnabled ? c.lootCount : "off",
+    return [c.seed, c.cells,
+      c.mapType === "dungeon" ? "d:" + [c.rooms, c.roomMin, c.roomMax].join("-") : "b:" + c.braidPct,
+      c.vision, c.visionShape === "cone" ? "cone" + c.visionHalf : "disc",
+      c.lootEnabled ? c.lootCount : "off",
       c.chestsEnabled ? c.chestCount : "off",
-      c.monstersEnabled ? [c.monsterCount, c.monsterSpeed, c.aggroRange, c.wanderRandomness].join("-") : "off",
-      c.timeLimitS > 0 ? c.timeLimitS : "open",
+      c.monstersEnabled
+        ? [c.monsterCount, c.monsterSpeed, c.aggroRange, c.wanderRandomness, c.avoidMonsters ? 1 : 0].join("-")
+        : "off",
+      c.timeLimitS > 0 ? c.timeLimitS + (c.fastMode ? "/fast" : "") : "open",
     ].join("|");
   }
 
