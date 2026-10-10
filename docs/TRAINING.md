@@ -1157,3 +1157,42 @@ pool is a different, measured quantity (81,740 at the 0.5 floor). The
 A/B arms should define the pool as `corpus_gates.py` quarantines it at
 a recorded threshold — the manifest makes the pool a reproducible
 artifact instead of a per-campaign judgement call.
+
+### merged-v4 built and verified (2026-10-09)
+
+**Upstream accounting, measured** (a recon pass had assumed the HF
+dataset grew past what the lineage ingested — it did not):
+`corpora/src/dataset.jsonl` is byte-identical (sha `7c7a8806…`) to the
+file merged-v1 ingested, so upstream never grew. The 148,160 rows
+partition exactly: **132,781** survive into merged-v3, **+28,937**
+quarantine rows were re-admitted by the qradj-v1 recovery (verified by
+record-id intersection, not inferred from counts), **+9,810** remain
+quarantined (the remainder), and **+5,569** were deduped at the v2
+merge (exact duplicates of retained rows; they stay out — re-adding
+them would double-weight identical content).
+
+**Build** (`fedora:~/oc-model-eval/build_merged_v4.py` →
+`corpora/merged-v4.jsonl`, manifest `merged-v4.manifest.json`):
+merged-v3 (pinned `7e86c550…`, 173,452 records, byte-verbatim) + the
+9,810-record quarantine remainder, each marked
+`_pool: {origin, quarantine_reason, train_weight: 0.05}` — the §9.8.4
+verdict applied at the record level. 183,262 records out; sha
+asserted on both inputs; suite state-collision gate reproduced arm B's
+build numbers exactly (28,937 recovered-skip, 0 collisions, 9,810
+admitted). `_pool.train_weight` is a record-level marker consumed by
+row prep (applied per emitted segment row, arm-B precedent);
+`decision_sft_prep` itself does not read it.
+
+**Equivalence verification**: `decision_sft_prep` on merged-v4 emits
+187,822 rows that are **sequence-identical** to arm B's trained rows
+(`e1-quarx005.rows.jsonl`, sha `13968f04…`) after stripping
+`_train_weight` — the record-level corpus and the arm that was trained
+are two representations of one composition, and the pin is now
+checkable rather than asserted.
+
+**Not folded in**: the `corpus_gates.py` noise-pool threshold A/B
+(81,740 rows at the 0.5 floor) stays open for a future arm — one
+measured change per corpus version. merged-v4's only treatment vs v3
+is the A/B-verified pool re-admission. First consumer per §10: the
+prune-then-recover middle path (structured-prune the r22 4B to
+~1–2 B + LoRA recovery on merged-v4), burst-scale.
