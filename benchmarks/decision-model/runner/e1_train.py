@@ -85,6 +85,31 @@ v3 (iterate-B, TRAINING.md §9.7.1) — the val curve is now durable:
   columns. The manifest is the record of record; the log line
   remains for humans.
 
+v4 (--soft-labels, e1-softlabel-v1, TRAINING.md §10 / #143) — the
+teacher-distribution path:
+
+- **Gold-conditioned, teacher-supervised**: the text is byte-identical
+  to the hard rows (verdict tokens placed at the gold slot by
+  decision_sft_prep), so the ONLY variable vs a hard arm is the target
+  distribution. Verdict-token positions leave the hard-CE surface;
+  EOS keeps its CE (learn-to-stop must survive the soft switch).
+- **Listwise KL over slot margins**: at each slot position the loss
+  reads z_i = logit[yes] − logit[no] and minimizes
+  CE(teacher_p, softmax(z)) averaged over slots — exactly the quantity
+  the serving/eval readout scores (per-slot yes/no margin, softmax over
+  slots), so training and evaluation share one mechanism by
+  construction. The teacher distribution is a softmax over options, so
+  a coherent listwise target is the right form; per-slot binary
+  targets would not sum to a distribution.
+- **--teacher-temp** applies p ∝ p^(1/T) (renormalized) AFTER the
+  cache: raw facts are what gets cached and sha-pinned, so temperature
+  arms share one tokenization cache and the manifest records the temp
+  actually trained at.
+- Cache key gains ``-soft``: a soft run cannot serve a hard corpus's
+  cache or vice versa (the soft arrays only exist in soft caches).
+  Rows whose ``slot_probs`` field is missing, wrong-length, or <2
+  slots are loud-skipped and counted, never silently dropped.
+
 torch/transformers/peft import lazily so the pure helpers (segment
 encoding, label masking, batching, stratified split) unit-test on
 machines without torch. Every knob is a CLI flag with the
@@ -292,6 +317,26 @@ def main() -> int:
                          "of the loss is unchanged")
     ap.add_argument("--length-bucket", action="store_true",
                     help="length-homogeneous batching experiment")
+    ap.add_argument("--soft-labels", action="store_true",
+                    help="soft-label mode: rows carry slot_probs (the "
+                         "teacher distribution over option slots, from "
+                         "the teacher-scoring campaign). Loss = "
+                         "listwise CE(teacher, softmax over slot "
+                         "yes/no margins) + stop CE at EOS. Verdict "
+                         "tokens stay gold-placed in the text (one "
+                         "variable vs hard SFT) but leave the hard-CE "
+                         "surface. Requires build_softlabel_corpus "
+                         "rows")
+    ap.add_argument("--teacher-temp", type=float, default=1.0,
+                    help="soft mode: p ∝ p^(1/T) applied to slot "
+                         "probs after cache load (T>1 flattens, T<1 "
+                         "sharpens; 1.0 = facts as recorded). The "
+                         "cache stores raw facts, so temperature arms "
+                         "share one tokenization cache")
+    ap.add_argument("--stop-weight", type=float, default=1.0,
+                    help="soft mode: weight of the EOS stop CE added "
+                         "to the slot-margin CE (0 disables "
+                         "learn-to-stop supervision)")
     ap.add_argument("--profile-steps", type=int, default=0,
                     help="wrap the first N optimizer steps in "
                          "torch.profiler")
@@ -367,6 +412,19 @@ def main() -> int:
     eos_id = tok.eos_token_id
     collate = PadCollate(tok.pad_token_id)
 
+    soft_mode = args.soft_labels
+    if soft_mode:
+        yes_ids = tok.encode(" yes", add_special_tokens=False)
+        no_ids = tok.encode(" no", add_special_tokens=False)
+        if len(yes_ids) != 1 or len(no_ids) != 1:
+            say(f"soft-labels: verdict tokens are not single tokens "
+                f"(yes={yes_ids} no={no_ids}) — slot margins undefined")
+            return 1
+        yes_id, no_id = yes_ids[0], no_ids[0]
+        say(f"soft-labels: slot margins over {{{yes_id}=yes, "
+            f"{no_id}=no}}, teacher_temp={args.teacher_temp:g}, "
+            f"stop CE stays on EOS")
+
     # Supervised-position CE (train and val both): run the transformer
     # trunk, gather only supervised positions, project just those
     # through lm_head. Identical loss to passing labels (CE over
@@ -393,6 +451,35 @@ def main() -> int:
         sel = head(hidden[:, :-1, :][pos[0], pos[1]]).float()
         return sel, shift, pos
 
+    def soft_row_losses(sel, shift, pos, batch_soft):
+        """Per-row listwise CE(teacher_p, softmax over slot margins)
+        where margin_i = logit[yes] - logit[no] at slot i — the exact
+        distribution the serving/eval readout scores. z is assembled
+        row-major over the batch's verdict positions (pos is row-major
+        and verdict preserves that order), so the k-th prob of row r
+        pairs with the k-th verdict position of row r; the encode-side
+        length guard is what makes that pairing safe. Returns
+        (per-row CE tensor, batch row indices) or None when a batch
+        somehow carries no verdict positions."""
+        tgt = shift[pos]
+        verdict = (tgt == yes_id) | (tgt == no_id)
+        if not bool(verdict.any()):
+            return None
+        z = sel[verdict][:, yes_id] - sel[verdict][:, no_id]
+        losses: list[torch.Tensor] = []
+        ridx: list[int] = []
+        k = 0
+        for r, probs in enumerate(batch_soft):
+            n = len(probs)
+            if n == 0:
+                continue
+            logq = torch.log_softmax(z[k:k + n], dim=-1)
+            p_r = torch.tensor(probs, device=z.device, dtype=z.dtype)
+            losses.append(-(p_r * logq).sum())
+            ridx.append(r)
+            k += n
+        return torch.stack(losses), ridx
+
     # Tokenize once, cache by (data sha, max_len, split knobs): pilots
     # re-running on the same corpus+config skip the encode pass (A5).
     # The split knobs MUST be in the key — the internal-consistency
@@ -410,7 +497,8 @@ def main() -> int:
     # different rws arrays.
     split_tag = (f"l{args.limit_rows or 0}-s{args.seed}"
                  f"-vf{args.val_frac:g}-vc{args.val_cap}"
-                 f"-rwf{args.row_weight_field or '0'}-fam3")
+                 f"-rwf{args.row_weight_field or '0'}-fam3"
+                 + ("-soft" if args.soft_labels else ""))
     cache_path = cache_dir / (f"e1-train-{data_sha[:12]}-"
                               f"ml{args.max_len}-{split_tag}.npz")
 
@@ -418,13 +506,26 @@ def main() -> int:
         feats: list[tuple[list[int], list[int]]] = []
         fams: list[str] = []
         rws: list[float] = []
+        soft_vals: list[list[float]] = []
         skipped = 0
+        soft_bad = 0
         for row in split_rows:
             enc = encode_row(row["segments"], tok.encode, eos_id,
                              args.max_len)
             if enc is None:
                 skipped += 1
                 continue
+            # Soft mode: slot_probs must exist, match the y=1 segment
+            # count exactly, and carry >=2 slots — a mismatch would
+            # desync the KL targets from the slot positions, so the
+            # row is loud-skipped, never silently trained on.
+            if soft_mode:
+                probs = row.get("slot_probs") or []
+                n_slots = sum(1 for s in row["segments"] if s["y"])
+                if len(probs) != n_slots or n_slots < 2:
+                    soft_bad += 1
+                    continue
+                soft_vals.append([float(p) for p in probs])
             feats.append(enc)
             fams.append(row_family(row))
             # Per-row loss weight: the field's value, else 1.0. Missing
@@ -433,8 +534,9 @@ def main() -> int:
             rws.append(float(row.get(args.row_weight_field, 1.0))
                        if args.row_weight_field else 1.0)
         say(f"{tag}: feats={len(feats)} loud_skipped_over_maxlen="
-            f"{skipped}")
-        return feats, fams, rws, skipped
+            f"{skipped}"
+            + (f" soft_bad_slotprobs={soft_bad}" if soft_mode else ""))
+        return (feats, fams, rws, skipped, soft_vals, soft_bad)
 
     if cache_path.exists():
         z = np.load(cache_path, allow_pickle=False)
@@ -458,20 +560,33 @@ def main() -> int:
             val_rws = rws_all[counts["train_n"]:]
             skipped_train = counts["skipped_train"]
             skipped_val = counts.get("skipped_val", 0)
+            soft_bad_train = counts.get("soft_bad_train", 0)
+            soft_bad_val = counts.get("soft_bad_val", 0)
+            if soft_mode:
+                soff = z["soft_offs"]
+                sflat = z["soft"]
+                soft_all = [sflat[soff[i]:soff[i + 1]].tolist()
+                            for i in range(n_feats)]
+                train_soft = soft_all[:counts["train_n"]]
+                val_soft = soft_all[counts["train_n"]:]
             say(f"cache hit {cache_path.name} train={len(train_feats)} "
                 f"val={len(val_feats)}")
         else:
             say(f"cache stale {cache_path.name} (row-count mismatch) "
                 f"— re-encoding")
             cache_path.unlink()
-            train_feats, train_fams, train_rws, skipped_train = \
+            (train_feats, train_fams, train_rws, skipped_train,
+             train_soft, soft_bad_train) = \
                 encode_all([rows[i] for i in train_idx], "train")
-            val_feats, val_fams, val_rws, skipped_val = encode_all(
+            (val_feats, val_fams, val_rws, skipped_val,
+             val_soft, soft_bad_val) = encode_all(
                 [rows[i] for i in val_idx], "val")
     else:
-        train_feats, train_fams, train_rws, skipped_train = encode_all(
-            [rows[i] for i in train_idx], "train")
-        val_feats, val_fams, val_rws, skipped_val = encode_all(
+        (train_feats, train_fams, train_rws, skipped_train,
+         train_soft, soft_bad_train) = \
+            encode_all([rows[i] for i in train_idx], "train")
+        (val_feats, val_fams, val_rws, skipped_val,
+         val_soft, soft_bad_val) = encode_all(
             [rows[i] for i in val_idx], "val")
 
     if not cache_path.exists():
@@ -482,17 +597,52 @@ def main() -> int:
         counts = {"train_n": len(train_feats), "val_n": len(val_feats),
                   "skipped_train": skipped_train,
                   "skipped_val": skipped_val}
-        np.savez(cache_path,
-                 ids=np.array([i for ids, _ in train_feats + val_feats
-                               for i in ids], dtype=np.int32),
-                 labels=np.array([i for _, ls in train_feats + val_feats
-                                  for i in ls], dtype=np.int32),
-                 offsets=np.array(offs, dtype=np.int64),
-                 fams=np.array(train_fams + val_fams),
-                 rws=np.array(train_rws + val_rws, dtype=np.float64),
-                 counts=np.frombuffer(json.dumps(counts).encode(),
-                                      dtype=np.uint8))
+        payload = dict(
+            ids=np.array([i for ids, _ in train_feats + val_feats
+                          for i in ids], dtype=np.int32),
+            labels=np.array([i for _, ls in train_feats + val_feats
+                             for i in ls], dtype=np.int32),
+            offsets=np.array(offs, dtype=np.int64),
+            fams=np.array(train_fams + val_fams),
+            rws=np.array(train_rws + val_rws, dtype=np.float64),
+            counts=np.frombuffer(json.dumps(counts).encode(),
+                                 dtype=np.uint8))
+        if soft_mode:
+            sflat: list[float] = []
+            soffs = [0]
+            for probs in train_soft + val_soft:
+                sflat.extend(probs)
+                soffs.append(len(sflat))
+            payload["soft"] = np.array(sflat, dtype=np.float64)
+            payload["soft_offs"] = np.array(soffs, dtype=np.int64)
+            counts["soft_bad_train"] = soft_bad_train
+            counts["soft_bad_val"] = soft_bad_val
+            payload["counts"] = np.frombuffer(
+                json.dumps(counts).encode(), dtype=np.uint8)
+        np.savez(cache_path, **payload)
         say(f"cache written {cache_path.name}")
+
+    # Teacher temperature applies AFTER the cache: raw facts are what
+    # is cached and sha-pinned downstream, so temp arms share one
+    # tokenization cache and the manifest records the trained-at temp.
+    if soft_mode and args.teacher_temp != 1.0:
+        import math
+
+        def temp_scale(probs: list[float]) -> list[float]:
+            pmax = max(probs)
+            if pmax <= 0:
+                return probs
+            inv = 1.0 / args.teacher_temp
+            w = [0.0 if p <= 0 else
+                 math.exp(inv * (math.log(p) - math.log(pmax)))
+                 for p in probs]
+            total = sum(w)
+            return [x / total for x in w] if total > 0 else probs
+
+        train_soft = [temp_scale(p) for p in train_soft]
+        val_soft = [temp_scale(p) for p in val_soft]
+        say(f"teacher_temp={args.teacher_temp:g} applied "
+            f"post-cache (train rows {len(train_soft)})")
 
     train_nonunit = sum(1 for w in train_rws if w != 1.0)
     val_nonunit = sum(1 for w in val_rws if w != 1.0)
@@ -532,18 +682,92 @@ def main() -> int:
                               default=str)}")
 
     def run_val(step: int) -> tuple[float, dict, float, float]:
-        """Exact per-row token-mean val losses in ONE forward per
-        batch: cross-entropy gathered only at supervised positions
-        (a full-vocab reshape at 2048 tokens would need tens of GB),
-        attributed per row and per family. Also reports token
-        accuracy and mean entropy over supervised positions. Returns
-        ``(overall loss, per-family losses, token accuracy, mean
-        entropy)``; logs the per-family table."""
+        """Exact per-row val losses in ONE forward per batch,
+        attributed per row and per family. Hard mode: token-mean CE
+        over supervised positions, token accuracy, mean entropy.
+        Soft mode: per-row listwise slot CE (mean over rows) + stop
+        CE, slot-top1 agreement with the teacher, mean entropy of the
+        student's slot distribution. Returns ``(overall loss,
+        per-family losses, accuracy metric, mean entropy)``; logs the
+        per-family table."""
         model.eval()
         row_losses: list[tuple[int, int]] = []
         n_correct = 0
         n_sup = 0
         ent_sum = 0.0
+        # Soft accumulators
+        slot_ce_sum = 0.0
+        stop_ce_sum = 0.0
+        n_stop_total = 0
+        agree_n = 0
+        if soft_mode:
+            with torch.no_grad():
+                for start in range(0, len(val_order), 8):
+                    batch_idx = val_order[start:start + 8]
+                    batch = [val_feats[i] for i in batch_idx]
+                    input_ids, labels, attn = collate(batch)
+                    t_ids = torch.tensor(input_ids,
+                                         device=model.device)
+                    t_lab = torch.tensor(labels, device=model.device)
+                    t_att = torch.tensor(attn, device=model.device)
+                    sel, shift, pos = sup_logits(t_ids, t_att, t_lab)
+                    if pos[0].numel() == 0:
+                        continue
+                    tgt = shift[pos]
+                    verdict = (tgt == yes_id) | (tgt == no_id)
+                    out = soft_row_losses(
+                        sel, shift, pos,
+                        [val_soft[i] for i in batch_idx])
+                    if out is None:
+                        continue
+                    rows_ce, _ = out
+                    z_all = sel[verdict][:, yes_id] \
+                        - sel[verdict][:, no_id]
+                    # per-row slot distribution entropy + agreement
+                    k = 0
+                    for r, probs in enumerate(
+                            [val_soft[i] for i in batch_idx]):
+                        n = len(probs)
+                        z_r = z_all[k:k + n]
+                        p_r = torch.tensor(probs,
+                                           device=z_all.device,
+                                           dtype=z_all.dtype)
+                        q = torch.softmax(z_r, dim=-1)
+                        ent_sum += float(
+                            -(q * q.clamp_min(1e-12).log()).sum())
+                        agree_n += int(int(q.argmax()) ==
+                                       int(p_r.argmax()))
+                        row_losses.append((float(rows_ce[r]), 1))
+                        k += n
+                    slot_ce_sum += float(rows_ce.sum())
+                    stop = ~verdict
+                    if bool(stop.any()):
+                        stop_ce_sum += float(F.cross_entropy(
+                            sel[stop], tgt[stop],
+                            reduction="sum"))
+                        n_stop_total += int(stop.sum())
+            model.train()
+            n_rows = max(1, len(row_losses))
+            slot_ce_mean = slot_ce_sum / n_rows
+            stop_ce_mean = stop_ce_sum / max(1, n_stop_total)
+            overall = slot_ce_mean + args.stop_weight * stop_ce_mean
+            fam_sum: Counter = Counter()
+            fam_tok: Counter = Counter()
+            for (s, c), i in zip(row_losses, val_order):
+                fam_sum[val_fams[i]] += s
+                fam_tok[val_fams[i]] += c
+            per_family = {f: round(fam_sum[f] / max(1, fam_tok[f]), 4)
+                          for f in sorted(fam_sum)}
+            slot_agree = agree_n / max(1, len(row_losses))
+            ent_mean = ent_sum / max(1, len(row_losses))
+            log(f"val step={step} loss={overall:.4f} "
+                f"slot_ce={slot_ce_mean:.4f} "
+                f"stop_ce={stop_ce_mean:.4f} "
+                f"slot_agree={slot_agree:.4f} "
+                f"entropy={ent_mean:.4f} "
+                f"per_family={json.dumps(per_family)} "
+                f"rows={len(row_losses)}")
+            return overall, per_family, slot_agree, ent_mean
         with torch.no_grad():
             for start in range(0, len(val_order), 8):
                 batch = [val_feats[i] for i in
@@ -596,9 +820,10 @@ def main() -> int:
     val_history: list[dict] = []
 
     def maybe_checkpoint(step: int) -> None:
-        val_loss, per_family, tok_acc, ent_mean = run_val(step)
+        val_loss, per_family, acc_metric, ent_mean = run_val(step)
+        acc_key = "slot_agree" if soft_mode else "tok_acc"
         val_history.append({"step": step, "loss": round(val_loss, 4),
-                            "tok_acc": round(tok_acc, 4),
+                            acc_key: round(acc_metric, 4),
                             "entropy": round(ent_mean, 4),
                             "per_family": per_family})
         if val_loss < best["val_loss"]:
@@ -632,7 +857,24 @@ def main() -> int:
             sel, shift, pos = sup_logits(t_ids, t_att, t_lab)
             if pos[0].numel() == 0:
                 continue
-            raw = F.cross_entropy(sel, shift[pos], reduction="mean")
+            if soft_mode:
+                out = soft_row_losses(sel, shift, pos,
+                                      [train_soft[i]
+                                       for i in sel_idx])
+                if out is None:
+                    continue
+                rows_ce, _ = out
+                tgt = shift[pos]
+                stop = ~((tgt == yes_id) | (tgt == no_id))
+                stop_ce = (
+                    F.cross_entropy(sel[stop], tgt[stop],
+                                    reduction="mean")
+                    if bool(stop.any())
+                    else torch.zeros((), device=sel.device))
+                raw = rows_ce.mean() + args.stop_weight * stop_ce
+            else:
+                raw = F.cross_entropy(sel, shift[pos],
+                                      reduction="mean")
             fw = 1.0
             if fam_weights:
                 fams = [train_fams[i] for i in sel_idx]
@@ -703,13 +945,17 @@ def main() -> int:
     peak_mem = (int(torch.cuda.max_memory_allocated())
                 if torch.cuda.is_available() else 0)
     manifest = {
-        "manifest_version": "opencodifier.e1-train/3",
+        "manifest_version": "opencodifier.e1-train/4",
+        "loss_mode": ("soft-slot-kl+stop-ce" if soft_mode
+                      else "hard-verdict-ce"),
         "base": args.base,
         "data": {"path": str(rows_path), "sha256": data_sha,
                  "rows": len(rows), "train": len(train_feats),
                  "val": len(val_feats),
                  "loud_skipped_over_maxlen_train": skipped_train,
-                 "loud_skipped_over_maxlen_val": skipped_val},
+                 "loud_skipped_over_maxlen_val": skipped_val,
+                 "soft_bad_slotprobs_train": soft_bad_train,
+                 "soft_bad_slotprobs_val": soft_bad_val},
         "row_weight": {"field": args.row_weight_field,
                        "train_rows": len(train_rws),
                        "train_nonunit": train_nonunit,
@@ -729,7 +975,10 @@ def main() -> int:
                   "val_cap": args.val_cap, "val_every": args.val_every,
                   "family_weight": fam_weights,
                   "length_bucket": args.length_bucket,
-                  "grad_checkpoint": not args.no_grad_checkpoint},
+                  "grad_checkpoint": not args.no_grad_checkpoint,
+                  "soft_labels": args.soft_labels,
+                  "teacher_temp": args.teacher_temp,
+                  "stop_weight": args.stop_weight},
         "optimizer": {"name": "AdamW",
                       "weight_decay": opt.defaults["weight_decay"],
                       "betas": list(opt.defaults["betas"]),
@@ -744,7 +993,9 @@ def main() -> int:
         "tokens_per_second_wall": round(
             cum_tokens / max(1e-9, time.time() - t0)),
         "peak_memory_bytes": peak_mem,
-        "loss_surface": "verdict tokens only (y=1 segments + EOS)",
+        "loss_surface": ("slot margins: listwise CE(teacher, softmax) "
+                         "+ EOS stop CE" if soft_mode
+                         else "verdict tokens only (y=1 segments + EOS)"),
         "val_history": val_history,
         "best_checkpoint": {"step": best["step"],
                             "val_loss": round(best["val_loss"], 4)}
