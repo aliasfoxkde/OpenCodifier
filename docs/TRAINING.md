@@ -1103,11 +1103,26 @@ model, integrity manifest).
   weakness persists at 2B (0.8B lane showed relational val 0.0),
   capacity alone did not close it. Candidate lever for the soft-label
   v2 arm (#143): relational-heavy data, not more parameters.
-- **Next (pre-registered)**: GATE_PASS → JevBench 231 leg via
-  `--arm slot` (base + adapter-best, fp16, T5500 GPU1). Calibration
-  fit for the 2B arm comes after that leg (the fitter consumes its
-  per-row probabilities). A JevBench number is only published if the
-  release gate's second condition is met on this leg.
+- **JevBench 231 leg (GATE_PASS precondition met; executed 2026-10-11)**:
+  adapter-best, fp16, T5500 GPU1, harness `9ec6f15a` (same as every
+  Board A row). **Accuracy 0.6840** (158/231), family-macro 0.6832,
+  raw ECE 0.2067, Brier 0.5035, p50 0.58 s, replay determinism
+  231/231 (labels + probabilities). **Release gate: both legs pass**
+  — suite 0.8083 ≥ 0.68 AND JevBench 0.6840 ≥ 0.6494 (the Jev-Style
+  0.8B bridge) — the first own-trained arm to clear both. Per-family
+  shape matches the rel200 diagnosis: extraction 0.958, routing 1.00,
+  tool_selection 1.00, ordinal 1.00 vs multi_hop 0.389, judge_hard
+  0.412, long_policy 0.368, temporal_numeric 0.333 — the
+  relational/compositional families are exactly where the arm loses
+  the board.
+- **Calibration fit (D15 fitter, in-sample winner-vs-rest margin)**:
+  shipped `results/calibration/e1e-qwen3.5-2b-holdout.json`
+  (T=3.362, ECE 0.179 → 0.117, AURC 0.146 unchanged — both artifact
+  gates pass) and `e1e-qwen3.5-2b-rel200.json` (T=5.100,
+  ECE 0.262 → 0.169). Applied to the external JevBench board
+  analysis-only (no test-set fit): ECE 0.2067 → 0.1269. The arm is
+  systematically overconfident by ~3.4× in probability — consistent
+  with verdict-slot training on hard labels.
 
 ## 10. Transfer pathways into a small decision model (taxonomy, 2026-10-06)
 
