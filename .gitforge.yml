@@ -53,12 +53,28 @@ jobs:
     # so this is contention headroom, not workload growth.
     timeout: 60m
     steps:
+      # 2026-10-11: the runner caps each job container at 4 GiB. Under a
+      # multi-run storm, default -j (= nproc) runs enough rustc units in
+      # parallel to blow through the cgroup cap — cargo dies with SIGKILL
+      # (exit 137), host dmesg stays clean. -j 4 plus stripped debuginfo
+      # keeps peak RSS (the worst offender is linking the reqwest/hyper
+      # integration-test binaries) well inside the cap. Identical flags in
+      # all three steps so the shared target/ is built exactly once.
       - name: Unit and integration tests
-        run: cargo test --workspace
+        run: |
+          export CARGO_BUILD_JOBS=4
+          export RUSTFLAGS="-D warnings -C debuginfo=0"
+          cargo test --workspace
       - name: Feature-gated tests (llama.cpp transport, tokenizer agreement)
-        run: cargo test -p opencodifier-model --features llamacpp,tokenizers
+        run: |
+          export CARGO_BUILD_JOBS=4
+          export RUSTFLAGS="-D warnings -C debuginfo=0"
+          cargo test -p opencodifier-model --features llamacpp,tokenizers
       - name: Documentation tests
-        run: cargo test --doc
+        run: |
+          export CARGO_BUILD_JOBS=4
+          export RUSTFLAGS="-D warnings -C debuginfo=0"
+          cargo test --doc
 
   - name: doc
     image: opencodifier-ci-rust:2
@@ -107,9 +123,15 @@ jobs:
   - name: coverage
     image: opencodifier-ci-rust:2
     needs: [lint]
-    timeout: 45m
+    # 60m (was 45m): the -j 4 storm-fit above also applies here (same 4 GiB
+    # container cap; the instrumented rebuild is the single longest phase).
+    # llvm-cov manages its own RUSTFLAGS — only the build-jobs knob is
+    # exported here, never RUSTFLAGS.
+    timeout: 60m
     steps:
       - name: Line coverage (lcov DA basis)
-        run: cargo llvm-cov --workspace --lcov --output-path /tmp/lcov.info
+        run: |
+          export CARGO_BUILD_JOBS=4
+          cargo llvm-cov --workspace --lcov --output-path /tmp/lcov.info
       - name: Floor assertion (97.5 fixed constant; D36 ratchet retired)
         run: python3 scripts/coverage_floor.py /tmp/lcov.info --floor 97.5
