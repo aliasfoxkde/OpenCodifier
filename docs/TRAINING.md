@@ -1071,6 +1071,44 @@ model, integrity manifest).
   DDP only on Volta, no FSDP/device_mesh — §9.8) and recorded as the
   first power-on validation item.
 
+#### 9.9.1 E1-E executed: both arms GATE_PASS (2026-10-11)
+
+- **Execution**: restart after the strata kill — smoke 2k rows
+  rc=0 (23:35Z→01:24Z Oct 10), full arm `e1e2b` 01:24:18Z Oct 10 →
+  **06:27:08Z Oct 11 rc=0** (29.0 h wall, 11,009 steps, ~9.5 s/step —
+  on the stage-0 projection). Replica (seed 7) trained concurrently on
+  GPU1, closed 05:59Z.
+- **Co-tenant incident (recorded as an ops finding)**: the chain's
+  rel200 eval leg OOM'd — `t5500-llama.service` (a Qwen3.8-27B
+  llama-server deploy, 14.16 GiB on GPU0) started at 06:28:45Z, two
+  seconds into the leg, and the chain driver died before the stage-4
+  GATE line. No process was killed; the remaining legs (gate rel200 +
+  all four replica evals) were completed manually on the free GPU1 via
+  `e1e-finish.sh` — same eval commands, same suites, same stage-4 gate
+  rule; artifacts `runs/*/eval-*`, log `logs/e1e-finish.log`. T5500
+  effectively has one usable GPU while that unit holds GPU0.
+- **Results** (fixed reader; acc / ECE):
+
+  | arm | holdout best | holdout last | rel200 best | rel200 last |
+  |---|---|---|---|---|
+  | gate s42 | **0.8083** / 0.179 | 0.8083 / 0.176 | 0.7321 / 0.262 | 0.7321 / 0.261 |
+  | replica s7 | **0.8000** / 0.172 | 0.8083 / 0.174 | 0.7179 / 0.259 | 0.7250 / 0.252 |
+
+- **Pre-registered gate (§7 E3: ≥ 0.75 holdout-best)**:
+  **GATE_PASS × 2** (0.8083, 0.8000). Seed delta 0.0083 — replication
+  holds; on the replica the last adapter matches the best (0.8083), so
+  the endpoint is not a best-checkpoint artifact.
+- **rel200 is the binding slice**: 0.718–0.732 across all four
+  variants vs 0.80–0.81 holdout — the relational/compositional
+  weakness persists at 2B (0.8B lane showed relational val 0.0),
+  capacity alone did not close it. Candidate lever for the soft-label
+  v2 arm (#143): relational-heavy data, not more parameters.
+- **Next (pre-registered)**: GATE_PASS → JevBench 231 leg via
+  `--arm slot` (base + adapter-best, fp16, T5500 GPU1). Calibration
+  fit for the 2B arm comes after that leg (the fitter consumes its
+  per-row probabilities). A JevBench number is only published if the
+  release gate's second condition is met on this leg.
+
 ## 10. Transfer pathways into a small decision model (taxonomy, 2026-10-06)
 
 Recorded because it disciplines which experiment buys what. Four distinct
