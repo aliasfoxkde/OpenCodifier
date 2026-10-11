@@ -65,6 +65,7 @@ zero synthesized probabilities, full replay determinism.
 | **gguf: decider-2b-v11 Q4_K_M** (third-party 2B decision model, authors' `prompt.build` + own temperature module, 2026-10-08) | 231 | 0.7576 | 0.7632 | 0.058 | 0.332 | — | 2.54 s | 231/231 (labels + probabilities) |
 | Jev-Style-0.8B-Decision-v3 Q4_K_M (native verdict-slot readout — comparability bridge) | 231 | 0.6494 | 0.6378 | **0.080** | **0.425** | **0.364** (84/231) | 6.72 s | 231/231 (labels + probabilities) |
 | **e1-e: Qwen3.5-2B + own-trained verdict-slot LoRA** (adapter-best, fp16, T5500 GPU1, 2026-10-11; first own arm to pass both release-gate legs — suite 0.8083 ⁶) | 231 | 0.6840 | 0.6832 | 0.207 ⁷ | 0.504 | 0.100 (23/231) | 0.58 s | 231/231 (labels + probabilities) |
+| **minicpm: MiniCPM5-2B-Jev** (ytbai LoRA + letter-readout head over open MiniCPM5-2B, authors' `model.py` via our wire mapping ⁸, CPU fp32 16-thread, fedora i5-13600K, 2026-10-11) | 231 | **0.7792** | **0.7816** | **0.054** | **0.310** | **0.524** (121/231) | 3.06 s | 231/231 (labels + probabilities) |
 | **fork: Qwen3.5-4B UD-Q4_K_XL tree mode** (D16 tier, fork-default T — base model, no decision tune; **fedora anchor**, 2026-10-02, default instructions; replicate bit-identical ²) | 231 | **0.7662** | **0.7571** | 0.070 ¹ | 0.305 ¹ | — ³ | 2.28 s | 231/231 (labels + d15 distributions ¹) |
 
 ¹ ECE/Brier come from the decision-identical build-`d15` arm
@@ -94,6 +95,22 @@ soft-label v2 data, not parameters).
 0.1269. Auto@5% is rank-based and does not move; its 0.100 vs the
 bridge's 0.364 is the price of the arm's sharper but miscalibrated
 distribution (Brier 0.504 vs 0.425).
+⁸ minicpm (third-party, `ytbai/MiniCPM5-2B-Jev`, 103 MB = 25M-param
+LoRA + letter-readout head over the Apache-2.0 MiniCPM5-2B base):
+served through the authors' own `model.py` (their published serving
+path — Single-Pass K=1, `add_date_facts=True`, no PriDe; this repo
+owns only the wire-record mapping, labels order preserved, runner arm
+`--arm minicpm`). Authors claim 0.7879 on their own split/harness;
+0.7792 here is within 0.9 pt on public-231 — the claim replicates.
+New Board A accuracy/macro/auto@5% leader; near-best calibration out
+of the box (their prior-debias + per-type temperatures are what our
+post-hoc D15 fits do). Determinism: in-run replay
+`predictions_match` 231/231 plus an independent cross-session run
+bit-identical on all 231 labels and probabilities. Per-family profile
+is near-complementary to e1-e: temporal_numeric 0.133 / tradeoff
+0.333 / multi_hop 0.556 weak, judge_hard 0.765 / trap 0.875 /
+adversarial 1.00 strong. Latency p95 35.5 s is the long_policy
+context tail on CPU.
 
 **auto@5% — automation share at ≤5% error** (the Kev-column adopt,
 RESEARCH.md §14.5): the largest prefix of items, ranked by the arm's own
