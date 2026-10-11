@@ -652,6 +652,165 @@ class E1SlotAdapter:
         self.tok = None
 
 
+def render_minicpm_wire(t) -> tuple[dict, list[str]] | None:
+    """JevBench task -> (ytbai SystemOne wire record, label names in
+    probability order), or None when the item is not renderable.
+
+    Labels order survives end-to-end: choice criteria are rebuilt in
+    t.labels order (a missing description falls back to the label — the
+    choice_candidates rule, recorded not invented), noul passes the
+    harness's false/true criteria through and maps to their fixed
+    ['no', 'yes'] option order, score passes the level list
+    positionally (a criteria dict degrades to the bare labels — the
+    render_slot_item rule; their own dict branch sorts by float(key),
+    which non-numeric level names would crash). Their
+    to_internal_record does the rest; the contract we feed is the wire
+    shape their serve.py publishes."""
+    qtype = t.question.get("type")
+    instructions = str(t.question.get("instructions") or "").strip()
+    labels = list(t.labels)
+    if not instructions or len(labels) < 2:
+        return None
+    criteria = t.question.get("criteria")
+    if qtype == "choice":
+        crit = ({lab: criteria.get(lab, lab) for lab in labels}
+                if isinstance(criteria, dict)
+                else {lab: lab for lab in labels})
+        names = list(crit)
+    elif qtype == "noul":
+        crit = criteria if isinstance(criteria, dict) else None
+        names = ["no", "yes"]
+    elif qtype == "score":
+        crit = criteria if isinstance(criteria, list) else list(labels)
+        names = list(labels)
+    else:
+        return None
+    wire = {"id": getattr(t, "id", ""),
+            "state": t.state,
+            "questions": {"decision": {"type": qtype,
+                                       "instructions": instructions,
+                                       "criteria": crit}}}
+    return wire, names
+
+
+class MiniCPMAdapter:
+    """ytbai/MiniCPM5-2B-Jev: PEFT LoRA + LetterReadoutHead over
+    openbmb/MiniCPM5-2B, driven through the authors' own model.py
+    (checkpoint dir = adapter files + head.pt + model.py), CPU-only.
+
+    This adapter supplies the distribution only: wire record -> their
+    to_internal_record -> their predict_record — calibrated letter
+    readout with fitted per-type temperatures and prior debiasing, the
+    published serving path. Single-Pass K=1 unless pride=True (their
+    published JevBench row is Single-Pass); add_date_facts=True unless
+    disabled (their serve.py default). The harness scores correctness,
+    Brier, ECE and determinism; a local base snapshot keeps the run
+    offline-deterministic."""
+
+    name = "minicpm5-2b-jev"
+    price_input_per_m = 0.0
+    price_output_per_m = 0.0
+    ladder = None
+
+    def __init__(self, ckpt: Path, base: Path | None, dtype: str,
+                 threads: int, timeout_s: float, pride: bool,
+                 date_facts: bool):
+        self.ckpt = ckpt
+        self.base = base
+        self.dtype = dtype
+        self.threads = threads
+        self.timeout_s = timeout_s
+        self.pride = pride
+        self.date_facts = date_facts
+        self.model = None
+        self.tok = None
+        self._model_mod = None
+        self.warnings: list[str] = []
+
+    def load(self):
+        import importlib.util  # noqa: PLC0415 (arm-local)
+        import torch  # noqa: PLC0415 (arm-local)
+
+        spec = importlib.util.spec_from_file_location(
+            "minicpm_jev_model", self.ckpt / "model.py")
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["minicpm_jev_model"] = mod
+        spec.loader.exec_module(mod)
+        self._model_mod = mod
+
+        torch.set_num_threads(max(1, self.threads))
+        dtype = torch.float32 if self.dtype == "fp32" else torch.bfloat16
+        if self.base is None:
+            model, _tok = mod.MiniCPMSystemOne.load_checkpoint(
+                str(self.ckpt), device="cpu", dtype=dtype)
+        else:
+            # load_checkpoint resolves the base id from head.pt against
+            # the HF cache; overriding with the local snapshot keeps the
+            # arm reproducible from pinned files alone.
+            head = torch.load(self.ckpt / "head.pt", map_location="cpu",
+                              weights_only=True)
+            tok = mod.load_tokenizer(str(self.base))
+            model = mod.MiniCPMSystemOne(
+                base_model=str(self.base), tok=tok, device="cpu",
+                dtype=dtype, lora_r=int(head.get("lora_r", 0)),
+                head_dim=int(head.get("head_dim", 256)),
+                adapter_dir=str(self.ckpt),
+                lora_targets=str(head.get("lora_targets", "all")),
+                top_k_layers=int(head.get("top_k_layers", 0)))
+            state = head.get("state_dict")
+            if isinstance(state, dict):
+                try:
+                    model.head.load_state_dict(state, strict=False)
+                    model.head.to("cpu")
+                except RuntimeError as e:
+                    self.warnings.append(f"head state_dict: {e}")
+            model.head.temperature = float(head.get("temperature", 1.0))
+            model.eval()
+        self.model = model
+        self.tok = model.tok
+
+    def reserve_estimate(self, _t):
+        return None
+
+    def run(self, t) -> "DecisionResult":
+        from jevbench.adapters.base import DecisionResult  # noqa: PLC0415
+
+        rendered = render_minicpm_wire(t)
+        if rendered is None:
+            return DecisionResult(self.name, False,
+                                  error="unrenderable_question")
+        wire, names = rendered
+        started = time.perf_counter()
+        try:
+            internal = self._model_mod.to_internal_record(
+                wire, add_date_facts=self.date_facts)
+            out = self.model.predict_record(internal, use_pride=self.pride)
+            probs_list = [float(p) for p in out[0][1].tolist()]
+        except Exception as e:  # noqa: BLE001 — their Runner classifies failures
+            return DecisionResult(self.name, False, error=type(e).__name__)
+        latency = time.perf_counter() - started
+        if len(probs_list) != len(names):
+            return DecisionResult(self.name, False,
+                                  error="slot_count_mismatch",
+                                  latency_s=latency)
+        probs = dict(zip(names, probs_list))
+        label = max(probs, key=probs.get)
+        raw = {"options": internal["questions"][0]["options"],
+               "pride": self.pride}
+        if label not in t.labels or abs(sum(probs.values()) - 1.0) > 1e-6:
+            return DecisionResult(self.name, False,
+                                  error="invalid_distribution",
+                                  latency_s=latency, raw=raw)
+        return DecisionResult(self.name, True, probs=probs,
+                              probs_source="native", label=label,
+                              latency_s=latency, raw=raw)
+
+    def close(self):
+        self.model = None
+        self.tok = None
+        self._model_mod = None
+
+
 class VtxAdapter:
     """VTX-JEV-3 static-embedding decision engine through its vendor client.
 
@@ -1270,7 +1429,7 @@ def main() -> int:
         "--arm",
         required=True,
         choices=["engine", "fork_4b", "jev_native", "vtx", "nli", "gguf",
-                 "slot"],
+                 "slot", "minicpm"],
     )
     ap.add_argument(
         "--slot-base",
@@ -1289,6 +1448,38 @@ def main() -> int:
         choices=["fp16", "bf16"],
         default="bf16",
         help="load dtype for the slot arm (fp16 on the T5500 Volta pair)",
+    )
+    ap.add_argument(
+        "--minicpm-ckpt",
+        type=Path,
+        default=None,
+        help="ytbai MiniCPM5-2B-Jev checkpoint dir (adapter + head.pt + "
+             "model.py; required with --arm minicpm)",
+    )
+    ap.add_argument(
+        "--minicpm-base",
+        type=Path,
+        default=None,
+        help="local openbmb/MiniCPM5-2B snapshot (minicpm arm; default = "
+             "the base id recorded in head.pt)",
+    )
+    ap.add_argument(
+        "--minicpm-dtype",
+        choices=["fp32", "bf16"],
+        default="fp32",
+        help="load dtype for the minicpm arm (fp32 on CPU: AVX2 fp32 "
+             "beats emulated bf16)",
+    )
+    ap.add_argument(
+        "--minicpm-pride",
+        action="store_true",
+        help="cyclic-permutation PriDe readout (their published JevBench "
+             "row is Single-Pass K=1)",
+    )
+    ap.add_argument(
+        "--minicpm-no-date-facts",
+        action="store_true",
+        help="skip their add_date_facts=True serving default (minicpm arm)",
     )
     ap.add_argument(
         "--gguf-dir",
@@ -1354,6 +1545,8 @@ def main() -> int:
     args = ap.parse_args()
     if args.arm == "slot" and args.slot_base is None:
         ap.error("--slot-base is required for the slot arm")
+    if args.arm == "minicpm" and args.minicpm_ckpt is None:
+        ap.error("--minicpm-ckpt is required for the minicpm arm")
     if args.llama is not None and args.llama_model_id is None:
         ap.error("--llama requires --llama-model-id")
     if (args.ladder is not None or args.llama is not None) and args.arm != "engine":
@@ -1391,6 +1584,11 @@ def main() -> int:
     elif args.arm == "slot":
         adapter = E1SlotAdapter(args.slot_base, args.slot_adapter,
                                 args.slot_dtype, args.timeout)
+    elif args.arm == "minicpm":
+        adapter = MiniCPMAdapter(args.minicpm_ckpt, args.minicpm_base,
+                                 args.minicpm_dtype, args.threads,
+                                 args.timeout, args.minicpm_pride,
+                                 not args.minicpm_no_date_facts)
     else:
         adapter = JevNativeBridgeAdapter(args.model_dir, args.threads, args.timeout)
 
@@ -1489,6 +1687,24 @@ def main() -> int:
                 if f.is_file():
                     model_files[f"adapter/{fname}"] = (
                         hashlib.sha256(f.read_bytes()).hexdigest())
+    if args.arm == "minicpm":
+        for fname in ("adapter_config.json", "adapter_model.safetensors",
+                      "head.pt", "model.py", "checkpoint_meta.json"):
+            f = args.minicpm_ckpt / fname
+            if f.is_file():
+                model_files[f"ckpt/{fname}"] = (
+                    hashlib.sha256(f.read_bytes()).hexdigest())
+        if args.minicpm_base is not None:
+            for fname in ("config.json", "generation_config.json",
+                          "tokenizer.json", "tokenizer_config.json",
+                          "special_tokens_map.json"):
+                f = args.minicpm_base / fname
+                if f.is_file():
+                    model_files[f"base/{fname}"] = (
+                        hashlib.sha256(f.read_bytes()).hexdigest())
+            for shard in sorted(args.minicpm_base.glob("*.safetensors")):
+                model_files[f"base/{shard.name}"] = (
+                    hashlib.sha256(shard.read_bytes()).hexdigest())
 
     manifest = {
         "arm": args.arm,
@@ -1500,6 +1716,13 @@ def main() -> int:
                                        if args.slot_adapter else None),
                            "dtype": args.slot_dtype}}
            if args.arm == "slot" else {}),
+        **({"minicpm_model": {"ckpt": str(args.minicpm_ckpt),
+                              "base": (str(args.minicpm_base)
+                                       if args.minicpm_base else None),
+                              "dtype": args.minicpm_dtype,
+                              "pride": args.minicpm_pride,
+                              "date_facts": not args.minicpm_no_date_facts}}
+           if args.arm == "minicpm" else {}),
         **(
             {
                 "serve": {
@@ -1552,6 +1775,17 @@ def main() -> int:
                     "verdict tokens absent, one teacher-forced forward "
                     "pass, logit(' yes') - logit(' no') at each ' ->' "
                     "anchor (e1_eval.slot_positions), softmax over slots",
+            "minicpm": "wire record (state + one typed question) into the "
+                       "authors' model.py: choice criteria rebuilt in "
+                       "labels order (missing desc -> label), noul "
+                       "false/true criteria through to their fixed no/yes "
+                       "option order, score levels positional (criteria "
+                       "dict degrades to bare labels); their "
+                       "to_internal_record + predict_record do rendering, "
+                       "letter readout, prior debiasing and per-type "
+                       "temperatures (the published serving path); "
+                       "Single-Pass K=1 unless --minicpm-pride; "
+                       "add_date_facts=True unless --minicpm-no-date-facts",
         }[args.arm],
         "determinism": determinism,
         "adapter_warnings": getattr(adapter, "warnings", []),
