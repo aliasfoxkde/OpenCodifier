@@ -64,6 +64,7 @@ zero synthesized probabilities, full replay determinism.
 | **gguf: imajev-2b Q4_K_M** (third-party 2B decision model, authors' standard prompt + shipped T=1.646 letter readout; unknown→abstain scored incorrect, 2026-10-08) | 231 | 0.7359 | 0.7449 | 0.032 | 0.315 | — | 3.83 s | 231/231 (labels + probabilities) |
 | **gguf: decider-2b-v11 Q4_K_M** (third-party 2B decision model, authors' `prompt.build` + own temperature module, 2026-10-08) | 231 | 0.7576 | 0.7632 | 0.058 | 0.332 | — | 2.54 s | 231/231 (labels + probabilities) |
 | Jev-Style-0.8B-Decision-v3 Q4_K_M (native verdict-slot readout — comparability bridge) | 231 | 0.6494 | 0.6378 | **0.080** | **0.425** | **0.364** (84/231) | 6.72 s | 231/231 (labels + probabilities) |
+| **e1-e: Qwen3.5-2B + own-trained verdict-slot LoRA** (adapter-best, fp16, T5500 GPU1, 2026-10-11; first own arm to pass both release-gate legs — suite 0.8083 ⁶) | 231 | 0.6840 | 0.6832 | 0.207 ⁷ | 0.504 | 0.100 (23/231) | 0.58 s | 231/231 (labels + probabilities) |
 | **fork: Qwen3.5-4B UD-Q4_K_XL tree mode** (D16 tier, fork-default T — base model, no decision tune; **fedora anchor**, 2026-10-02, default instructions; replicate bit-identical ²) | 231 | **0.7662** | **0.7571** | 0.070 ¹ | 0.305 ¹ | — ³ | 2.28 s | 231/231 (labels + d15 distributions ¹) |
 
 ¹ ECE/Brier come from the decision-identical build-`d15` arm
@@ -79,6 +80,20 @@ sibling-session storm load, not arm time).
 ² The replicate (`fork_4b-anchor-rep1-v1`, fresh session, same build /
 instructions / split) matched the anchor on all 231 `predicted` and
 `raw_sha256` values (p50 1.74 s) — see the superseded-row paragraph.
+⁶ e1-e (E1-E, TRAINING.md §9.9.1): Qwen3.5-2B + LoRA verdict-slot
+readout trained 11,009 steps on merged-v3; holdout 0.8083 (gate ≥ 0.75
+GATE_PASS, seed-replicated 0.8000) and JevBench 0.6840 ≥ 0.6494 clear
+both release-gate legs. The per-family shape matches the rel200 slice
+diagnosis — routing/tool-selection/ordinal at 1.00 vs multi_hop 0.389,
+judge_hard 0.412, long_policy 0.368: the relational/compositional
+families are where the board is lost (candidate lever: relational-heavy
+soft-label v2 data, not parameters).
+⁷ Raw board ECE. The shipped holdout-fitted artifact
+(`calibration/e1e-qwen3.5-2b-holdout.json`, T=3.362, holdout ECE
+0.179 → 0.117) applied to this board analysis-only: ECE 0.2067 →
+0.1269. Auto@5% is rank-based and does not move; its 0.100 vs the
+bridge's 0.364 is the price of the arm's sharper but miscalibrated
+distribution (Brier 0.504 vs 0.425).
 
 **auto@5% — automation share at ≤5% error** (the Kev-column adopt,
 RESEARCH.md §14.5): the largest prefix of items, ranked by the arm's own

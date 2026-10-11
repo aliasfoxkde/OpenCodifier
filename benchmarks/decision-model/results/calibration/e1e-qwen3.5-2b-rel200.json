@@ -1,0 +1,22 @@
+{
+  "format_version": 1,
+  "scheme": "temperature",
+  "model_id": "e1e-qwen3.5-2b-rel200",
+  "calibration_version": 1,
+  "default_temperature": 5.099749,
+  "temperatures": {
+    "choice": 5.099749
+  },
+  "fit": {
+    "items": 280,
+    "ece_before": 0.26243,
+    "ece_after": 0.168532,
+    "aurc_before": 0.318782,
+    "aurc_after": 0.318782,
+    "accuracy_at_coverage": {
+      "50": 0.707143,
+      "80": 0.758929
+    },
+    "source": "e1 slot-readout eval of /home/mkinney/t5500-bundle/eval/suite_holdout_rel200.json (sha256 afe6770c73d11518), single-run arm eval-rel200-best, model /home/mkinney/t5500-bundle/runs/e1-e-qwen2b/adapter-best; winner-vs-rest margin fit, in-sample"
+  }
+}
