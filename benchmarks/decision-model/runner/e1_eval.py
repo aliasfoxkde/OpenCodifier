@@ -14,6 +14,10 @@ Suite items (choice: candidates with id+description, gold answer id)
 map directly. The suite must never be a training source
 (decision_sft_prep excludes suite rows); this tool only reads it.
 
+Each scored row carries the full slot distribution (`probs`, keyed by
+candidate id) alongside the winner fields, so fit_calibration.py can
+fit exact reverse-softmax temperature artifacts for this lane.
+
 Usage:
     python3 runner/e1_eval.py \
         --base ~/oc-model-eval/models/hf/Qwen3.5-0.8B \
@@ -184,7 +188,12 @@ def main() -> int:
                          "p": round(probs[k], 4),
                          "margin": round(margin, 4),
                          "entropy": round(ent, 4), "correct": ok,
-                         "slot_scores": [round(s, 4) for s in scores]})
+                         "slot_scores": [round(s, 4) for s in scores],
+                         # full slot distribution keyed by candidate id —
+                         # lets fit_calibration.py use the exact
+                         # reverse-softmax temperature path on this lane
+                         "probs": {oid: round(pv, 6) for oid, pv
+                                   in zip(opt_ids, probs)}})
 
     n_ok = sum(1 for r in rows if "correct" in r)
     acc = sum(r["correct"] for r in rows if "correct" in r)

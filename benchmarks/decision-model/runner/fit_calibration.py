@@ -470,6 +470,41 @@ def build_artifact(
     }
 
 
+def e1_readout_items(arm_dir: Path) -> tuple[list[dict], dict]:
+    """Load an e1_eval.py slot-readout dir (rows.jsonl + summary.json).
+
+    Rows carry the winner fields (p, pred, answer) plus — for eval runs
+    produced by the current e1_eval.py — the full slot distribution
+    (`probs` keyed by candidate id), which lets the exact reverse-softmax
+    fit path engage. Rows without a full distribution (older runs, slot
+    position errors) are still fit through the winner-vs-rest margin
+    path: full_observations falls back arm-wide if ANY item lacks probs,
+    and rows without `correct` (unscored) are dropped here.
+
+    The summary is returned alongside so the artifact provenance names
+    the actual suite file + sha the eval read, not a hardcoded suite.
+    """
+    summary = json.loads((arm_dir / "summary.json").read_text(encoding="utf-8"))
+    items: list[dict] = []
+    for line in (arm_dir / "rows.jsonl").read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if "correct" not in row:
+            continue
+        items.append({
+            "id": row["id"],
+            "prob": float(row["p"]),
+            "pred": str(row["pred"]),
+            "answer": str(row["answer"]),
+            "class": row.get("class"),
+            "probs": row.get("probs"),
+        })
+    if not items:
+        raise SystemExit(f"no scored rows in {arm_dir}")
+    return items, summary
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Fit D15 temperature-calibration artifacts from run data."
@@ -479,10 +514,13 @@ def main() -> None:
     parser.add_argument("--tasks", type=str, default=None,
                         help="comma-separated harness dataset jsonl files "
                              "(needed for run_jevbench.py arm dirs)")
+    parser.add_argument("--e1-dir", action="append", default=[], metavar="NAME=DIR",
+                        help="fit an e1_eval.py slot-readout dir (rows.jsonl + "
+                             "summary.json) as artifact NAME; repeatable")
     args = parser.parse_args()
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    rows: list[tuple[str, float, float, float, float]] = []
+    jobs: list[tuple[str, dict, Path, str]] = []
     for run_name, artifact_name in ARMS.items():
         run_path = args.results_dir / run_name
         source_suite = "benchmarks/decision-model suite (seed 20260926, 120 items)"
@@ -510,6 +548,25 @@ def main() -> None:
             # silent, and no artifact is touched for it.
             print(f"{artifact_name}: SKIPPED (missing run JSON/dir: {run_path})")
             continue
+        jobs.append((artifact_name, run, run_path, source_suite))
+    for spec in args.e1_dir:
+        name, sep, dir_str = spec.partition("=")
+        if not name or not sep or not dir_str:
+            raise SystemExit(f"--e1-dir expects NAME=DIR, got: {spec!r}")
+        arm_dir = Path(dir_str)
+        items, summary = e1_readout_items(arm_dir)
+        suite = summary.get("suite") or {}
+        # Provenance names the suite actually read (path + sha), never a
+        # hardcoded description — the e1 lane evaluates whatever suite it
+        # was handed.
+        source_suite = (f"e1 slot-readout eval of {suite.get('path', '?')} "
+                        f"(sha256 {str(suite.get('sha256', '?'))[:16]})")
+        model = summary.get("adapter") or summary.get("base") or arm_dir.name
+        jobs.append((name, {"single": items, "model": {"name": model}},
+                     arm_dir, source_suite))
+
+    rows: list[tuple[str, float, float, float, float]] = []
+    for artifact_name, run, run_path, source_suite in jobs:
         fitted = build_artifact(artifact_name, run, run_path, source_suite)
         out_path = args.out_dir / f"{artifact_name}.json"
         # An artifact ships only if the fit does not worsen the headline
