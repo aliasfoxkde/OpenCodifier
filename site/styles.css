@@ -34,6 +34,7 @@
   --cursor-glow: rgba(94, 234, 212, 0.075);  /* pointer-following mesh glow */
   --tint-row: rgba(94, 234, 212, 0.07);      /* table hairlines */
   --tint-sm: rgba(94, 234, 212, 0.055);      /* pill/chip/bar-track fills */
+  --pill-bg: #0a1512;                        /* opaque pill fill — backdrop grid must not show through */
   --tint-md: rgba(94, 234, 212, 0.09);       /* code bg, rung-num, rung active */
   --tint-lg: rgba(94, 234, 212, 0.12);       /* active tab */
   --tint-xl: rgba(94, 234, 212, 0.14);       /* chip-on fill */
@@ -198,7 +199,7 @@ html { scrollbar-color: var(--scroll-thumb) var(--scroll-track); }
 
 /* mobile density: sections and card grids breathe less on small screens */
 @media (max-width: 760px) {
-  .section { padding: 2.7rem 1rem 2.2rem; }
+  .section { padding: 1.35rem 1rem 1.1rem; }
 }
 
 /* the escalation ladder as a compact table on phones: one row per rung,
@@ -329,6 +330,7 @@ html.no-js .theme-toggle, html.no-js #to-top { display: none; }
   display: inline-block;
   padding: 0.72rem 1.35rem;
   border-radius: 999px;
+  white-space: nowrap;
   background: linear-gradient(135deg, var(--teal), var(--green));
   color: var(--btn-ink); font-weight: 700; text-decoration: none;
   border: none; cursor: pointer; font-size: 0.95rem;
@@ -354,7 +356,7 @@ html.no-js .theme-toggle, html.no-js #to-top { display: none; }
   font-size: 0.76rem; font-weight: 600; letter-spacing: 0.04em;
   color: var(--teal); border: 1px solid var(--line);
   padding: 0.28rem 0.8rem; border-radius: 999px;
-  background: var(--tint-sm);
+  background: var(--pill-bg);
 }
 .hero h1 {
   font-size: clamp(2.6rem, 7.2vw, 4.6rem);
@@ -378,12 +380,12 @@ html.no-js .theme-toggle, html.no-js #to-top { display: none; }
 }
 .hero-copy, .hero-visual { min-width: 0; }
 .hero-copy { display: flex; flex-direction: column; align-items: flex-start; }
-.hero-copy .hero-badges, .hero-copy .hero-ctas { justify-content: flex-start; }
+.hero-copy .hero-badges { justify-content: flex-start; }
 .hero-copy .hero-sub { margin-left: 0; margin-right: 0; }
 @media (max-width: 980px) {
   .hero-grid { grid-template-columns: minmax(0, 1fr); text-align: center; }
   .hero-copy { align-items: center; }
-  .hero-copy .hero-badges, .hero-copy .hero-ctas { justify-content: center; }
+  .hero-copy .hero-badges { justify-content: center; }
   .hero-copy .hero-sub { margin-left: auto; margin-right: auto; }
   .hero-visual { width: 100%; max-width: 30rem; margin: 0 auto; }
 }
@@ -454,7 +456,7 @@ html.no-js .theme-toggle, html.no-js #to-top { display: none; }
    isolation keeps the aura's z-index inside the section. */
 .section {
   max-width: var(--max); margin: 0 auto;
-  padding: 4.2rem clamp(1rem, 4vw, 2rem);
+  padding: 2.1rem clamp(1rem, 4vw, 2rem);
   position: relative; isolation: isolate;
 }
 .section::before {
