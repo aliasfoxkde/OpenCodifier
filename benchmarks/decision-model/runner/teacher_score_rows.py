@@ -215,7 +215,9 @@ def _prep_init(base_path: str) -> None:
 
 def _prep_item(item: dict) -> tuple:
     """Render + locate slot positions + tokenize (CPU-only; runs in a
-    worker process so it never serializes against the GPU)."""
+    worker process so it never serializes against the GPU). Returns the
+    item's ``_ord`` slot along with the results so an unordered pool can
+    route outputs without head-of-line blocking."""
     text = render_item(item["state"], item["qtype"],
                        item["instructions"], item["options"])
 
@@ -224,7 +226,7 @@ def _prep_item(item: dict) -> tuple:
 
     positions = slot_positions(text, item["n_options"], enc)
     ids = enc(text) if positions is not None else None
-    return positions, ids
+    return item["_ord"], positions, ids
 
 
 def cmd_score(args: argparse.Namespace) -> int:
@@ -328,33 +330,63 @@ def cmd_score(args: argparse.Namespace) -> int:
         done = 0
         if args.workers > 1:
             import multiprocessing as mp
-            from concurrent.futures import ProcessPoolExecutor
-            # spawn: workers must not inherit the parent's CUDA context
+            from concurrent.futures import ProcessPoolExecutor, \
+                FIRST_COMPLETED, wait
+            # spawn: workers must not inherit the parent's CUDA context.
+            # Results stream back as they finish (a slow long-item prep
+            # must not stall the batch stream behind it), with only a
+            # bounded window of futures alive so the tokenized corpus
+            # never sits in memory at once.
             ctx = mp.get_context("spawn")
             pool = ProcessPoolExecutor(
                 max_workers=args.workers, mp_context=ctx,
                 initializer=_prep_init, initargs=(args.base,))
             say(f"prep workers: {args.workers}")
-            prep_iter = pool.map(_prep_item, [items[i] for i in order],
-                                 chunksize=64)
+            for slot, it in enumerate(order):
+                items[it]["_ord"] = slot
+            total_preps = len(order)
+            pending: set = set()
+            next_sub = 0
+            window = args.workers * 4
+
+            def prep_stream():
+                nonlocal next_sub, pending
+                while len(pending) < window and next_sub < total_preps:
+                    pending.add(pool.submit(_prep_item, items[order[next_sub]]))
+                    next_sub += 1
+                while pending:
+                    finished, pending = wait(pending,
+                                             return_when=FIRST_COMPLETED)
+                    for fut in finished:
+                        yield fut.result()
+                    while len(pending) < window \
+                            and next_sub < total_preps:
+                        pending.add(
+                            pool.submit(_prep_item, items[order[next_sub]]))
+                        next_sub += 1
+            prep_iter = prep_stream()
         else:
             _prep_init(args.base)
+            for slot, it in enumerate(order):
+                items[it]["_ord"] = slot
             prep_iter = map(_prep_item, (items[i] for i in order))
+            total_preps = len(order)
         stream = iter(prep_iter)
         buf: list = []
-        idx = 0
+        n_pulled = 0
         n_batches = 0
 
         def pull(n: int) -> None:
-            nonlocal idx
-            while len(buf) < n and idx < len(order):
-                positions, ids = next(stream)
-                if items[order[idx]]["id"] not in done_ids:
-                    buf.append((items[order[idx]], positions, ids))
-                idx += 1
+            nonlocal n_pulled
+            while len(buf) < n and n_pulled < total_preps:
+                slot, positions, ids = next(stream)
+                it = items[order[slot]]
+                if it["id"] not in done_ids:
+                    buf.append((it, positions, ids))
+                n_pulled += 1
 
         with torch.inference_mode():
-            while buf or idx < len(order):
+            while buf or n_pulled < total_preps:
                 if not buf:
                     pull(1)
                 kept = []
@@ -406,9 +438,10 @@ def cmd_score(args: argparse.Namespace) -> int:
                     dst.flush()
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
-                if done // 500 < idx // 500 or idx == len(items):
-                    say(f"{idx}/{len(items)}")
-                done = idx
+                if done // 500 < n_pulled // 500 \
+                        or n_pulled == total_preps:
+                    say(f"{n_pulled}/{len(items)}")
+                done = n_pulled
 
     dst.flush()
     dst.close()
