@@ -37,6 +37,17 @@ Arms (--arm):
               options), scored by the model's own cosine softmax. The
               position-gated attention pooler lives in the vendor client —
               plain Model2Vec mean pooling does not reproduce this head.
+  slot        An E1-trained local HF model (+ optional LoRA adapter)
+              through the native verdict-slot readout — the
+              trained-native architecture's benchmark leg (e1_eval.py is
+              the same readout on the in-house suite). The render is the
+              SFT training text (decision_sft_prep macjev-render-v1)
+              byte-for-byte with the verdict tokens absent; one
+              teacher-forced forward pass, each option's `` ->`` anchor
+              read as logit(" yes") - logit(" no"), softmax over slots.
+              noul renders as the training lanes' false:/true: slots
+              keyed back to the harness's no/yes labels; score renders
+              levels as options.
 
 Every arm replays the whole suite (--replay, default on) and records a
 determinism block in the manifest.
@@ -56,6 +67,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import string
 import subprocess
 import sys
@@ -66,6 +78,11 @@ from resources import ResourceMonitor
 
 RUNNER_DIR = Path(__file__).parent
 sys.path.insert(0, str(RUNNER_DIR))
+
+# The slot arm renders through the SFT prep module itself — parity with
+# the training text is by construction, not by copied code.
+import decision_sft_prep as sft_prep  # noqa: E402 (runner-local)
+from e1_eval import slot_positions  # noqa: E402 (runner-local)
 
 
 def _load_harness(ref: Path):
@@ -131,6 +148,61 @@ def probs_from_distribution(dist, labels: list[str]):
     if not 0.99 <= total <= 1.01:
         return None
     return probs
+
+
+def slot_softmax(scores: list[float]) -> list[float]:
+    """Verdict-slot margins -> distribution over slots (max-subtracted
+    exp/normalize — identical arithmetic to e1_eval's readout)."""
+    mx = max(scores)
+    exps = [math.exp(s - mx) for s in scores]
+    total = sum(exps)
+    return [e / total for e in exps]
+
+
+def render_slot_item(t) -> tuple[str, list[str], list[str]] | None:
+    """JevBench task -> (inference render, label names in slot order,
+    option lines), or None when the item is not renderable in the E1
+    layout.
+
+    The text is the SFT training text byte-for-byte with the verdict
+    tokens absent: header (sft_prep.render_header), then one
+    ``<option> ->`` line per slot, then the closing newline — exactly
+    the shape segments_for tokenizes, minus the " yes"/" no" segments
+    the model is meant to supply. Label names are the harness's; noul
+    labels are 'no'/'yes' keyed to the training lanes' false/true
+    slots. Options are built through sft_prep.options_for so choice /
+    noul / score render rules live in one place."""
+    qtype = t.question.get("type")
+    instructions = str(t.question.get("instructions") or "").strip()
+    labels = list(t.labels)
+    if not instructions or len(labels) < 2:
+        return None
+    criteria = t.question.get("criteria")
+    if qtype == "choice":
+        # Labels order; the label itself is the description when the
+        # item's criteria lack it (choice_candidates rule — recorded,
+        # never invented).
+        crit = ({lab: criteria.get(lab, lab) for lab in labels}
+                if isinstance(criteria, dict)
+                else {lab: lab for lab in labels})
+        names = list(crit)
+    elif qtype == "noul":
+        crit = criteria if isinstance(criteria, dict) else {}
+        names = ["no", "yes"]
+    elif qtype == "score":
+        crit = criteria if isinstance(criteria, list) else list(labels)
+        names = list(labels)
+    else:
+        return None
+    options = sft_prep.options_for(
+        {"type": qtype, "criteria": crit})
+    if options is None:
+        return None
+    state = (t.state.strip() if isinstance(t.state, str)
+             else json.dumps(t.state))
+    text = (sft_prep.render_header(qtype, instructions, options, state)
+            + "\n".join(f"{o} ->" for o in options) + "\n")
+    return text, names, options
 
 
 class EngineAdapter:
@@ -479,6 +551,105 @@ class JevNativeBridgeAdapter:
     def close(self):
         if self.engine is not None:
             self.engine.close()
+
+
+class E1SlotAdapter:
+    """E1-trained local HF model (+ optional LoRA adapter) through the
+    native verdict-slot readout — the trained-native architecture's
+    benchmark leg. Full softmax over the option set, so Brier/ECE are
+    comparable with the jev_native/vtx rows. Rendering goes through
+    render_slot_item (SFT-parity by construction); the anchor search is
+    e1_eval.slot_positions, the same code the in-house suite evals run.
+    The harness scores — correctness, Brier, ECE, determinism — this
+    adapter only supplies the distribution."""
+
+    name = "e1-slot-readout"
+    price_input_per_m = 0.0
+    price_output_per_m = 0.0
+    ladder = None
+
+    def __init__(self, base: Path, adapter_dir: Path | None,
+                 dtype: str, timeout_s: float):
+        self.base = base
+        self.adapter_dir = adapter_dir
+        self.dtype = dtype
+        self.timeout_s = timeout_s
+        self.tok = None
+        self.model = None
+        self.device = "cpu"
+        self.yes_id: int | None = None
+        self.no_id: int | None = None
+
+    def load(self):
+        import torch  # noqa: PLC0415 (slot arm only)
+        from peft import PeftModel  # noqa: PLC0415 (slot arm only)
+        from transformers import (  # noqa: PLC0415 (slot arm only)
+            AutoModelForCausalLM,
+            AutoTokenizer,
+        )
+
+        self.tok = AutoTokenizer.from_pretrained(self.base)
+        torch_dtype = (torch.float16 if self.dtype == "fp16"
+                       else torch.bfloat16)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.base, dtype=torch_dtype, attn_implementation="eager")
+        if self.adapter_dir is not None:
+            model = PeftModel.from_pretrained(model, self.adapter_dir)
+        model.eval()
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model = model.to(self.device)
+        yes = self.tok.encode(" yes", add_special_tokens=False)
+        no = self.tok.encode(" no", add_special_tokens=False)
+        if len(yes) != 1 or len(no) != 1:
+            raise ValueError(
+                f"verdict tokens are not single tokens: yes={yes} no={no}")
+        self.yes_id, self.no_id = yes[0], no[0]
+
+    def reserve_estimate(self, _t):
+        return None
+
+    def run(self, t) -> "DecisionResult":
+        import torch  # noqa: PLC0415 (slot arm only)
+        from jevbench.adapters.base import DecisionResult  # noqa: PLC0415
+
+        rendered = render_slot_item(t)
+        if rendered is None:
+            return DecisionResult(self.name, False,
+                                  error="unrenderable_question")
+        text, names, options = rendered
+
+        def encode_fn(s: str) -> list[int]:
+            return self.tok.encode(s, add_special_tokens=False)
+
+        positions = slot_positions(text, len(names), encode_fn)
+        if positions is None:
+            return DecisionResult(self.name, False,
+                                  error="slot positions != options")
+        started = time.perf_counter()
+        try:
+            ids = encode_fn(text)
+            with torch.no_grad():
+                logits = self.model(
+                    torch.tensor([ids], device=self.device)).logits[0]
+            scores = [float(logits[p, self.yes_id] - logits[p, self.no_id])
+                      for p in positions]
+        except Exception as e:  # noqa: BLE001 — their Runner classifies failures
+            return DecisionResult(self.name, False, error=type(e).__name__)
+        latency = time.perf_counter() - started
+        probs = dict(zip(names, slot_softmax(scores)))
+        label = max(probs, key=probs.get)
+        raw = {"options": options,
+               "slot_scores": [round(s, 4) for s in scores]}
+        if label not in t.labels or abs(sum(probs.values()) - 1.0) > 1e-6:
+            return DecisionResult(self.name, False, error="invalid_distribution",
+                                  latency_s=latency, raw=raw)
+        return DecisionResult(self.name, True, probs=probs,
+                              probs_source="native", label=label,
+                              latency_s=latency, raw=raw)
+
+    def close(self):
+        self.model = None
+        self.tok = None
 
 
 class VtxAdapter:
@@ -1095,8 +1266,30 @@ def replay_records(adapter, tasks, ref_dir: Path, out_dir: Path, runner_cls, led
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--arm", required=True,
-                    choices=["engine", "fork_4b", "jev_native", "vtx", "nli", "gguf"])
+    ap.add_argument(
+        "--arm",
+        required=True,
+        choices=["engine", "fork_4b", "jev_native", "vtx", "nli", "gguf",
+                 "slot"],
+    )
+    ap.add_argument(
+        "--slot-base",
+        type=Path,
+        default=None,
+        help="base HF model dir for the slot arm (required with --arm slot)",
+    )
+    ap.add_argument(
+        "--slot-adapter",
+        type=Path,
+        default=None,
+        help="optional LoRA adapter dir on top of --slot-base (slot arm)",
+    )
+    ap.add_argument(
+        "--slot-dtype",
+        choices=["fp16", "bf16"],
+        default="bf16",
+        help="load dtype for the slot arm (fp16 on the T5500 Volta pair)",
+    )
     ap.add_argument(
         "--gguf-dir",
         type=Path,
@@ -1159,6 +1352,8 @@ def main() -> int:
         help="pass --llama-timeout-ms to `serve`",
     )
     args = ap.parse_args()
+    if args.arm == "slot" and args.slot_base is None:
+        ap.error("--slot-base is required for the slot arm")
     if args.llama is not None and args.llama_model_id is None:
         ap.error("--llama requires --llama-model-id")
     if (args.ladder is not None or args.llama is not None) and args.arm != "engine":
@@ -1193,6 +1388,9 @@ def main() -> int:
     elif args.arm == "gguf":
         adapter = GgufLetterAdapter(args.gguf_dir, args.gguf_family,
                                     args.gguf_file, args.threads, args.timeout)
+    elif args.arm == "slot":
+        adapter = E1SlotAdapter(args.slot_base, args.slot_adapter,
+                                args.slot_dtype, args.timeout)
     else:
         adapter = JevNativeBridgeAdapter(args.model_dir, args.threads, args.timeout)
 
@@ -1274,12 +1472,34 @@ def main() -> int:
             f = args.gguf_dir / fname
             if f.is_file():
                 model_files[fname] = hashlib.sha256(f.read_bytes()).hexdigest()
+    if args.arm == "slot":
+        for fname in ("config.json", "generation_config.json",
+                      "tokenizer.json", "tokenizer_config.json"):
+            f = args.slot_base / fname
+            if f.is_file():
+                model_files[f"base/{fname}"] = (
+                    hashlib.sha256(f.read_bytes()).hexdigest())
+        for shard in sorted(args.slot_base.glob("*.safetensors")):
+            model_files[f"base/{shard.name}"] = (
+                hashlib.sha256(shard.read_bytes()).hexdigest())
+        if args.slot_adapter is not None:
+            for fname in ("adapter_config.json",
+                          "adapter_model.safetensors"):
+                f = args.slot_adapter / fname
+                if f.is_file():
+                    model_files[f"adapter/{fname}"] = (
+                        hashlib.sha256(f.read_bytes()).hexdigest())
 
     manifest = {
         "arm": args.arm,
         "harness": {"repo": "fstandhartinger/jevbench", "commit": harness_commit(args.ref),
                     "license": "MIT", "method": "docs/METHOD-v1.4.md (public split)"},
         "dataset_sha256": dataset_hash(tasks),
+        **({"slot_model": {"base": str(args.slot_base),
+                           "adapter": (str(args.slot_adapter)
+                                       if args.slot_adapter else None),
+                           "dtype": args.slot_dtype}}
+           if args.arm == "slot" else {}),
         **(
             {
                 "serve": {
@@ -1323,6 +1543,15 @@ def main() -> int:
                     "noul rows use the noul temperature. Criteria-less choice items render "
                     "the bare label (imajev Option contract), not the engine's "
                     "label-as-description",
+            "slot": "all kinds render in the macjev-render-v1 SFT layout "
+                    "(decision_sft_prep by import — parity by "
+                    "construction): choice '<id>: <desc>' in labels order "
+                    "(criteria-less items use the label), noul the "
+                    "training lanes' false:/true: slots keyed back to the "
+                    "harness no/yes labels, score 'level <i>: <desc>'; "
+                    "verdict tokens absent, one teacher-forced forward "
+                    "pass, logit(' yes') - logit(' no') at each ' ->' "
+                    "anchor (e1_eval.slot_positions), softmax over slots",
         }[args.arm],
         "determinism": determinism,
         "adapter_warnings": getattr(adapter, "warnings", []),
