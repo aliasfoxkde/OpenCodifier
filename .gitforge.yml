@@ -60,19 +60,31 @@ jobs:
       # keeps peak RSS (the worst offender is linking the reqwest/hyper
       # integration-test binaries) well inside the cap. Identical flags in
       # all three steps so the shared target/ is built exactly once.
+      #
+      # The build also goes to container-local disk: this is the only lane
+      # emitting heavy object files into the sshfs-backed workspace target/,
+      # and the mount returns EPERM on individual files under exactly that
+      # burst (ring's assembler output, dep-info reads) at any load, while
+      # lint/doc (rmeta only) and coverage (cargo-llvm-cov uses its own
+      # target dir) pass. No cross-lane reuse exists to lose — clippy's
+      # artifacts never feed cargo test — and container-local disk beats
+      # sshfs on throughput anyway.
       - name: Unit and integration tests
         run: |
           export CARGO_BUILD_JOBS=4
+          export CARGO_TARGET_DIR=/tmp/oc-test-target
           export RUSTFLAGS="-D warnings -C debuginfo=0"
           cargo test --workspace
       - name: Feature-gated tests (llama.cpp transport, tokenizer agreement)
         run: |
           export CARGO_BUILD_JOBS=4
+          export CARGO_TARGET_DIR=/tmp/oc-test-target
           export RUSTFLAGS="-D warnings -C debuginfo=0"
           cargo test -p opencodifier-model --features llamacpp,tokenizers
       - name: Documentation tests
         run: |
           export CARGO_BUILD_JOBS=4
+          export CARGO_TARGET_DIR=/tmp/oc-test-target
           export RUSTFLAGS="-D warnings -C debuginfo=0"
           cargo test --doc
 
@@ -92,10 +104,15 @@ jobs:
     needs: [test]
     timeout: 30m
     steps:
+      # Container-local target dir, same reasoning as the test lane: the
+      # release build's object files are exactly the write burst the sshfs
+      # workspace chokes on, and nothing downstream reuses them.
       - name: Release binary
-        run: cargo build --release
+        run: |
+          export CARGO_TARGET_DIR=/tmp/oc-e2e-target
+          cargo build --release
       - name: End-to-end validation (serve + MCP, PLAN 18d)
-        run: python3 scripts/e2e_validate.py --binary target/release/opencodifier --port 8188
+        run: python3 scripts/e2e_validate.py --binary /tmp/oc-e2e-target/release/opencodifier --port 8188
 
   - name: supply-chain
     image: opencodifier-ci-rust:2
