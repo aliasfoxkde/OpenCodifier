@@ -386,9 +386,13 @@ def cmd_score(args: argparse.Namespace) -> int:
                 n_pulled += 1
 
         with torch.inference_mode():
+            # Deep pull-ahead: the pool preps a whole window up front so
+            # batches assemble instantly and the GPU never waits on a
+            # prep that can only run between forwards otherwise.
+            window = args.batch * 4
             while buf or n_pulled < total_preps:
-                if not buf:
-                    pull(1)
+                if len(buf) < max(2, args.batch):
+                    pull(window)
                 kept = []
                 # first buffered item fixes the batch's padded length
                 while buf:
@@ -404,7 +408,6 @@ def cmd_score(args: argparse.Namespace) -> int:
                             or len(kept) >= args.batch:
                         break
                     kept.append(buf.pop(0))
-                    pull(1)
                 if not kept:
                     continue
                 maxlen = max(len(ids) for _, _, ids in kept)
