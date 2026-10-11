@@ -912,7 +912,18 @@ fn serve_ends_cleanly_when_the_operator_interrupts_it() {
     let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_opencodifier"))
         .args(["serve", "--bind", &addr.to_string()])
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        // The child's stderr is captured, never discarded: under the
+        // instrumented coverage build this test once failed as
+        // `code() == None` with zero diagnostics (2026-10-11, run
+        // 23d5e45f). A signal-death with no captured output is
+        // undiagnosable from the CI receipt alone.
+        .stderr(Stdio::from(
+            std::fs::File::create(
+                std::env::temp_dir()
+                    .join(format!("oc-serve-interrupt-{}-stderr", std::process::id())),
+            )
+            .expect("create stderr capture"),
+        ))
         .spawn()
         .expect("spawn opencodifier serve");
 
@@ -938,7 +949,15 @@ fn serve_ends_cleanly_when_the_operator_interrupts_it() {
     assert!(interrupted, "could not deliver SIGINT to the serve process");
 
     let status = child.wait().expect("serve exits after the interrupt");
-    assert_eq!(status.code(), Some(0), "SIGINT must shut the server down gracefully");
+    let err_path =
+        std::env::temp_dir().join(format!("oc-serve-interrupt-{}-stderr", std::process::id()));
+    let child_err = std::fs::read_to_string(&err_path).unwrap_or_default();
+    let _ = std::fs::remove_file(&err_path);
+    assert_eq!(
+        status.code(),
+        Some(0),
+        "SIGINT must shut the server down gracefully (exit {status:?}, child stderr: {child_err:?})"
+    );
 }
 
 #[test]
