@@ -110,6 +110,30 @@ teacher-distribution path:
   Rows whose ``slot_probs`` field is missing, wrong-length, or <2
   slots are loud-skipped and counted, never silently dropped.
 
+v5 (--resume / --ckpt-every) — resumability (TRAINING.md backlog #1;
+two 2026-10-12 v2-arm deaths with zero salvage were the cost of not
+having it):
+
+- **Optimizer-step boundaries are resume points.** Every
+  ``--ckpt-every`` optimizer steps (default 100) the trainer writes
+  ``resume-state.pt`` into the run dir: adapter weights, optimizer +
+  GradScaler state, step/epoch/next-batch position, best-checkpoint
+  dict + val_history, window/cumulative loss stats, and RNG states
+  (torch, all CUDA devices, python random). Saved to a tmp file then
+  ``os.replace``d, so a power death cannot leave a torn checkpoint.
+- **Refuses to resume into a different run.** The state carries the
+  data sha and a fingerprint of every training knob; ``--resume``
+  against a mismatched corpus/recipe exits non-zero instead of
+  silently continuing someone else's experiment.
+- **Determinism contract**: epoch orders are regenerated from the
+  seed via ``make_order``, the LR schedule reconstructs from the
+  restored step count, and the only sanctioned divergence vs an
+  uninterrupted run is dropout RNG position at the resume boundary —
+  the parity pilot (interrupted-vs-straight step losses within fp16
+  noise) is the acceptance gate before trusting a resume.
+- The manifest (v5) gains a ``resume`` field (null, or the resumed
+  step/epoch + ckpt interval) so an arm's provenance is explicit.
+
 torch/transformers/peft import lazily so the pure helpers (segment
 encoding, label masking, batching, stratified split) unit-test on
 machines without torch. Every knob is a CLI flag with the
@@ -129,6 +153,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
 import random
 import sys
@@ -342,6 +367,15 @@ def main() -> int:
     ap.add_argument("--profile-steps", type=int, default=0,
                     help="wrap the first N optimizer steps in "
                          "torch.profiler")
+    ap.add_argument("--resume", type=Path, default=None,
+                    help="run dir containing resume-state.pt written "
+                         "by a dead run; continues it at the saved "
+                         "step (knob fingerprint + data sha must "
+                         "match, else exit)")
+    ap.add_argument("--ckpt-every", type=int, default=100,
+                    help="write resume-state.pt every N optimizer "
+                         "steps (torn exposure is bounded by this "
+                         "interval, not the run length)")
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
 
@@ -351,7 +385,9 @@ def main() -> int:
         import torch.nn.functional as F
         import peft
         import transformers
-        from peft import LoraConfig, get_peft_model
+        from peft import (LoraConfig, get_peft_model,
+                          get_peft_model_state_dict,
+                          set_peft_model_state_dict)
         from transformers import (AutoModelForCausalLM, AutoTokenizer,
                                   get_cosine_schedule_with_warmup)
     except ImportError as e:
@@ -842,6 +878,109 @@ def main() -> int:
     step = 0
     last_gn = 0.0
     t0 = time.time()
+
+    # ---- resumability (v5): optimizer-step boundaries are resume
+    # points; resume-state.pt is written atomically every
+    # --ckpt-every steps and after every val checkpoint ----
+    resume_fingerprint = {
+        "base": args.base, "data_sha": data_sha,
+        "epochs": args.epochs, "lr": args.lr,
+        "lora_r": args.lora_r, "lora_alpha": args.lora_alpha,
+        "lora_dropout": args.lora_dropout,
+        "batch": args.batch, "accum": args.accum,
+        "max_len": args.max_len, "dtype": args.dtype,
+        "attn": args.attn,
+        "grad_checkpoint": not args.no_grad_checkpoint,
+        "warmup": args.warmup, "limit_rows": args.limit_rows,
+        "val_frac": args.val_frac, "val_cap": args.val_cap,
+        "val_every": args.val_every,
+        "family_weight": args.family_weight,
+        "row_weight_field": args.row_weight_field,
+        "length_bucket": args.length_bucket,
+        "soft_labels": args.soft_labels,
+        "teacher_temp": args.teacher_temp,
+        "stop_weight": args.stop_weight, "seed": args.seed,
+        "train_rows": len(train_feats), "val_rows": len(val_feats),
+    }
+    resume_point: tuple[int, int] | None = None
+    resumed_from: dict | None = None
+
+    def capture_rng() -> dict:
+        state: dict = {"torch": torch.get_rng_state(),
+                       "python": random.getstate()}
+        if torch.cuda.is_available():
+            state["cuda"] = torch.cuda.get_rng_state_all()
+        return state
+
+    def restore_rng(state: dict) -> None:
+        torch.set_rng_state(state["torch"].cpu())
+        random.setstate(state["python"])
+        if "cuda" in state and torch.cuda.is_available():
+            torch.cuda.set_rng_state_all(
+                [s.cpu() for s in state["cuda"]])
+
+    def save_resume_state(cur_step: int, cur_epoch: int,
+                          next_start: int) -> None:
+        # atomic: tmp + os.replace, so a power death mid-write
+        # cannot leave a torn checkpoint behind
+        adapter = {k: v.detach().cpu() for k, v
+                   in get_peft_model_state_dict(model).items()}
+        tmp = args.out / "resume-state.pt.tmp"
+        torch.save({
+            "format": "opencodifier.e1-resume/1",
+            "fingerprint": resume_fingerprint,
+            "step": cur_step, "epoch": cur_epoch,
+            "next_start": next_start,
+            "adapter": adapter,
+            "opt": opt.state_dict(), "sched": sched.state_dict(),
+            "scaler": scaler.state_dict(),
+            "best": best, "val_history": val_history,
+            "window": list(window),
+            "cum_loss": cum_loss, "cum_tokens": cum_tokens,
+            "rng": capture_rng(),
+        }, tmp)
+        os.replace(tmp, args.out / "resume-state.pt")
+        log(f"resume-state -> step={cur_step} "
+            f"(epoch={cur_epoch} next_start={next_start})")
+
+    if args.resume is not None:
+        ckpt_path = args.resume / "resume-state.pt"
+        if not ckpt_path.is_file():
+            sys.stderr.write(
+                f"resume: no {ckpt_path} — a run dir only has one "
+                f"after --ckpt-every optimizer steps completed; "
+                f"refusing to guess\n")
+            raise SystemExit(1)
+        state = torch.load(ckpt_path, map_location="cpu",
+                           weights_only=False)
+        if state.get("fingerprint") != resume_fingerprint:
+            sys.stderr.write(
+                "resume: knob fingerprint / data sha mismatch — the "
+                "state belongs to a different run recipe; refusing "
+                "to continue it\n")
+            raise SystemExit(1)
+        set_peft_model_state_dict(model, state["adapter"])
+        opt.load_state_dict(state["opt"])
+        sched.load_state_dict(state["sched"])
+        scaler.load_state_dict(state["scaler"])
+        best = state["best"]
+        val_history = state["val_history"]
+        window.clear()
+        window.extend(state["window"])
+        cum_loss = state["cum_loss"]
+        cum_tokens = state["cum_tokens"]
+        restore_rng(state["rng"])
+        step = int(state["step"])
+        resume_point = (int(state["epoch"]), int(state["next_start"]))
+        resumed_from = {"step": step, "epoch": resume_point[0],
+                        "ckpt_every": args.ckpt_every,
+                        "format": state.get("format")}
+        log(f"resumed at step={step}/{total_steps} "
+            f"(epoch={resume_point[0]} "
+            f"next_start={resume_point[1]}); "
+            f"best={best['val_loss']:.4f}@{best['step']} "
+            f"val_points={len(val_history)}")
+        t0 = time.time()
     model.train()
     profiler = None
     profile_left = 0
@@ -849,7 +988,10 @@ def main() -> int:
         if step >= total_steps:
             break
         order = make_order(epoch)
-        for start in range(0, len(order), args.batch):
+        ep_start = (resume_point[1]
+                    if resume_point and epoch == resume_point[0]
+                    else 0)
+        for start in range(ep_start, len(order), args.batch):
             sel_idx = order[start:start + args.batch]
             batch = [train_feats[i] for i in sel_idx]
             input_ids, labels, attn = collate(batch)
@@ -937,6 +1079,10 @@ def main() -> int:
                         profiler = None
                 if args.val_every > 0 and step % args.val_every == 0:
                     maybe_checkpoint(step)
+                if step % args.ckpt_every == 0:
+                    # after maybe_checkpoint so the state carries
+                    # this step's val point if one just fired
+                    save_resume_state(step, epoch, start + args.batch)
                 if step >= total_steps:
                     break
     if args.val_every > 0 and step % args.val_every != 0:
@@ -947,7 +1093,9 @@ def main() -> int:
     peak_mem = (int(torch.cuda.max_memory_allocated())
                 if torch.cuda.is_available() else 0)
     manifest = {
-        "manifest_version": "opencodifier.e1-train/4",
+        "manifest_version": "opencodifier.e1-train/5",
+        "resume": resumed_from,
+        "ckpt_every": args.ckpt_every,
         "loss_mode": ("soft-slot-kl+stop-ce" if soft_mode
                       else "hard-verdict-ce"),
         "base": args.base,
