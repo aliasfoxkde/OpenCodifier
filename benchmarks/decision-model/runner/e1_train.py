@@ -260,13 +260,15 @@ def bucketed_order(lengths: list[int], seed: int, epoch: int,
     high length variance is a documented eval-loss degradation risk."""
     idx = list(range(len(lengths)))
     random.Random(seed * 1000 + epoch).shuffle(idx)
-    order: list[int] = []
-    for start in range(0, len(idx), bucket):
-        chunk = idx[start:start + bucket]
-        chunk.sort(key=lambda i: lengths[i])
-        order.extend(chunk)
-    random.Random(seed * 1000 + epoch + 1).shuffle(order)
-    return order
+    chunks = [sorted(idx[start:start + bucket],
+                     key=lambda i: lengths[i])
+              for start in range(0, len(idx), bucket)]
+    # Shuffle the CHUNKS, never the flat concatenation: shuffling the
+    # flat list dissolves exactly the length grouping this function
+    # exists to create (found inert 2026-10-12 on t5500 — bucketed vs
+    # unbucketed b8 wall identical to the second).
+    random.Random(seed * 1000 + epoch + 1).shuffle(chunks)
+    return [i for chunk in chunks for i in chunk]
 
 
 def main() -> int:
