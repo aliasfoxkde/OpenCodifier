@@ -1249,3 +1249,140 @@ measured change per corpus version. merged-v4's only treatment vs v3
 is the A/B-verified pool re-admission. First consumer per §10: the
 prune-then-recover middle path (structured-prune the r22 4B to
 ~1–2 B + LoRA recovery on merged-v4), burst-scale.
+
+## 12. Configuration ledger, epochs, and plateau policy (2026-10-12)
+
+Opened after the operator's plateau question ("if training plateaus do
+we 'know' it's good? can accuracy rise again?"). This section is the
+audit trail for **which parts of the current recipe are measured and
+which are inherited assumptions** — the difference between a tuned
+pipeline and a lucky one.
+
+### 12.1 What a plateau means — and what it does not
+
+A flat validation curve means exactly one thing: **this recipe — this
+data, this schedule, this loss mode, this rank — has extracted what it
+can.** It is a statement about the recipe, not about the arm's
+quality, and not about the task's ceiling.
+
+Three rules follow, each with a recorded reason:
+
+1. **Plateau ≠ good.** "Good" is decided only by the held-out gates
+   (suite ≥ 0.68, JevBench ≥ 0.6494 — §9.12 release policy). The
+   E1-C pilot is the standing counterexample: its val loss plateaued
+   beautifully while the reader defect meant accuracy sat *below
+   chance* (0.2251). A converged curve will converge to garbage just
+   as readily as to a good model. Never read a gate verdict off a
+   loss curve.
+2. **Within a run, a plateau is flat — accuracy does not rise again
+   on its own.** Nothing arrives during training to change the
+   outcome: same data, same schedule, same init. Waiting longer on a
+   plateaued arm buys noise, not progress. (The cosine tail is the
+   one schedule event that still moves late-training loss — see
+   rule 3's other side.)
+3. **Across recipes, a plateau is a floor for THIS recipe only, and
+   it moves under nameable interventions.** Accuracy comes back and
+   goes higher when something material changes:
+   - **schedule events** — the LR tail (cosine decay → 0), an LR
+     restart, or a longer warmup;
+   - **capacity** — higher LoRA rank, full-FT, a bigger base;
+   - **data** — more or cleaner rows (VIVERE gap-fill, the
+     merged-line noise gate A/B), a different mix;
+   - **loss mode** — hard-CE → soft-KL distillation is not a
+     third recipe on the same curve, it is a different surface
+     (hard-CE val ~0.03 vs soft-KL val ~0.16 is definitional, not
+     comparable — never compare across loss modes, only within one);
+   - **optimization machinery** — bucketing/packing (affects which
+     gradients the padding tax leaves on the table), kernel swaps.
+   Without one of these, "it will go up if we just keep training" is
+   not a hypothesis, it is a wish.
+
+**Epochs are a stopping point, not a property of the data.** The
+honest framing: train longer than you expect to need with
+`adapter-best` checkpointing on, and *choose* the epoch count on the
+observed curve. Because `--ckpt-every` now persists the best
+checkpoint (trainer v5, commit c44ad6a), choosing too many epochs
+costs only compute, never quality — the wrong-epoch-count failure
+mode is retired. Current arms inherit `epochs=1` from E1-E
+(**assumed, not measured** — flagged in the ledger below); the
+3-epoch × 4k-row pilot (~15 min on the 5060 Ti) is queued to convert
+that assumption into a measurement.
+
+### 12.2 Configuration ledger — measured vs assumed vs falsified
+
+Every knob in the v2-0.8B recipe, with its evidentiary status. Anything
+marked ASSUMED is inherited (E1-E / Jev-style reference) and untested
+in this configuration; marked FALSIFIED means measured and rejected.
+
+| Knob | Status | Evidence |
+|---|---|---|
+| `batch 2 × accum 8` | **MEASURED fastest** | 7-pilot sweep 2026-10-12: b2×a8 7.51 s/step (V100) vs b4 8.58, b8 10.49, b16 12.19 — monotonic loss to padding waste; VRAM never binding (2–6.3 GiB) |
+| throughput on Ada | **MEASURED** | 5060 Ti 1.06 s/step = 7.1× V100; workload is shape/overhead-bound (0.8B only 1.26× faster/step than 2B), not param-bound |
+| `fp16 + sdpa` platform rule | **MEASURED** | E1-E trained and evaluated with it (train-manifest `"attn": "sdpa"`); the "eager on t5500" note was stale. Same-platform A/B rule stands |
+| grad checkpointing ON | **MEASURED mandatory** | no-ckpt OOMs mid-run even at b4 (hybrid conv+recurrent activations; long-batch peak, not average — average-case VRAM fits lie) |
+| `epochs 1` | **ASSUMED** (inherited E1-E) | never swept on this corpus; soft-precrash fit (below) suggests the answer may be "less than one" for the soft arm. Epoch pilot queued |
+| `lr 1e-4` | **ASSUMED** (inherited) | no LR sweep on any arm. Mini-sweep queued now that arms cost ~3.5 h |
+| LoRA `r16 / α32 / dropout 0.05` | **ASSUMED** (Jev-style reference) | capacity axis untested; interacts with the soft-label signal |
+| `warmup 0.03` | **ASSUMED** | untested |
+| `val_frac 0.01 / cap 2000, val_every 500` | **MEASURED adequate** | val noise ~±0.005 on hard (rmse of fit 0.0050 vs trend 0.037→0.030); 17 points over an arm is enough for floor estimation |
+| `--length-bucket` | **FALSIFIED as shipped; fixed forward** | inert defect (flat-shuffle destroyed grouping, d989c9d); all recorded arms ran with it OFF, so nothing shipped is affected. Re-sweep batching AFTER the fix |
+| trainer resume | **MEASURED** | v5 parity pilot: SIGKILL mid-val → worst val delta 0.0003 vs uninterrupted; guard refuses fingerprint mismatch (negative control tested) |
+| two arms on one GPU / DDP / IO parallelism / torch.compile | **FALSIFIED non-levers** | timesharing adds nothing (not VRAM-bound); DDP changes numerics for no gain; tokenize/cache is seconds; compile = low expected gain + graph breaks |
+
+**The soft-arm step budget finding (first extrapolator catch):** the
+pre-crash soft arm's curve fits L∞ = 0.1541 (rmse 0.0019, b = 0.94)
+— effectively converged by ~val2500 of 11,615 steps. The E1-E step
+budget is ~4× longer than the soft arm needed. Candidate ledger
+entries if it reproduces on the fedora soft arm: stop early (adapter-best
+already holds the floor), or spend the surplus steps on a lower final
+LR rather than more plateau steps.
+
+### 12.3 The extrapolator — `benchmarks/decision-model/runner/arm_curve_fit.py`
+
+Stdlib-only tool that reads a run dir's `train-manifest.json`
+`val_history` (record of record) — or, for mid-run dirs, the
+`val step=N loss=X` log lines — and fits two plateau forms
+(L∞ + a·s^−b and L∞ + a·e^(−bs); grid over b + closed-form 2-var
+least squares, negative loss floors rejected). Reports the floor
+L∞, projected loss, `plateaued` (<1% improvement on the best of the
+last three preceding points), and `val_turning_up` (past the val
+minimum — `adapter-best` holds the right checkpoint from here).
+`--self-test` runs synthetic-curve assertions (power-law and exp
+ground truths recovered within tolerance; flat, upturn, and
+insufficient-data flags). `--warn-above X` flags `abort_candidate`
+for projected-final above a gate-implying threshold.
+
+Protocol (binding):
+
+- **Review-only, never auto-kill.** The E1-C lesson: every
+  extrapolator predicts the run, not the truth. An `abort_candidate`
+  flag means a human compares the projection to the gate threshold
+  before anything is stopped.
+- **Judge floors, not single flags.** On noisy val (hard arm:
+  ±0.005 noise vs 0.037→0.030 trend), `plateaued` flickers; the fit's
+  L∞ with its rmse is the stable read. `val_turning_up` + a flat
+  `plateaued` together = stop gracefully.
+- **Refit, don't rescale.** A projection is valid at the last fitted
+  step; reaching a distant horizon by rescaling is directional at
+  best. The tool says so in its output.
+- **First catches (2026-10-12):** soft-precrash floor 0.1541
+  converged-by-~2500 (§12.2 ledger finding); live hard-fed floor
+  0.0292 with last 0.0298 — on the floor, still nominally improving.
+
+### 12.4 Process-audit queue (work done while arms run)
+
+Standing answer to "can we improve the pipeline while we wait":
+
+1. **Epoch pilot** — 3 epochs × 4k rows on the 5060 Ti (~15 min);
+   converts the `epochs 1` assumption into a curve. Lands here.
+2. **LR × LoRA-r mini-sweep** — 3.5 h arms make sweeps affordable;
+   after the arms' eval legs, on the same platform.
+3. **causal_conv1d canary** — install → 4k-row b2a8 pilot → same-seed
+   loss parity within fp16 noise → keep only if ≥1.3× s/step.
+4. **Bridge flag stages (a)/(b)** — at the post-arms restart (§9
+   serving notes; MTP as a measured A/B).
+5. **Clock-lock sweep on t5500** {unlocked,1300,1200,1100} ×
+   {120,110,100 W} — after the PSU swap, never mid-run.
+6. **Corpus ceiling/noise estimators** — proposed lane (gate-transfer
+   prior from teacher facts; VIVERE gain-guided extraction) —
+   awaiting operator go.
