@@ -117,6 +117,44 @@ backend + verdict-slot + Rust calibration). The winning arm(s) get the
 JevBench leg — required before any release/teacher-lineage claim
 (both legs rule); schedule when the t5500 frees or fedora off-peak.
 
+## Verdict (2026-10-12, phases 1–3 executed; board row + fn9 in
+`docs/BENCHMARKS.md`)
+
+Frontier (public-231, fork tree-mode lane, T=14 fedora CPU; raw →
+post-D15 in-sample refit):
+
+| arm | size | acc | ECE | p50 |
+|---|---|---|---|---|
+| mc5-jev-f16 | 5.0 GB | 0.6364 → 0.6450 | 0.263 → 0.060 | 1.22 s |
+| mc5-jev-q8_0 | 2.7 GB | 0.6364 → 0.6407 | 0.269 → 0.058 | 1.30 s |
+| mc5-jev-q4_k_m | 1.6 GB | 0.6320 → 0.6407 | 0.246 → 0.082 | 1.47 s |
+| mc5-base-q4 (control) | 1.6 GB | 0.6320 → 0.6407 | 0.246 → 0.082 | 1.29 s |
+
+- **Size/speed/fidelity legs: thesis WINS.** Parity-exact conversion
+  (f16 ≡ fp32 to 3 decimals; q8 argmax 1.000, 0.126-nat mean delta),
+  quant cost ≤0.4 pt at q4, 1.6–2.7 GB served vs ~10 GB fp32 runtime,
+  CPU p50 1.2–1.5 s vs the authors' 3.06 s.
+- **Intelligence leg: thesis FAILS the pre-registered bars.** Every
+  arm caps ≈0.64; the Jev adapter adds ≤0.4 pt over the base-model
+  control through this lane (base-q4 and jev-q4 are statistically
+  identical). Rung bar (beat e1-e 0.6840 at lower latency): FAIL on
+  both legs. Publish bar (JevBench ≥ 0.6494): FAIL (0.6407). No
+  JevBench leg scheduled — the holdout gate would not clear.
+- **Attribution**: the authors' 0.7792 is lane-bound — their prompt
+  format ("Answer: (" cue), native letter readout, and PriDe
+  machinery do not transfer through the fork tree-mode lane. The
+  adapter's skill is real (their receipt replicates) but bound to
+  their serving path.
+- **D15 refit mechanics validated**: raw ECE 0.25–0.27 with ~70% of
+  rows at conf 0.99 is fully treatable by 4-parameter per-type
+  temperature + 0.1 prior debias (post ECE 0.058–0.082, in line with
+  the d15-4B lane's 0.0696). `mc5_refit.py` is arm-generic.
+- **B5 go/no-go: NO-GO for this arm.** e1-e stays the release line.
+  The lane's durable deliverables: `runner/gguf_parity.py` (fixture
+  gates), the BOS-prepend serving-path rule, `flip_add_bos.py`,
+  sha-pinned GGUF ladder, and the refit tool. V100 numbers moot (gate
+  failed on CPU parity env; latency would not flip the verdict).
+
 ## Decision criteria for the hypothesis
 
 - **Rung bar** (integration candidate): merged arm beats e1-e 0.6840
