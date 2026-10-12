@@ -85,6 +85,24 @@ discipline, quality.md):
   c. **Sub-chance fixture accuracy = halt-and-diagnose**, never
      proceed to a benchmark (the 0.2251 mis-anchored-index lesson).
 
+  *Execution log (2026-10-12):* tool = `runner/gguf_parity.py`
+  (Layer-1 tokenization exact-match + Layer-2 fp32-HF vs server
+  next-token top-K on 48 suite fixtures). First f16 leg: tokenize
+  1.000, argmax 0.833, mean|Δlp| ≈ 1.0 nat → gate fail, chain halted.
+  Diagnosis (fingerprint probes, never a blind rerun): **not a
+  conversion defect** — the GGUF inherited `add_bos_token=true,
+  bos_token_id=0` from MiniCPM5's tokenizer config, so llama-server
+  prepended `[0]` to every *string* prompt (109→110 tokens), while the
+  reference path (ytbai `model.py`) tokenizes `add_special_tokens=False`
+  — no BOS ever. Proof: explicit-id prompts agree to 3 decimals
+  (f16 ≈ fp32 exact); `HF([0]+seq)` fingerprints the string-prompt
+  distribution on all top-5 tokens to ≤0.01 nat. Fix at the artifact
+  level (`flip_add_bos.py`): `add_bos_token=false` in all three GGUFs,
+  re-pinned — f16 `94dd64a6…`, q8_0 `fc61a377…`, q4_k_m `b24efa5c…`.
+  Lesson: `/tokenize` does not apply the BOS prepend that string
+  `/completion` does; sequence truth for parity must come from the
+  serving path, not the tokenize endpoint.
+
 **Phase 3 — public-231 frontier**: letters readout per arm →
 acc / macro / ECE / auto@5% + latency mean/p95 + file size, fedora CPU
 (bounded threads; parity environment with the receipt). Then the
