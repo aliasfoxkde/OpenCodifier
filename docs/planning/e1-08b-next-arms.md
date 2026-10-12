@@ -86,3 +86,35 @@ intended variable per arm.
 - VIVERE lane re-open for the teacher-scoring campaign (operator
   paused it 2026-10-09; re-asked 2026-10-10 — staged on go).
 - Teacher choice contingent on E1-E verdict (above).
+
+## Trainer optimization backlog (2026-10-12, from the v2 launch)
+
+Measured during the concurrency sweep before the v2 arms (7 pilots,
+4000-row samples, b2/b4/b8/b16 × ckpt ±, bucketed ±):
+
+- **Resumability (before the next long arm)**: the trainer keeps only
+  `adapter-best` + final; no optimizer state — a death mid-arm means a
+  full restart. Add checkpoint triplet (optimizer + GradScaler + step +
+  RNG + dataloader position) and `--resume <run-dir>`; verify a
+  resume-continuation reproduces the uninterrupted loss curve on a 1k
+  pilot. Enables GPU time-slicing too.
+- **Sweep verdict (measured)**: b2×a8 fastest (7.51 s/step); larger
+  micro-batches lose monotonically to padding waste (8.58 / 10.49 /
+  12.19); no-checkpoint OOMs MID-RUN on long-sequence batches —
+  peak-case, not average-case; VRAM never binding (≤6.3 of 15.77 GiB).
+  0.8B is only 1.26× faster/step than the 2B — shape/overhead-bound.
+- **Batch-size ranking is not stable**: it was measured with
+  `--length-bucket` broken (inert flat-shuffle, fixed d989c9d). Redo
+  the micro-batch sweep with working bucketing before believing b2 —
+  the padding tax was the reason big batches lost.
+- **causal_conv1d canary** (post-arms): F.conv1d is in the hot path
+  (visible in the OOM traces). Same-seed loss-trajectory parity probe
+  required — a kernel swap may not change numerics silently. Keep if
+  ≥1.3×; applies to 2B arms too.
+- **Falsified non-levers** (do not rediscover): two arms on one GPU
+  (throughput is not VRAM-bound); DDP for the A/B (two runs needed
+  anyway; all-reduce changes numerics); tokenizer parallelism (cache
+  builds in seconds); torch.compile (low expected gain on V100 fp16).
+- **Sequence packing** (design option): concat-to-budget kills padding
+  but needs cross-row masking and its own A/B — trainer-versioned
+  change, not a knob.
