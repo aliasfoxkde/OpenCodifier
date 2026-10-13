@@ -419,6 +419,7 @@ class ForkAdapter:
     name = "pd-fork-tree"
     price_input_per_m = 0.0
     price_output_per_m = 0.0
+    ladder = None
 
     def __init__(self, port: int, instructions: str, timeout_s: float):
         self.port = port
@@ -497,6 +498,7 @@ class JevNativeBridgeAdapter:
     name = "jev-style-0.8b-native"
     price_input_per_m = 0.0
     price_output_per_m = 0.0
+    ladder = None
 
     def __init__(self, model_dir: Path, threads: int, timeout_s: float):
         self.model_dir = model_dir
@@ -823,6 +825,7 @@ class VtxAdapter:
     name = "vtx-jev-3"
     price_input_per_m = 0.0
     price_output_per_m = 0.0
+    ladder = None
 
     def __init__(self, model_dir: Path, timeout_s: float):
         self.model_dir = model_dir
