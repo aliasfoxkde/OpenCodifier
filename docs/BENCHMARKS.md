@@ -69,6 +69,7 @@ zero synthesized probabilities, full replay determinism.
 | **gguf: mc5-jev MiniCPM5-2B-Jev Q8_0** (own conversion of the ⁸ arm, fork tree mode + D15 in-sample refit ⁹; control `mc5-base-q4` refits to the same 0.6407; 2026-10-12) | 231 | 0.6407 | 0.6061 | 0.058 | 0.179 | 0.299 (69/231) | 1.30 s | 231/231 (labels + distributions) |
 | **fork: Qwen3.5-4B UD-Q4_K_XL tree mode** (D16 tier, fork-default T — base model, no decision tune; **fedora anchor**, 2026-10-02, default instructions; replicate bit-identical ²) | 231 | **0.7662** | **0.7571** | 0.070 ¹ | 0.305 ¹ | — ³ | 2.28 s | 231/231 (labels + d15 distributions ¹) |
 | **e1-v2: Qwen3.5-0.8B + own-trained verdict-slot LoRA** (hard-label merged-v4 corpus, adapter-best, fp16+sdpa, fedora 5060 Ti, 2026-10-12; suite holdout 0.7000 clears the ≥ 0.68 suite leg — release gate FAILS on this board leg ¹⁰) | 231 | 0.5584 | 0.5458 | 0.195 | 0.630 | — | 0.25 s | 231/231 (labels + probabilities) |
+| **strands: amazon/strands-decider-E2B-gemma4-v1-2610** (third-party 2B Gemma-4-E2B + rank-48 LoRA + pointer head, authors' `strands-decider serve` via our wire mapping ¹¹, CPU bf16, fedora i5-13600K, 2026-10-13; authors' self-run 0.7792 on H100 — live pairing inside) | 231 | 0.7706 | 0.7612 | **0.045** | 0.311 | **0.528** (122/231) | 1.75 s | 231/231 (labels + probabilities) |
 
 ¹ ECE/Brier come from the decision-identical build-`d15` arm
 (`fork_4b-d15-v1`, same host/build/split, predictions equal 231/231):
@@ -149,6 +150,33 @@ value) not accuracy. Latency p95 6.4 s carries long_policy context on
 CPU (determinism computed post-hoc from results.jsonl vs
 results-replay.jsonl: 231/231 labels and probabilities — the summary
 crash fixed in 76172f0 struck after scoring wrote both files).
+¹¹ strands (third-party, `amazon/strands-decider-E2B-gemma4-v1-2610`,
+Apache-2.0: rank-48 LoRA 290 M + pointer head 9.4 M over
+`google/gemma-4-E2B-it`, per-kind temperatures baked into the config,
+force_bos): served through the authors' own `strands-decider serve`
+POST /v1/systemone (their published serving path — state + one typed
+question verbatim, prompts are the server's; this repo owns only the
+wire-record mapping, runner arm `--arm strands`). Authors claim
+180/231 = 0.7792 (self-run, H100): **the claim replicates** — 178/231
+= 0.7706 here (−0.9 pp), and the item-level pairing shows our 178
+correct are a strict subset of their 180 (zero flips in our favor,
+two hard-tier flips against: `hard-opus-b-multi_hop-04`,
+`hard-sol-c-judge_hard-03` — device numerics, not serving-path
+divergence). In-run replay determinism 231/231; best ECE on the board
+(0.045 raw, no post-hoc fit — their baked per-kind temperatures are
+doing what our D15 refits do) and board-best auto@5% (0.528).
+Two provenance caveats recorded against the authors' published eval
+artifacts, neither affecting the live result: (a) 3 choice rows in
+their `results.jsonl` carry `correct=true` flags that their own
+published distributions contradict (gold absent from a 4-key fragment
+summing to 0.002–0.036), and 14 rows are unmappable to a strict
+rescore — a strict argmax rescore of their file gives 0.7696 on the
+217 clean rows; (b) their schema accepts a label field we deliberately
+never set. Per-family shape: every easy family at 1.00
+(extraction/intent/fact/routing/tool_selection/routing_hard) vs
+temporal_numeric 0.267, probability 0.400, ambiguous 0.429, multi_hop
+0.500 — the hard-compositional tier is where the 53 misses live,
+same shape as every other 2B arm on this board.
 
 **auto@5% — automation share at ≤5% error** (the Kev-column adopt,
 RESEARCH.md §14.5): the largest prefix of items, ranked by the arm's own

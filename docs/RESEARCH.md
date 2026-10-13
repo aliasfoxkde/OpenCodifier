@@ -2622,3 +2622,86 @@ Reads that hold after the leg:
 4. **No serving case**: 2.5–3.8 s p50 serial vs the fork's 2.28 s at
    higher accuracy — the fork keeps the rung; these rows are the
    independent-replication receipts the board submission cites.
+
+### §15.10 Addendum (2026-10-12/13, user-directed): strands-decider-E2B adjudicated live + GPT-X3-150M probed
+
+Two external-model probes in one window, both from operator pointers.
+
+**§15.10.1 strands-decider-E2B-gemma4-v1-2610 — the claim adjudicated,
+not just re-run.** `amazon/strands-decider-E2B-gemma4-v1-2610`
+(Apache-2.0; rank-48 LoRA 290 M + pointer head 9.4 M over
+`google/gemma-4-E2B-it`, pointer_dim 768 / 24 slots, per-kind
+temperatures baked in: global T 0.7998, noul 1.0704 / choice 0.5608 /
+score 1.4788, force_bos, window 4096) claims 180/231 = 0.7792 on
+JevBench public (self-run, H100, jevbench @ `1bcc55eb`). Three-stage
+adjudication, all receipts in `runs/jevbench/strands-e2b-fed/`:
+
+1. **Zero-compute audit of their published eval artifacts** (their
+   `eval/jevbench-w4096/results.jsonl` ships in the HF repo):
+   `tasks_sha256` byte-identical to our concat of the same three
+   public files, 231/231 ids match. Under a strict independent
+   rescore (our math, argmax over their own published
+   distributions): **167/217 clean rows = 0.7696** vs their recorded
+   180/231 = 0.7792. Findings: 3 choice rows whose `correct=true`
+   flags are contradicted by their own published distributions (gold
+   absent from a 4-key fragment massing 0.002–0.036), 1 empty-probs
+   row, 14 rows total unmappable (schema variance: score `expected`
+   as int vs string labels). Recorded honest range from their file
+   alone: [0.723, 0.779].
+2. **Live replication through the authors' serving path** (the only
+   faithful lane — no GGUF/ONNX exists; their `strands-decider serve`
+   POST /v1/systemone, state + one typed question verbatim, prompts
+   are the server's; our runner arm `--arm strands` owns the
+   wire-record mapping exactly as JevBench's typesafe adapter does:
+   noul → {yes: p, no: 1−p}, choice/score native, never renormalized,
+   no label override). CPU bf16 (the fedora 5060 Ti has no sm_120
+   kernels in torch cu126 — `cudaErrorNoKernelImageForDevice`; CPU is
+   the same graph, device-independent for accuracy):
+   **178/231 = 0.7706**, Brier 0.311, **ECE 0.045** (board-best raw),
+   auto@5% **0.528** (board-best), schema validity 1.0, replay
+   determinism 231/231, p50 1.75 s CPU.
+3. **Item-level pairing vs their self-run**: our 178 correct are a
+   **strict subset** of their 180 — zero flips in our favor, two
+   hard-tier flips against (`hard-opus-b-multi_hop-04`,
+   `hard-sol-c-judge_hard-03`). That is the signature of device
+   numerics on a faithful path, not protocol divergence. Verdict:
+   **the claim replicates** (Δ −0.9 pp); the audit caveats stand as
+   provenance notes on their published artifacts, superseded for
+   capability by the live run.
+
+Board placement (BENCHMARKS.md Board A, footnote 11): 0.7706 puts it
+between the fork anchor (0.7662) and minicpm (0.7792) — third on the
+board by accuracy, first by raw ECE and auto@5%. Per-family shape is
+the now-familiar 2B profile taken to its extreme: all six easy
+families at 1.00 (tool_selection Brier 0.0000) vs temporal_numeric
+0.267 / probability 0.400 / ambiguous 0.429 / multi_hop 0.500 —
+53 of its 53 misses live in the hard-compositional tier. What
+transfers to our program: (a) a second independent confirmation that
+**baked per-kind temperature calibration is the cheap ECE win**
+(their config T's are what our post-hoc D15 refits estimate; ours are
+fit after training, theirs at training time — the training-time fit is
+the better pipeline and §12's soft-T axis is our version of it);
+(b) the pointer-head-over-LoRA architecture at 2B is the third
+independent design to clear 0.77 on this suite (imajev card, minicpm,
+strands) while every hard-compositional family stays sub-0.55 —
+**the tier wall is architectural, not training-regime**; (c) serving
+trap recorded: HF `local_dir` downloads do not populate the hub cache
+— offline serving of a checkpoint whose config names the base by repo
+id needs the config's `base_model` pointed at the local snapshot
+(patched in our serving copy; weights untouched, sha-pinned).
+
+**§15.10.2 GPT-X3-150M-ONNX — functional tiny base, not a decision
+model.** `ahmadw/GPT-X3-150M-ONNX` verified working on ORT 1.24.2
+CPU: hybrid GDN2 architecture (21 layers, recurrent state
+[batch, 9, 64, 64] + short conv state [batch, 576, 3]) with gated-GQA
+attention at layers 3/7; 86 graph inputs, single-token decode, 2-D
+logits [batch, 65536]. Decode probe: "The capital of France is" →
+" Paris" (p 0.372, top-1); "Water boils at 100 degrees" → " Celsius".
+~8–12.6 tok/s fp16 CPU decode, prefill 90–200 ms/token;
+kv-cache init robust (slot-0 zeros vs ones byte-identical output).
+Verdict: a working general base LM at 150 M with a modern hybrid
+state-space + attention mix — relevant to the ladder only as a
+potential **embedding/classifier-scale torso**, not a decision model
+(no decision tuning, no calibration artifacts, no option-conditioned
+readout). No board row: it answers none of the three typed question
+kinds under any documented protocol.
