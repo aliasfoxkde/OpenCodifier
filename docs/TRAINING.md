@@ -1124,6 +1124,86 @@ model, integrity manifest).
   systematically overconfident by ~3.4× in probability — consistent
   with verdict-slot training on hard labels.
 
+### 9.10 v2-0.8B arms executed on fedora: hard control clears the suite
+gate, soft-label distillation is a wash (2026-10-12)
+
+Both v2 arms ran to completion on the fedora 5060 Ti (trainer v5 with
+resume; sequential hard → soft under `runs/arms-fed.sh`; 11,615 steps
+each; hard 4 h 51 m, soft 4 h 35 m; both rc=0, zero resume events
+needed). Recipe: E1-E byte-identical (b2×a8, max_len 2048, fp16+sdpa,
+LoRA r16/α32/d0.05, lr 1e-4, warmup 0.03, seed 42, val_every 500,
+ckpt_every 100) over `corpora/e1-softlabel-v1` (187,822 rows, sha
+`2f51072f…`); soft arm adds `--soft-labels --teacher-temp 1` (facts as
+recorded). Same-platform A/B satisfied.
+
+**Suite legs** (e1_eval.py, E1-E protocol — readout oc-readout-v1,
+defaults bf16+eager exactly as `train_e1e_2b.sh` stage 3; suite shas
+pinned in each summary.json; run dirs on NAS
+`runs/v2-08b-{hard,soft}-fed/`):
+
+| arm | holdout-120 acc (ECE) | rel200-280 acc (ECE) | val floor (fit) |
+|---|---|---|---|
+| hard control | **0.7000** (0.1406) | **0.5214** (0.1580) | 0.0292 (= fit L∞ 0.0292) |
+| soft-label | 0.6750 (0.1601) | 0.5179 (**0.0923**) | 0.1477 (fit L∞ 0.1541, still descending at 8k) |
+
+**Gate verdicts (pre-registered §7 E3 / §9.12 rules):**
+- **Hard control: suite 0.7000 ≥ 0.68 GATE_PASS**, JevBench 231 leg
+  executed per protocol (`runs/jevbench-v2-hard.sh`, r2 shape: fork
+  server, qat-Q4_0 base + LoRA F16, CPU-only, port 8095, harness
+  `fork_4b`, complete=True, operational_success=1.0):
+  **accuracy 0.5584 (129/231), macro 0.5458, Brier 0.6304, ECE
+  0.1952 — JevBench < 0.6494 GATE_FAIL. Release gate: FAIL overall**
+  (needs both legs). The dual gate did its job: the suite leg alone
+  would have waved this arm through; the board leg caught the
+  transfer gap. Suite→board deltas: v2-0.8B 0.700→0.558 (−14.2),
+  E1-E-2B 0.808→0.684 (−12.4), Jev-Style bridge 0.8B row 0.6494 —
+  the transfer discount is ~12-14 pp at every rung, and the 0.8B
+  starts too low to survive it. The 2B (E1-E) remains the only
+  own-trained arm through both legs.
+  (Harness note: the leg crashed at the post-scoring provenance
+  merge — `ForkAdapter` lacked the `ladder` class attr the fusion
+  summary reads; scoring artifacts were already written and valid
+  (`complete=true`). Fixed in-repo + patched at the pinned harness
+  on fedora; scoring path untouched.)
+- **Soft arm: suite 0.6750 < 0.68 GATE_FAIL — JevBench correctly NOT
+  run** (arm-B precedent).
+- **"Soft must beat hard": FAILED, and honestly a statistical wash,
+  not a loss.** Δholdout = 2.5 pp on 120 rows (84 vs 81 correct —
+  inside binomial noise at this n); Δrel200 = 0.35 pp on 280 rows
+  (146 vs 145). **The distillation premise (teacher distributions >
+  hard labels) showed no accuracy gain at 0.8B with T=1, one epoch.**
+  What soft DID buy: calibration — rel200 ECE 0.0923 vs hard 0.1580,
+  with the expected mechanism (softer confidence: mean top-prob 0.728
+  vs 0.877 on holdout). A candidate pivot is soft-as-calibrator, not
+  soft-as-accuracy: distill for the confidence profile, take argmax
+  accuracy from hard labels.
+
+**Reading the val floors (§12.3 protocol):** hard sat exactly on its
+fitted floor at the end (last val 0.0292 = predicted L∞ — the
+extrapolator called it from 17 points at step 8500). Soft was still
+descending at 8k past its early-curve fit (precrash L∞ 0.1541 from 7
+noisy points vs actual 0.1477 at 11,615 — extrapolators predict the
+run, gates decide truth, §12.3 rule vindicated).
+
+**Program implications:**
+1. The **relational slice stays binding**: hard rel200 0.5214 vs the
+   2B's 0.718–0.732 — a +5 pp suite gain over arm B moved rel200 by
+   <2 pp. Data shape (relational-heavy rows), not parameters or label
+   mode, is the 0.8B lever (§9.9 diagnosis unchanged).
+2. **VIVERE soft-label transfer: premise falsified at this config** for
+   accuracy. T=1/1-epoch is one point in config space (T sweep + more
+   epochs queued in §12.4), but the default posture for 0.8B v3 should
+   be hard labels unless the T sweep flips the sign.
+3. **Calibration-by-distillation is a real observed effect** (ECE
+   table above) and feeds the D15 seam: a soft-trained head's
+   probabilities may need less temperature correction than a
+   hard-trained head's (hard is systematically overconfident — §9.9
+   fit T=3.362 on the 2B).
+4. Holdout-120 vs "231 split" naming: the suite gate leg is the pinned
+   **120-row holdout** (`suite_holdout.json`, sha in summaries); the
+   231-row surface is the JevBench public split (separate leg). Never
+   conflate the two when comparing arms.
+
 ## 10. Transfer pathways into a small decision model (taxonomy, 2026-10-06)
 
 Recorded because it disciplines which experiment buys what. Four distinct
@@ -1320,7 +1400,7 @@ in this configuration; marked FALSIFIED means measured and rejected.
 | throughput on Ada | **MEASURED** | 5060 Ti 1.06 s/step = 7.1× V100; workload is shape/overhead-bound (0.8B only 1.26× faster/step than 2B), not param-bound |
 | `fp16 + sdpa` platform rule | **MEASURED** | E1-E trained and evaluated with it (train-manifest `"attn": "sdpa"`); the "eager on t5500" note was stale. Same-platform A/B rule stands |
 | grad checkpointing ON | **MEASURED mandatory** | no-ckpt OOMs mid-run even at b4 (hybrid conv+recurrent activations; long-batch peak, not average — average-case VRAM fits lie) |
-| `epochs 1` | **ASSUMED** (inherited E1-E) | never swept on this corpus; soft-precrash fit (below) suggests the answer may be "less than one" for the soft arm. Epoch pilot queued |
+| `epochs 1` | **ASSUMED, now evidenced** (inherited E1-E) | v2 arms: hard landed exactly on its fitted floor at the budget end (§9.10) — 1 epoch is the right budget for the hard arm; soft hit its floor by ~8k of 11,615 steps (would stop early next time). 3-epoch pilot still queued for the epoch-2+ question |
 | `lr 1e-4` | **ASSUMED** (inherited) | no LR sweep on any arm. Mini-sweep queued now that arms cost ~3.5 h |
 | LoRA `r16 / α32 / dropout 0.05` | **ASSUMED** (Jev-style reference) | capacity axis untested; interacts with the soft-label signal |
 | `warmup 0.03` | **ASSUMED** | untested |
@@ -1336,6 +1416,15 @@ budget is ~4× longer than the soft arm needed. Candidate ledger
 entries if it reproduces on the fedora soft arm: stop early (adapter-best
 already holds the floor), or spend the surplus steps on a lower final
 LR rather than more plateau steps.
+
+**Resolution on the fedora soft arm:** partially confirmed — its floor
+was lower than the early fit predicted (0.1477 actual vs 0.1541
+predicted; the 7-point fit underestimated the descent, §9.10) but it
+still reached ~floor by ~8k of 11,615 steps. Net: the soft arm wastes
+~30% of its budget; the hard arm uses all of it. Lesson: fits from
+few noisy early points UNDERESTIMATE the remaining descent — refit at
+each val point (the tool does) and treat the floor as provisional
+until two consecutive fits agree.
 
 ### 12.3 The extrapolator — `benchmarks/decision-model/runner/arm_curve_fit.py`
 
