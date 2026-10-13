@@ -68,6 +68,7 @@ zero synthesized probabilities, full replay determinism.
 | **minicpm: MiniCPM5-2B-Jev** (ytbai LoRA + letter-readout head over open MiniCPM5-2B, authors' `model.py` via our wire mapping ⁸, CPU fp32 16-thread, fedora i5-13600K, 2026-10-11) | 231 | **0.7792** | **0.7816** | **0.054** | **0.310** | **0.524** (121/231) | 3.06 s | 231/231 (labels + probabilities) |
 | **gguf: mc5-jev MiniCPM5-2B-Jev Q8_0** (own conversion of the ⁸ arm, fork tree mode + D15 in-sample refit ⁹; control `mc5-base-q4` refits to the same 0.6407; 2026-10-12) | 231 | 0.6407 | 0.6061 | 0.058 | 0.179 | 0.299 (69/231) | 1.30 s | 231/231 (labels + distributions) |
 | **fork: Qwen3.5-4B UD-Q4_K_XL tree mode** (D16 tier, fork-default T — base model, no decision tune; **fedora anchor**, 2026-10-02, default instructions; replicate bit-identical ²) | 231 | **0.7662** | **0.7571** | 0.070 ¹ | 0.305 ¹ | — ³ | 2.28 s | 231/231 (labels + d15 distributions ¹) |
+| **e1-v2: Qwen3.5-0.8B + own-trained verdict-slot LoRA** (hard-label merged-v4 corpus, adapter-best, fp16+sdpa, fedora 5060 Ti, 2026-10-12; suite holdout 0.7000 clears the ≥ 0.68 suite leg — release gate FAILS on this board leg ¹⁰) | 231 | 0.5584 | 0.5458 | 0.195 | 0.630 | — | 0.25 s | 231/231 (labels + probabilities) |
 
 ¹ ECE/Brier come from the decision-identical build-`d15` arm
 (`fork_4b-d15-v1`, same host/build/split, predictions equal 231/231):
@@ -133,6 +134,21 @@ adds ≤0.4 pt over base through this lane, every arm caps ≈0.64,
 below e1-e 0.6840 (rung bar) and the 0.6494 publish bar; the ⁸ row's
 0.7792 is lane-bound (their prompt format + native letter readout),
 not weights-bound. No release or rung claim changes.
+¹⁰ e1-v2 (TRAINING.md §9.10): Qwen3.5-0.8B + LoRA verdict-slot
+readout, 11,615 steps on merged-v4 hard labels (the soft-label v2 arm
+— same recipe, soft targets — is the accuracy wash: holdout 84 v 81/120,
+rel200 146 v 145/280; soft holdout 0.6750 fails the ≥ 0.68 suite leg so
+it gets no board run, pre-registered). The 0.8B arm reproduces the
+suite→board discount: 0.7000 → 0.5584 (−11.4 pp; e1-e-2B was −12.4),
+lost in the same families harder — multi_hop 0.167, temporal_numeric
+0.133, tradeoff 0.167, long_policy 0.316 — while winning fact 1.00,
+tool_selection 0.917, intent 0.833. Calibration on the board is poor
+(raw ECE 0.195, Brier 0.630); the soft arm's distillation bought
+calibration only on the relational slice (rel200 ECE 0.0923, best 0.8B
+value) not accuracy. Latency p95 6.4 s carries long_policy context on
+CPU (determinism computed post-hoc from results.jsonl vs
+results-replay.jsonl: 231/231 labels and probabilities — the summary
+crash fixed in 76172f0 struck after scoring wrote both files).
 
 **auto@5% — automation share at ≤5% error** (the Kev-column adopt,
 RESEARCH.md §14.5): the largest prefix of items, ranked by the arm's own
@@ -950,6 +966,32 @@ more items to the model rung, which is exactly the division of labor
 F28 fitted. Deployment note: at 60/120 escalations the holdout p50
 crosses into rung territory — p50 "mostly-lexical" behavior is
 suite-dependent; refit the gate per deployment traffic.
+
+### Held-out suite: v2-0.8B own-trained arms on the same locked holdout (2026-10-12)
+
+The v2 0.8B arms (TRAINING.md §9.10) score `suite_holdout.json` v3 through
+`e1_eval.py` adapter-best readout — a different mechanism from the fusion-gate
+rows above (single model, argmax over the verdict slot; no engine rungs, no
+gate). Held here because it is the same locked item set: the suite-leg release
+gate (≥ 0.68) reads the holdout-120 accuracy. rel200 (280 items) is the
+relational-heavy diagnostic slice, not a gate. Fedora 5060 Ti; latency not
+gated for readout-argmax evals; no replay run (determinism unmeasured here,
+unlike the ¹⁰ board run).
+
+| run | acc (meta/lex/rel) | acc | ECE | p50 | determinism |
+|---|---|---:|---:|---:|---|
+| v2-08b-hard holdout-120 (adapter-best) | 0.95 / 0.75 / 0.40 | 0.700 | 0.141 | — | not replayed |
+| v2-08b-soft holdout-120 (adapter-best) | 0.80 / 0.75 / 0.475 | 0.675 | 0.160 | — | not replayed |
+| v2-08b-hard rel200-280 (adapter-best) | — | 0.521 | 0.158 | — | not replayed |
+| v2-08b-soft rel200-280 (adapter-best) | — | 0.518 | **0.092** | — | not replayed |
+
+Hard and soft are an accuracy wash on both slices (statistical ties);
+what the soft arm's distillation bought is calibration on the relational
+slice — ECE 0.092 vs 0.158 at identical accuracy — consistent with the
+soft-as-calibrator pivot candidate in §9.10. The relational class column
+is the binding constraint on the gate leg at 0.8B (0.40 hard / 0.475 soft
+vs e1-e-2B's relational strength); no 0.8B recipe in this program has
+cleared it.
 
 ### r19 E2B quant-ladder speed reference (2026-10-05)
 
