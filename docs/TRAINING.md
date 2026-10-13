@@ -1400,9 +1400,10 @@ in this configuration; marked FALSIFIED means measured and rejected.
 | throughput on Ada | **MEASURED** | 5060 Ti 1.06 s/step = 7.1× V100; workload is shape/overhead-bound (0.8B only 1.26× faster/step than 2B), not param-bound |
 | `fp16 + sdpa` platform rule | **MEASURED** | E1-E trained and evaluated with it (train-manifest `"attn": "sdpa"`); the "eager on t5500" note was stale. Same-platform A/B rule stands |
 | grad checkpointing ON | **MEASURED mandatory** | no-ckpt OOMs mid-run even at b4 (hybrid conv+recurrent activations; long-batch peak, not average — average-case VRAM fits lie) |
-| `epochs 1` | **ASSUMED, now evidenced** (inherited E1-E) | v2 arms: hard landed exactly on its fitted floor at the budget end (§9.10) — 1 epoch is the right budget for the hard arm; soft hit its floor by ~8k of 11,615 steps (would stop early next time). 3-epoch pilot still queued for the epoch-2+ question |
-| `lr 1e-4` | **ASSUMED** (inherited) | no LR sweep on any arm. Mini-sweep queued now that arms cost ~3.5 h |
-| LoRA `r16 / α32 / dropout 0.05` | **ASSUMED** (Jev-style reference) | capacity axis untested; interacts with the soft-label signal |
+| `epochs 1` | **MEASURED** (pilot + full-scale) | v2 arms: hard landed exactly on its fitted floor at the budget end (§9.10); soft hit its floor by ~8k of 11,615 steps. Pilot E3 (3 epochs × 4k rows, below): val flat from step ~400 of 741, eval acc 0.6333 vs 0.6583–0.6667 for the 1-epoch arms — epochs 2–3 bought nothing at pilot scale. 1 epoch stands |
+| `lr 1e-4` | **MEASURED directional** | pilot L-sweep (below): 1e-4 > 5e-5 > 2e-4 on holdout acc (0.6333 / 0.5917 / 0.5583, E3 vs L1 vs L2). Inherited default wins both directions |
+| LoRA `r16 / α32 / dropout 0.05` | **MEASURED directional** | pilot R-sweep: r8a16 0.6667 > r16a32 > r32a64 0.5833 — smaller rank won at 4k rows (overfit direction). r16 stays the default at full scale; r8 is the named candidate for small-data arms |
+| soft-label temperature `T` | **MEASURED directional (new row)** | pilot T-sweep: T=0.5 0.6583 acc / **0.068 ECE** (best calibration of the window) vs T=2.0 0.5417 / 0.105 — accuracy and calibration both fall monotonically in T. v2 soft used T=1. Sharpened (T<1) soft targets are the soft-as-calibrator operating point, not softened ones |
 | `warmup 0.03` | **ASSUMED** | untested |
 | `val_frac 0.01 / cap 2000, val_every 500` | **MEASURED adequate** | val noise ~±0.005 on hard (rmse of fit 0.0050 vs trend 0.037→0.030); 17 points over an arm is enough for floor estimation |
 | `--length-bucket` | **FALSIFIED as shipped; fixed forward** | inert defect (flat-shuffle destroyed grouping, d989c9d); all recorded arms ran with it OFF, so nothing shipped is affected. Re-sweep batching AFTER the fix |
@@ -1425,6 +1426,39 @@ still reached ~floor by ~8k of 11,615 steps. Net: the soft arm wastes
 few noisy early points UNDERESTIMATE the remaining descent — refit at
 each val point (the tool does) and treat the floor as provisional
 until two consecutive fits agree.
+
+**The pilot window (2026-10-12 22:11–23:00, fedora 5060 Ti):** seven
+4k-row arms (`--limit-rows 4000`, seed 42, b2a8 fp16+sdpa, ckpt/val
+every 100), each with a holdout-120 eval of adapter-best. Known
+confound: the cosine schedule compresses to 741 steps at this scale,
+so arms read against a different LR trajectory than full runs.
+
+| arm | knobs | holdout-120 acc | ECE |
+|---|---|---:|---:|
+| E3 | 3 epochs (base lr/r) | 0.6333 | 0.1355 |
+| L1 | lr 5e-5 | 0.5917 | 0.1074 |
+| L2 | lr 2e-4 | 0.5583 | 0.1000 |
+| R1 | r8/α16 | **0.6667** | 0.0950 |
+| R2 | r32/α64 | 0.5833 | 0.1012 |
+| T1 | soft T=0.5 | 0.6583 | **0.0680** |
+| T2 | soft T=2.0 | 0.5417 | 0.1050 |
+
+Reads, all directional (n=120 → ±8.5 pp two-σ on any single arm; only
+the R1–T2 spread ~12.5 pp even approaches significance): (1) the
+inherited defaults win the lr axis in both directions; (2) LoRA
+capacity prefers SMALLER at pilot data volume — consistent with
+overfitting, and the reason r8 is only a small-data candidate, not a
+full-scale change; (3) the epoch answer repeats the §9.10 doctrine —
+E3's val was flat from step ~400 (loss 0.1298 → 0.057 by step 400,
+then 0.0566–0.0601 for the remaining 341 steps across epochs 2–3) and
+its eval acc sits below both 1-epoch arms; (4) the temperature axis is
+the one genuinely new measurement: soft T=0.5 matches the best arm's
+accuracy while posting the window's best ECE (0.068 vs 0.095–0.136
+hard) — the soft-as-calibrator pivot (§9.10) now has an operating
+point, T<1 sharpened, to test at full scale. 4k rows underscales the
+corpus (full-data hard arm: 0.7000), so absolute values read low; the
+pilot ranks knobs, it does not gate anything. Run tree archived:
+`runs/pilot-window-1012/` on both hosts.
 
 ### 12.3 The extrapolator — `benchmarks/decision-model/runner/arm_curve_fit.py`
 
@@ -1462,10 +1496,12 @@ Protocol (binding):
 
 Standing answer to "can we improve the pipeline while we wait":
 
-1. **Epoch pilot** — 3 epochs × 4k rows on the 5060 Ti (~15 min);
-   converts the `epochs 1` assumption into a curve. Lands here.
-2. **LR × LoRA-r mini-sweep** — 3.5 h arms make sweeps affordable;
-   after the arms' eval legs, on the same platform.
+1. **Epoch pilot — DONE 2026-10-12** (with the LR and LoRA-r legs folded
+   into the same window; see the pilot table in §12.2). Follow-through:
+   a full-scale soft T=0.5 arm is the one candidate the pilot names.
+2. **LR × LoRA-r mini-sweep — DONE at pilot scale** (same window);
+   full-scale confirmation only if a future recipe change reopens the
+   axis.
 3. **causal_conv1d canary** — install → 4k-row b2a8 pilot → same-seed
    loss parity within fp16 noise → keep only if ≥1.3× s/step.
 4. **Bridge flag stages (a)/(b)** — at the post-arms restart (§9
