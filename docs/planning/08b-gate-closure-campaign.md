@@ -85,6 +85,29 @@ SystemOne wire contract, adjudicated live at 0.7706/ECE 0.045.
 - **T2.3 Batch-sweep redo** with fixed bucketing (retires G7; the D9
   shape evidence stays invalid until this runs).
 
+### T1 results so far (2026-10-13, updated same day)
+
+- **T1.2 slice probe DONE** (1,000-row stride sample, GPU): teacher vs
+  strands agreement **0.8748** over 1,030 questions (noul 0.908
+  n=790 — dominated by 1-question SargeDev relevance rows; choice
+  0.949 n=78; score 0.679 n=162). Zero request errors; max state
+  5,934 chars — **no window-4096 truncation risk anywhere**. Disagreement
+  is already 4× the T1.5 threshold at slice scale — directionally
+  supports v5. Runner: `benchmarks/decision-model/runner/
+  strands2b_slice_probe.py`; artifacts on fedora
+  `~/oc-model-eval/runs/strands2b-slice-v1/`.
+- **GPU unlocked on fedora**: strands' torch (cu126) has no sm_120
+  kernels, but a cu130 venv (`~/venvs/strands-gpu`) serves the same
+  checkpoint on the 5060 Ti at **0.23 s/row vs 20.3 s CPU (~88×)**,
+  device parity verified (max prob delta 0.007, zero argmax flips vs
+  the CPU fixture). Full-pass economics collapse from CPU-days to
+  ~½–1 GPU-day.
+- **T1.3 full pass LAUNCHED** (operator go 2026-10-13: fedora freed,
+  bridge infra stopped by operator): all 183,262 merged-v4 rows,
+  stride 1, GPU, resume-safe →
+  `~/oc-model-eval/runs/strands2b-full-v1/`. ETA overnight.
+  T1.4 analysis + the T1.5 gate run on this output.
+
 ### T3 — Arms
 
 - **T3.1 Full-scale soft T=0.5** (after T2.1): completes the pilot's
@@ -94,19 +117,35 @@ SystemOne wire contract, adjudicated live at 0.7706/ECE 0.045.
   holdout at end of training, bake into the exported config (strands
   pattern). Evaluated on rel200 + board; new calibration artifact
   shape; benefits every future arm including e1-e's successor.
+  **Pre-test DONE (2026-10-13, in-sample, disclosed — sizing probe,
+  not a shipped artifact)**, tool `runner/perkind_holdout_fit.py`
+  (validates against the strands record: reproduces ECE 0.0451 /
+  auto@5% 122/231 exactly):
+  - v2-08b board rows (231): raw ECE 0.1952 → single global T 0.1126
+    → **per-kind T\* 0.0847** (bool 4.55 / choice 2.93 / score 2.12).
+  - v2-08b holdout (120): raw 0.1406 → own fit T\*=1.64 → 0.1175;
+    the e1-e global 3.362 applied to this arm **worsens** it to
+    0.2428 — one global T does not transfer across arms.
+  - strands rows with our global 3.362: ECE 0.045 → 0.257 — same
+    non-transfer, their edge is per-arm + per-kind.
+  Verdict: the axis is real and cheap; bake per-kind T at export per
+  arm. auto@5% does not move at 0.8B accuracy (nothing to auto-accept
+  at 55%); it moves once accuracy does.
 - **T3.3 The gate-closing arm** (after T1.5-if-v5): v5 data +
   measured knobs (lr 1e-4, 2 epochs, r8/r16 A/B at full volume) +
   T3.2 export calibration. Success criterion: board ≥ 0.6494 with
   suite ≥ 0.68. If T1.4 kills the data hypothesis, T3.3 is replaced
   by the documented pivot: 0.8B is a calibration/cheap-arm only, and
   the release effort moves to e1-e successors at 2B.
-- **T3.4 The board-leader arm: 4B own-tuned** [host-gated on T5500]:
-  the fork anchor (Qwen3.5-4B, base, untuned, D16 tier) already reads
-  0.7662 — 0.6 pp under the minicpm leader, above strands' 0.7706 —
-  with zero decision tuning. An r48-class LoRA on 4B with v5 data +
-  T3.2 export calibration is the highest-probability path past
-  0.7792. 5060 Ti (16 GB) cannot train 4B comfortably; needs the
-  V100 pair (T5500 PSU) or QLoRA on fedora as fallback.
+- **T3.4 Capacity contingency: 4B own-tuned** [CONTINGENCY, not
+  primary — operator direction 2026-10-13]: the board leader is a 2B
+  (minicpm 0.7792) and strands is a 2B (0.7706), so 2B capacity is
+  proven sufficient to top this board; smaller = faster = better
+  product fit. Primary path is the 2B on v5 (T3.3). T3.4 (4B r48 LoRA
+  on v5 + T3.2 calibration, fork-anchor floor 0.7662) triggers only
+  on a named trigger: **the 2B arm plateaus below 0.75 board after
+  v5 + per-kind T** — evidence the residual gap is base-model
+  capacity, not data. Host: T5500 V100 pair (PSU) or QLoRA on fedora.
 
 ## What "beyond strands" means (targets, three legs)
 
@@ -120,9 +159,8 @@ axis gets there; the three legs compose:
 2. **Calibration** (T3.2): per-kind T baked at export — attacks the
    axis strands won; the pilot's soft-T=0.5 ECE 0.068 at pilot scale
    says the axis is real.
-3. **Capacity** (T3.3, T3.4): the 0.8B gate-closure arm first, then
-   the 4B leader candidate — the fork anchor's untuned 0.7662 is the
-   floor evidence.
+3. **Capacity** (T3.3, T3.4): the 2B-on-v5 gate/leader arm is the
+   primary; the 4B is a contingency behind a named plateau trigger.
 
 ### T4 — Engine product track (parallel, engineering-side)
 
@@ -144,12 +182,11 @@ estimators (accuracy half; T1.4 is the noise half), T5500 power soak,
 
 ```
 now ──► T2.1 T2.2 (engineering, no gate — code + CPU smoke on fedora) ──► T3.1
-    └─► T1.1 T1.2 (slice probe, no gate; fedora CPU while T5500 is down)
-         ──► [OP] T1.3 (V100 when the PSU lands, else CPU days) ──► T1.4 ──► T1.5
-                                                                          │
-                                         v5 ──► T3.3 ◄── T3.2 (either way)
-T3.4 starts when the V100 pair returns. T4.1 interleaves on engineering
-time; T5 waits for operator.
+    └─► T1.2 DONE ──► T1.3 RUNNING (fedora GPU, overnight) ──► T1.4 ──► T1.5
+                                                                     │
+                                    v5 ──► T3.3 (2B primary) ◄── T3.2 (either way)
+T3.4 fires only on the 2B-plateau trigger. T4.1 interleaves on
+engineering time; T5 waits for operator.
 ```
 
 Hosts: T5500 = training + T1 (V100 pair, power-cap regime) — **DOWN
