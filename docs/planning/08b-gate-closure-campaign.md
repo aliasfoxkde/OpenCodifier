@@ -49,11 +49,18 @@ SystemOne wire contract, adjudicated live at 0.7706/ECE 0.045.
   t5500-power-cap regime); checkpoint + venv staged (286 M copy from
   fedora; cu126 supports sm_70 natively — the sm_120 trap is
   5060 Ti-specific); bridge duty untouched on fedora.
+  **Contingency (2026-10-13): T5500 is DOWN awaiting a replacement
+  PSU** — T1.2 starts on fedora CPU instead: bf16 CPU serve measured
+  ~1.7 s/task steady in the §15.10 adjudication, so a 1,000-row probe
+  is ~30 min single-threaded and needs no GPU. Full pass on CPU is
+  3–5 days — defer T1.3 to the V100 pair or accept CPU days as a
+  conscious trade; do not block T2 on it either way.
 - **T1.2 Slice probe (no gate)**: 1,000 corpus rows through
-  `strands-decider serve` batched on V100. Verify: window-4096
-  truncation rate on real corpus lengths, p50/p95 latency, response
-  schema parity, agreement spot-check vs teacher-gold on 100 rows.
-  Fixture-first per the model-import parity discipline.
+  `strands-decider serve` batched on V100 (or fedora CPU per the
+  T1.1 contingency). Verify: window-4096 truncation rate on real
+  corpus lengths, p50/p95 latency, response schema parity, agreement
+  spot-check vs teacher-gold on 100 rows. Fixture-first per the
+  model-import parity discipline.
 - **T1.3 Full pass [OP]**: merged-v4 states → second-opinion column.
   At ~0.1–0.2 s/task batched: ~3–6 h per 100 k rows on one V100.
   No API spend (local weights) — this is the noise half of the
@@ -93,6 +100,29 @@ SystemOne wire contract, adjudicated live at 0.7706/ECE 0.045.
   suite ≥ 0.68. If T1.4 kills the data hypothesis, T3.3 is replaced
   by the documented pivot: 0.8B is a calibration/cheap-arm only, and
   the release effort moves to e1-e successors at 2B.
+- **T3.4 The board-leader arm: 4B own-tuned** [host-gated on T5500]:
+  the fork anchor (Qwen3.5-4B, base, untuned, D16 tier) already reads
+  0.7662 — 0.6 pp under the minicpm leader, above strands' 0.7706 —
+  with zero decision tuning. An r48-class LoRA on 4B with v5 data +
+  T3.2 export calibration is the highest-probability path past
+  0.7792. 5060 Ti (16 GB) cannot train 4B comfortably; needs the
+  V100 pair (T5500 PSU) or QLoRA on fedora as fallback.
+
+## What "beyond strands" means (targets, three legs)
+
+strands-decider-E2B is the bar to beat on BOTH axes: board accuracy
+> 0.7792 (the minicpm leader) and raw ECE < 0.045 / auto@5% > 0.528
+(the strands calibration). The evidence says no single training-knob
+axis gets there; the three legs compose:
+
+1. **Data** (T1): consensus labels + relational density — attacks the
+   hard-compositional wall every 2B arm hits (the 53-miss tier).
+2. **Calibration** (T3.2): per-kind T baked at export — attacks the
+   axis strands won; the pilot's soft-T=0.5 ECE 0.068 at pilot scale
+   says the axis is real.
+3. **Capacity** (T3.3, T3.4): the 0.8B gate-closure arm first, then
+   the 4B leader candidate — the fork anchor's untuned 0.7662 is the
+   floor evidence.
 
 ### T4 — Engine product track (parallel, engineering-side)
 
@@ -113,16 +143,24 @@ estimators (accuracy half; T1.4 is the noise half), T5500 power soak,
 ## Sequencing
 
 ```
-now ──► T2.1 T2.2 (engineering, no gate) ──► T3.1
-    └─► T1.1 T1.2 (slice probe, no gate) ──► [OP] T1.3 ──► T1.4 ──► T1.5
-                                                              │
-                              v5 ──► T3.3 ◄── T3.2 (either way)
-T4.1 interleaves on engineering time; T5 waits for operator.
+now ──► T2.1 T2.2 (engineering, no gate — code + CPU smoke on fedora) ──► T3.1
+    └─► T1.1 T1.2 (slice probe, no gate; fedora CPU while T5500 is down)
+         ──► [OP] T1.3 (V100 when the PSU lands, else CPU days) ──► T1.4 ──► T1.5
+                                                                          │
+                                         v5 ──► T3.3 ◄── T3.2 (either way)
+T3.4 starts when the V100 pair returns. T4.1 interleaves on engineering
+time; T5 waits for operator.
 ```
 
-Hosts: T5500 = training + T1 (V100 pair, power-cap regime); fedora =
-bridge duty + CPU eval legs; Kaggle T4 free tier / Modal ≤ $50 burst =
-overflow training per platform policy.
+Hosts: T5500 = training + T1 (V100 pair, power-cap regime) — **DOWN
+2026-10-13, replacement PSU on order; all T2/T3 arms queue behind it**;
+fedora = bridge duty + CPU eval legs — root/home are one fs (nvme0n1p3,
+1.9 T) and hit 8 G free on 2026-10-13; remediated same day (~7 G caches
+reclaimed, the 2.4 T stale gitforge-audit-20260822 snapshot + 76 G of
+superseded eval models archiving copy-first to /nas/Temp/archive/
+before delete-verify, spin-down ops staged for the 16 T sda);
+Kaggle T4 free tier / Modal ≤ $50 burst = overflow training per
+platform policy.
 
 ## Discipline
 
