@@ -883,6 +883,94 @@ class VtxAdapter:
         self.client = None
 
 
+class StrandsSystemOneAdapter:
+    """strands-decider through its own published serving path.
+
+    POSTs each task to `strands-decider serve`'s /v1/systemone exactly as
+    JevBench's typesafe adapter does: state passthrough, one 'decision'
+    question rendered verbatim from the task record (type/instructions/
+    criteria), no prompt of our own — prompts are the server's. Response
+    parsing mirrors typesafe: noul -> {yes: p, no: 1-p}; choice and score
+    probabilities used as-is (native), never renormalized; predictions
+    left for the harness to derive from the distribution (no label
+    override), which is how the official adapter's rows are scored.
+    """
+
+    name = "strands-systemone"
+    price_input_per_m = 0.0
+    price_output_per_m = 0.0
+    ladder = None
+
+    def __init__(self, endpoint: str, model_label: str, timeout_s: float):
+        self.endpoint = endpoint.rstrip("/")
+        self.model_label = model_label
+        self.timeout_s = timeout_s
+
+    def load(self):
+        pass
+
+    def close(self):
+        pass  # stateless HTTP client; the server is managed externally
+
+    def reserve_estimate(self, _t):
+        return None
+
+    def run(self, t) -> "DecisionResult":
+        import urllib.error  # noqa: PLC0415
+        import urllib.request  # noqa: PLC0415
+
+        from jevbench.adapters.base import DecisionResult  # noqa: PLC0415
+
+        q = {"type": t.question["type"],
+             "instructions": t.question["instructions"]}
+        if t.question.get("criteria") is not None:
+            q["criteria"] = t.question["criteria"]
+        body = {"state": t.state, "model": self.model_label,
+                "questions": {"decision": q}}
+        data = json.dumps(body).encode()
+        req = urllib.request.Request(
+            f"{self.endpoint}/v1/systemone", data=data, method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        started = time.perf_counter()
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout_s) as r:
+                parsed = json.loads(r.read())
+        except Exception as e:  # noqa: BLE001 — harness classifies failures
+            return DecisionResult(self.name, False,
+                                  error=f"{type(e).__name__}: {e}",
+                                  probs_source="native",
+                                  model=self.model_label)
+        latency = time.perf_counter() - started
+        res = DecisionResult(self.name, False, status=200, latency_s=latency,
+                             probs_source="native", model=self.model_label,
+                             raw={"qtype": t.question["type"]})
+        answers = parsed.get("answers") or {}
+        ans = answers.get("decision")
+        if not isinstance(ans, dict):
+            res.error = "missing 'answers.decision'"
+            return res
+        if ans.get("type") != t.question["type"]:
+            res.error = "native answer type mismatch"
+            return res
+        try:
+            if t.question["type"] == "noul":
+                p = float(ans["noul"])
+                if not 0.0 <= p <= 1.0:
+                    raise ValueError(f"noul out of range: {p}")
+                res.probs = {"yes": p, "no": 1.0 - p}
+            else:
+                probs = ans.get("probabilities")
+                if not isinstance(probs, dict) or not probs:
+                    raise ValueError("answer missing probabilities")
+                res.probs = {str(k): float(v) for k, v in probs.items()}
+        except (KeyError, TypeError, ValueError) as e:
+            res.error = f"answer parse failed: {e}"
+            return res
+        res.ok = True
+        return res
+
+
 class NliOnnxAdapter:
     """Zero-shot NLI cross-encoder through ONNX Runtime (PLAN 24j; arm of
     record `MoritzLaurer/deberta-v3-base-zeroshot-v2.0`, its own published
@@ -1432,7 +1520,7 @@ def main() -> int:
         "--arm",
         required=True,
         choices=["engine", "fork_4b", "jev_native", "vtx", "nli", "gguf",
-                 "slot", "minicpm"],
+                 "slot", "minicpm", "strands"],
     )
     ap.add_argument(
         "--slot-base",
@@ -1483,6 +1571,24 @@ def main() -> int:
         "--minicpm-no-date-facts",
         action="store_true",
         help="skip their add_date_facts=True serving default (minicpm arm)",
+    )
+    ap.add_argument(
+        "--strands-endpoint",
+        default=None,
+        help="base URL of `strands-decider serve` (required with --arm "
+             "strands); the runner owns only the wire-record mapping",
+    )
+    ap.add_argument(
+        "--strands-model",
+        default="strands-decider",
+        help="model label sent in /v1/systemone requests (strands arm)",
+    )
+    ap.add_argument(
+        "--strands-ckpt",
+        type=Path,
+        default=None,
+        help="checkpoint dir served at --strands-endpoint, for manifest "
+             "file hashes (strands arm; hashes only, never read)",
     )
     ap.add_argument(
         "--gguf-dir",
@@ -1550,6 +1656,8 @@ def main() -> int:
         ap.error("--slot-base is required for the slot arm")
     if args.arm == "minicpm" and args.minicpm_ckpt is None:
         ap.error("--minicpm-ckpt is required for the minicpm arm")
+    if args.arm == "strands" and args.strands_endpoint is None:
+        ap.error("--strands-endpoint is required for the strands arm")
     if args.llama is not None and args.llama_model_id is None:
         ap.error("--llama requires --llama-model-id")
     if (args.ladder is not None or args.llama is not None) and args.arm != "engine":
@@ -1592,6 +1700,9 @@ def main() -> int:
                                  args.minicpm_dtype, args.threads,
                                  args.timeout, args.minicpm_pride,
                                  not args.minicpm_no_date_facts)
+    elif args.arm == "strands":
+        adapter = StrandsSystemOneAdapter(args.strands_endpoint,
+                                          args.strands_model, args.timeout)
     else:
         adapter = JevNativeBridgeAdapter(args.model_dir, args.threads, args.timeout)
 
@@ -1708,12 +1819,24 @@ def main() -> int:
             for shard in sorted(args.minicpm_base.glob("*.safetensors")):
                 model_files[f"base/{shard.name}"] = (
                     hashlib.sha256(shard.read_bytes()).hexdigest())
+    if args.arm == "strands" and args.strands_ckpt is not None:
+        # Same file set the authors' jevbench.sh fingerprints: every file
+        # under the checkpoint, sorted, individually sha256'd.
+        for f in sorted(args.strands_ckpt.rglob("*")):
+            if f.is_file():
+                model_files[str(f.relative_to(args.strands_ckpt))] = (
+                    hashlib.sha256(f.read_bytes()).hexdigest())
 
     manifest = {
         "arm": args.arm,
         "harness": {"repo": "fstandhartinger/jevbench", "commit": harness_commit(args.ref),
                     "license": "MIT", "method": "docs/METHOD-v1.4.md (public split)"},
         "dataset_sha256": dataset_hash(tasks),
+        **({"strands_model": {"endpoint": args.strands_endpoint,
+                              "model": args.strands_model,
+                              "ckpt": (str(args.strands_ckpt)
+                                       if args.strands_ckpt else None)}}
+           if args.arm == "strands" else {}),
         **({"slot_model": {"base": str(args.slot_base),
                            "adapter": (str(args.slot_adapter)
                                        if args.slot_adapter else None),
@@ -1789,6 +1912,15 @@ def main() -> int:
                        "temperatures (the published serving path); "
                        "Single-Pass K=1 unless --minicpm-pride; "
                        "add_date_facts=True unless --minicpm-no-date-facts",
+            "strands": "wire record (state + one typed question) verbatim "
+                       "into the authors' `strands-decider serve` "
+                       "/v1/systemone (their published serving path; "
+                       "prompts are the server's); response mapping "
+                       "mirrors JevBench's typesafe adapter: noul -> "
+                       "{yes: p, no: 1-p}, choice/score probabilities "
+                       "native as-is, never renormalized; no label "
+                       "override — predictions derived from the "
+                       "distribution like the official adapter's rows",
         }[args.arm],
         "determinism": determinism,
         "adapter_warnings": getattr(adapter, "warnings", []),
