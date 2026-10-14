@@ -143,6 +143,16 @@ SystemOne wire contract, adjudicated live at 0.7706/ECE 0.045.
   arm: holdout + rel200 readout evals, per-kind T baked to
   `adapter-best/perkind_calibration.json` (T3.2 export step), then a
   gate-gated JevBench board leg (holdout ≥ 0.68) on CPU llama-server.
+- **T3.3 r16 VERDICT: GATE_FAIL — merged-v5 falsified (2026-10-14)**.
+  Training healthy (val 0.0168, tok_acc 0.9943); holdout **0.5167**
+  vs e1-e's 0.8083 on the same suite (rel200 0.4071 vs 0.718–0.732;
+  relational class 0.15). Board skipped by the gate. Corpus-only
+  delta — recipe byte-identical — so merged-v5's mix is the defect
+  (teacher-agreement rose yet transfer collapsed: agreement ≠ the
+  binding constraint). merged-v6 promoted to the named next lever;
+  full record in TRAINING.md "T3.3 r16 arm" (2026-10-14). Recovery
+  ran via `runs/t33-recover.sh` after the co-tenant-27B OOM (fixed:
+  real rc capture, perkind argv paths, GPU pre/mid-flight guards).
 - **T3.1 Full-scale soft T=0.5** (after T2.1): completes the pilot's
   named follow-through. Pre-registered expectation: calibration win,
   accuracy wash — it is a record-completing arm, not a gate attempt.
