@@ -465,6 +465,23 @@ DOWN (PSU on order) — fedora is the only trainer; launch decision
 made. Pilot RESULT lines are NOT gate numbers and not board numbers
 (pilot-scale discipline).
 
+**Sweep + canary rerun closed (6:45 PM Central, FAIL=0 both stages).**
+T2.3: bucketing replicates +31.3% under ckpt ON; b4-bucket is the
+sweet spot (47.5 tok/s, +44.4%); b8 regresses; loss trajectory flat
+across configs → ordering-neutral lever (#147 DONE). T2.2 with the
+fixed comparator: **FAIL as a measurement** — causal_conv1d drifts
+1.65% mean / 6.78% worst windowed rel delta vs sdpa same-seed, while
+buying +29.2% tok/s. Kernel = throughput-not-parity lever; OFF for
+gate arms (#148 DONE with the honest verdict). `--no-grad-checkpoint`
+repriced at +79% tok/s against the ckpt-ON rerun — the speed that
+killed six arms is real and so was the bill.
+
+**T3.3' launched 6:47 PM Central** (`runs/t33p-v6full.sh` →
+`t33p-2b-v6full`): 2B r16/a32 champion recipe, ONE change vs the T3.3
+arms (the corpus, per the census verdict), ~19.2k steps ≈ 19 h on
+fedora, eval legs + 0.68 gate + conditional JevBench chained. G7/G8
+retire when this arm lands.
+
 ## Discipline
 
 Every number in this plan cites a shipped record (BENCHMARKS.md,
