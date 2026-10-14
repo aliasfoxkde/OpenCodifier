@@ -203,6 +203,40 @@ axis gets there; the three legs compose:
   largest product-side gap). Constraint set unchanged: ONNX/llama
   behind traits, no heavyweight deps in core, bit-determinism proof
   or a DECISIONS-recorded re-key.
+  **Scoping DONE (2026-10-13, fork source read at
+  `/nas/Temp/work/oc-model-eval/llama.cpp`)** — one correction to the
+  plan's shape: the fork's `POST /decision` is *not* a tensor-in /
+  tensor-out model, so it does not fit [`InferenceBackend`]
+  (DenseTensor maps, `crates/opencodifier-runtime/src/backend.rs:31`).
+  It is a **decision backend**: one shared prefix (system +
+  instructions, chat-template-rendered server-side — all contexts must
+  share it) plus 1–256 context strings and a finite JSON schema; the
+  server scores every schema row in one batched pass. Per-context
+  result: `decision.<field>` (selected value) + `fields.<field>` with
+  `value`, `probability`, full `distribution` {choice → p} when the
+  field is enum/numeric-with-probs, `interval_p10_p90` for numeric
+  fields, `scored_nodes`, plus usage/timings. Design that follows:
+  1. `opencodifier-runtime`, `llamacpp` feature: new `DecisionBackend`
+     trait (contexts + finite option sets → per-field distributions;
+     blocking HTTP, no async in runtime) with the fork client as first
+     impl; heavyweight dep (HTTP client) confined to this crate/feature
+     per D11.
+  2. `opencodifier-model`: a `fork` contract module alongside
+     `kai`/`julia` — schema per kind (bool = 2-value enum; choice =
+     candidate-id enum; score = numeric levels), question rendering
+     shares `KaiQuestion`-style payloads; fork `distribution` maps
+     straight onto the IR's outcome distribution (calibration seam
+     applies downstream — the T3.2 per-kind T artifact becomes the
+     engine lane's calibration config).
+  3. `opencodifier-engine`: ladder rung / `EngineHandle` lane over the
+     trait. Determinism: batch-invariance must be *proven* (same
+     request in different batch compositions → byte-identical
+     distributions) before batching ships; until then the engine lane
+     pins batch = 1 (trivially deterministic).
+  kai.rs is the in-repo template for contracts 1–2 (render → batch →
+  tensors → backend → f64 softmax); here the server does the scoring
+  and returns probabilities, so the module is render + wire + validate
+  only.
 
 ### T5 — Operator-gated queue [OP]
 
