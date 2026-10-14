@@ -427,6 +427,44 @@ Rerun `runs/chain-rerun.sh` launched 5:10 PM Central same day: Stage 1 =
 when `--val-every 10000` never fires, so the eval path cannot see a
 missing adapter.)
 
+**Bake-off rerun complete (5:52 PM Central, FAIL=0 — all arms clean with
+ckpt ON) and the anchor clause FIRED.** RESULT lines:
+
+| arm | corpus | holdout | rel200 |
+|---|---|---|---|
+| t66r-a-anchor-v2 | softlabel-v2 (anchor-bad) | **0.6250** | 0.4250 |
+| t66r-b-anchor-iterb | iterb (anchor-good) | 0.5000 | 0.4357 |
+| t66r-c-v6lite | merged-v6-lite | 0.5583 | **0.4786** |
+| t66r-d-v6full | merged-v6-full | 0.5000 | 0.4536 |
+
+Pre-registered rule applied: **anchor ordering inverted** — B (0.500) ≤
+A (0.625) on holdout, contradicting the pilot-scale anchor calibration
+that named iterb "good". The clause anticipated exactly this: pilot
+scale (6,400 rows × 400 steps exposes ~2% of a 306k corpus; holdout
+n=240) cannot resolve corpus identity, so the decision moves to **census
+evidence**:
+
+1. **Containment:** v6 ⊇ iterb verbatim (scaffold) + confidence-gated
+   v3 additions (unique argmax, max(target) ≥ 1.5/k; validator PASS on
+   slot-gates, render equivalence, decon spots; lineage PASS). Anything
+   iterb renders, v6 renders more of.
+2. **Composition direction (the closed root cause):** v5 failed on its
+   77%-boolean weak-label mix. v6's additions shift mix toward
+   **choice** (the transferable family): 42.9% in the scaffold → ~50%
+   in both v6 arms, with score_nonconstant + noul gates enforced.
+3. **lite vs full discriminates on family balance:** lite caps v3 noul
+   additions at 0, diluting noul to 19.2% (scaffold: 27.3%); full adds
+   24k v3 noul and holds 23.6% — nearest the known-good scaffold
+   balance, plus maximum gate-passing volume (129k vs 75k added rows;
+   306,999 total).
+
+**Verdict: merged-v6-full takes the T3.3' corpus slot.** T3.3' = full
+2B gate-attempt arm on merged-v6-full. Host constraint: T5500 still
+DOWN (PSU on order) — fedora is the only trainer; launch decision
+(after the rerun chain frees the GPU, ~7:10 PM) recorded here when
+made. Pilot RESULT lines are NOT gate numbers and not board numbers
+(pilot-scale discipline).
+
 ## Discipline
 
 Every number in this plan cites a shipped record (BENCHMARKS.md,
