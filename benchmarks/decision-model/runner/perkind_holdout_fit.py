@@ -80,12 +80,12 @@ def ece_logits(rows, temps, n_bins=10):
 JSON_OUT = None
 
 
-def run_logits_mode():
-    d = json.load(open(SUITE))
+def run_logits_mode(rows_path=None, suite_path=None):
+    d = json.load(open(suite_path or SUITE))
     items = d if isinstance(d, list) else d.get("items") or []
     suite = {it["id"]: it for it in items}
     rows = []
-    for line in open(HOLDOUT):
+    for line in open(rows_path or HOLDOUT):
         if not line.strip():
             continue
         r = json.loads(line)
@@ -110,7 +110,7 @@ def run_logits_mode():
         return ece_logits(rows_, temps)
 
     report(rows, nll, ece, one=lambda k: 1.0, glob=lambda k: GLOBAL_T,
-           label=f"logits mode: {HOLDOUT.rsplit('/', 2)[-2]}",
+           label=f"logits mode: {(rows_path or HOLDOUT).rsplit('/', 2)[-2]}",
            json_out=JSON_OUT)
 
 
@@ -246,7 +246,7 @@ def main():
     else:
         rows_f = argv[0] if argv else HOLDOUT
         suite_f = argv[1] if len(argv) > 1 else SUITE
-        run_logits_mode()
+        run_logits_mode(rows_f, suite_f)
 
 
 if __name__ == "__main__":
