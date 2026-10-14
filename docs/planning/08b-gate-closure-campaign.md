@@ -85,28 +85,34 @@ SystemOne wire contract, adjudicated live at 0.7706/ECE 0.045.
 - **T2.3 Batch-sweep redo** with fixed bucketing (retires G7; the D9
   shape evidence stays invalid until this runs).
 
-### T1 results so far (2026-10-13, updated same day)
+### T1 results (2026-10-13, complete)
 
 - **T1.2 slice probe DONE** (1,000-row stride sample, GPU): teacher vs
   strands agreement **0.8748** over 1,030 questions (noul 0.908
   n=790 — dominated by 1-question SargeDev relevance rows; choice
   0.949 n=78; score 0.679 n=162). Zero request errors; max state
-  5,934 chars — **no window-4096 truncation risk anywhere**. Disagreement
-  is already 4× the T1.5 threshold at slice scale — directionally
-  supports v5. Runner: `benchmarks/decision-model/runner/
-  strands2b_slice_probe.py`; artifacts on fedora
-  `~/oc-model-eval/runs/strands2b-slice-v1/`.
+  5,934 chars — **no window-4096 truncation risk anywhere**. Runner:
+  `benchmarks/decision-model/runner/strands2b_slice_probe.py`;
+  artifacts on fedora `~/oc-model-eval/runs/strands2b-slice-v1/`.
 - **GPU unlocked on fedora**: strands' torch (cu126) has no sm_120
   kernels, but a cu130 venv (`~/venvs/strands-gpu`) serves the same
   checkpoint on the 5060 Ti at **0.23 s/row vs 20.3 s CPU (~88×)**,
   device parity verified (max prob delta 0.007, zero argmax flips vs
   the CPU fixture). Full-pass economics collapse from CPU-days to
   ~½–1 GPU-day.
-- **T1.3 full pass LAUNCHED** (operator go 2026-10-13: fedora freed,
-  bridge infra stopped by operator): all 183,262 merged-v4 rows,
-  stride 1, GPU, resume-safe →
-  `~/oc-model-eval/runs/strands2b-full-v1/`. ETA overnight.
-  T1.4 analysis + the T1.5 gate run on this output.
+- **T1.3 full pass DONE** (operator go 2026-10-13; resumed once after
+  an unrelated ENOSPC on the host, zero rows lost): all **183,262
+  merged-v4 rows → 188,061 questions**, 1 error question,
+  `~/oc-model-eval/runs/strands2b-full-v1/`.
+- **T1.4 analysis DONE** — teacher (gold) vs strands agreement:
+  **0.8715 overall → 12.85% disagreement** (noul 0.9081 n=144,391 /
+  choice 0.9251 n=14,113 / **score 0.6667 n=29,557**). By source:
+  SargeDev relevance 0.911, vivere 0.769, **typed-decisions 0.610**.
+- **T1.5 gate: FIRED** (pre-registered threshold 5%; measured 12.85%,
+  2.6× over; score kind alone is 33.3% contested). **Build merged-v5
+  with consensus labels** — the ~24k-question disagreement pool is
+  the relabel-candidate set by construction. The data-quality
+  hypothesis (G1/G2) is confirmed live, not null.
 
 ### T3 — Arms
 
