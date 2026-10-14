@@ -77,6 +77,9 @@ def ece_logits(rows, temps, n_bins=10):
     return sum(b[0] * abs(b[2] / b[0] - b[1] / b[0]) for b in bins if b[0]) / n
 
 
+JSON_OUT = None
+
+
 def run_logits_mode():
     d = json.load(open(SUITE))
     items = d if isinstance(d, list) else d.get("items") or []
@@ -107,7 +110,8 @@ def run_logits_mode():
         return ece_logits(rows_, temps)
 
     report(rows, nll, ece, one=lambda k: 1.0, glob=lambda k: GLOBAL_T,
-           label=f"logits mode: {HOLDOUT.rsplit('/', 2)[-2]}")
+           label=f"logits mode: {HOLDOUT.rsplit('/', 2)[-2]}",
+           json_out=JSON_OUT)
 
 
 # ---------- probs mode ----------
@@ -180,12 +184,12 @@ def run_probs_mode(run_dir, ref_dir, glob_t):
 
     report(rows, nll_probs, ece_probs, one=lambda k: 1.0, glob=lambda k: glob_t,
            label=f"probs mode: {run_dir.rsplit('/', 1)[-1]}",
-           with_auto5=True)
+           with_auto5=True, json_out=JSON_OUT)
 
 
 # ---------- shared report ----------
 
-def report(rows, nll, ece, one, glob, label, with_auto5=False):
+def report(rows, nll, ece, one, glob, label, with_auto5=False, json_out=None):
     acc = sum(r["correct"] for r in rows) / len(rows)
     kinds = sorted({r["kind"] for r in rows})
     grid = [0.2 * (20.0 / 0.2) ** (i / 199) for i in range(200)]
@@ -218,10 +222,22 @@ def report(rows, nll, ece, one, glob, label, with_auto5=False):
             n, tot = auto5(rows, temps)
             sys.stdout.write(f"auto@5% @{name}: {n}/{tot} = {n / tot:.3f}\n")
     sys.stdout.write(f"per-kind temps: {per}\n")
+    if json_out:
+        with open(json_out, "w") as f:
+            json.dump({"per_kind_T": {k: per[k] for k in per},
+                       "ece_per_kind": {k: ece([r for r in rows if r["kind"] == k], per)
+                                        for k in per},
+                       "ece_all_perk": ece(rows, per),
+                       "rows": len(rows), "acc": acc}, f, indent=2, sort_keys=True)
 
 
 def main():
+    global JSON_OUT
     argv = sys.argv[1:]
+    if "--json" in argv:
+        i = argv.index("--json")
+        JSON_OUT = argv[i + 1]
+        del argv[i:i + 2]
     if argv and argv[0] == "--probs":
         run_dir = argv[1] if len(argv) > 1 else BOARD_RUN
         ref_dir = argv[2] if len(argv) > 2 else REF
