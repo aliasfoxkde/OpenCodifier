@@ -346,6 +346,43 @@ the corpus). Order changes:
    CLOSED GATE_FAIL — its successor is "T3.3′: 2B on merged-v6".
 5. Eval lane v2 (#150: batching + sdpa) stays post-campaign, versioned.
 
+**Pre-flight audit + staged pipeline (2026-10-14, same day — operator
+asked for an audit before more GPU hours).** Failure taxonomy from this
+campaign, each now guarded:
+
+| failure | guard now in place |
+|---|---|
+| co-tenant GPU OOM kills evals | GPU pre/mid-flight checks in every staged script (compute-apps probe, never kills) |
+| preflight grep matched "in**active**" | `grep -qx active` exact match |
+| real rc lost to pipe (`$?` after grep) | `RC=$?` captured immediately after every stage |
+| wrong-corpus A/B nearly recorded | census-first discipline: corpus identity verified from manifests before any conclusion (iterb vs softlabel-v2) |
+| `--length-bucket` inert (#147) | fixed in trainer (`bucketed_order(lengths, seed, epoch)`); sweep staged to measure it |
+| perkind argv dead code | parameterized (committed 4494142) |
+| manifest sha hashed pre-close (v6 build, caught by validate harness) | builder fixed; shas recomputed post-close; `validate_v6.py` runs pre-deployment |
+
+Staged chain (all self-guarded, run unattended): r8 rank control
+(TRAINING ~17 steps/min, healthy) → `runs/t22-t23.sh` (5 pilots:
+T2.3 bucketed sweep b2/b4/b8 + T2.2 causal_conv1d same-seed canary,
+now with `--no-grad-checkpoint` [A7, bit-identical, ~20% throughput;
+flag spelling verified against argparse]) → chains
+`runs/t66-bakeoff.sh` (T3.3' corpus bake-off, 4 arms × 0.8B × 400
+steps: A anchor-bad = softlabel-v2, B anchor-good = iterb, C =
+merged-v6-lite, D = merged-v6-full; pre-registered rule: rank on
+holdout, tiebreak rel200; pilots are NOT gate numbers; a candidate
+must beat B to take the T3.3' corpus slot).
+
+merged-v6 BUILT + VALIDATED (2026-10-14): scaffold = e1-iterb verbatim
+(177,999) + jev-distill-corpus-v3 additions (apache-2.0; openjev stream
+CC0 — lineage check PASS per RELEASE_POLICY.md). Confidence gate:
+unique argmax, max(target) ≥ 1.5/k; decon against suite_holdout +
+rel200 + JevBench public (587 keys); exact first-seen dedupe (absorbs
+the iterb↔v3 vintage overlap); loud-drop counts in manifests. lite =
+252,999 rows (50.0/30.9/19.2 c/s/n, sha ace8e39b…); full = 306,999
+(49.6/26.7/23.6, sha d4aeca49…). Validator: rowcounts, slot-gates,
+render equivalence (byte-pattern y-flags identical to scaffold), 40
+suite-probe decon spot — all PASS. Tooling stays off the public tree
+(NAS + fedora) per the withheld-machinery split.
+
 Hosts: T5500 = training + T1 (V100 pair, power-cap regime) — **DOWN
 2026-10-13, replacement PSU on order; all T2/T3 arms queue behind it**;
 fedora = bridge duty + CPU eval legs — root/home are one fs (nvme0n1p3,
