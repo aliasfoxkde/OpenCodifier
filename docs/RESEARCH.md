@@ -2930,3 +2930,36 @@ sparsity. API surface confirms `modelopt.torch.quantization.lora` and
    Ti is sm_120), cited at "BF16-matching accuracy" with QAD recovery
    on MoE models — irrelevant to GGUF serving today, relevant the day
    the serving stack changes.
+
+## §20 — LeWM audit: JEPA world model vs the decision runtime (2026-10-14)
+
+Prompt: arxiv 2603.19312 (LeWorldModel) + lucas-maes/le-wm. What it is:
+the first JEPA that trains stably end-to-end from raw pixels — two
+losses (next-embedding prediction + Gaussian latent regularizer), no
+EMA/pretrained-encoder/auxiliary crutches; ~15M params, single-GPU
+hours, plans up to 48× faster than foundation-model world models,
+latent space probes for physical structure and "surprise" detects
+implausible events. Code + weights released (4.5k stars, MIT).
+
+Verdict: well-executed, different domain. Two conceptual
+confirmations, one named future hook, zero implementable levers
+today.
+
+1. *Confirmation — abstention via surprise:* their surprise eval
+   (prediction error in latent space flags implausible states) is the
+   generative-free sibling of our OOD dimension in ConfidenceReport.
+   Validates the multi-dimensional confidence design; adds nothing we
+   can implement — a latent surprise feature needs a second trained
+   model, which violates the never-two-classifiers-per-request rule.
+2. *Confirmation — small-fast-planner thesis:* 15M params planning
+   competitively is the world-model version of "smallest base that
+   clears the gate".
+3. *The Gaussian-regularizer trick (collapse control with one
+   hyperparameter) does not transfer:* our SFT is supervised slot CE —
+   no representation objective to collapse.
+4. *Named future hook:* if OpenCodifier ever grows a state-transition
+   decision surface (score candidate actions by predicted outcome over
+   evolving state), a JEPA-style latent forward model is the cheap
+   planner/verifier rung — prediction in latent space instead of
+   generative rollout maps exactly onto the cheapest-reliable-layer
+   principle (B6-adjacent, speculative, no current surface wants it).
