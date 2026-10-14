@@ -167,6 +167,18 @@ SystemOne wire contract, adjudicated live at 0.7706/ECE 0.045.
   engineered relational content (itemgen or equivalent regeneration);
   raw-stream union alone is falsified.** Full census + probes in
   TRAINING.md "Root cause closed" (2026-10-14).
+- **T3.3 r8 RANK CONTROL VERDICT: GATE_FAIL — and it strengthens the
+  corpus verdict (2026-10-14, 4:23 PM Central)**. r8/a16 (half the
+  rank): holdout **0.6250**, rel200 **0.4393**, board skipped by the
+  gate — but r8 *beats* r16 by +10.8 holdout / +3.2 rel200. Reading:
+  v5 does not reward capacity — at r16 the model memorizes the
+  77%-boolean mix and transfers worse; halving rank improves
+  generalization while still failing the gate. Both within-corpus rank
+  arms fail ⇒ composition, not capacity, binds (second independent
+  angle on the root cause above). Recovery calibration fit ran
+  (per-kind T choice=2.169). Artifacts pulled to
+  /nas/Temp/work/oc-model-eval/runs/t33-2b-v5-r8 (34M). t22-t23
+  launched 4:26 PM Central (chains t66-bakeoff).
 - **T3.1 Full-scale soft T=0.5** (after T2.1): completes the pilot's
   named follow-through. Pre-registered expectation: calibration win,
   accuracy wash — it is a record-completing arm, not a gate attempt.
