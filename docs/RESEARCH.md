@@ -2891,3 +2891,42 @@ venv per model; compression needs bitsandbytes.
 6. *Ops details:* pinned-host cap of 2GB per prefetched layer (larger
    layers go pageable); 4-bit compression and prefetching are mutually
    exclusive (decompress sits on the load path, cannot overlap).
+
+## §19 — NVIDIA Model-Optimizer audit: what transfers to the quant program (2026-10-14)
+
+Prompt: anything useful in NVIDIA/Model-Optimizer (modelopt)? Verdict:
+methodology importer, not tool adopter — its outputs target
+TensorRT-LLM/SGLang/vLLM, our release surface is llama.cpp GGUF + ONNX
+(ort behind a feature). Apache-2.0, active. Capabilities: PTQ
+(simulated quant in original precision — INT8/INT4/FP8/NVFP4),
+QAT + quantization-aware distillation, pruning, NAS, spec-decode,
+sparsity. API surface confirms `modelopt.torch.quantization.lora` and
+`modelopt.torch.peft` (LoRA-integrated fake-quant) and ONNX
+`int4/int8/fp8` modules.
+
+1. *Actionable now — imatrix arm for the #88 Winnow bake-off:* the
+   mechanism that keeps Q4 accuracy is activation-aware weight scaling
+   (the awq_clip family; llama.cpp's `imatrix` is the same family). Our
+   board-leg GGUFs were quantized Q4_K_M plain (RTN-family k-quants, no
+   decision-corpus statistics). The v3 corpus ships a 13,766-row
+   calibration split and our render contract is deterministic — build
+   an imatrix from a few hundred rendered decision rows and add an
+   imatrix-Q4_K_M arm to the bake-off. Minutes of work,
+   distribution-matched; if it shrinks the quant delta, the QAT
+   trigger (>1-2 pts) never fires.
+2. *Named contingency — QAT path:* if the trigger does fire, modelopt
+   QAT is the implementation candidate: fake-quant wraps modules
+   loss-agnostically (our slot-restricted CE trainer stays intact) and
+   LoRA integration exists. Real cost is format mismatch — we release
+   GGUF Q4_K_M, modelopt targets INT4/NVFP4 via TRT-LLM/vLLM, so QAT
+   would need a weight-only INT4 scheme that survives a GGUF re-export
+   or a product-side format decision. Priced as contingency only.
+3. *Validated shape, not adoptable:* AutoQuantize (mixed-precision
+   per-layer search) and AutoQuant-KV (per-layer KV format search) are
+   the principled version of the bridge's hand-tuned KV-quant
+   constraints. Our serving lane is llama.cpp, so these set the
+   ceiling, not the tool.
+4. *Future-lane note:* NVFP4/W4A4 is Blackwell-native GEMM (the 5060
+   Ti is sm_120), cited at "BF16-matching accuracy" with QAD recovery
+   on MoE models — irrelevant to GGUF serving today, relevant the day
+   the serving stack changes.
