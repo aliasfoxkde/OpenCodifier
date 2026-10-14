@@ -2705,3 +2705,45 @@ potential **embedding/classifier-scale torso**, not a decision model
 (no decision tuning, no calibration artifacts, no option-conditioned
 readout). No board row: it answers none of the three typed question
 kinds under any documented protocol.
+
+## §16 — Multi-family teacher consensus + the transfer-vs-size curve (2026-10-13, FUTURE SCOPE — vision note, not a queued item)
+
+Operator direction: extract "knowledge" from every model family available
+(Kimi K3, ZAI GLM 5.3, Qwen3.8-2.4T-A95B, …), merge into one dataset,
+and test how much intelligence transfers to much smaller models —
+mapping where the intelligence/best-size curve actually sits. Correctly
+self-scoped by the operator as **LLM-model-building scope, not
+decision-runtime scope**; recorded here because (a) the VIVERE
+extraction lane (§15 program, TRAINING.md) is already this program's
+cheap-extraction half, and (b) our campaign has already measured real
+points on the decision-sized version of that curve.
+
+What we already know, from shipped records:
+
+- **Cross-family consensus works and is cheap to add.** merged-v5 is a
+  two-family consensus (qwen-line teacher + strands gemma-line judge):
+  raw disagreement 12.85% → pre-registered consensus flips 1.94%
+  (T1.5, campaign doc). The builder is family-agnostic by construction
+  — a third/fourth judge is the same slice-probe → full-pass →
+  consensus pipeline we just ran, not new machinery.
+- **Family choice moves more than training knobs.** Same corpus, 2B
+  class: minicpm 0.7792 / strands 0.7706 / our qwen 0.6840 — a 10.8 pp
+  spread among same-size models. Base-model pretraining intelligence is
+  the substrate; the decision distill sits on top of it.
+- **Two points on the size curve already exist for this task.** 0.8B
+  fails the board leg (0.5584, −9.1 pp short); 2B passes it (e1-e
+  0.6840 ≥ 0.6494). For adversarial typed decisions the knee sits
+  between 0.8B and 2B — and whether consensus data moves the knee DOWN
+  is exactly the decision-relevant experiment (a v5-trained 0.8B arm
+  would measure it; the hard-compositional tier wall every 2B hits is
+  the counter-hypothesis, §15.10).
+
+What belongs here vs. a future LLM program: the decision-corpus version
+(consensus over N judge families on typed decisions, transfer curve
+from 0.15B→2B on JevBench/suite legs) stays in scope for this repo and
+feeds the engine rung's product-fit question (smallest base that still
+clears the gate = fastest local decider). The general-LLM version
+(free-form knowledge distillation, general corpora, frontier teachers)
+is explicitly out of scope for OpenCodifier and would be its own
+program. No schedule commitment; revisit after T3.3's verdict, which
+measures whether label-quality data alone moves the knee.
