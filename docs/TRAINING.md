@@ -1691,3 +1691,41 @@ is unaffected — plus `expandable_segments:True` to kill the
 fragmentation co-factor. Canary comparator fixed (n≥15 windows, worst
 rel delta over step≥100 windows ≤ 2%, overall mean ≤ 1%). Order:
 bake-off → sweep → canary; results land here + the campaign doc.
+
+## T2.3 sweep + T2.2 canary rerun verdicts (2026-10-14, 6:52 PM Central)
+
+**T2.3 sweep (all ckpt ON, softlabel-v1, batch×accum=16 throughout) —
+#147 closes with a clean throughput table:**
+
+| arm | config | mean win (post-100) | tok/s | Δ vs a |
+|---|---|---|---|---|
+| t23r-a | b2/a8, no bucket | 0.0716 | 32.9 | — |
+| t23r-b | b2/a8 + bucket | 0.0690 | 43.2 | +31.3% |
+| t23r-c | b4/a4 + bucket | 0.0703 | **47.5** | +44.4% |
+| t23r-d | b8/a2 + bucket | 0.0723 | 44.5 | +35.3% |
+
+Readings: bucketing replicates its banked +31.3% exactly under ckpt ON
+(config-independent lever); b4 is the throughput sweet spot; b8
+regresses; loss trajectory is flat across configs (mean win
+0.069–0.072) — pure throughput lever, ordering-neutral. vs first pass:
+`--no-grad-checkpoint` was worth +79% tok/s (58.8/32.9 and 77.2/43.2,
+consistent both pairs) — the speed is real, and so was the peak-memory
+bill that killed six arms. Memory-constrained sweet spot: **b4-bucket
+ckpt ON**.
+
+**T2.2 canary with the fixed comparator (n≥15, worst post-100 ≤ 2%,
+mean ≤ 1%): FAIL — and this time it's a measurement, not a structure.**
+CANARY_WINDOWS=20, WORST_POST100=0.0678, MEAN_DELTA=0.0165. causal_conv1d
+is NOT trajectory-transparent vs sdpa under fp16: same-seed windows
+drift up to 6.8% relative. It does buy **+29.2% tok/s** (42.5 vs 32.9).
+Verdict banked: kernel = throughput lever with a numerics cost — fine
+for pilots/sweeps where trajectory identity doesn't matter, OFF for
+gate arms (one variable at a time). Env restored after the canary.
+
+**T3.3' LAUNCHED 6:47 PM Central** (runs/t33p-v6full.sh →
+runs/t33p-2b-v6full): Qwen3.5-2B, r16/a32 champion recipe, sdpa,
+ckpt ON, full merged-v6-full (306,999 rows: 151,436 choice / 81,537
+score / 72,026 noul; train 304,999 / val 2,000), ~19.2k steps ≈ 19 h →
+train ETA tomorrow early afternoon Central; holdout/rel200/perkind legs
++ 0.68 gate + conditional JevBench board leg are chained in the same
+script. One change vs the T3.3 arms: the corpus (census verdict above).
