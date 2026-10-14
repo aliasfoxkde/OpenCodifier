@@ -405,6 +405,28 @@ before delete-verify, spin-down ops staged for the 16 T sda);
 Kaggle T4 free tier / Modal ≤ $50 burst = overflow training per
 platform policy.
 
+**Chain first pass: partial (2026-10-14, 4:56 PM Central).** r8 completed
+clean (verdict above). The t22-t23 → t66-bakeoff stages then produced
+one banked result and two defects, all diagnosed from run logs:
+
+| defect | evidence | fix forward |
+|---|---|---|
+| T2.3 sweep arms c (b4) + d (b8) OOM | died steps 14 / 1; failed allocs 28–96 MiB at 12.7–13.2 GiB PyTorch allocation on the 15.57 GB card — `--no-grad-checkpoint` removed the ~20% peak margin and bigger micro-batches sat right at the cliff; 2.1–2.6 GiB "reserved but unallocated" = fragmentation co-factor | rerun all four sweep arms with ckpt ON (internally consistent table) |
+| t66 bake-off: ALL FOUR arms rc=1 | same OOM signature (a 56 s, b 5.5 min, c 24 s, d 37 s) at configs identical to surviving t23-a/b ⇒ environmental delta, not per-corpus | rerun under new names (t66r-*) preserving failed artifacts; ckpt ON (recipe-faithful — the champion recipe trains with ckpt; ckpt is math-transparent so corpus ranking is unaffected) + `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` |
+| T2.2 canary FAIL was structural, not kernel divergence | comparator required n≥100 common windows but the trainer logs one win-line per 20 steps ⇒ 400 steps = exactly 20 windows — verdict was guaranteed FAIL regardless of kernel behavior; means actually matched within 0.36% (t23-a 0.1678 vs t22-e 0.1672) and the 16.6% "worst" delta was early-window warmup noise | fixed comparator: n≥15 windows AND worst windowed rel delta over step≥100 windows ≤ 2% AND overall mean ≤ 1% |
+
+**Banked (paired, same-condition — survives the rerun):** length-bucketing
+**+31.3% tok/s** at b2 (t23-a no-bucket 58.8 → t23-b bucketed 77.2;
+`--no-grad-checkpoint` baseline). The bucketing fix (#147) is now
+measured-effective, not just code-closed.
+
+Rerun `runs/chain-rerun.sh` launched 5:10 PM Central same day: Stage 1 =
+4 bake-off arms (decision-critical, first) → Stage 2 = 4 sweep arms
+(ckpt ON) → Stage 3 = canary pair with fixed comparator. ~55 min.
+(adapter-best verified safe: e1_train.py:870 saves it at end-of-run even
+when `--val-every 10000` never fires, so the eval path cannot see a
+missing adapter.)
+
 ## Discipline
 
 Every number in this plan cites a shipped record (BENCHMARKS.md,

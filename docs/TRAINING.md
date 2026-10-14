@@ -1666,3 +1666,28 @@ artifacts pulled to /nas/Temp/work/oc-model-eval/runs/t33-2b-v5-r8
 (adapter, adapter-best, holdout/rel200 evals, manifest). Chain
 proceeded to t22-t23 at 4:26 PM Central (T2.2 canary + T2.3 sweep,
 then the t66 corpus bake-off decides the T3.3' corpus slot).
+
+## T2.2/T2.3 first pass: one banked lever, two defects, rerun running (2026-10-14, 5:12 PM Central)
+
+First-pass outcomes (details + defect table in
+`planning/08b-gate-closure-campaign.md`):
+
+- **Banked — length-bucketing +31.3% tok/s** at batch2/accum8 under
+  `--no-grad-checkpoint` (58.8 → 77.2 tok/s, t23-a vs t23-b, paired
+  same-condition). #147's fix is measured-effective.
+- **T2.3 b4/b8 arms + all four t66 bake-off arms OOM** — the
+  `--no-grad-checkpoint` pilot config sat at 12.7–13.2 GiB on the
+  15.57 GB card; any bigger micro-batch or transient co-tenant draw
+  tipped it over (failed allocs 28–96 MiB).
+- **T2.2 canary FAIL was structural** — comparator wanted n≥100 common
+  windows; the trainer emits one win-line per 20 steps, so 400 steps =
+  exactly 20 windows. Kernel means matched within 0.36%; the 16.6%
+  worst delta was early-window warmup noise, not divergence.
+
+Rerun (`runs/chain-rerun.sh`, launched 5:10 PM Central): every arm
+trains WITH grad checkpointing — recipe-faithful (the champion recipe
+uses ckpt) and ckpt is math-transparent, so the bake-off corpus ranking
+is unaffected — plus `expandable_segments:True` to kill the
+fragmentation co-factor. Canary comparator fixed (n≥15 windows, worst
+rel delta over step≥100 windows ≤ 2%, overall mean ≤ 1%). Order:
+bake-off → sweep → canary; results land here + the campaign doc.
