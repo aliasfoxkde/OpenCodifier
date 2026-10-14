@@ -1550,3 +1550,43 @@ consensus pass over the new rows (strands judge, ~42 GPU-h at
 is the largest single data-side lever available and the exact corpus
 the open board-topper trained on — at 2B, with per-kind calibration,
 on consensus-cleaned labels.
+
+## T3.3 r16 arm: merged-v5 corpus FALSIFIED (2026-10-14)
+
+Fedora recovery pipeline (co-tenant 27B OOM killed with operator
+authorization; `runs/t33-recover.sh`, real-rc discipline) ran the r16
+arm's eval legs. Training itself was healthy: 11,615 steps, final val
+0.0168 / tok_acc 0.9943, adapter-best 5.9 MB. Then, through the pinned
+harness lane (same suite sha, same readout as e1-e):
+
+- **holdout 120: 0.5167** (e1-e on the identical suite: 0.8083) —
+  **GATE_FAIL** vs 0.68; board leg correctly skipped by the gate
+  (0.5167 < 0.68). No board number exists for this arm; none may.
+- **rel200: 0.4071** (e1-e: 0.718–0.732).
+- Per-class: lexical 0.725 / metadata 0.675 / **relational 0.15**.
+- ECE raw 0.3022 → per-kind T=2.7974 → 0.1128 (same hot-logits shape
+  as every arm; artifact baked to `adapter-best/perkind_calibration.json`).
+
+Reading: recipe byte-identical, corpus the only delta (rows sha
+`018f6a1d…`), so this is a **−0.29 holdout / −0.31 rel200 corpus-only
+regression**. Train fit near-perfect (0.0168) means optimization
+succeeded — the *training distribution* is the defect: merged-v5
+(SargeDev 142,591 + vivere 39,231 + typed-decisions 1,200 + suite 240)
+regressed the relational/compositional slice catastrophically vs the
+E1 corpus. Note the paradox recorded at T3.3 launch: per-kind
+teacher-agreement ROSE in v5 (noul 0.9721 / choice 0.9765 /
+score 0.9608) while transfer collapsed — teacher-agreement is not the
+binding constraint; family mix/relational density is.
+
+Consequences:
+
+1. **merged-v6 promoted from candidate to the named next data lever**
+   (corpus-v3 ingest, 655,806 rows — see preceding section). It is the
+   only untested corpus-scale move, and it is the corpus the open
+   board-topper actually trained on.
+2. The relational-density program re-opens with evidence: negative-
+   enriched ratio ≤ 1:3 on relational rows, engine-generated
+   relational items (B3 lane).
+3. r8/a16 (rank A/B) trains on the same corpus as the within-corpus
+   control; it is expected to fail the gate for the same reason and
+   is informative for shape/rank only.
