@@ -1590,3 +1590,49 @@ Consequences:
 3. r8/a16 (rank A/B) trains on the same corpus as the within-corpus
    control; it is expected to fail the gate for the same reason and
    is informative for shape/rank only.
+
+### Root cause closed: the A/B pair is e1-iterb vs e1-softlabel-v2 (2026-10-14, later same day)
+
+Zero-GPU probes settled the mechanism. First correction to the reading
+above: e1-e did not train on e1-softlabel-v1 — TRAINING.md §9.9.1 pins
+e1-e to **e1-iterb (177,999 rows)**. The honest A/B pair is therefore
+e1-iterb vs e1-softlabel-v2, and the recipe is verified byte-identical
+(`e1_train.py:443` — `target_modules=["q_proj","k_proj","v_proj","o_proj"]`
+on both; rank/hardware were the only recorded deltas).
+
+Census of the two corpora (kind mix / engineered content):
+
+| | e1-iterb (e1-e) | e1-softlabel-v2 (r16) |
+|---|---|---|
+| rows | 177,999 | 187,822 |
+| choice | 76,411 (42.9%) | 13,874 (7.4%) |
+| score | 53,077 (29.8%) | 29,557 (15.7%) |
+| noul (boolean) | 48,511 (27.3%) | 144,391 (76.9%) |
+| itemgen streams | **67,619 (38.0%)** | **0** |
+| top sources | vivere 50,841, SargeDev 47,854, itemgen/score-board 23,520 | SargeDev 142,591 (75.9%) |
+
+The itemgen streams in iterb (score-board 23,520, root-cause-agreeing
+15,300, first-restored-chain 15,300, root-cause-chain 13,499) are the
+engine-generated relational/compositional items — exactly the slice
+that collapsed to 0.15 in r16. Two alternative mechanisms were probed
+and falsified on the way:
+
+- **"the family mix changed v1→v2"** — wrong pair, and moot: the
+  e1-softlabel-v1 vs v2 census shows compositionally identical corpora
+  (only 3,652 consensus-flip labels differ, 1.9%).
+- **"the consensus flip pass injected contradictions"** — flip probe
+  (merged-v4 vs merged-v5, grouped by normalized instructions):
+  3,652 flips, **0 injected into previously-consistent groups**; v5 is
+  slightly MORE consistent than v4 (37 vs 42 mixed sibling groups).
+
+Verdict: the softlabel stream structurally lacks what the iterb
+program engineered in — choice/score mass (23.1% vs 72.8%) and the
+itemgen relational chains (0% vs 38%). Training on a 77%-boolean
+corpus shifts the prior hard toward boolean; the suite's choice-heavy
+relational slice collapses. Simple distribution shift, no exotic
+explanation. **merged-v6 design constraint updated: it must carry
+iterb's engineered content (itemgen streams or equivalent relational
+regeneration) with corpus-v3 as the volume lever — a raw-stream union
+alone is now falsified.** Throughput note: the staged T2.2/T2.3 pilots
+now run `--no-grad-checkpoint` (A7 flag, bit-identical math, ~20%
+throughput) on fedora where peak memory allows.

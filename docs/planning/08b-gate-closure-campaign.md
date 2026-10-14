@@ -153,6 +153,20 @@ SystemOne wire contract, adjudicated live at 0.7706/ECE 0.045.
   full record in TRAINING.md "T3.3 r16 arm" (2026-10-14). Recovery
   ran via `runs/t33-recover.sh` after the co-tenant-27B OOM (fixed:
   real rc capture, perkind argv paths, GPU pre/mid-flight guards).
+- **T3.3 root cause CLOSED (2026-10-14, zero-GPU probes)** — the A/B
+  pair is e1-iterb vs e1-softlabel-v2 (e1-e trained on e1-iterb per
+  §9.9.1, not softlabel-v1; recipe byte-identical at e1_train.py:443).
+  iterb: 42.9/29.8/27.3% choice/score/noul + **38% itemgen** (engine-
+  generated relational chains: score-board, root-cause-agreeing,
+  first-restored-chain, root-cause-chain). softlabel-v2: 7.4/15.7/
+  **76.9%** noul, zero itemgen. Falsified on the way: v1→v2 mix change
+  (census: compositionally identical) and flip-pass contradictions
+  (probe: 0 injected; v5 MORE consistent than v4). Verdict: plain
+  distribution shift — a 77%-boolean corpus cannot serve a choice-heavy
+  relational suite. **merged-v6 constraint updated: must carry iterb's
+  engineered relational content (itemgen or equivalent regeneration);
+  raw-stream union alone is falsified.** Full census + probes in
+  TRAINING.md "Root cause closed" (2026-10-14).
 - **T3.1 Full-scale soft T=0.5** (after T2.1): completes the pilot's
   named follow-through. Pre-registered expectation: calibration win,
   accuracy wash — it is a record-completing arm, not a gate attempt.
@@ -307,6 +321,30 @@ now ──► T2.1 T2.2 (engineering, no gate — code + CPU smoke on fedora) �
 T3.4 fires only on the 2B-plateau trigger. T4.1 interleaves on
 engineering time; T5 waits for operator.
 ```
+
+**Re-sequenced 2026-10-14 (T3.3 r16 falsification + root cause):** the
+plan holds — the falsification *confirmed* the "binding constraint is
+data" thesis with the mechanism now named (relational engineering in
+the corpus). Order changes:
+
+1. **merged-v6 rebuild jumps the queue** as the next gate attempt:
+   iterb scaffold (choice/score mass + itemgen relational streams) ∪
+   corpus-v3 gated ingest (655,806 rows, richer kind mix: 163k choice /
+   150k score / 342k noul; 14 families incl. spatial/structured) ∪
+   softlabel stream bounded to a minority share; suite decontamination;
+   softlabel pass optional (strands consensus ~42 GPU-h only if a probe
+   shows consensus moves the gate).
+2. **Fast-lane corpus bake-off before any full arm** (~30 min/pilot on
+   fedora, 0.8B × 400 steps): candidate mixes ranked on rel200 +
+   holdout choice/score slices; winner earns the single full 2B arm.
+   e1-iterb at 2B already exists (e1-e) — it is the standing champion
+   and the blend's scaffold.
+3. T2.2/T2.3 unchanged (throughput levers, now with
+   `--no-grad-checkpoint`); T2.1 smoke remains the gate for them.
+4. **T3.1 soft-T deferred** (record-completing, not gate-critical;
+   superseded in priority by the corpus lane); T3.3-as-v5-arm is
+   CLOSED GATE_FAIL — its successor is "T3.3′: 2B on merged-v6".
+5. Eval lane v2 (#150: batching + sdpa) stays post-campaign, versioned.
 
 Hosts: T5500 = training + T1 (V100 pair, power-cap regime) — **DOWN
 2026-10-13, replacement PSU on order; all T2/T3 arms queue behind it**;
