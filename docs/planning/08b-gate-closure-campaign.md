@@ -131,6 +131,18 @@ SystemOne wire contract, adjudicated live at 0.7706/ECE 0.045.
 
 ### T3 — Arms
 
+- **T3.3 LAUNCHED (2026-10-13 ~23:05 local, fedora)**: pipeline
+  `runs/t33-v5.sh` — r16/a32 then r8/a16, both 1 epoch (the measured
+  standing config; "2 epochs" in the earlier text is superseded by
+  TRAINING.md's "1 epoch stands"), E1-E recipe otherwise byte-identical,
+  on the merged-v5 rows corpus `e1-softlabel-v2` (rows sha
+  `018f6a1d…`, built from merged-v5 through the byte-identical
+  build_softlabel_corpus path; per-kind teacher-agreement rose to
+  noul 0.9721 / choice 0.9765 / score 0.9608 from v4's
+  0.9524/0.9579/0.9422 — the flip arithmetic checks per kind). Each
+  arm: holdout + rel200 readout evals, per-kind T baked to
+  `adapter-best/perkind_calibration.json` (T3.2 export step), then a
+  gate-gated JevBench board leg (holdout ≥ 0.68) on CPU llama-server.
 - **T3.1 Full-scale soft T=0.5** (after T2.1): completes the pilot's
   named follow-through. Pre-registered expectation: calibration win,
   accuracy wash — it is a record-completing arm, not a gate attempt.
