@@ -2854,3 +2854,40 @@ wall-clock, unquantified on their own page.
 on disk (NVMe only — never the NAS spinner at ~180MB/s); per-model
 transformers pins (5.8+ for Qwen3.8-27B, 4.56.x for Kimi K3) mean a
 venv per model; compression needs bitsandbytes.
+
+**Code read (clone, same day) — findings and falsified transfers.**
+
+1. *Design worth stealing (if we ever stream):* the real transformers
+   model is instantiated on the `meta` device and per-module forward
+   hooks stream weights disk→GPU right before each module runs, with a
+   one-worker prefetch thread overlapping load with compute
+   (airllm_base.py:58-71). Because transformers drives the forward,
+   new architectures cost nothing — that is why their Qwen3.5/3.8/Kimi
+   support is real (split tests included in-tree).
+2. *Falsified transfer — chunked fused CE:* chunked_ce.py never
+   materializes [N, vocab] logits (running logsumexp forward, chunked
+   recompute backward — the Cut-CCE/Liger pattern). Checked against our
+   trainer before adopting: `sup_logits` already restricts CE to
+   supervised slot positions (e1_train.py:818-820), so we never build
+   full-sequence logits either. No win available; recorded as a known
+   technique.
+3. *Falsified transfer — streamed training:* `_StreamedModule`
+   offloads boundary activations to pinned CPU and recomputes each
+   module with re-streamed weights in backward — how 27B trains at
+   2GB. Our constraint at 2B is not VRAM (checkpoint-off already
+   fits); pattern recorded for the day it is.
+4. *Durable note — fp16 silent overflow on deep models:* they force
+   bf16 defaults because fp16 overflows to inf/NaN on deep stacks
+   (Qwen3-235B, 94 layers) without erroring (airllm_base.py:96-98,
+   166-178). Volta has no bf16, so any deeper/larger T5500 arm should
+   watch for exactly this signature in the gn/win logging we already
+   keep.
+5. *Durable note — remote-code discipline:* they try
+   `trust_remote_code=False` first and only fall back to vendored
+   modeling code, because vendored code rots against transformers'
+   cache/generation APIs (DynamicCache.seen_tokens example), plus a
+   shim re-exporting symbols transformers 5.0 relocated. Same lesson as
+   the minicpm adapter lane-bound result, now with a named mechanism.
+6. *Ops details:* pinned-host cap of 2GB per prefetched layer (larger
+   layers go pageable); 4-bit compression and prefetching are mutually
+   exclusive (decompress sits on the load path, cannot overlap).
