@@ -2813,3 +2813,44 @@ already-owned hosts, not new hardware.
 Also noted while auditing: fedora's 13600K exposes `avx_vnni` — relevant
 to any future mainline CPU-build tuning of the same lane regardless of
 fork choice.
+
+## §18 — AirLLM audit: layer-streaming inference + LoRA training (2026-10-14)
+
+Prompt: lyogavin/airllm — "2.8T LLM inference with single 4GB GPU".
+Status: very much alive — 38.6k stars, pushed the day of this audit,
+v3.0 (FP8) June 2026, and LoRA-style *training* support added Sept
+2026. Not the stale novelty project the VRAM headline suggests.
+
+**Mechanism.** One transformer layer resident on the GPU at a time;
+layers shard to disk and stream with prefetch; VRAM scales with layer
+size, not model size. Optional 4/8-bit block-wise compression buys "up
+to 3×" speed because the bottleneck is disk loading, not math. VRAM
+table: Qwen3.8-27B at 3.33GB, DeepSeek-V3 (671B) at 12GB, Llama-3.1
+405B at 8GB. Training streams frozen base layers one at a time with
+the LoRA adapter resident (explicitly not HF Trainer/QLoRA) — 27B
+dense trainable at ~2GB VRAM @ seq 512.
+
+**The number the README never reports: throughput.** Every generated
+token costs a full pass of the model across the PCIe/NVMe path, so TG
+is disk-bound — usable for one-shot prompt-processing workloads,
+unusable for generation-heavy serving. The trade is VRAM for
+wall-clock, unquantified on their own page.
+
+**Lane fit — no current fit; watch-list only.**
+1. *27B bridge:* N/A — gen-based board legs need real TG; streaming
+   turns it into seconds-per-token.
+2. *Training arms (0.8B–4B):* N/A — they already fit in 16GB (2B LoRA
+   uses 12GB with headroom); streaming weights per step would be
+   10–100× slower. AirLLM training only pays for bases that do NOT
+   fit, and no roadmap item trains a ≥20B base.
+3. *Small-model serving/eval:* N/A — that lane is the CPU pool (§17).
+4. *Watch-list condition:* the one shape it fits is a PP-heavy,
+   TG≈1-token slot-readout decision arm on a ≥20B base, run on the
+   5060 Ti without a VRAM wall. That inverts the product thesis
+   (smallest base that clears the gate), so it stays a recorded
+   option, not a plan.
+
+**Ops traps if ever used:** layer-splitting duplicates the full model
+on disk (NVMe only — never the NAS spinner at ~180MB/s); per-model
+transformers pins (5.8+ for Qwen3.8-27B, 4.56.x for Kimi K3) mean a
+venv per model; compression needs bitsandbytes.
