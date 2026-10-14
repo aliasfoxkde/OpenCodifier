@@ -2747,3 +2747,55 @@ clears the gate = fastest local decider). The general-LLM version
 is explicitly out of scope for OpenCodifier and would be its own
 program. No schedule commitment; revisit after T3.3's verdict, which
 measures whether label-quality data alone moves the knee.
+
+## §17 — Inference-fork audit: ik_llama.cpp for the CPU decision lane (2026-10-14)
+
+Prompt: ik_llama.cpp (github.com/ikawrakow/ik_llama.cpp) keeps getting
+recommended for CPU performance — is it applicable to our lanes? The
+2026-10-12 bridge-tuning verdict ("not for this workload") covered the
+fedora GPU bridge only; this audit re-checks the CPU decision lane.
+
+**Fork status (corrects the "it's old" premise).** The fork point is old
+(last upstream sync August 2024) but the project is actively developed —
+pushed the day of this audit, ~3.3k stars, and it *reimplements* modern
+models rather than syncing them: Qwen3-Next (PR 1266), dense Qwen3.5
+with fused delta-net (PRs 1326, 1315/1333/1362/1373), MiniCPM5
+(PR 2447), plus its own IQK/Trellis quant families and MTP (which
+appeared here before mainline). It is a parallel branch, not a dead one.
+
+**Lane 1 — fedora bridge (Qwen3.8-27B, RTX 5060 Ti 16GB): still N/A.**
+Qwen3.8 is not in the fork's supported list, the bridge's 2× lever is
+mainline draft-mtp speculative decoding, and the IQ3_XXS VRAM tuning is
+done. Unchanged from the 10-12 record.
+
+**Lane 2 — CPU decision lane (qwen3_5 hybrid 2B, our parallel-decision
+fork, ~1.7 s/decision vs the ≤1 s rung target): the only lane where ik
+could pay, and three gates stand in the way.**
+
+1. *Arch gate:* the README claims dense Qwen3.5 + delta-net support, but
+   whether that loads OUR qwen3_5 hybrid GGUF conversion is unverified —
+   a load test settles it in minutes.
+2. *Host gate (decisive):* the eval host CPU is an i5-13600K — AVX2 +
+   AVX-VNNI, **no AVX-512**. ik's headline IQK GEMM kernels gate on the
+   `HAVE_FANCY_SIMD` AVX-512 path and otherwise "silently fall back to
+   the AVX2 path". What remains on this host is AVX2 GEMM prompt
+   processing + AVX-VNNI kernels + CPU flash attention — real but
+   modest for a dense 2B; the fork's famous 2×+ numbers are big-MoE,
+   server-batch workloads, not dense-2B single-slot readout.
+3. *Integration gate:* the decision lane is our own fork (verdict-slot
+   readout patch written against modern mainline). Porting it onto a
+   2024-era base means permanent double divergence. The sanctioned
+   latency lever for this lane remains #150 (batching + sdpa + anchor
+   drift check).
+
+**Decision rule.** After the current training chain completes (never
+during — CPU contention pollutes trainer tok/s): 30-minute probe —
+CPU-only ik build on fedora, attempt to load the e1-e 2B GGUF; if it
+loads, `llama-bench` PP/TG vs our current build, 3+ windows, pinned to
+P-cores (the 13600K is 6P+8E hybrid — a thread-tuning trap in itself).
+Pursue the port only if the arch loads AND PP gains ≥ 1.5×; otherwise
+close as N/A for both lanes and update the standing memory note.
+
+Also noted while auditing: fedora's 13600K exposes `avx_vnni` — relevant
+to any future mainline CPU-build tuning of the same lane regardless of
+fork choice.
