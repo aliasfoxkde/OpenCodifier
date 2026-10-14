@@ -2788,13 +2788,27 @@ could pay, and three gates stand in the way.**
    latency lever for this lane remains #150 (batching + sdpa + anchor
    drift check).
 
-**Decision rule.** After the current training chain completes (never
-during — CPU contention pollutes trainer tok/s): 30-minute probe —
-CPU-only ik build on fedora, attempt to load the e1-e 2B GGUF; if it
-loads, `llama-bench` PP/TG vs our current build, 3+ windows, pinned to
-P-cores (the 13600K is 6P+8E hybrid — a thread-tuning trap in itself).
-Pursue the port only if the arch loads AND PP gains ≥ 1.5×; otherwise
-close as N/A for both lanes and update the standing memory note.
+**Decision rule (amended same day after operator review).** The value
+axis is not only speed: a maintained CPU stack running the decision lane
+*at parity* still wins strategically — eval legs and serving move to CPU
+while the GPU trains, instead of every job queuing on fedora's single
+5060 Ti (and the release posture is CPU serving regardless). The probe
+therefore runs in two tiers whatever the expected gain:
+
+- **Tier 1** (30 min, after the chain completes — never during; CPU
+  contention pollutes trainer tok/s): CPU-only ik build on fedora, load
+  the e1-e 2B GGUF, `llama-bench` PP/TG vs our current build, 3+ windows,
+  pinned to P-cores (the 13600K is 6P+8E hybrid — a thread-tuning trap
+  in itself). Settles arch coverage + perf delta.
+- **Tier 2** (only if the arch loads at parity-or-better): treat ik as a
+  candidate backend for #150 — price the verdict-slot readout port
+  against a full slot-batch measurement (the actual workload shape), not
+  raw PP/TG.
+
+Bounds: the 27B bridge stays GPU-bound no matter what (27B CPU TG is
+<1 tok/s on this host class), so this is small-model serving/eval
+capacity only; and the capacity gain is scheduling concurrency across
+already-owned hosts, not new hardware.
 
 Also noted while auditing: fedora's 13600K exposes `avx_vnni` — relevant
 to any future mainline CPU-build tuning of the same lane regardless of
