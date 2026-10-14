@@ -58,6 +58,16 @@ future judge families (e.g. GLM, Kimi), verify their license permits
 corpus-derived derivative *training*; corpus stays private regardless,
 but keeping the lineage clean preserves the option to release it later.
 
+**Experimental tier (operator direction, 2026-10-14).** Separately
+from the corpus of record, *probe corpora* may be built from ANY
+teacher family — clearly labeled experimental artifacts, purpose:
+measure whether teacher family/quality moves the intelligence-transfer
+curve (RESEARCH.md §16). Rules: probe corpora never feed a gated or
+released arm, never merge into the corpus of record, and are discard-
+or-archive-only. The corpus of record stays permissive-clean; the
+experimental tier is where non-permissive-teacher options get tested
+before any such decision is reflected here.
+
 ## Commercialization paths preserved by this split
 
 1. Training/fine-tuning services on the withheld machinery.
