@@ -1636,3 +1636,33 @@ regeneration) with corpus-v3 as the volume lever — a raw-stream union
 alone is now falsified.** Throughput note: the staged T2.2/T2.3 pilots
 now run `--no-grad-checkpoint` (A7 flag, bit-identical math, ~20%
 throughput) on fedora where peak memory allows.
+
+## T3.3 r8 rank control: GATE_FAIL, and the corpus verdict gets a second angle (2026-10-14, 4:23 PM Central)
+
+The staged chain's first leg — `runs/t33-recover.sh` r8/a16 (half the
+rank of the falsified r16 arm, same merged-v5 corpus, same recipe
+otherwise). Training healthy to the end (cum 0.0505, LR annealed to
+~4e-07, gn clean throughout; tok/s 22 at --no-grad-checkpoint... the
+r8 leg predates the flag, tok/s 21).
+
+| arm | rank | holdout | rel200 | board |
+|---|---|---|---|---|
+| t33-2b-v5-r16 | r16/a32 | 0.5167 | 0.4071 | skipped (< 0.68) |
+| t33-2b-v5-r8 | r8/a16 | **0.6250** | **0.4393** | skipped (< 0.68) |
+
+Expected GATE_FAIL, delivered — but the rank control did more than
+confirm: **halving the rank IMPROVED holdout by +10.8 and rel200 by
++3.2 while still failing the gate.** On a healthy corpus, more rank
+never hurts holdout this way; on v5 it does. The reading: r16 had
+enough capacity to memorize the 77%-boolean weak-label mix, and
+memorization displaced transfer — r8 memorizes less and generalizes
+better, yet still cannot clear 0.68 because the composition deficit
+(the closed root cause above) binds before capacity does. Two
+independent angles now agree: merged-v5 fails on composition, not on
+recipe or capacity. No further v5 arms warranted at any rank.
+
+Recovery calibration fit ran as designed (per-kind T: choice=2.169);
+artifacts pulled to /nas/Temp/work/oc-model-eval/runs/t33-2b-v5-r8
+(adapter, adapter-best, holdout/rel200 evals, manifest). Chain
+proceeded to t22-t23 at 4:26 PM Central (T2.2 canary + T2.3 sweep,
+then the t66 corpus bake-off decides the T3.3' corpus slot).
