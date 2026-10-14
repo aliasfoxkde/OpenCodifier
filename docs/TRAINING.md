@@ -1511,3 +1511,42 @@ Standing answer to "can we improve the pipeline while we wait":
 6. **Corpus ceiling/noise estimators** — proposed lane (gate-transfer
    prior from teacher facts; VIVERE gain-guided extraction) —
    awaiting operator go.
+
+### 2026-10-14 addendum: corpus-v3 is the board-topper's training corpus — and the ingest half of the #124 plan never shipped
+
+`autotrust/JEV-27B` (88.70 family-macro on public-231, above its own
+closed teacher) trained on exactly the `SargeDev/jev-distill-corpus-v3`
+whose ingestion §11's gates were built for: 740,957 rows = `yuri_v3`
+498,010 (synthetic operational scenarios, 53 domains, labels distilled
+from TypeSafe Jev 1.13 via OpenRouter) + `yuri_v1` 148,154 (the stream
+our lineage DID ingest — 148,160 at our snapshot) + `openjev_v2` 94,801
+(CC0, ZefanCai/Open-Jev reschema'd). Measured facts:
+
+- **merged-v5 contains ZERO `yuri_v3` rows** (grep-verified). merged-v4
+  was built as merged-v3 + the 9,810 quarantine remainder; the §11
+  gates ran their first measurement over all 655,806 train rows
+  (2026-10-08: 81,740 rows below the 0.5 top-prob floor, 207,461
+  margin<0.1, zero schema violations, zero label fights) but the
+  gated ingest itself never became an arm. The earlier "upstream never
+  grew" recon compared `corpora/src/dataset.jsonl` against what
+  merged-v1 ate — a local-vs-local check that missed the v3 revision
+  entirely.
+- Their card's own limitations (mirrors teacher's mistakes, ~7 %
+  option-order flip, placeholder rows) are the yuri_v1 relevance
+  stream's known properties — the consensus/noise machinery we built
+  for v5 attacks exactly this and was never pointed at yuri_v3.
+- License clean at every layer: corpus Apache-2.0, openjev stream CC0.
+  Whether SargeDev's OpenRouter/TypeSafe terms permitted their
+  distillation is their exposure; the published artifact is
+  Apache-2.0 and downstream-clean for us. Their `calibration` /
+  `test` / `test_set_30k` splits stay out of any train use (their
+  internal metrics are in-sample on test_set_30k).
+
+**merged-v6 candidate (queued behind T3.3's verdict):** ingest
+corpus-v3 train (655,806) through `corpus_gates.py` at recorded
+thresholds + suite decontamination, union merged-v5. Optional
+consensus pass over the new rows (strands judge, ~42 GPU-h at
+0.23 s/row) only if T3.3 shows consensus labels move the gate. This
+is the largest single data-side lever available and the exact corpus
+the open board-topper trained on — at 2B, with per-kind calibration,
+on consensus-cleaned labels.
