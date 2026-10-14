@@ -109,10 +109,25 @@ SystemOne wire contract, adjudicated live at 0.7706/ECE 0.045.
   choice 0.9251 n=14,113 / **score 0.6667 n=29,557**). By source:
   SargeDev relevance 0.911, vivere 0.769, **typed-decisions 0.610**.
 - **T1.5 gate: FIRED** (pre-registered threshold 5%; measured 12.85%,
-  2.6× over; score kind alone is 33.3% contested). **Build merged-v5
-  with consensus labels** — the ~24k-question disagreement pool is
-  the relabel-candidate set by construction. The data-quality
-  hypothesis (G1/G2) is confirmed live, not null.
+  2.6× over; score kind alone is 33.3% contested). **merged-v5 BUILT**
+  (2026-10-13, `runner/build_merged_v5.py`, policy fixed in the script
+  docstring before any flip count was observed): flip a label iff
+  teacher-facts-v1 and strands BOTH disagree with gold; everything
+  else byte-identical; suite rows untouched; flipped distributions =
+  strands' native probs with recomputed EV (v4's `score` field verified
+  = EV over prob keys, 2400/2400) and confidence = mean(strands,
+  teacher tops). Results: **3,652 flips / 188,062 questions (1.94%)**
+  (noul 2,843 / score 551 / choice 258; SargeDev 2,564 /
+  typed-decisions 891 / vivere 197); agree 158,655;
+  keep-2v1 25,037; split3 477. Internal check: teacher dissent 4.88%
+  ≈ the recorded 94.9–95.1% teacher-gold agreement. Score
+  disagreements are 74% adjacent-bucket (ordinal adjacency, not
+  random flips). Raw disagreement (12.85%) ≠ flip pool (1.94%): the
+  disagreement map lives in `merged-v5.disputes.jsonl` for any
+  downstream filtering; the corpus is the consensus-label variant of
+  the pre-registered "consensus labels / ensembled soft labels".
+  sha256 `b04f87fc…`; manifest + disputes alongside at
+  `corpora/merged-v5/` (NAS + fedora).
 
 ### T3 — Arms
 
