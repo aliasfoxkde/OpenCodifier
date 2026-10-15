@@ -17,7 +17,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.0"
+version = "0.6.1"
 edition = "2024"
 # MSRV policy: the oldest stable toolchain the workspace is tested against
 # in CI. Bumps are breaking changes and recorded in CHANGELOG.md.
