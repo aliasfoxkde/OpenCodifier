@@ -95,6 +95,23 @@ Requires a stable Rust toolchain (MSRV 1.90, declared in `Cargo.toml`).
 Contribution rules are in [`CONTRIBUTING.md`](CONTRIBUTING.md); the
 security policy is in [`SECURITY.md`](SECURITY.md).
 
+## Ecosystem
+
+Related open-source projects from the same shop:
+
+- [Aegis](https://github.com/aliasfoxkde/aegis) — high-performance
+  security scanning for DevOps pipelines; part of this repo's own
+  CI gate.
+- [GitForge](https://github.com/aliasfoxkde/GitForge) — self-hosted,
+  fast, GitHub-compatible forge; this repo's CI/CD platform of record.
+- [AgentVerify](https://github.com/aliasfoxkde/AgentVerify) — open-source
+  outcome verification for agent actions.
+- [SiliconRank](https://github.com/aliasfoxkde/SiliconRank) — normalized
+  compute/hardware benchmarking hub: CPUs, GPUs, accelerators, systems.
+- [dark-factory](https://github.com/aliasfoxkde/dark-factory) — AI-first
+  template repository: CI/CD, pre-commit hooks, E2E testing framework,
+  and a reusable code library, designed for 90%+ automated coverage.
+
 ## License
 
 Apache-2.0 — see [`LICENSE`](LICENSE).
