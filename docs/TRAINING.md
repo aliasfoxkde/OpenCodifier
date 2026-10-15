@@ -1729,3 +1729,41 @@ score / 72,026 noul; train 304,999 / val 2,000), ~19.2k steps ≈ 19 h →
 train ETA tomorrow early afternoon Central; holdout/rel200/perkind legs
 + 0.68 gate + conditional JevBench board leg are chained in the same
 script. One change vs the T3.3 arms: the corpus (census verdict above).
+
+## T3.3' verdict: GATE_PASS ×2 — and the corpus-volume lever closes (2026-10-15, 5:20 AM Central)
+
+`t33p-2b-v6full` finished clean (train rc=0, 19,058 steps, 9.7 h,
+gn max 7.81, no val divergence; artifacts pulled to
+`/nas/Temp/work/oc-model-eval/runs/t33p-2b-v6full`).
+
+| leg | E1-E (iterb scaffold, 178k) | t33p (merged-v6-full, 307k) | release gate |
+|---|---|---|---|
+| suite holdout (120) | **0.8083** | 0.6917 | ≥ 0.68 — **PASS** |
+| rel200 (200) | **0.718–0.732** | 0.6607 | — |
+| JevBench board (231) | **0.6840** | 0.6580 | ≥ 0.6494 — **PASS** |
+| suite→board drop | −12.4 | **−3.4** | — |
+| ECE (per-kind T fit) | 0.127 (T=3.362) | 0.1313 (T=5.225) | — |
+
+**GATE_PASS × 2 — the second own arm through the release gate, and the
+first via the corpus-composition route.** But the E1-E comparison on
+the identical suite/readout is the real result: **E1-E remains strictly
+better on every leg.** The 129k confidence-gated v3 additions cost
+~12 holdout / ~6 rel200 / ~2.6 board points at fixed recipe. What v5
+proved catastrophically (ungated weak-label volume destroys transfer),
+v6 proves precisely (gated + deduped volume still does not add
+transfer): **confidence-gated volume ≠ transfer.** The census gates
+measure label quality; they do not measure marginal training value.
+
+The composition arc is now complete at gate scale: v5 catastrophic →
+v6 recovers to gate-passing → scaffold alone best. No
+merged-v7-at-volume arms warranted; the corpus-volume lever is closed.
+
+Silver lining worth keeping: t33p's suite→board lane drop is −3.4 vs
+E1-E's −12.4 — the v6-trained arm agrees across lanes far better. If
+part of the suite number is lane-specific, v6-style data makes the two
+legs honest with each other; relevant to #150 (eval lane v2).
+
+Release candidate: unchanged — E1-E. t33p is evidence, not a
+candidate. Next levers, evidence-ranked: consensus-flip patch /
+strands consensus pass (quality-first), T3.4 4B contingency, #150
+eval lane.

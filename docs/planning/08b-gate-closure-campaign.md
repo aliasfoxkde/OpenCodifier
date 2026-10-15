@@ -482,6 +482,19 @@ arms (the corpus, per the census verdict), ~19.2k steps ≈ 19 h on
 fedora, eval legs + 0.68 gate + conditional JevBench chained. G7/G8
 retire when this arm lands.
 
+**T3.3' LANDED: GATE_PASS × 2, corpus-volume lever CLOSED (4:56 AM
+Central, 2026-10-15).** holdout 0.6917 (≥0.68 PASS) + JevBench 0.6580
+(≥0.6494 PASS) — second own arm through the release gate. But E1-E
+stays strictly better on every leg (0.8083 / 0.718+ / 0.6840 on the
+identical suite/readout): the 129k gated v3 additions cost ~12/6/2.6
+points at fixed recipe. Composition arc complete — v5 catastrophic,
+v6 gate-passing, scaffold best; confidence-gated volume ≠ transfer.
+No v7-at-volume arms. G7/G8 retired with this arm. Silver lining:
+suite→board drop −3.4 (vs E1-E's −12.4) — lanes agree better on v6
+data (#150 input). Release candidate unchanged: E1-E. Next levers:
+consensus-flip patch / strands consensus pass (quality-first), T3.4
+4B contingency, #150.
+
 ## Discipline
 
 Every number in this plan cites a shipped record (BENCHMARKS.md,
