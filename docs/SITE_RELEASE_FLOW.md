@@ -21,7 +21,7 @@ play on the site
 
 | Ref | Role | Where |
 |---|---|---|
-| `main` | production. CF Pages deploys it automatically. | origin (GitHub) |
+| `main` | production. Deployed to CF Pages manually (direct-upload — see Promotion). | origin (GitHub) |
 | `site/<topic>` | staging. Gets a CF Pages branch preview per push. | GitForge + origin |
 | never | direct pushes to `origin main` (ruleset-protected). | -- |
 
@@ -58,9 +58,12 @@ Rules:
    Adding the lane requires a Node-bearing CI image first; do not fake it with
    a job that cannot run.
 
-4. **Cloudflare Pages** builds every pushed branch automatically. The preview
-   URL (`<branch>.opencodifier.pages.dev`) IS staging. It serves the exact
-   commit; there is no separate staging build step.
+4. **Cloudflare Pages** does NOT build branches: the `opencodifier` Pages
+   project is direct-upload (no git integration), so pushes never deploy
+   anything by themselves. Staging is the local review server
+   (`http://localhost:8777`); for a shareable URL, deploy the branch
+   explicitly (`wrangler pages deploy site --project-name=opencodifier
+   --branch=<branch>` gives a preview URL) and review that.
 
 ## Review checklist (human, in a browser)
 
@@ -84,9 +87,20 @@ its own work.
 
 1. Open the PR on GitHub from the `site/<topic>` branch.
 2. The reviewer uses the preview URL + the checklist above.
-3. On approval, merge the PR. `main` moves; CF Pages deploys production.
+3. On approval, merge the PR. `main` moves. Production deploys are
+   **manual** — run after any `site/` change merges:
+
+   ```
+   just site-wasm                        # rebuild site/wasm (build artifact)
+   node --test site/tests/*.mjs          # site test lane
+   wrangler pages deploy site --project-name=opencodifier --branch=main
+   ```
+
+   Auth comes from `CLOUDFLARE_API_TOKEN` in the environment (already
+   configured on this host; wrangler is on the nvm node PATH).
 4. Sync the merge back to GitForge (push `main` there) so both remotes agree.
-5. Spot-check the production URL after the deploy finishes (hard refresh).
+5. Spot-check the production URL after the deploy finishes (hard refresh) —
+   nothing deploys until step 3's `wrangler` command runs.
 
 ## Scheduled improvement pass
 
