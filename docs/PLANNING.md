@@ -1488,6 +1488,13 @@ POST /v1/systemone
 
 The compatibility endpoint must emulate the supported Jev/System One schema, while the native `/v1/decide` API remains the canonical OpenCodifier API.
 
+*Amendment (2026-10-15): shipped reality — there is no `/v1/systemone`
+route. Jev/System One compatibility lives in `opencodifier-schema` as a
+wire adapter (Jev in, canonical IR out), and the HTTP surface is
+`POST /v1/decide` (+ `/v1/chat/completions`, `/v1/messages`,
+`/v1/batch`). The adapter-normalizes-into-the-IR rule supersedes a
+dedicated compat endpoint; see docs/DECISIONS.md D12.*
+
 ---
 
 # 37. Local Server
