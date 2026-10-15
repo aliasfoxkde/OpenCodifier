@@ -6,7 +6,7 @@ project does not yet guarantee a stable public API — version `0.x`
 releases may break, and every breaking change is recorded in this file
 (and reflected in `docs/DECISIONS.md` where a binding decision moves).
 
-## [0.6.0] — 2026-10-15
+## [0.6.1] — 2026-10-15
 
 The engine learns when not to answer: selective-prediction evidence
 floors and elicited abstention join the calibration stack, the corpus
@@ -53,7 +53,9 @@ passes the release gate and the first gated weights ship.
 - e1 readout anchor off-by-one token (`7082a46`); length-bucket chunk
   splitting kept intact (`d989c9d`); itemgen compiles under the pinned
   1.90 toolchain (`de8b944`); wasm conformance keys + intra-doc link
-  (`a265d81`); perkind argv honors rows/suite paths (`4494142`).
+  (`a265d81`); perkind argv honors rows/suite paths (`4494142`);
+  site release flow doc corrected — production deploys are manual
+  direct-upload, never automatic (`20fac47`).
 
 ### Verified — the corpus-composition question closes
 
