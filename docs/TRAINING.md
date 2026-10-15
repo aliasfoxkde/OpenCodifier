@@ -1806,3 +1806,36 @@ imatrix, or a separately-trained adapter; ≈ 0.61 ⇒ the
 `merge_and_unload` → `convert_hf_to_gguf` path itself regresses —
 audit LoRA scaling (B-application) against `convert_lora_to_gguf`
 before any further quant work. Verdict to be appended.
+
+### T88 attribution verdict (2026-10-15, 11:05 AM Central)
+
+The diagnostic arm (unquantized merged-F16 through the identical fork
+lane, 231/231 scored) landed at **0.6494**:
+
+| lane | accuracy | delta vs F16-LoRA 0.6580 |
+|---|---|---|
+| F16-LoRA (t33p, reference) | 0.6580 | — |
+| merged-F16, fork lane (diagnostic) | **0.6494** | −0.9 pts |
+| merged + imatrix Q4_K_M (T88 arm) | 0.6104 | −4.8 pts |
+
+**The quantization is the culprit, and the bake-off closes no-go.**
+The merge+convert path costs only ~0.9 pts (lane-level; the F16-LoRA
+reference serves via `convert_lora_to_gguf` + adapter application, a
+different path), while Q4_K_M imatrix quantization costs a further
+~3.9 pts. Decisive detail: even the UNQUANTIZED merge path sits
+exactly at the release-gate line (0.6494) with zero headroom — so no
+quant tier of this arm can clear the board leg. Q5_K_M / more-chunks /
+base-imatrix levers are moot for this adapter; a separately-trained
+quantization-aware adapter would be a new arm, not a repair. E1-E
+remains the only release candidate.
+
+Second finding, now measured twice (T88 run A/B and the diagnostic):
+**the CPU fork lane does not replay byte-identical under host load**
+(`results.jsonl` vs `results-replay.jsonl` differ in every pass
+today). The determinism-replay gate as written (byte-identical) is
+stricter than this lane can satisfy; determinism claims for quants on
+this lane need either a load-pinned window or a tolerance definition
+(same verdict set, identical accuracy) — flagged for #150 (eval lane
+v2). The T88 G1 FAIL therefore reflects lane behavior, not an
+imatrix-specific defect; the accuracy gates alone already killed the
+arm.
