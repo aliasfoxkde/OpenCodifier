@@ -6,6 +6,70 @@ project does not yet guarantee a stable public API — version `0.x`
 releases may break, and every breaking change is recorded in this file
 (and reflected in `docs/DECISIONS.md` where a binding decision moves).
 
+## [0.6.0] — 2026-10-15
+
+The engine learns when not to answer: selective-prediction evidence
+floors and elicited abstention join the calibration stack, the corpus
+toolchain becomes a first-class item generator crate, and the
+benchmark program closes its corpus-composition question — merged-v6
+passes the release gate and the first gated weights ship.
+
+### Added
+
+- Engine — selective prediction end to end: a label-overlap preflight
+  that abstains before extraction guesses (`d5f4733`), a
+  selective-prediction evidence floor (`df230f5`), boolean gate fit
+  with elicited abstain (`c5d2527`), and risk-coverage acceptance for
+  calibration artifacts (`d9b86e9`) — a calibration artifact now earns
+  deployment by its risk-coverage curve, not a single operating point.
+- `opencodifier-itemgen` — new crate: the relational/contrastive item
+  generator that builds suite items, extracted from ad-hoc scripts
+  (`70a59af`).
+- Schema — shared byte-exact macjev renderer, one implementation for
+  tests and tools (`8b415d2`); noul non-string sides skip with unit
+  tests (`661925d`).
+- Model — NLI verbalization verifier contract for the #15 enhancement
+  program (`a6a2e07`).
+- Benchmarks — the training/corpus toolchain of record: soft-label
+  trainer path + corpus builders (`9937045`), VIVERE teacher-score
+  campaign tool (`5b800cb`) + batched teacher scoring (`cfdf760`),
+  trainer resume-state + `--resume` (`c44ad6a`), GGUF parity fixtures
+  with the BOS serving-path root cause (`0364e17`), corpus-prep gates
+  for merged-v4/v5/v6 lanes (`bf5370f`, `d464cdb`), reporting parity
+  metrics over frozen evidence (`4b2cab8`) + the cost table mapping to
+  the board CSV (`dc89d22`), the rel200 eval slice + iterate-B val
+  history (`da0f599`), the e1 calibration lane + JevBench slot arm
+  (`224929b`), and the MiniCPM5 arm (`b52fbaa`).
+- Site — Decisions SDK + shell kit (`3740523`), the 12-game SDK game
+  library (`9ef9906`), the chrome round: switcher + ratings
+  (`6b066b1`), a wiki-style docs page (`f4530cb`), the decide console
+  (`f7a56bb`), the board data page + quickstart + landing fixes
+  (`e617e35`), and board parity + billed-cost columns (`505e648`).
+- CI — test/e2e lanes build on container-local disk (`6cbf4d0`); heavy
+  lanes fit the 4G container cap (`e427961`).
+
+### Fixed
+
+- e1 readout anchor off-by-one token (`7082a46`); length-bucket chunk
+  splitting kept intact (`d989c9d`); itemgen compiles under the pinned
+  1.90 toolchain (`de8b944`); wasm conformance keys + intra-doc link
+  (`a265d81`); perkind argv honors rows/suite paths (`4494142`).
+
+### Verified — the corpus-composition question closes
+
+- T3.3' (2B on merged-v6-full): **release gate PASS ×2** — suite
+  holdout 0.6917 (≥ 0.68) and JevBench 0.6580 (≥ 0.6494) — second own
+  arm through the gate (TRAINING.md, 2026-10-15). The comparison with
+  E1-E closes the corpus-volume lever: confidence-gated volume ≠
+  transfer; E1-E (0.8083 / 0.6840) remains the release candidate.
+- First gated weights published:
+  `aliasfox/OpenCodifier-Decision-2B-v6full` (per-surface numbers,
+  shipped per-kind calibration, withheld-corpus disclosure).
+- Engineering levers measured: length-bucketing +31.3% replicates,
+  b4-bucket sweet spot +44.4% (T2.3); causal_conv1d buys +29.2% tok/s
+  but fails same-seed trajectory parity — throughput lever, banned
+  from gate arms (T2.2, fixed comparator).
+
 ## [0.5.0] — 2026-10-07
 
 The escalation ladder gains its model rung and its cross-rung walk,
