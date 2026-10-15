@@ -16,6 +16,7 @@ use opencodifier_core::{
 use opencodifier_engine::{DecisionGraph, EngineConfig, EngineHandle};
 use opencodifier_schema::WireFormat;
 use opencodifier_schema::native::Native;
+use opencodifier_schema::openai::OpenAi;
 use reqwest::StatusCode;
 use reqwest::header::CONTENT_TYPE;
 use serde_json::{Value, json};
@@ -190,9 +191,9 @@ async fn healthz_reports_the_engine_identity() {
     assert_eq!(response["status"], "ok");
     assert_eq!(response["identity"]["graph_version"], health.identity.graph_version);
     // The composed id: the relational solver over the lexical classifier.
-    assert_eq!(response["identity"]["model_id"], "relational-v1|builtin-lexical-v1");
+    assert_eq!(response["identity"]["model_id"], "relational-v1|builtin-lexical-v2");
     assert_eq!(response["identity"]["calibration_version"], health.identity.calibration_version);
-    assert!(!response["identity"]["engine_semver"].as_str().unwrap().is_empty());
+    assert_ne!(response["identity"]["engine_semver"].as_str().unwrap(), "");
     assert_eq!(response["nodes"].as_u64().unwrap(), u64::try_from(health.nodes).unwrap());
     assert_eq!(
         response["parallelism"].as_u64().unwrap(),
@@ -499,4 +500,335 @@ async fn models_and_capabilities_report_the_active_lane() {
     let endpoints = caps["endpoints"].as_array().unwrap();
     assert!(endpoints.iter().any(|entry| entry == "/v1/decide"));
     assert!(endpoints.iter().any(|entry| entry == "/v1/batch"));
+}
+
+/// The INTEGRATIONS.md §2.3 quickstart, byte-for-byte as the adoption
+/// guide prints it (Phase 19c): the test pastes exactly what the doc
+/// tells a newcomer to paste, so docs and wire cannot drift apart
+/// silently.
+const QUICKSTART_BODY: &str = r#"{
+  "state": {"text": "Checkout errors hit 12% eight minutes after a deploy. Rollback window closes in 20 minutes."},
+  "questions": [{
+    "type": "choice",
+    "id": "action",
+    "text": "Which action should the on-call take?",
+    "candidates": [
+      {"id": "rollback", "description": "roll back to the last healthy build"},
+      {"id": "hotfix",   "description": "patch forward on the broken build"},
+      {"id": "wait",     "description": "watch dashboards and hold"}
+    ]
+  }]
+}"#;
+
+#[tokio::test]
+async fn the_documented_quickstart_round_trips_verbatim() {
+    let server = spawn_server().await;
+    let response = post_json(&server.base_url, "/v1/decide", QUICKSTART_BODY).await;
+    assert_eq!(response.status(), StatusCode::OK, "the quickstart must work as printed");
+    let body: Value = response.json().await.unwrap();
+
+    // What the doc promises: the chosen candidate and full distribution
+    // per question; calibrated confidence, gate outcome, and trace for the
+    // request as a whole.
+    let answer = &body["answers"][0];
+    assert_eq!(answer["question_id"], "action", "body: {body}");
+    assert_eq!(answer["type"], "choice");
+    let choice = answer["choice"].as_str().unwrap_or_default();
+    assert!(["rollback", "hotfix", "wait"].contains(&choice), "choice: {choice}");
+    let entries = answer["distribution"]["entries"].as_array().unwrap();
+    assert_eq!(entries.len(), 3, "distribution: {entries:?}");
+    let mass: f64 = entries.iter().map(|entry| entry["probability"].as_f64().unwrap()).sum();
+    assert!((mass - 1.0).abs() < 1e-6);
+    assert!(body["confidence"]["calibrated_confidence"].as_f64().is_some());
+    assert!(
+        ["accept", "verified", "verify", "abstain", "escalate", "no_valid_candidate"]
+            .contains(&body["outcome"].as_str().unwrap_or_default()),
+        "outcome: {body}"
+    );
+    assert!(body["trace"].as_object().is_some_and(|trace| !trace.is_empty()));
+}
+
+#[tokio::test]
+async fn the_format_header_selects_the_adapter_over_the_wire() {
+    let server = spawn_server().await;
+    let request = DecisionRequest::new(
+        State::from_text("refactor the rust parser module without allocating"),
+        vec![DecisionQuestion::Choice(
+            ChoiceQuestion::new(
+                "model",
+                "Which model should refactor the parser?",
+                vec![
+                    Candidate::new("local-qwen", "fast local coding model for rust refactors")
+                        .unwrap(),
+                    Candidate::new("cloud-large", "long context cloud reasoning service").unwrap(),
+                ],
+            )
+            .unwrap(),
+        )],
+        DecisionPolicy::default(),
+        RequestMetadata::default(),
+    )
+    .unwrap();
+    let openai_body = OpenAi.encode_request(&request).unwrap().to_string();
+
+    // The §2.4 curl: an OpenAI-shaped body with the header is decoded and
+    // answered in the same shape — the `{"<question id>": value}`
+    // projection, not the native envelope.
+    let with_header = client()
+        .post(format!("{}/v1/decide", server.base_url))
+        .header(CONTENT_TYPE, "application/json")
+        .header("x-opencodifier-format", "openai")
+        .body(openai_body.clone())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(with_header.status(), StatusCode::OK);
+    let projected: Value = with_header.json().await.unwrap();
+    assert!(projected["model"].is_string(), "projection: {projected}");
+    assert!(projected.get("answers").is_none(), "projection: {projected}");
+
+    // An unknown format value is refused at the boundary, never guessed.
+    let unknown = client()
+        .post(format!("{}/v1/decide", server.base_url))
+        .header(CONTENT_TYPE, "application/json")
+        .header("x-opencodifier-format", "yaml")
+        .body(openai_body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
+    let error: Value = unknown.json().await.unwrap();
+    assert_eq!(error["error"]["code"], "schema.invalid_value", "error: {error}");
+}
+
+/// The `response_format` a chat client sends for one decision request:
+/// the strict-mode schema the adapter itself encodes, verbatim.
+fn chat_response_format(request: &DecisionRequest) -> Value {
+    let schema = OpenAi.encode_request(request).unwrap()["format"]["schema"].clone();
+    json!({ "type": "json_schema", "json_schema": { "name": "decisions", "schema": schema } })
+}
+
+/// A chat completion envelope over the decision request a test built.
+async fn post_chat(
+    server: &TestServer,
+    messages: Value,
+    response_format: Value,
+) -> reqwest::Response {
+    post_json(
+        &server.base_url,
+        "/v1/chat/completions",
+        &json!({
+            "model": "opencodifier-decision",
+            "messages": messages,
+            "response_format": response_format,
+        })
+        .to_string(),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn chat_completions_decides_a_strict_schema_request() {
+    let server = spawn_server().await;
+    let request = DecisionRequest::new(
+        State::from_text("refactor the rust parser module without allocating"),
+        vec![DecisionQuestion::Choice(
+            ChoiceQuestion::new(
+                "model",
+                "Which model should refactor the parser?",
+                vec![
+                    Candidate::new("local-qwen", "fast local coding model for rust refactors")
+                        .unwrap(),
+                    Candidate::new("cloud-large", "long context cloud reasoning service").unwrap(),
+                ],
+            )
+            .unwrap(),
+        )],
+        DecisionPolicy::default(),
+        RequestMetadata::default(),
+    )
+    .unwrap();
+
+    // The adapter's own strict schema rides in as `response_format`; no
+    // `required` list, so the route must synthesize it (strict mode makes
+    // every property required).
+    let messages = json!([
+        { "role": "system", "content": "Deployment context: production rust monorepo." },
+        { "role": "user", "content": "refactor the rust parser module without allocating" },
+    ]);
+    let response = post_chat(&server, messages, chat_response_format(&request)).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = response.json().await.unwrap();
+
+    // A chat completion envelope whose content is the structured-output
+    // JSON the adapter projects: one field per question.
+    assert_eq!(body["object"], "chat.completion", "body: {body}");
+    assert_eq!(body["model"], "opencodifier-decision");
+    assert!(body["id"].as_str().unwrap().starts_with("chatcmpl-"));
+    assert!(body["created"].as_u64().unwrap() > 0);
+    // Zeroed on purpose: the decision ran on the deterministic engine, so no
+    // model tokens were consumed. OpenAI-shape gateways decode the field.
+    assert_eq!(body["usage"]["prompt_tokens"], 0);
+    assert_eq!(body["usage"]["completion_tokens"], 0);
+    assert_eq!(body["usage"]["total_tokens"], 0);
+    let choice = &body["choices"][0];
+    assert_eq!(choice["finish_reason"], "stop");
+    assert_eq!(choice["message"]["role"], "assistant");
+    let content: Value =
+        serde_json::from_str(choice["message"]["content"].as_str().unwrap()).unwrap();
+    assert!(
+        ["local-qwen", "cloud-large"].contains(&content["model"].as_str().unwrap()),
+        "content: {content}"
+    );
+    // The outcome has no slot in a chat shape, so it travels in the
+    // extension object next to the calibrated confidence.
+    assert!(
+        ["accept", "verified", "verify", "abstain", "escalate", "no_valid_candidate"]
+            .contains(&body["opencodifier"]["outcome"].as_str().unwrap_or_default()),
+        "body: {body}"
+    );
+    assert!(body["opencodifier"]["calibrated_confidence"].as_f64().unwrap() >= 0.0);
+
+    // The same schema with the list supplied verbatim is honored too.
+    let mut with_required = chat_response_format(&request);
+    with_required["json_schema"]["schema"]["required"] = json!(["model"]);
+    let response = post_chat(&server, json!([{ "role": "user", "content": "refactor the rust parser module without allocating" }]), with_required).await;
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn chat_completions_refuses_generation_requests_with_typed_errors() {
+    let server = spawn_server().await;
+    let messages = json!([{ "role": "user", "content": "refactor the rust parser module" }]);
+
+    // No response format at all: a chat completion that wants prose.
+    let bare = client()
+        .post(format!("{}/v1/chat/completions", server.base_url))
+        .header(CONTENT_TYPE, "application/json")
+        .body(json!({ "model": "opencodifier-decision", "messages": messages }).to_string())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bare.status(), StatusCode::BAD_REQUEST);
+    let error: Value = bare.json().await.unwrap();
+    assert_eq!(error_code(&error), "schema.unsupported_generation_field", "error: {error}");
+
+    // `json_object` is free-form generation by definition.
+    let free_form = post_chat(&server, messages.clone(), json!({ "type": "json_object" })).await;
+    assert_eq!(free_form.status(), StatusCode::BAD_REQUEST);
+    let error: Value = free_form.json().await.unwrap();
+    assert_eq!(error_code(&error), "schema.unsupported_generation_field");
+
+    // A prose property — a string with no enum — is not a decision.
+    let prose = post_chat(
+        &server,
+        messages,
+        json!({ "type": "json_schema", "json_schema": { "name": "summary", "schema": {
+            "type": "object",
+            "properties": { "summary": { "type": "string" } },
+        } } }),
+    )
+    .await;
+    assert_eq!(prose.status(), StatusCode::BAD_REQUEST);
+    let error: Value = prose.json().await.unwrap();
+    assert_eq!(error_code(&error), "schema.unsupported_generation_field");
+    assert!(error["error"]["message"].as_str().unwrap().contains("summary"), "error: {error}");
+}
+
+#[tokio::test]
+async fn chat_completions_flattens_messages_and_refuses_undecidable_ones() {
+    let server = spawn_server().await;
+    let request = DecisionRequest::new(
+        State::from_text("refactor the rust parser module without allocating"),
+        vec![DecisionQuestion::Choice(
+            ChoiceQuestion::new(
+                "model",
+                "Which model should refactor the parser?",
+                vec![
+                    Candidate::new("local-qwen", "fast local coding model for rust refactors")
+                        .unwrap(),
+                    Candidate::new("cloud-large", "long context cloud reasoning service").unwrap(),
+                ],
+            )
+            .unwrap(),
+        )],
+        DecisionPolicy::default(),
+        RequestMetadata::default(),
+    )
+    .unwrap();
+    let format = chat_response_format(&request);
+
+    // System and user join into the state; the assistant turn is skipped
+    // (the runtime decides over the caller's state, not a conversation).
+    let conversational = post_chat(
+        &server,
+        json!([
+            { "role": "system", "content": "Deployment context: production rust monorepo." },
+            { "role": "assistant", "content": "I could look at that for you." },
+            { "role": "user", "content": "refactor the rust parser module without allocating" },
+        ]),
+        format.clone(),
+    )
+    .await;
+    assert_eq!(conversational.status(), StatusCode::OK);
+    let body: Value = conversational.json().await.unwrap();
+    let content: Value =
+        serde_json::from_str(body["choices"][0]["message"]["content"].as_str().unwrap()).unwrap();
+    assert!(content["model"].is_string(), "content: {content}");
+
+    // Multimodal content is refused, never silently dropped: the IR's
+    // state is text, and dropping a part decides over less than was sent.
+    let multimodal = post_chat(
+        &server,
+        json!([{ "role": "user", "content": [{ "type": "text", "text": "refactor" }] }]),
+        format.clone(),
+    )
+    .await;
+    assert_eq!(multimodal.status(), StatusCode::BAD_REQUEST);
+    let error: Value = multimodal.json().await.unwrap();
+    assert_eq!(error_code(&error), "schema.invalid_value", "error: {error}");
+
+    // No decidable state at all.
+    let empty =
+        post_chat(&server, json!([{ "role": "assistant", "content": "hello" }]), format).await;
+    assert_eq!(empty.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn chat_completions_reports_abstention_as_a_200() {
+    let server = spawn_server().await;
+    // A state with no lexical overlap on any level: the engine answers
+    // with (near-)uniform mass, calibration lands under the default
+    // abstain gate (0.50), and the outcome is abstain — a successful
+    // decision, so the transport status stays 200.
+    let request = DecisionRequest::new(
+        State::from_text("the ornamental thimble catalogue quadruples nightly"),
+        vec![DecisionQuestion::Score(
+            ScoreQuestion::new(
+                "difficulty",
+                "How difficult is this engineering task?",
+                ["trivial", "moderate", "expert"]
+                    .iter()
+                    .map(|label| ScoreLevel::new(*label).unwrap())
+                    .collect(),
+            )
+            .unwrap(),
+        )],
+        DecisionPolicy::default(),
+        RequestMetadata::default(),
+    )
+    .unwrap();
+
+    let response = post_chat(
+        &server,
+        json!([{ "role": "user", "content": "the ornamental thimble catalogue quadruples nightly" }]),
+        chat_response_format(&request),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["opencodifier"]["outcome"], "abstain", "body: {body}");
+    let content: Value =
+        serde_json::from_str(body["choices"][0]["message"]["content"].as_str().unwrap()).unwrap();
+    assert!(content.is_object(), "content: {content}");
 }

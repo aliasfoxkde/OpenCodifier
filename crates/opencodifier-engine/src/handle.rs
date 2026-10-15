@@ -74,6 +74,53 @@ impl EngineHandle {
         })
     }
 
+    /// Assembles the engine with an escalation ladder: per-node /
+    /// per-kind confidence-gate overrides applied at the threshold node
+    /// (PLANNING.md §24). An empty ladder — the default — is
+    /// [`EngineHandle::new`] with no ladder set.
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`DecisionEngine::new`] — including
+    /// [`crate::error::EngineError::InvalidConfig`] when a non-empty
+    /// ladder carries no distinct `id`.
+    pub fn with_ladder(
+        config: EngineConfig,
+        classifier: Arc<dyn Classifier>,
+        verifier: Option<Arc<dyn Classifier>>,
+        ladder: crate::ladder::LadderPolicy,
+    ) -> EngineResult<Self> {
+        Self::with_rungs(config, classifier, verifier, ladder, Vec::new())
+    }
+
+    /// Assembles the engine with an ordered escalation tail (D27): when
+    /// the primary rung's gate does not accept a question, the executor
+    /// walks `fallbacks` in order, firing a rung only while the previous
+    /// one did not accept — one classifier per accepted question, never
+    /// two. An empty list is [`EngineHandle::with_ladder`].
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`DecisionEngine::new`].
+    pub fn with_rungs(
+        config: EngineConfig,
+        classifier: Arc<dyn Classifier>,
+        verifier: Option<Arc<dyn Classifier>>,
+        ladder: crate::ladder::LadderPolicy,
+        fallbacks: Vec<crate::ladder::Rung>,
+    ) -> EngineResult<Self> {
+        let config = config.with_ladder(ladder);
+        Ok(Self {
+            engine: DecisionEngine::new_with_rungs(
+                config,
+                Arc::new(SystemClock),
+                classifier,
+                verifier,
+                fallbacks,
+            )?,
+        })
+    }
+
     /// The fully deterministic, zero-ML engine: the relational solver
     /// (exact proofs over extracted facts) over the built-in lexical
     /// classifier. This is the base binary's default posture — useful
@@ -255,9 +302,13 @@ mod tests {
 
         let (response_with_report, report) = handle.decide_with_report(&choice_request()).unwrap();
         assert_eq!(response_with_report.answers().len(), 1);
-        assert!(!report.waves().is_empty());
+        // The explicitly-typed empty vector is the one "not empty" encoding
+        // clippy 1.99 accepts: `assert_is_empty` bans the direct form while
+        // `unnecessary_first_then_check`/`len_zero`/`bool_assert_comparison`
+        // ban every alternative spelling of it.
+        assert_ne!(report.waves(), Vec::<Vec<opencodifier_core::NodeId>>::new());
         // The composed id: solver over lexical, folded into the identity.
-        assert_eq!(handle.identity().model_id, "relational-v1|builtin-lexical-v1");
+        assert_eq!(handle.identity().model_id, "relational-v1|builtin-lexical-v2");
     }
 
     #[test]
@@ -322,7 +373,7 @@ mod tests {
         assert_eq!(health.nodes, 10);
         let response = handle.decide(&choice_request()).unwrap();
         assert_eq!(response.answers().len(), 1);
-        assert_eq!(handle.identity().model_id, "relational-v1|builtin-lexical-v1");
+        assert_eq!(handle.identity().model_id, "relational-v1|builtin-lexical-v2");
     }
 
     #[test]

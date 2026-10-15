@@ -5,12 +5,22 @@
 #
 # All jobs run on the runner-local `opencodifier-ci-rust` image, which bakes
 # the toolchain, rustfmt/clippy, cargo-deny, cargo-audit, aegis (pinned
-# rev), and a warm crate registry. Tools are NOT installed at job runtime:
+# rev), cargo-llvm-cov + llvm-tools (coverage lane), and a warm crate
+# registry. Tools are NOT installed at job runtime:
 # the runner's preflight (F25) contract is baked-in-tools, and containers
 # here cannot reach host services at all (the host firewall default-DROPs
 # docker-sourced traffic; only crates.io-style egress works). Build/rebuild
 # the image and bump the tag per the cache contract in
 # infrastructure/docker/ci-rust.Dockerfile (`just ci-image`).
+#
+# Job graph is a fan-out (lint -> {test, doc, supply-chain} -> e2e) unlike
+# peers' linear chains: that is safe ONLY because the deployed runner
+# executes a run's jobs one at a time (observed: lane finishes are strictly
+# serialized in the jobs table; two containers of one run never coexist).
+# If the runner ever grows true intra-run parallelism, jobs of one run will
+# share the same workspace directory and concurrent cargo invocations will
+# corrupt each other's build locks — collapse this to a linear chain the
+# same day (the layout GitForge's own pipeline documents).
 name: opencodifier-ci
 version: "1.0"
 trigger_on:
@@ -21,8 +31,12 @@ environment:
   RUSTFLAGS: "-D warnings"
 jobs:
   - name: lint
-    image: opencodifier-ci-rust:1
-    timeout: 20m
+    image: opencodifier-ci-rust:2
+    # 45m: 2026-10-08 receipts — run 857acb2e (f21cd8b) timed out at 20m
+    # with the host at load ~30 (co-tenant storm; the same contention the
+    # test job's 60m budget was sized for). fmt+clippy from a fresh clone
+    # is ~10-15 min calm; this is storm headroom, not workload growth.
+    timeout: 45m
     steps:
       - name: Format check
         run: cargo fmt --all -- --check
@@ -30,19 +44,55 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
   - name: test
-    image: opencodifier-ci-rust:1
+    image: opencodifier-ci-rust:2
     needs: [lint]
-    timeout: 20m
+    # 60m: 2026-10-03 receipts — killed at 43m (old 20m budget, watchdog
+    # reconcile) and again at 45m17s under the new budget, both in
+    # co-tenant storms at load 95-135. Coverage (strictly heavier:
+    # instrumented rebuild + all tests) goes green in ~16 min when calm,
+    # so this is contention headroom, not workload growth.
+    timeout: 60m
     steps:
+      # 2026-10-11: the runner caps each job container at 4 GiB. Under a
+      # multi-run storm, default -j (= nproc) runs enough rustc units in
+      # parallel to blow through the cgroup cap — cargo dies with SIGKILL
+      # (exit 137), host dmesg stays clean. -j 4 plus stripped debuginfo
+      # keeps peak RSS (the worst offender is linking the reqwest/hyper
+      # integration-test binaries) well inside the cap. Identical flags in
+      # all three steps so the shared target/ is built exactly once.
+      #
+      # The build also goes to container-local disk: this is the only lane
+      # emitting heavy object files into the sshfs-backed workspace target/,
+      # and the mount returns EPERM on individual files under exactly that
+      # burst (ring's assembler output, dep-info reads) at any load, while
+      # lint/doc (rmeta only) and coverage (cargo-llvm-cov uses its own
+      # target dir) pass. No cross-lane reuse exists to lose — clippy's
+      # artifacts never feed cargo test — and container-local disk beats
+      # sshfs on throughput anyway.
       - name: Unit and integration tests
-        run: cargo test --workspace
+        run: |
+          export CARGO_BUILD_JOBS=4
+          export CARGO_TARGET_DIR=/tmp/oc-test-target
+          export RUSTFLAGS="-D warnings -C debuginfo=0"
+          cargo test --workspace
+      - name: Feature-gated tests (llama.cpp transport, tokenizer agreement)
+        run: |
+          export CARGO_BUILD_JOBS=4
+          export CARGO_TARGET_DIR=/tmp/oc-test-target
+          export RUSTFLAGS="-D warnings -C debuginfo=0"
+          cargo test -p opencodifier-model --features llamacpp,tokenizers
       - name: Documentation tests
-        run: cargo test --doc
+        run: |
+          export CARGO_BUILD_JOBS=4
+          export CARGO_TARGET_DIR=/tmp/oc-test-target
+          export RUSTFLAGS="-D warnings -C debuginfo=0"
+          cargo test --doc
 
   - name: doc
-    image: opencodifier-ci-rust:1
+    image: opencodifier-ci-rust:2
     needs: [lint]
-    timeout: 15m
+    # 30m: doc timed out at 15m in the same storm window (2026-10-03).
+    timeout: 30m
     steps:
       - name: Build docs with warnings as errors
         run: |
@@ -50,17 +100,22 @@ jobs:
           cargo doc --workspace --no-deps
 
   - name: e2e
-    image: opencodifier-ci-rust:1
+    image: opencodifier-ci-rust:2
     needs: [test]
     timeout: 30m
     steps:
+      # Container-local target dir, same reasoning as the test lane: the
+      # release build's object files are exactly the write burst the sshfs
+      # workspace chokes on, and nothing downstream reuses them.
       - name: Release binary
-        run: cargo build --release
+        run: |
+          export CARGO_TARGET_DIR=/tmp/oc-e2e-target
+          cargo build --release
       - name: End-to-end validation (serve + MCP, PLAN 18d)
-        run: python3 scripts/e2e_validate.py --binary target/release/opencodifier --port 8188
+        run: python3 scripts/e2e_validate.py --binary /tmp/oc-e2e-target/release/opencodifier --port 8188
 
   - name: supply-chain
-    image: opencodifier-ci-rust:1
+    image: opencodifier-ci-rust:2
     needs: [lint]
     timeout: 30m
     steps:
@@ -70,3 +125,30 @@ jobs:
         run: cargo audit
       - name: Security pattern scan (0 new findings)
         run: aegis --format json scan --file . --baseline .aegis/baseline.json
+
+  # Coverage floor on the lcov DA basis, measured inside THIS image — the
+  # number of record (docs/COVERAGE.md 2026-10-08 census): local rustc
+  # versions emit a different, finer-grained mapping and read ~8 points
+  # lower on the same tree, so only an in-image measurement moves the
+  # floor. Measured 98.39% (18187/18485); the D36 ratchet is retired at
+  # the reachable ceiling (D36 update 2026-10-08) — the 298-line residual
+  # is proven class-infeasible, so the floor rests at 97.5 as the fixed
+  # constant, deliberately under the measured value as a regression guard.
+  # Queue-cost note: this instrumented rebuild roughly doubles this run's
+  # wall time; it stays in the default graph because coverage regressions
+  # are exactly the kind of failure that is silent everywhere else.
+  - name: coverage
+    image: opencodifier-ci-rust:2
+    needs: [lint]
+    # 60m (was 45m): the -j 4 storm-fit above also applies here (same 4 GiB
+    # container cap; the instrumented rebuild is the single longest phase).
+    # llvm-cov manages its own RUSTFLAGS — only the build-jobs knob is
+    # exported here, never RUSTFLAGS.
+    timeout: 60m
+    steps:
+      - name: Line coverage (lcov DA basis)
+        run: |
+          export CARGO_BUILD_JOBS=4
+          cargo llvm-cov --workspace --lcov --output-path /tmp/lcov.info
+      - name: Floor assertion (97.5 fixed constant; D36 ratchet retired)
+        run: python3 scripts/coverage_floor.py /tmp/lcov.info --floor 97.5

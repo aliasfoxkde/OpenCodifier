@@ -99,6 +99,7 @@ pub mod anthropic;
 pub mod codec;
 pub mod error;
 pub mod jev;
+pub mod macjev;
 pub mod native;
 pub mod openai;
 pub mod registry;
@@ -170,7 +171,7 @@ mod tests {
         let formats: Vec<BoxedWireFormat> =
             vec![Box::new(Native), Box::new(openai::OpenAi), Box::new(jev::Jev)];
         assert_eq!(formats.len(), 3);
-        assert!(!format!("{:?}", formats[0]).is_empty());
+        assert_ne!(format!("{:?}", formats[0]), "");
     }
 
     #[test]

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Pre-paint theme resolution — mirrors index.html; owned by site-core.js. -->
+<script>
+(function () {
+  "use strict";
+  var mode = "system";
+  try {
+    var v = localStorage.getItem("oc-theme");
+    if (v === "light" || v === "dark" || v === "system") mode = v;
+  } catch (e) { /* storage unavailable: system default */ }
+  var resolved = mode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : mode;
+  document.documentElement.setAttribute("data-theme", resolved);
+  document.documentElement.setAttribute("data-theme-mode", mode);
+})();
+</script>
+<title>OpenCodifier — GridWars: geometry that decides, on a warping grid</title>
+<meta name="description" content="A twin-stick arena in the GridWars lineage: geometry hunts you on a warping spring grid, every enemy picks chase / wander / charge / flee / split out loud on a rule ladder, and the engine picks which geometry enters next. Mouse to aim, left click to fire, right click to swap weapons, WASD to fly.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:site_name" content="OpenCodifier">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://opencodifier.pages.dev/gridwars.html">
+<meta property="og:title" content="OpenCodifier — GridWars: geometry that decides, out loud">
+<meta property="og:description" content="Twin-stick neon arena on a warping grid: enemies run a labelled rule ladder (chase, wander, charge, brake, flee, jink, trail, split), waves are seeded and deterministic, and the engine names which geometry enters next. All local, all auditable.">
+<meta property="og:image" content="https://opencodifier.pages.dev/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="tw.css">
+</head>
+<body>
+<a class="skip-link" href="#gridwars">Skip to GridWars</a>
+
+<div class="bg-mesh" aria-hidden="true"></div>
+
+<nav class="nav">
+  <a class="brand" href="index.html">
+    <img src="assets/logo.svg" alt="" width="22" height="22">
+    opencodifier
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="benchmarks.html">Benchmarks</a>
+    <a href="playground.html" aria-current="page">Playground</a>
+    <a href="decide.html">Decide</a>
+    <a href="api.html">API</a>
+    <a href="docs.html">Docs</a>
+  </div>
+  <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Theme: system (matches your device) — activate for light">
+    <svg class="tt-auto" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.2 14.5A8.3 8.3 0 0 1 9.5 3.8a8.3 8.3 0 1 0 10.7 10.7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+  <a class="nav-gh" href="https://github.com/aliasfoxkde/OpenCodifier" aria-label="OpenCodifier on GitHub" rel="noopener">
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+  </a>
+  <a class="btn btn-small nav-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+  <a class="btn btn-small" href="api.html">API docs</a>
+  <details class="nav-menu">
+    <summary aria-label="Open menu"><span></span><span></span><span></span></summary>
+    <div class="nav-menu-panel">
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">Benchmarks</a>
+      <a href="playground.html" aria-current="page">Playground</a>
+      <a href="decide.html">Decide</a>
+      <a href="api.html">API</a>
+      <a href="docs.html">Docs</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier">GitHub ↗</a>
+      <div class="nav-menu-foot">
+        <a class="nav-menu-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+        <span class="nav-menu-themeslot" aria-hidden="true"></span>
+      </div>
+    </div>
+  </details>
+</nav>
+
+<header class="hero hero-slim" id="top">
+  <h1><span class="grad">GridWars</span> — geometry that decides, out loud</h1>
+  <p class="hero-sub">
+    A twin-stick arena in the GridWars lineage: neon geometry hunts you across a
+    spring grid that warps under every explosion. Every enemy runs a labelled
+    rule ladder — <strong>chase, wander, charge, brake, flee, jink, trail,
+    split</strong> — and the game state panel counts each tag, so "what the
+    enemies decided" is a number, not a vibe. Waves are seeded and
+    deterministic, and the one genuine choice — which geometry enters next —
+    goes to the engine when it is available. Mouse to aim, left click to fire,
+    right click to swap weapons, WASD to fly.
+  </p>
+</header>
+
+<main>
+<section id="gridwars" class="section" data-toc-label="GridWars">
+  <div class="game-wrap gw-wrap" id="gridwars-root">
+
+    <div class="game-bar gw-bar">
+      <button type="button" class="mz-chip mz-play" id="gw-play">▶ play</button>
+      <button type="button" class="mz-chip" id="gw-restart">↺ restart</button>
+      <span class="game-seed-wrap">
+        <label for="gw-seed" class="game-slider-label">seed </label>
+        <input type="text" id="gw-seed" class="mz-input" value="oc-gridwars" size="12">
+        <button type="button" class="mz-chip" id="gw-dice" title="new random seed">🎲</button>
+      </span>
+      <button type="button" class="mz-chip" id="gw-engine-toggle">engine: on</button>
+      <span class="mz-chip game-rung" id="gw-engine-chip">engine: off</span>
+      <button type="button" class="mz-chip" id="gw-keys">⌨ keybindings</button>
+      <button type="button" class="mz-chip" id="gw-board-btn">★ scoreboard</button>
+      <button type="button" class="mz-chip" id="gw-reset-params">reset params</button>
+    </div>
+
+    <div class="gw-layout">
+
+      <!-- LEFT: options accordion. Every section is a <details>, and
+           site-core.js enrolls every details on the page in the site-wide
+           one-open-at-a-time rule — opening a panel closes the rest,
+           including the game-state panel. That is the house rule. -->
+      <div class="gw-col gw-col-options">
+        <details class="gw-acc" id="gw-acc-difficulty" open>
+          <summary>Difficulty &amp; waves</summary>
+          <div class="gw-acc-body">
+            <label class="game-slider">
+              <span class="game-slider-label">difficulty</span>
+              <select id="gw-difficulty" aria-label="Difficulty">
+                <option value="chill">chill — later tiers, softer spawns</option>
+                <option value="standard" selected>standard — as tuned</option>
+                <option value="overdrive">overdrive — earlier tiers, denser</option>
+              </select>
+            </label>
+            <p class="game-note">
+              Tiers unlock geometry: diamonds and pinwheels at tier 1, squares
+              and rockets at tier 2, snakes at tier 3, weavers and wells at
+              tier 4. Score <em>and</em> survival time both buy tier — the
+              thresholds shift with difficulty. A wave block is 15 s; the
+              spawn interval tightens every wave and with score.
+            </p>
+          </div>
+        </details>
+
+        <details class="gw-acc" id="gw-acc-ship">
+          <summary>Ship</summary>
+          <div class="gw-acc-body">
+            <label class="game-slider"><span class="game-slider-label">top speed</span>
+              <input type="range" id="gw-speed" min="140" max="460" step="10" value="270" aria-label="Ship top speed">
+              <span class="game-sliderval" id="gw-speed-val">270</span></label>
+            <label class="game-slider"><span class="game-slider-label">inertia</span>
+              <input type="range" id="gw-inertia" min="0" max="1" step="0.05" value="0.5" aria-label="Ship inertia">
+              <span class="game-sliderval" id="gw-inertia-val">0.5</span></label>
+            <label class="game-slider"><span class="game-slider-label">lives</span>
+              <input type="range" id="gw-lives" min="1" max="9" step="1" value="3" aria-label="Lives">
+              <span class="game-sliderval" id="gw-lives-val">3</span></label>
+            <label class="game-slider"><span class="game-slider-label">respawn shield s</span>
+              <input type="range" id="gw-invuln" min="0" max="6" step="0.5" value="2.5" aria-label="Respawn shield seconds">
+              <span class="game-sliderval" id="gw-invuln-val">2.5</span></label>
+            <p class="game-note">Thrust and drift, not a cursor: you keep
+              sliding after you let go. More inertia is a longer slide.</p>
+          </div>
+        </details>
+
+        <details class="gw-acc" id="gw-acc-weapons">
+          <summary>Weapons</summary>
+          <div class="gw-acc-body">
+            <label class="game-slider"><span class="game-slider-label">start on</span>
+              <select id="gw-weapon-start" aria-label="Starting weapon">
+                <option value="pulse" selected>1 · pulse</option>
+                <option value="scatter">2 · scatter</option>
+                <option value="laser">3 · laser</option>
+                <option value="wave">4 · wave</option>
+              </select></label>
+            <div class="gw-wep">
+              <div class="gw-wep-name">1 · pulse — fast single shot</div>
+              <label class="game-slider"><span class="game-slider-label">cooldown</span>
+                <input type="range" data-wep="pulse" data-key="cooldown" min="3" max="30" step="1" value="8" aria-label="Pulse cooldown">
+                <span class="game-sliderval">8</span></label>
+              <label class="game-slider"><span class="game-slider-label">damage</span>
+                <input type="range" data-wep="pulse" data-key="dmg" min="1" max="4" step="1" value="1" aria-label="Pulse damage">
+                <span class="game-sliderval">1</span></label>
+            </div>
+            <div class="gw-wep">
+              <div class="gw-wep-name">2 · scatter — 3-way spread</div>
+              <label class="game-slider"><span class="game-slider-label">pellets</span>
+                <input type="range" data-wep="scatter" data-key="count" min="2" max="5" step="1" value="3" aria-label="Scatter pellet count">
+                <span class="game-sliderval">3</span></label>
+              <label class="game-slider"><span class="game-slider-label">spread</span>
+                <input type="range" data-wep="scatter" data-key="spread" min="0.1" max="0.9" step="0.05" value="0.38" aria-label="Scatter spread">
+                <span class="game-sliderval">0.38</span></label>
+              <label class="game-slider"><span class="game-slider-label">cooldown</span>
+                <input type="range" data-wep="scatter" data-key="cooldown" min="6" max="45" step="1" value="18" aria-label="Scatter cooldown">
+                <span class="game-sliderval">18</span></label>
+            </div>
+            <div class="gw-wep">
+              <div class="gw-wep-name">3 · laser — piercing beam</div>
+              <label class="game-slider"><span class="game-slider-label">cooldown</span>
+                <input type="range" data-wep="laser" data-key="cooldown" min="15" max="90" step="1" value="42" aria-label="Laser cooldown">
+                <span class="game-sliderval">42</span></label>
+              <label class="game-slider"><span class="game-slider-label">damage</span>
+                <input type="range" data-wep="laser" data-key="dmg" min="1" max="6" step="1" value="3" aria-label="Laser damage">
+                <span class="game-sliderval">3</span></label>
+            </div>
+            <div class="gw-wep">
+              <div class="gw-wep-name">4 · wave — expanding ring</div>
+              <label class="game-slider"><span class="game-slider-label">radius</span>
+                <input type="range" data-wep="wave" data-key="r1" min="40" max="160" step="5" value="80" aria-label="Wave ring radius">
+                <span class="game-sliderval">80</span></label>
+              <label class="game-slider"><span class="game-slider-label">cooldown</span>
+                <input type="range" data-wep="wave" data-key="cooldown" min="25" max="120" step="1" value="50" aria-label="Wave cooldown">
+                <span class="game-sliderval">50</span></label>
+            </div>
+            <p class="game-note">These are live: retune mid-run and the seed
+              stays, so the run stays comparable. Right click or 1–4 swaps.</p>
+          </div>
+        </details>
+
+        <details class="gw-acc" id="gw-acc-grid">
+          <summary>Grid</summary>
+          <div class="gw-acc-body">
+            <label class="game-slider"><span class="game-slider-label">warp strength</span>
+              <input type="range" id="gw-warp" min="0" max="1" step="0.05" value="0.6" aria-label="Grid warp strength">
+              <span class="game-sliderval" id="gw-warp-val">0.6</span></label>
+            <label class="game-slider"><span class="game-slider-label">line density</span>
+              <input type="range" id="gw-density" min="24" max="64" step="4" value="40" aria-label="Grid line spacing">
+              <span class="game-sliderval" id="gw-density-val">40</span></label>
+            <p class="game-note">The grid is a real spring mesh in the core:
+              every death and every bomb pushes it, and it settles back. Zero
+              warp is a flat grid that still takes the hits.</p>
+          </div>
+        </details>
+
+        <details class="gw-acc" id="gw-acc-spawn">
+          <summary>Spawn</summary>
+          <div class="gw-acc-body">
+            <label class="game-slider"><span class="game-slider-label">rate ×</span>
+              <input type="range" id="gw-spawnrate" min="0.4" max="2" step="0.1" value="1" aria-label="Spawn rate multiplier">
+              <span class="game-sliderval" id="gw-spawnrate-val">1</span></label>
+            <label class="game-slider"><span class="game-slider-label">max geometry</span>
+              <input type="range" id="gw-maxenemies" min="8" max="120" step="4" value="60" aria-label="Maximum enemies">
+              <span class="game-sliderval" id="gw-maxenemies-val">60</span></label>
+            <p class="game-note">Rate scales the interval; the cap is a hard
+              ceiling on the field, splitting children included.</p>
+          </div>
+        </details>
+      </div>
+
+      <!-- CENTER: the arena, its controls, the HUD, the last decision -->
+      <div class="gw-center">
+        <canvas id="gridwars-canvas" width="960" height="600" role="img"
+          aria-label="GridWars arena — neon geometry on a warping grid; mouse aims, left click fires, right click swaps weapon, WASD moves"></canvas>
+
+        <div class="game-bar gw-controls">
+          <button type="button" class="mz-chip mz-play" id="gw-play2">▶ play</button>
+          <button type="button" class="mz-chip" id="gw-pause2">⏸ pause</button>
+          <button type="button" class="mz-chip" id="gw-restart2">↺ restart</button>
+          <span class="gw-controls-sep" aria-hidden="true"></span>
+          <button type="button" class="mz-chip gw-wepbtn" data-weapon="pulse" title="1 — pulse: fast single shot">1·pulse</button>
+          <button type="button" class="mz-chip gw-wepbtn" data-weapon="scatter" title="2 — scatter: 3-way spread">2·scatter</button>
+          <button type="button" class="mz-chip gw-wepbtn" data-weapon="laser" title="3 — laser: piercing beam">3·laser</button>
+          <button type="button" class="mz-chip gw-wepbtn" data-weapon="wave" title="4 — wave: expanding ring">4·wave</button>
+          <span class="gw-controls-sep" aria-hidden="true"></span>
+          <button type="button" class="mz-chip" id="gw-bomb" title="Space — clear the field">✷ bomb <b id="gw-bomb-n">3</b></button>
+        </div>
+
+        <div class="gw-hud" id="gw-hud"></div>
+        <div class="game-hintline" id="gw-trace" aria-live="polite">no decisions yet</div>
+
+        <div class="card gw-legend">
+          <h3>Weapons &amp; controls</h3>
+          <div class="gw-legend-grid" id="gw-legend"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT: live game state -->
+      <div class="gw-col gw-col-state">
+        <details class="gw-acc gw-state" id="gw-state" open>
+          <summary>Game state</summary>
+          <div class="gw-acc-body">
+            <div class="gw-kvlist" id="gw-kv"></div>
+            <div class="gw-sub">what the enemies decided</div>
+            <div class="gw-tags" id="gw-tags"></div>
+            <div class="gw-sub">engine decisions</div>
+            <div class="gw-kvlist" id="gw-engine"></div>
+            <p class="game-note">
+              Enemy decisions are cheap local rules, counted per tag. The engine
+              gets exactly one kind of question — which geometry enters next —
+              and only when two or more tier-valid answers exist. Absent
+              engine, the seeded weighting answers and the rung says rule.
+            </p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2 game-about">
+    <div class="card">
+      <h3>What decides what</h3>
+      <ul class="checks">
+        <li><strong>Every enemy decides out loud.</strong> Five times a second
+          — and again on every phase change — each geometry reads its own
+          situation (a bullet on its line, your distance, its own charge) and
+          picks a tag: chase, wander, charge, brake, aim, flee, jink, trail,
+          pull, burst. The panel counts every pick.</li>
+        <li><strong>The personalities are the clone's.</strong> Diamonds jink
+          off your fire line, pinwheels barely bother, squares flee and split
+          into three, rockets charge a straight line and brake, snakes eat your
+          trail and only die at the head, wells swallow fire until they burst.</li>
+        <li><strong>Waves are seeded, and the engine names the entrant.</strong>
+          Same seed, same spawn sequence. Which geometry leads a wave — and
+          which newly-unlocked geometry enters first — is the one genuine
+          choice, so that is what leaves the tab as a real
+          <code>choice</code> request when the WASM engine is available.</li>
+        <li><strong>Determinism is test-pinned.</strong> The core is DOM-free:
+          the same seed and the same inputs replay the same match, particles
+          included. <code>tests/gridwars_test.mjs</code> pins the spawn
+          sequence, the ladder, the splits, and the bomb.</li>
+      </ul>
+    </div>
+    <div class="card card-honest">
+      <h3>Honest edges</h3>
+      <ul class="crosses">
+        <li>There is no AI in the enemies and no network anywhere on this
+          page. The ladder is a dozen comparisons per enemy; the engine is one
+          local WASM call per wave at most. The rung chip says which one
+          answered.</li>
+        <li>When the engine is unavailable, nothing pretends: the seeded
+          roster weighting picks, and the state panel shows
+          <code>engine: unavailable</code>.</li>
+        <li>The multiplier is geoms, not time: fly through what the dead drop.
+          Dying resets it. Bombs score nothing and drop no geoms — clearing
+          the field is a rescue, not a farm.</li>
+        <li>The scoreboard is session-only — close the tab and it is gone.
+          Nothing is stored or sent.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="footer">
+  <div class="footer-grid">
+    <div class="foot-about">
+      <div class="foot-brand">opencodifier</div>
+      <p>A local-first decision runtime: typed decisions with calibrated confidence, a
+        deterministic execution trace instead of chain-of-thought, and refusal as a
+        first-class outcome. GridWars runs on the same Decisions SDK as Pong, Pac-maze,
+        Apex Line and Tower Defense — the scoreboard lives in this tab and nowhere else.</p>
+      <a class="foot-tag" href="https://github.com/TaskWizer" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><path d="M7.5 12.2l3 3L16.5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Built with TaskWizer AI technologies
+      </a>
+    </div>
+    <nav class="foot-col" aria-label="Site">
+      <div class="foot-head">Site</div>
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">The measured board</a>
+      <a href="playground.html">Playground</a>
+      <a href="decide.html">Decide</a>
+      <a href="api.html">API documentation</a>
+    </nav>
+    <nav class="foot-col" aria-label="Source and data">
+      <div class="foot-head">Source &amp; data</div>
+      <a href="board.csv">board.csv (raw)</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier" rel="noopener">GitHub</a>
+      <a href="https://huggingface.co/TaskWizerAI" rel="noopener">Hugging Face ↗</a>
+    </nav>
+    <nav class="foot-col" aria-label="Ecosystem">
+      <div class="foot-head">Ecosystem</div>
+      <a href="https://vivere-5we.pages.dev/" rel="noopener">VIVERE ↗</a>
+      <a href="https://www.amortyx.com" rel="noopener">Amortyx ↗</a>
+      <a href="https://www.mcpmanage.com" rel="noopener">MCPManage ↗</a>
+      <a href="https://github.com/aliasfoxkde/aegis" rel="noopener">Aegis ↗</a>
+      <a href="https://github.com/aliasfoxkde/GitForge" rel="noopener">GitForge ↗</a>
+    </nav>
+  </div>
+  <p class="foot-links">Apache-2.0 · local-first · no telemetry · no external requests</p>
+</footer>
+
+<script src="site-core.js"></script>
+<script src="toc.js"></script>
+<script src="sdk/decisions-sdk.js"></script>
+<script src="gridwars-core.js"></script>
+<script src="gridwars.js"></script>
+</body>
+</html>

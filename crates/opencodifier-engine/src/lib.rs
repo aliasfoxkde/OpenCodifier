@@ -23,6 +23,7 @@
 //! | [`clock`] | §10 — `Clock`, `Deadline`, `CancellationToken` |
 //! | [`engine`] | §43 — configuration and the orchestrating `DecisionEngine` |
 //! | [`rerank`] | §26, §54 — the reranker seam (permute, never remove) |
+//! | [`wire`] | §57, §68 — the transport-neutral native-schema boundary every embedding surface shares |
 //! | [`mod@optimize`] | §51 — equivalence-preserving graph optimization (D22) |
 //!
 //! # The cheap-mechanism-first principle
@@ -122,6 +123,8 @@ pub mod facts;
 pub mod focus;
 pub mod graph;
 pub mod handle;
+pub mod ladder;
+pub mod ladder_fit;
 pub mod lexical;
 pub mod narrowing;
 pub mod optimize;
@@ -129,9 +132,13 @@ pub mod relational;
 pub mod report;
 pub mod rerank;
 pub mod rules;
+pub mod wire;
 
 pub use cache::{CacheConfig, CacheKey, CacheKeyBuilder, DecisionCache, EngineIdentity};
-pub use calibration::{Calibration, IdentityCalibration, TemperatureCalibration};
+pub use calibration::{
+    Calibration, CalibrationArtifact, CalibrationFit, IdentityCalibration, ProofAwareCalibration,
+    TemperatureCalibration,
+};
 pub use classifier::{Classifier, LexicalClassifier, MockClassifier};
 pub use clock::{CancellationToken, Clock, Deadline, ManualClock, SystemClock};
 pub use engine::{DecisionEngine, EngineConfig};
@@ -143,6 +150,10 @@ pub use focus::{
 };
 pub use graph::{DecisionGraph, GraphDocument, NodeKind, NodeSpec};
 pub use handle::{EngineHandle, EngineHealth, MAX_BATCH};
+pub use ladder::{LadderPolicy, LadderProfile, Rung, RungCalibration};
+pub use ladder_fit::{
+    BooleanEvidence, BooleanThresholdFit, emit_boolean_profile, f1_at, fit_boolean_threshold,
+};
 pub use lexical::{Bm25Index, negation_polarity, softmax, tokenize};
 pub use narrowing::{LexicalScores, NarrowingOutcome};
 pub use optimize::optimize;

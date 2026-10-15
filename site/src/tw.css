@@ -1,0 +1,146 @@
+/* Tailwind v4 input — theme tokens + utilities + new-section components.
+   Preflight is skipped on purpose: the hand-written component layer
+   (styles.css) must keep rendering identically, so every border utility
+   here spells out `border-solid` (preflight normally does it).
+   Built artifact: ../tw.css (committed; deploys never load a CDN).
+   Rebuild: npm run build:css (site/) */
+
+@import "tailwindcss/theme" layer(theme);
+@import "tailwindcss/utilities" layer(utilities);
+
+/* Explicit sources so the build works from any cwd and never wanders
+   outside site/ (aegis skips gitignored paths, so node_modules/ is
+   invisible to the audit gate). */
+@source "../index.html";
+@source "../";
+
+@theme {
+  --color-oc-bg: #060d0c;
+  --color-oc-bg2: #0a1512;
+  --color-oc-ink: #e7f5f0;
+  --color-oc-dim: #9db8b0;
+  /* WCAG 2.1 AAA (7.45:1 on card) — keep in sync with styles.css --ink-faint. */
+  --color-oc-faint: #88aca3;
+  --color-oc-teal: #5eead4;
+  --color-oc-green: #34d399;
+  --color-oc-amber: #fbbf24;
+  --color-oc-line: rgba(94, 234, 212, 0.14);
+  --color-oc-card: rgba(13, 26, 23, 0.66);
+  --color-oc-card2: rgba(16, 33, 29, 0.85);
+  --radius-oc: 16px;
+}
+
+@layer components {
+  /* ---------- nav: mobile menu + github ---------- */
+  .nav-gh {
+    @apply flex items-center text-oc-dim transition-colors duration-200;
+  }
+  .nav-gh:hover { @apply text-oc-teal; }
+
+  .nav-menu { @apply relative hidden; }
+  .nav-menu summary {
+    @apply cursor-pointer flex flex-col gap-1 p-2 rounded-lg
+      border border-solid border-oc-line;
+    list-style: none;
+  }
+  .nav-menu summary::-webkit-details-marker { display: none; }
+  .nav-menu summary span {
+    @apply block w-[18px] h-[2px] rounded-sm bg-oc-dim transition-all duration-200;
+  }
+  .nav-menu[open] summary span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+  .nav-menu[open] summary span:nth-child(2) { @apply opacity-0; }
+  .nav-menu[open] summary span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+  .nav-menu-panel {
+    @apply absolute right-0 top-full mt-2.5 z-60 flex flex-col min-w-[190px]
+      p-2 rounded-xl border border-solid border-oc-line bg-oc-card2
+      backdrop-blur-md;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  }
+  .nav-menu-panel a {
+    @apply text-oc-dim no-underline text-[0.94rem] px-3 py-2 rounded-lg
+      transition-colors duration-200;
+  }
+  .nav-menu-panel a:hover { @apply text-oc-teal bg-oc-teal/7; }
+
+  @media (max-width: 760px) {
+    .nav-menu { @apply block; }
+    .nav-gh { @apply hidden; }
+  }
+
+  /* ---------- ecosystem: grouped 3D flip cards ----------
+     Front = name + tag + one-line summary + flip hint; back = details and
+     the link. Faces stack in one grid cell so the taller face sets the
+     height — no fixed card heights anywhere. The flip is transform-only
+     (compositor), keeps perspective depth, and collapses to no-transition
+     under prefers-reduced-motion. */
+  .eco-group { @apply mt-9; }
+  .eco-group-title {
+    @apply flex items-center gap-3 m-0 mb-4 text-oc-green font-bold
+      text-[0.78rem] tracking-[0.16em] uppercase;
+  }
+  .eco-group-title::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--color-oc-line), transparent);
+  }
+  .eco-grid {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3;
+  }
+  .eco-card {
+    @apply relative block no-underline text-inherit rounded-oc outline-none;
+    perspective: 1400px;
+  }
+  .eco-card:focus-visible {
+    box-shadow: 0 0 0 2px var(--color-oc-teal);
+  }
+  .eco-inner {
+    @apply relative grid h-full w-full rounded-oc;
+    transform-style: preserve-3d;
+    transition: transform 0.6s cubic-bezier(0.2, 0.7, 0.25, 1);
+  }
+  .eco-card:hover .eco-inner,
+  .eco-card:focus .eco-inner,
+  .eco-card:focus-visible .eco-inner { transform: rotateY(180deg); }
+  .eco-face {
+    @apply flex flex-col gap-2.5 rounded-oc p-6 border border-solid border-oc-line bg-oc-card;
+    grid-area: 1 / 1;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    transition: border-color 0.3s, box-shadow 0.6s;
+  }
+  .eco-card:hover .eco-face,
+  .eco-card:focus .eco-face,
+  .eco-card:focus-visible .eco-face {
+    @apply border-oc-teal/40;
+    box-shadow: 0 26px 60px rgba(0, 0, 0, 0.5);
+  }
+  .eco-back {
+    @apply bg-oc-card2 border-oc-teal/25;
+    transform: rotateY(180deg) translateZ(1px); /* translateZ: no z-fighting */
+  }
+  .eco-front { transform: translateZ(1px); }
+  .eco-sum { @apply text-oc-dim text-[0.9rem] leading-relaxed; }
+  .eco-hint {
+    @apply mt-auto pt-1.5 text-[0.7rem] tracking-[0.1em] uppercase text-oc-faint;
+  }
+  .eco-back .eco-link { @apply mt-auto pt-1.5 text-[0.82rem] text-oc-teal; }
+  .eco-chips { @apply flex flex-wrap gap-1.5; }
+  .eco-chip {
+    @apply text-[0.68rem] rounded-full px-2 py-0.5 border border-solid border-oc-line
+      text-oc-dim bg-oc-teal/5;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .eco-inner { transition: none; }
+  }
+
+  /* ---------- footer socials ---------- */
+  .foot-social {
+    @apply flex gap-x-5 gap-y-2 justify-center flex-wrap mb-4;
+  }
+  .foot-social a {
+    @apply inline-flex items-center gap-1.5 text-oc-dim no-underline
+      text-[0.86rem] transition-colors duration-200;
+  }
+  .foot-social a:hover { @apply text-oc-teal; }
+}

@@ -1,8 +1,11 @@
 # Amortyx Integration Design — Router Decisions as IR
 
-Status: design (task #40, PLANNING.md §60–§62). Nothing here is
-implemented yet; every code anchor cites the tree as it exists today
-(2026-09-28). Amortyx lives at `/nas/Temp/repos/Amortyx`.
+Status: design + first V1 integration shipped (2026-10-03, §12). The
+design sections were written at task #40 against PLANNING.md §60–§62;
+every code anchor cites the tree as it existed on 2026-09-28 (the
+Amortyx-side routing-plane anchors were re-verified at Amortyx HEAD
+`520bd60a` — see the correction in §2). Amortyx lives at
+`/nas/Temp/repos/Amortyx`.
 
 ## 1. The boundary (non-negotiable)
 
@@ -44,6 +47,19 @@ and silent: a wrong complexity guess looks identical to a right one.
 Exactly the gap OpenCodifier's IR exists to close: same decisions, typed,
 with calibrated confidence, an execution trace, and an explicit
 abstention outcome.
+
+> **Correction (HEAD `520bd60a`, verified 2026-10-03).** The anchors in
+> the table above are stale: `assess_complexity` and `select_provider`
+> are **test-only** at HEAD. The live routing chain is
+> `server.rs` → `chat_completions_with_headers` → `chat_completions_inner`
+> → `chat_completions_route` (`amortyx-router/src/handlers/main.rs`),
+> with the capability plane at `TaskProfile::classify` →
+> `registry.select_for_task` → `policy_engine.decide` and the adapter
+> bound inside `chat_completions_route`. `doc/INTEGRATION_AMORTYX.md`
+> lines citing the two functions as the live path describe tests, not
+> production. The replacement target is the *live chain* above; the
+> trail attribution (`Selection` in `handlers/routing_trail/mod.rs`)
+> and holdout rows are unchanged.
 
 ## 3. The decisions as IR (§63 registry shape)
 
@@ -236,3 +252,155 @@ shadow ledger ─► privacy filter ─► dedup ─► label extraction
 | Heuristic-vs-OC disagreement noise | shadow lane measures would-have deltas before any promotion (§7); no behavior change until evidence |
 | Long hostile request bodies | §45 focus extraction + hostile-input rule; §16 A/B: answer-identical on 120/120 padded items |
 | Drift between the trees' expectations | the §3 registry entries are versioned artifacts; cache keys fold their versions, so a stale consumer gets invalidated decisions, not silently stale ones |
+
+## 12. Shipped V1 (2026-10-03) — provider registration over the chat surface
+
+The first integration running on this host is the **zero-Amortyx-code
+path**: OpenCodifier registers in Amortyx's provider config, and the
+semantic decision capability arrives as just another
+OpenAI-compatible provider.
+
+- **Runtime**: `opencodifier serve --focus-budget 512` as a systemd
+  `--user` unit (`opencodifier.service`), loopback `127.0.0.1:8177`,
+  engine identity `relational-v1|builtin-lexical-v2|focused-v1@512`.
+- **Surface**: `POST /v1/chat/completions`
+  ([INTEGRATIONS.md §2.5](INTEGRATIONS.md)) — the OpenAI-shaped
+  decision projection. Amortyx's router speaks
+  `POST {base_url}/chat/completions` to every `openai_compatible`
+  provider, so the config-only registration needs no router changes:
+
+  ```yaml
+  # <amortyx config>.yaml → providers:
+  - name: opencodifier
+    provider_type: openai_compatible
+    api_key_env: AMORTYX_OPENCODIFIER_API_KEY   # any non-empty value; OC does not check it
+    base_url: "http://127.0.0.1:8177/v1"
+    models:
+      - name: relational-v1|builtin-lexical-v2|focused-v1@512   # a served id, echoed verbatim; not an LLM
+  ```
+
+  The `models[].name` must be a **served model id** (the engine
+  identity string, as listed by `GET :8177/v1/models`). A placeholder
+  name registers fine but every request 404s
+  (`RouterError::NotFound("model not configured: …")`) — the name is
+  matched exactly by `adapters_for_model`, not prefix-matched.
+
+- **Contract on the wire**: strict `json_schema` in, structured-output
+  JSON in `choices[0].message.content` out, outcome + calibrated
+  confidence in the `opencodifier` extension object, abstention as
+  `200` with `outcome: "abstain"`. A request without a strict schema is
+  refused `schema.unsupported_generation_field` — the runtime decides,
+  it does not generate prose, and a chat-shaped refusal is still a
+  typed error Amortyx can route on. The envelope carries an honest
+  zeroed `usage` object (`prompt_tokens`/`completion_tokens`/
+  `total_tokens` = 0): the decision ran on the deterministic engine, no
+  model tokens were consumed, and OpenAI-shaped clients (including
+  Amortyx's response decoder) require the field.
+- **Router version requirement (learned in E2E)**: released router
+  builds drop the client's `response_format` at three ingress layers
+  (`ChatCompletionsRequest` deserialization, `into_normalized`
+  metadata hoisting, `parse_inbound`), so the strict schema never
+  reaches OpenCodifier and every request is refused
+  `schema.unsupported_generation_field` (surfaced by the router as a
+  502 relay). The request-side passthrough that fixes this is Amortyx
+  commit `38daffa9` (branch `feat/forward-client-response-format`,
+  based on the deployed exact-cache line): `response_format` rides the
+  metadata passthrough into `request_overrides` and is re-flattened
+  onto the provider wire; packed/batch requests are excluded so their
+  own synthesized `response_format` demux contract is untouched.
+  Routers without this commit cannot front OpenCodifier's chat
+  surface.
+- **Boundary preserved**: this registration does NOT make Amortyx route
+  user traffic to OpenCodifier as if it were an LLM. The provider is
+  for decision-shaped requests (structured output, candidate lists in
+  the schema); the economic routing plane stays Amortyx's (§1), and the
+  routing-plane side-car of §6 remains the phase-2 path — native
+  `/v1/decide`, one batched call per request's five decisions, wired at
+  `chat_completions_route` (pre-`main.rs:1963`), with `abstain` ⇒
+  byte-identical heuristic fallback (§4).
+- **E2E validation**: complete (2026-10-04) — recorded in §13 below.
+
+## 13. E2E validation record (2026-10-04) — V1 chat surface through the deployed router
+
+Dual-arm against the live host: `POST :8177/v1/chat/completions`
+(direct) vs the same body through the Amortyx router
+`POST :8787/v1/chat/completions` (bearer auth), deterministic engine
+served by `opencodifier.service`.
+
+**Arms and results.**
+
+- *Parity (fresh unique bodies, 5/5)*: content identical both arms
+  (`{"policy":"fifo"}` for the eviction-policy probe; `{"backend":…}`
+  for the storage probe). Latency: direct p50 ≈ 9 ms, through-router
+  p50 ≈ 68 ms (min 26 / max 98) — the overhead is the router's
+  hook chain (dedup, exact-cache keying, breaker consult) plus one
+  HTTP hop; both arms deterministic.
+- *Burst*: 12 concurrent identical requests through the router →
+  12/12 HTTP 200, one distinct content (request coalescing +
+  exact-match cache behave as designed under concurrency).
+- *Abstention pass-through*: the no-metadata color probe returns
+  `200` through the router with the honest uniform-distribution
+  content and `outcome: "abstain"` semantics preserved on the direct
+  arm; through-router responses strip the `opencodifier` extension
+  object (finding F-1).
+- *Circuit breaker, full lifecycle (unique bodies so the exact-match
+  cache never masks it)*: with `failure_threshold: 5`,
+  `recovery_timeout_ms: 30000` (default), `success_threshold: 3`:
+  OC stopped → 5 real attempts fail (`502`, connection refused,
+  ~30–60 ms each) → circuit opens → subsequent requests fast-fail
+  `502 "opencodifier: circuit open"` → OC restarted (breaker does NOT
+  reset on provider restart) → after the recovery timeout the next
+  request is admitted half-open → 3 consecutive successes close the
+  circuit → normal serving. Journal-correlated
+  (`circuit_open`, `transitioned to half-open`, `closed (half-open
+  success)`).
+- *Exact-match cache vs outage*: identical bodies are served `200`
+  from the router's cache (`x-amortyx-provider: cache`) while
+  OpenCodifier is down. Correct cache semantics, operationally
+  surprising during outage drills — breaker tests must use unique
+  bodies (finding F-3).
+
+**Findings (status as of 2026-10-04).**
+
+- **F-1 — response-side extension stripped. — RESOLVED (same day).**
+  Observed: the router's OpenAI adapter decoded the provider envelope
+  into `NormalizedResponse` and re-serialized, dropping the
+  `opencodifier` extension (`outcome`, `calibrated_confidence`);
+  direct responses carried it. Fix: Amortyx `d182a126` —
+  `NormalizedResponse` gains an extension bag (payload, never routing
+  state: no effect on request identity, dedup, or cache identity; a
+  colliding name is dropped), the `openai_compatible` adapter
+  captures non-standard envelope fields through a flatten catch-all
+  filtered against the OpenAI-standard set, and the live + cached
+  chat projections re-emit the bag at the envelope top level.
+  Deployed and re-verified on this host: through-router responses now
+  carry `opencodifier: {outcome, calibrated_confidence}`, including
+  the abstention envelope. Branch
+  `feat/forward-client-response-format`: `38daffa9` request side,
+  `d182a126` response side.
+- **F-2 — intermittent silent empty-404 windows (environmental,
+  unresolved).** During high-frequency service restart churn, some
+  loopback requests to *both* `:8177` and `:8787` received empty
+  `404`s that are absent from the router's journald while adjacent
+  curl requests in the same minute are logged — i.e. proven **not**
+  the router and not attributable to either service on current
+  evidence (no nft/iptables redirects; single listener per port;
+  self-healed; reproduced only while stop/start churn was in
+  flight). Monitoring protocol if it recurs: capture both services'
+  journals for the failing second, `ss -i` socket state, and one
+  request from a second client host simultaneously.
+- **F-3 — outage-drill cache masking.** Identical-body requests
+  short-circuit at the exact-match cache and return `200` while the
+  provider is down; breaker/failover drills must vary bodies
+  per-request. Recorded here as an operational property, not a
+  defect.
+- **F-4 — doc drift fixed in this change (OpenCodifier-side,
+  closed).** §12's example registered `opencodifier-decision`, which
+  no served engine id matches; corrected to the real id and the
+  exact-match behavior documented.
+
+Fix-forward note: both code gaps on the integration path are closed
+and deployed — request-side `response_format` ingress (`38daffa9`)
+and response-side extension passthrough (`d182a126`). F-2
+(environmental) is the only open item, and it is not attributable to
+either service.

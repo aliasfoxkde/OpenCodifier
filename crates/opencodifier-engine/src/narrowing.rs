@@ -15,6 +15,9 @@
 //! knob and is rejected by the engine when safe mode is on (PLANNING.md
 //! §45: never eliminate based solely on weak semantic evidence).
 
+use std::collections::HashSet;
+use std::sync::Arc;
+
 use opencodifier_core::{Candidate, CandidateId, ChoiceQuestion, QuestionId};
 
 use crate::lexical::Bm25Index;
@@ -42,12 +45,19 @@ impl NarrowingOutcome {
         exclusions: &[CandidateId],
         pins: &[CandidateId],
     ) -> Self {
-        let mut removed: Vec<CandidateId> = Vec::new();
+        // Set views over the selector output: `apply` probes pins and
+        // removed once per exclusion and removed once per declared
+        // candidate, which is quadratic string-compare work on wide
+        // questions (B2). Membership semantics are unchanged.
+        let pinned: HashSet<&CandidateId> = pins.iter().collect();
+        let mut removed_vec: Vec<CandidateId> = Vec::new();
+        let mut removed: HashSet<&CandidateId> = HashSet::new();
         for candidate in exclusions {
-            if pins.contains(candidate) || removed.contains(candidate) {
+            if pinned.contains(candidate) || removed.contains(candidate) {
                 continue;
             }
-            removed.push(candidate.clone());
+            removed.insert(candidate);
+            removed_vec.push(candidate.clone());
         }
         let surviving: Vec<Candidate> = question
             .candidates()
@@ -59,7 +69,7 @@ impl NarrowingOutcome {
             question_id: question.id().clone(),
             before: question.candidates().len(),
             after: surviving.len(),
-            removed,
+            removed: removed_vec,
             surviving,
         }
     }
@@ -125,6 +135,12 @@ pub struct LexicalScores {
     question_id: QuestionId,
     scores: Vec<(CandidateId, f64)>,
     pruned: Vec<CandidateId>,
+    /// The index this run built over the surviving candidates, in the
+    /// order given. Kept for the build-once handoff (D28/#80): the
+    /// deciding classifier scores the *same* documents and reuses this
+    /// index instead of rebuilding it. `None` only in hand-constructed
+    /// test values.
+    index: Option<Arc<Bm25Index>>,
 }
 
 impl LexicalScores {
@@ -136,7 +152,7 @@ impl LexicalScores {
     pub fn score(question: &ChoiceQuestion, candidates: &[Candidate], query: &str) -> Self {
         let documents: Vec<&str> =
             candidates.iter().map(opencodifier_core::Candidate::description).collect();
-        let index = Bm25Index::new(documents);
+        let index = Arc::new(Bm25Index::new(documents));
         let raw = index.score_all(query);
         let mut scores: Vec<(CandidateId, f64)> = candidates
             .iter()
@@ -145,7 +161,14 @@ impl LexicalScores {
             .map(|(candidate, score)| (candidate.id().clone(), score))
             .collect();
         scores.sort_by(|left, right| right.1.total_cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
-        Self { question_id: question.id().clone(), scores, pruned: Vec::new() }
+        Self { question_id: question.id().clone(), scores, pruned: Vec::new(), index: Some(index) }
+    }
+
+    /// The index this run built over the surviving candidates, in input
+    /// order — the build-once handoff for the deciding classifier (#80).
+    #[must_use]
+    pub fn index(&self) -> Option<&Bm25Index> {
+        self.index.as_deref()
     }
 
     /// The question these scores belong to.
@@ -253,7 +276,7 @@ mod tests {
         let outcome = NarrowingOutcome::apply(&question(), &[], &[]);
         assert_eq!(outcome.before(), outcome.after());
         assert_eq!(outcome.reduction_ratio(), 1.0);
-        assert!(outcome.removed().is_empty());
+        assert_eq!(outcome.removed(), []);
         assert_eq!(outcome.narrowed_question(&question()), Some(question()));
     }
 
@@ -294,10 +317,11 @@ mod tests {
             question_id: QuestionId::new("model").unwrap(),
             scores: vec![(id("a"), 1.0), (id("b"), 0.5), (id("c"), 0.5)],
             pruned: Vec::new(),
+            index: None,
         };
         let kept = tied.clone().prune(2);
         assert_eq!(kept.scores().len(), 3, "candidates tied at the cut must survive");
-        assert!(kept.pruned().is_empty());
+        assert_eq!(kept.pruned(), []);
 
         // The same tie below the cut is eliminated with the rest.
         let cut = tied.prune(1);
@@ -310,7 +334,7 @@ mod tests {
         let scores = LexicalScores::score(&question(), question().candidates(), "coding");
         assert_eq!(scores.clone().prune(10).scores().len(), 3);
         assert_eq!(scores.clone().prune(0).scores().len(), 3, "keep=0 means 'no pruning'");
-        assert!(scores.clone().prune(0).pruned().is_empty());
+        assert_eq!(scores.clone().prune(0).pruned(), []);
     }
 
     #[test]

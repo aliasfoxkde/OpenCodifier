@@ -116,6 +116,60 @@ channel, and the raw evidence records the exact rendered request.
    the fork's tree mode (same config as the D16 run: T 1.400 shipped
    calibration). Direct competitor row: jev.page claims **80.5 % / 651 ms**
    for an llm-qwen3.5-4b decision server on the same 231 items.
+   **Done (2026-10-02, `runs/jevbench/fork_4b-v1/`)**: 0.6667 (154/231),
+   family-macro 0.6541, replay-deterministic 231/231, paraphrase
+   agreement 0.861 (36 pairs), label-only mapping (the tree ships the
+   winner's mass, D15) so no ECE/Brier; p50 15.5 s under a co-tenant
+   storm (latency is context, not a speed row). The 13.8-point gap to
+   jev.page's row is the price of a base model with no decision tune on
+   a readout the model was never trained for — the bridge arm already
+   proved the harness transfers at +0.9 pp.
+4. **VTX-JEV-3 (VTXAI) — the static-embedding survey arm.** A
+   Model2Vec-class 255,753×256 table (20.5 MB 2-bit LF2) with a
+   position-gated attention pooler, distilled on
+   `SargeDev/jev-distill-corpus-v3`, through the vendor `JevClient`
+   (`run_jevbench.py --arm vtx`): the jev_native rendering (noul as
+   no/yes, score levels as options) with the model's own cosine softmax,
+   so Brier/ECE stay comparable. Adds a data point the field lacked: what
+   a 20 MB static-embedding decision engine actually scores on this suite.
+5. **Zero-shot NLI cross-encoder survey arm (PLAN 24j).**
+   `MoritzLaurer/deberta-v3-base-zeroshot-v2.0`, its own published
+   `onnx/model.onnx` (705 MB fp32, no conversion), through in-process
+   ONNX Runtime (`run_jevbench.py --arm nli`, `--nli-dir`): the vtx
+   rendering (every kind as option descriptions), premise =
+   state + instructions, hypothesis = `"<description>."`, entailment
+   index read from `config.json` `id2label`, entailment masses
+   renormalized over the option set — the same renormalization the
+   Rust serving contract (`opencodifier-model::nli`) ships. Known
+   honest divergence, recorded in each run manifest: the serving
+   boolean path uses one-hypothesis complement (IR booleans carry only
+   text), while this adapter verbalizes per-option from JevBench
+   criteria — what the zeroshot training objective does. Adds the data
+   point the field lacked: what a generic entailment cross-encoder —
+   no Jev training at all — scores on the suite.
+
+6. **Third-party 2B GGUF decision models (task #125, 2026-10-08).**
+   Two independently trained 2B-class decision models through one
+   shared letter-code readout (`run_jevbench.py --arm gguf
+   --gguf-family {imajev,decider}`), each under its authors' own
+   protocol: **imajev-2b** (mindchain Q4_K_M of `mohit67890/imajev-2b`)
+   — the standard prompt layout from the authors'
+   `vision_decision/scoring.py` (header + JSON state + question +
+   `code: description` lines, the fixed unknown candidate last), the
+   base Qwen3.5-2B chat template with thinking off, the 255
+   single-token option codes derived with the authors' own algorithm
+   and binding-verified against the shipped `decision_readout.json`
+   (codes AND token ids) before any scoring, divided by the shipped
+   calibration temperature 1.646; unknown-argmax is scored incorrect
+   (the authors' own JevBench rule) with surviving option masses
+   renormalized for Brier/ECE. **decider-2b-v11** (Mapika Q4_K_M) —
+   the authors' own vendored `decider.prompt.build()` plain
+   state-first layout with `decider.temperature` (noul 1.624 / choice
+   1.164); score items render as one choice row over levels
+   (jev_native/vtx convention — a recorded divergence from the
+   authors' isolated-level protocol). Both: serial decode (the
+   decider card measures batching shifting Q4 probs by up to 0.16),
+   letter logits at the answer slot.
 
 Anchor rows published for the public split (sources: jev-style repo README;
 JevBench RESULTS; jev.page):
@@ -126,6 +180,7 @@ JevBench RESULTS; jev.page):
 | llm-qwen3.5-4b (jev.page) | 80.5 % / 651 ms p50 | self-reported |
 | Jev-Style-2B v3 | 73.6 % | self-run, GGUF F16 |
 | decider-2b | 71.0 % | board |
+| imajev-2b | 78.8 % | self-reported, HF card (4 rotations + calibration; raw single-pass 77.9 %) |
 | **Jev-Style-0.8B v3** | **64.1 % (148/231)** | **self-run, official harness — our bridge** |
 | open-jev-zefan-2b | 64.5 % | board |
 | Laya | 58.4 % | official |
@@ -171,8 +226,104 @@ milliseconds. Acceptance criteria:
 
 | arm | accuracy | macro | ECE | Brier | p50 / p95 | determinism | probs |
 |---|---:|---:|---:|---:|---|---|---|
-| engine (relational-v1) | 0.3766 | 0.4011 | 0.402 | 0.890 | 2.0 ms | 231/231 | native |
+| engine (relational-v1\|builtin-lexical-v2, 2026-10-06 D35 rerun) | 0.3766 | 0.4011 | 0.393 | 0.875 | 0.9 ms / 2.0 ms | 231/231 | native |
 | **jev_native bridge (0.8B-v3 Q4_K_M)** | **0.6494** | 0.6378 | **0.080** | 0.425 | 6.72 s / 103.8 s | 231/231 (labels + probs) | native |
+| vtx (VTX-JEV-3 LF2, vendor client) | 0.4113 | 0.4318 | 0.126 | 0.684 | 7.9 ms | 231/231 | native |
+| nli-zeroshot (deberta-v3-base-zeroshot-v2.0, entailment renorm, 2026-10-08) | 0.5325 | 0.4904 | 0.232 | 0.648 | 0.57 s / 6.9 s | 231/231 (labels + probs) | native |
+| imajev-2b (mindchain Q4_K_M, authors' prompt + shipped T=1.646, unknown→abstain scored incorrect, 2026-10-08) | 0.7359 | 0.7449 | 0.032 | 0.315 | 3.83 s / 68.7 s | 231/231 (labels) | native + unknown (226 valid / 5 abst) |
+| decider-2b-v11 (Mapika Q4_K_M, authors' `prompt.build` + temperature module, 2026-10-08) | 0.7576 | 0.7632 | 0.058 | 0.332 | 2.54 s / 27.9 s | 231/231 (labels + probs) | native |
+| engine + 4B rung, fusion-v2 gate (2026-10-05) | 0.5584 | 0.5622 | 0.335 | 0.734 | 1.2 ms / 0.73 s | 231/231 | native |
+| engine + 4B rung, proofs-only posture (2026-10-05) | **0.6883** | 0.6622 | 0.171 | 0.431 | 0.58 s / 14.0 s | 231/231 | native |
+| engine + 4B rung, proofs-only posture (2026-10-06 D35 rerun) | 0.6840 | 0.6593 | 0.170 | 0.436 | 0.82 s / 18.7 s | 231/231 | native |
+
+**The third-party 2B GGUF rows (task #125, 2026-10-08).** Two
+independently trained 2B decision models, each under its authors' own
+protocol (arm 6 above), on the same harness and split. decider-2b-v11
+Q4_K_M scores **0.7576** (ECE 0.058) — +4.8 pp above its 71.0 % board
+anchor; imajev-2b Q4_K_M scores **0.7359** (ECE 0.032; 5
+unknown-argmax abstentions scored incorrect per the authors' own rule)
+— 4–5 pp below its card's self-record, which pools 4 rotations +
+calibration (the card's raw single-pass: 0.779). The bridge measured
++0.9 pp vs self-report on this harness, so neither delta implicates
+scoring drift; both are protocol-shaped. Per-split: decider easy
+1.000 / original 0.875 / hard 0.577; imajev easy 0.958 / original
+0.903 / hard 0.532 — the hard split is the 2B-class wall on both
+(the 4B fork takes the suite at 0.766). Both arms replay 231/231
+label-identical; p50 2.5–3.8 s CPU serial under a co-tenant load
+window (load 20–54 recorded). Ladder read: a 2B letter-readout rung
+would slot between the 0.8B bridge (0.6494) and the 4B fork (0.7662)
+with no dominance case over the fork (2.28 s, higher accuracy) — the
+rows are independent replication and calibration receipts, not
+serving candidates. Raw evidence: `runs/jevbench/{imajev,decider}-2b-gguf/`
+outside both repos; D14 hashes in `results/models.manifest.json`.
+
+The engine row was re-measured on the shipped build
+(`runs/jevbench/engine-only-fedora-v1/`, archived on the compute host):
+0.3766 reproduced byte-identically (187 ok / 44 abstains), and the row's
+missing Speed cell is filled — p50 0.7 ms, p95 1.6 ms, the fastest arm
+on the suite by two orders. The D35 confidence bound re-measures it
+again with predictions byte-identical (`engine-only-fedora-v2-d35/`:
+same 0.3766, same 187/44, full replay) while the confidence columns
+move as designed: the 8 rows that reported p = 1.0 — BM25 softmax
+saturation, the maximum-confidence-wrong mechanism D35 removes — now
+report p ≤ 0.99, and the calibration cells improve for free
+(ECE 0.402 → 0.393, Brier 0.890 → 0.875) without any calibration being
+fit. The §45 focus-extraction A/B also reproduces answer-identical on
+the D35 build (acc 0.683 / ECE 0.095 with and without
+`--focus-budget 512` on the padded suite).
+
+The two full-system rows (task #105, contract and decomposition in
+`results/jevbench-fullsystem-fedora.md`): same 4B rung, same weights —
+the only difference is the gate posture, worth +13.0 pp. The
+in-domain-tuned fusion gate keeps 68.8 % of items at 0.434 accuracy
+while escalating 0.833 to the rung (F24's warning, measured OOD); the
+structural posture ties the post-hoc cascade bound a priori and pays
+for 12 honest abstentions in the accuracy column.
+
+**Proofs-posture D35 delta (2026-10-06, task #115).** Re-running the
+proofs posture on the D35 build
+(`runs/jevbench/proofs-only-fedora-v2-d35/`) moves it −1 item,
+0.6883 → 0.6840. The mechanism is exactly the saturation repair: D35
+caps the BM25 softmax at p ≤ 0.99, so the 8 rows that previously
+reported p = 1.0 and were engine-accepted under `min_confidence: 1.0`
+now escalate to the rung. The per-item diff over the whole suite finds
+exactly one flip: 4 of the 8 saturated items were correct at p = 1.0,
+the rung confirms 3 of them (probability-03, opus-c long_policy-04/11)
+and loses 1 (hard-opus-a-long_policy-19, engine-right → rung-wrong at
+14.2 s); the 4 previously-wrong saturated items stay wrong — the rung
+confirms them wrong too, consistent with the gate-refit finding that
+long_policy is rung-hostile. The "escalation converts engine misfires"
+hypothesis is refuted on this suite: the 2B rung is not better than the
+lexical engine on the items the engine could not verify. What D35 buys
+here is calibrated honesty — the posture no longer sells maximum
+confidence on items it cannot prove — at the cost of one formerly-lucky
+keep, plus latency from 11 added escalations (p50 0.58 → 0.82 s, p95
+14.0 → 18.7 s).
+
+**Gate-refit negative result (2026-10-06, task #114).** The obvious
+repair — refit the fusion thresholds on the OOD distribution — is
+measured and closed: the offline winner-prob sweep
+(`results/jevbench-fusion-v3-gate-refit.md`) is monotone to the grid
+edge, so the OOD-optimal gate IS the proofs posture. Split-half
+discipline agrees (fit 0.6897 / held-out 0.6870 at the boundary). The
+per-kind view finds no pocket either: at every decision kind and every
+confidence band the rung beats the engine's accepted items — the
+lexical engine's winner-probability is not an OOD-informative gate
+feature (on choice it is anti-correlated: the p≈1.0 band converts at
+0.235 while p∈[0.5,0.6) converts at 0.769). What remains open is a
+better gate *feature* (rule/extractor provenance rather than softmax
+confidence), not a better threshold.
+
+The vtx row (added 2026-09-29): VTX-JEV-3 through its vendor `JevClient`
+with the jev_native rendering — a 20.5 MB 2-bit static table scoring
+3.5 pp above the engine and ~23 pp below the 0.8B bridge, fully
+deterministic. Its sub-millisecond vendor latency claim reproduces
+(0.79 ms vendor-side p50 per suite decision); its accuracy sits at the
+engine's level, not the Jev-class field's. Family profile: strongest on
+fact 0.750, policy 0.750, ambiguous 0.571, routing_hard 0.600,
+temporal_numeric 0.467; weakest on long_policy 0.105, multi_hop 0.167,
+routing 0.250, ordinal 0.333 — static similarity guesses where the
+engine abstains and cannot compose. Archived `runs/jevbench/vtx-v1/`.
 
 Bridge vs acceptance: (1) reproduction — 150/231 = 64.9 % vs the
 published 64.1 % (148/231), +0.9 pp, PASS; (2) schema discipline —

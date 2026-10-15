@@ -59,6 +59,15 @@ pub const CODE_INVALID_POLICY: &str = "schema.invalid_value";
 /// shape (`version` plus a `nodes` array of node specs).
 pub const CODE_INVALID_GRAPH_JSON: &str = "cli.invalid_graph_json";
 
+/// Stable code reported when a `--ladder` profile document is unreadable,
+/// not the ladder wire shape, or rejected by the engine's validation.
+pub const CODE_INVALID_LADDER: &str = "cli.invalid_ladder";
+
+/// Stable code reported when the `--llama` decision rung cannot attach:
+/// the binary was built without the `llamacpp` feature, or the flag trio
+/// arrived incoherent past argument parsing.
+pub const CODE_MODEL_RUNG_UNAVAILABLE: &str = "cli.model_rung_unavailable";
+
 /// Stable code reported when `--bind` is not a valid socket address.
 pub const CODE_INVALID_BIND: &str = "cli.invalid_bind";
 
@@ -87,6 +96,19 @@ pub const CODE_RECIPE_EXISTS: &str = "cli.recipe_exists";
 /// Stable code reported when the recipe installation directory cannot be
 /// created or written.
 pub const CODE_UNWRITABLE_DESTINATION: &str = "cli.unwritable_destination";
+
+/// Stable code reported when `ladder fit-boolean` is given an empty id or
+/// `"none"` — the id decorates every cache key (D25), so an anonymous
+/// profile is refused before any fitting happens.
+pub const CODE_LADDER_ID_REFUSED: &str = "cli.ladder_id_refused";
+
+/// Stable code reported when `ladder fit-boolean` evidence file carries no
+/// rows: a fit over nothing is not a fit.
+pub const CODE_LADDER_EMPTY_EVIDENCE: &str = "cli.ladder_empty_evidence";
+
+/// Stable code reported when a subcommand cannot write a file the caller
+/// named with `--out`.
+pub const CODE_UNWRITABLE_OUTPUT: &str = "cli.unwritable_output";
 
 /// The MCP serving session itself failed (handshake refused, session task
 /// ended abnormally). Internal error: exit 3.

@@ -29,7 +29,12 @@ pub struct DecisionRequest {
 struct RawDecisionRequest {
     state: State,
     questions: Vec<DecisionQuestion>,
+    /// Optional on the wire: omitted means the engine's default posture.
+    /// A hand-written quickstart should not have to invent policy fields
+    /// it has not formed an opinion about.
+    #[serde(default)]
     policy: DecisionPolicy,
+    #[serde(default)]
     metadata: RequestMetadata,
 }
 
@@ -233,5 +238,22 @@ mod tests {
         let json = serde_json::to_string(&request).expect("serialize");
         let back: DecisionRequest = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(back, request);
+    }
+
+    #[test]
+    fn policy_and_metadata_are_optional_on_the_wire() {
+        // The minimal hand-written payload — the shape a quickstart
+        // documents — decodes with the engine's default policy and empty
+        // metadata; a caller never invents housekeeping fields to ask one
+        // question.
+        let minimal = serde_json::from_str::<DecisionRequest>(
+            r#"{
+                "state": {"text": "deploy is erroring, decide"},
+                "questions": [{"type": "boolean", "id": "rollback", "text": "Roll back now?"}]
+            }"#,
+        )
+        .expect("minimal payload decodes");
+        assert_eq!(minimal.policy(), &DecisionPolicy::default());
+        assert_eq!(minimal.metadata(), &RequestMetadata::default());
     }
 }

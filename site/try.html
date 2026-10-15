@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenCodifier — this page moved</title>
+<meta name="description" content="The try page has split: console links go to decide.html, everything else to the playground.">
+<meta http-equiv="refresh" content="0; url=playground.html">
+<link rel="canonical" href="https://opencodifier.pages.dev/playground.html">
+<script>
+/* keep deep links alive: ?run=… belongs to the Decide console now,
+   every other deep link (?maze=…, ?game=…) stays with the playground */
+var toConsole = /(^|[?&])run=/.test(location.search);
+location.replace((toConsole ? "decide.html" : "playground.html") + location.search + location.hash);
+</script>
+</head>
+<body>
+<p>This page moved to the <a href="playground.html">playground</a>
+or the <a href="decide.html">Decide console</a>.</p>
+</body>
+</html>

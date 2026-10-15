@@ -45,6 +45,7 @@ use crate::clock::{CancellationToken, Clock, Deadline};
 use crate::error::{EngineError, EngineResult};
 use crate::executor::{Executor, GraphOutcome, RunReport};
 use crate::graph::DecisionGraph;
+use crate::ladder::Rung;
 use crate::rules::RuleEngine;
 
 /// Everything the engine needs besides the request.
@@ -89,6 +90,12 @@ pub struct EngineConfig {
     /// `None` (the default) keeps the engine zero-ML; graphs that need
     /// the backend are refused at assembly (D21), never degraded.
     pub embedding: Option<Arc<dyn opencodifier_runtime::EmbeddingBackend>>,
+    /// Optional per-node / per-kind confidence-gate overrides — the
+    /// escalation ladder (PLANNING.md §24). Empty (the default) gates
+    /// every question with the request policy; a configured ladder
+    /// decorates the model id as `|ladder-v1@<id>` so cached decisions
+    /// re-key.
+    pub ladder: crate::ladder::LadderPolicy,
 }
 
 impl EngineConfig {
@@ -108,6 +115,7 @@ impl EngineConfig {
             max_execution_time: opencodifier_core::Limits::default().max_execution_time,
             focus: None,
             embedding: None,
+            ladder: crate::ladder::LadderPolicy::default(),
         }
     }
 
@@ -202,6 +210,16 @@ impl EngineConfig {
         self.embedding = embedding;
         self
     }
+
+    /// Sets the escalation ladder: per-node / per-kind confidence-gate
+    /// overrides consulted at the threshold node (PLANNING.md §24). An
+    /// empty [`LadderPolicy`](crate::ladder::LadderPolicy) — the default
+    /// — is a no-op.
+    #[must_use]
+    pub fn with_ladder(mut self, ladder: crate::ladder::LadderPolicy) -> Self {
+        self.ladder = ladder;
+        self
+    }
 }
 
 /// A reasonable default thread budget.
@@ -221,6 +239,11 @@ pub struct DecisionEngine {
     clock: Arc<dyn Clock>,
     classifier: Arc<dyn Classifier>,
     verifier: Option<Arc<dyn Classifier>>,
+    /// Ordered escalation rungs (D27): consulted at the threshold node,
+    /// in order, only while the previous rung's gate does not accept.
+    /// Empty — the default — means the gate cascade is exactly as it was
+    /// before rungs existed.
+    fallbacks: Vec<Rung>,
     token: Arc<CancellationToken>,
 }
 
@@ -238,6 +261,25 @@ impl DecisionEngine {
         clock: Arc<dyn Clock>,
         classifier: Arc<dyn Classifier>,
         verifier: Option<Arc<dyn Classifier>>,
+    ) -> EngineResult<Self> {
+        Self::new_with_rungs(config, clock, classifier, verifier, Vec::new())
+    }
+
+    /// Builds and validates an engine with an ordered escalation tail
+    /// (D27): when the primary rung's gate does not accept a question,
+    /// the executor walks `fallbacks` in order, firing a rung only while
+    /// the previous one did not accept. A non-empty list decorates the
+    /// model id `|rungs-v1@…` in list order so cached decisions re-key.
+    ///
+    /// # Errors
+    ///
+    /// [`DecisionEngine::new`]'s refusals.
+    pub fn new_with_rungs(
+        config: EngineConfig,
+        clock: Arc<dyn Clock>,
+        classifier: Arc<dyn Classifier>,
+        verifier: Option<Arc<dyn Classifier>>,
+        fallbacks: Vec<Rung>,
     ) -> EngineResult<Self> {
         if config.parallelism == 0 {
             return Err(EngineError::InvalidConfig {
@@ -289,19 +331,48 @@ impl DecisionEngine {
         }
         // The live classifier governs the model component of every cache
         // key (PLANNING.md §64): wrapper classifiers compose their ids
-        // (e.g. `relational-v1|builtin-lexical-v1`), so a swapped or
+        // (e.g. `relational-v1|builtin-lexical-v2`), so a swapped or
         // decorated classifier changes keys without caller bookkeeping.
         // A hand-set `identity.model_id` is never trusted over this.
         // Focused extraction decorates the same way (D6): the budget is
         // part of what a cached decision decided on, so
         // `|focused-v1@<budget>` rides on the model id and any policy
         // change invalidates the affected keys.
-        let model_id = match config.focus {
+        let mut model_id = match config.focus {
             Some(policy) => {
                 format!("{}|focused-v1@{}", classifier.model_id(), policy.budget_tokens)
             }
             None => classifier.model_id().to_owned(),
         };
+        // The ladder rides the same identity rule: a configured ladder is
+        // part of what a cached decision was gated by, so its id decorates
+        // the model id and any ladder change re-keys (an empty ladder is
+        // byte-identical to no ladder). Validation is unconditional so a
+        // misconfigured ladder is refused at assembly, not at first gate.
+        config.ladder.validate().map_err(|reason| EngineError::InvalidConfig { reason })?;
+        if !config.ladder.is_empty() {
+            model_id = format!("{}|ladder-v1@{}", model_id, config.ladder.id);
+        }
+        // Fallback rungs ride the same identity rule (D27): the ordered
+        // list is part of what a cached decision decided with, so each
+        // rung's model id and calibration version decorate the id in
+        // list order — a swap, refit, or reorder re-keys mechanically.
+        // A rung's policy has no version of its own; changing one is an
+        // artifact change under D25's discipline (bump the ladder id).
+        if !fallbacks.is_empty() {
+            let signature = fallbacks
+                .iter()
+                .map(|rung| {
+                    format!(
+                        "{}@{}",
+                        rung.classifier.model_id(),
+                        rung.calibration.as_ref().map_or(0, |calibration| calibration.version())
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("+");
+            model_id = format!("{model_id}|rungs-v1@{signature}");
+        }
         let config = EngineConfig {
             identity: EngineIdentity {
                 model_id,
@@ -319,6 +390,7 @@ impl DecisionEngine {
             clock,
             classifier,
             verifier,
+            fallbacks,
             token: Arc::new(CancellationToken::new()),
         })
     }
@@ -392,6 +464,7 @@ impl DecisionEngine {
             &self.clock,
             &self.classifier,
             self.verifier.as_ref(),
+            &self.fallbacks,
             request,
             key,
             deadline,

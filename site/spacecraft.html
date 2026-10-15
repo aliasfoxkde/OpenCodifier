@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Pre-paint theme resolution — mirrors index.html; owned by site-core.js. -->
+<script>
+(function () {
+  "use strict";
+  var mode = "system";
+  try {
+    var v = localStorage.getItem("oc-theme");
+    if (v === "light" || v === "dark" || v === "system") mode = v;
+  } catch (e) { /* storage unavailable: system default */ }
+  var resolved = mode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : mode;
+  document.documentElement.setAttribute("data-theme", resolved);
+  document.documentElement.setAttribute("data-theme-mode", mode);
+})();
+</script>
+<title>OpenCodifier — Spacecraft Emergency: the computer that refuses to guess</title>
+<meta name="description" content="A stricken ship on the Decisions SDK: rule gates fire first (hull critical, thermal limit, out-of-range abort), six actions are scored on the snapshot, and honest confidence comes from the score gap times sensor agreement. Below 0.30 the flight computer ABSTAINS — the sim freezes and the captain answers from the console. An engine refusal escalates the same way: refusal is a first-class outcome, never an error. Seeded, deterministic, no scripted cutscenes.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:site_name" content="OpenCodifier">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://opencodifier.pages.dev/antcolony.html">
+<meta property="og:title" content="OpenCodifier — Spacecraft Emergency: the computer that refuses to guess">
+<meta property="og:description" content="Spacecraft Emergency on the Decisions SDK — the abstention showcase: rules first, scored candidates, confidence from the score gap times sensor agreement, and a hard abstain that freezes the sim until the captain decides. An engine refusal escalates too. All local, all auditable.">
+<meta property="og:image" content="https://opencodifier.pages.dev/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="tw.css">
+</head>
+<body>
+<a class="skip-link" href="#antcolony">Skip to Ant Colony</a>
+
+<div class="bg-mesh" aria-hidden="true"></div>
+
+<nav class="nav">
+  <a class="brand" href="index.html">
+    <img src="assets/logo.svg" alt="" width="22" height="22">
+    opencodifier
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="benchmarks.html">Benchmarks</a>
+    <a href="playground.html" aria-current="page">Playground</a>
+    <a href="decide.html">Decide</a>
+    <a href="api.html">API</a>
+    <a href="docs.html">Docs</a>
+  </div>
+  <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Theme: system (matches your device) — activate for light">
+    <svg class="tt-auto" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.2 14.5A8.3 8.3 0 0 1 9.5 3.8a8.3 8.3 0 1 0 10.7 10.7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+  <a class="nav-gh" href="https://github.com/aliasfoxkde/OpenCodifier" aria-label="OpenCodifier on GitHub" rel="noopener">
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+  </a>
+  <a class="btn btn-small nav-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+  <a class="btn btn-small" href="api.html">API docs</a>
+  <details class="nav-menu">
+    <summary aria-label="Open menu"><span></span><span></span><span></span></summary>
+    <div class="nav-menu-panel">
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">Benchmarks</a>
+      <a href="playground.html" aria-current="page">Playground</a>
+    <a href="decide.html">Decide</a>
+      <a href="api.html">API</a>
+      <a href="docs.html">Docs</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier">GitHub ↗</a>
+      <div class="nav-menu-foot">
+        <a class="nav-menu-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+        <span class="nav-menu-themeslot" aria-hidden="true"></span>
+      </div>
+    </div>
+  </details>
+</nav>
+
+<header class="hero hero-slim" id="top">
+  <h1><span class="grad">Spacecraft Emergency</span> — the computer that refuses to guess</h1>
+  <p class="hero-sub">
+    A stricken ship, six candidate actions, and a flight computer that knows
+    the difference between a close call and a coin flip. <strong>Rule gates
+    fire first</strong> — hull critical, thermal limit, the crossing gone out
+    of range — and are never asked. Everything else is scored on the snapshot,
+    and confidence is honest arithmetic: the score gap times sensor agreement,
+    where every conflicting gauge quarters it. <strong>Below 0.30 the computer
+    abstains</strong> — the sim freezes, the console shows its reason plus both
+    readings of every disputed gauge, and you decide as the captain. The
+    engine gets the uncertain band; if IT refuses too, that escalates as
+    well. Refusal is a first-class outcome here, never an error.
+  </p>
+  </header>
+
+<main>
+<section id="spacecraft" class="section" data-toc-label="Spacecraft Emergency">
+  <div id="spacecraft-root" aria-label="Spacecraft Emergency game"></div>
+
+  <div class="grid-2 game-about">
+    <div class="card">
+      <h3>What decides what</h3>
+      <ul class="checks">
+        <li><strong>Rules fire before any question.</strong> Hull at 15 or
+          under, a fire with a failing crew, temp at 95, or a crossing that is
+          out of range while Earth is in range — each executes straight off
+          the rule ladder and lands on the <em>rule</em> rung. A test pins
+          each gate with its exact fixture.</li>
+        <li><strong>Confidence is arithmetic, not vibes.</strong> Six actions
+          score on the snapshot; confidence = score gap × sensor agreement,
+          and each conflicting channel quarters the agreement. Below 0.30 the
+          computer abstains and the sim freezes until the captain answers;
+          0.30–0.55 goes to the engine under the ask budget. No token → the
+          argmax decides and the rung says so.</li>
+        <li><strong>An engine refusal escalates; garbage does not.</strong> A
+          true <em>abstain</em> from the engine hands the call to the captain
+          — but a malformed answer is ignored and the argmax holds, same as
+          every other game. Both behaviors are pinned by tests.</li>
+        <li><strong>Determinism survives latency.</strong> Decision latency is
+          stamped on each decision and kept out of the summary, so same-seed
+          replays stay identical; sensor faults stick for ~15 s and self-heal;
+          an empty tank cuts the engines. Twenty tests run in CI.</li>
+      </ul>
+    </div>
+    <div class="card card-honest">
+      <h3>Honest edges</h3>
+      <ul class="crosses">
+        <li>The captain's console can sit empty for a whole calm crossing:
+          difficulty 0 means no random events, and with clean telemetry the
+          score gaps stay wide. Inject a sensor fault to see the abstain
+          ladder actually fire — the showcase is honest about when it does
+          and does not trigger.</li>
+        <li>The sensor strip shows the readings the computer last decided
+          on, not live truth — rendering never touches the RNG stream, or a
+          repaint would desync the deterministic sim.</li>
+        <li>The freeze is total by design: while an abstention pends, physics
+          stops. The captain cannot ignore a fire, and neither can you — the
+          sim will not advance until someone answers.</li>
+        <li>The flight log is session-only — a checkpoint every 60
+          sim-seconds plus the outcome. Close the tab and it is gone; nothing
+          leaves this page.</li>
+      </ul>
+    </div>
+  </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer-grid">
+    <div class="foot-about">
+      <div class="foot-brand">opencodifier</div>
+      <p>A local-first decision runtime: typed decisions with calibrated confidence, a
+        deterministic execution trace instead of chain-of-thought, and refusal as a
+        first-class outcome. Pong, Life, Pac-maze, Apex Line, Sparring Partner, Ask the Engine,
+        Tower Defense, Ant Colony, AI Civilization, the Traffic Simulator, and
+        Spacecraft Emergency run on the same Decisions SDK — the scoreboard
+        lives in this tab and nowhere else.</p>
+      <a class="foot-tag" href="https://github.com/TaskWizer" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><path d="M7.5 12.2l3 3L16.5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Built with TaskWizer AI technologies
+      </a>
+    </div>
+    <nav class="foot-col" aria-label="Site">
+      <div class="foot-head">Site</div>
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">The measured board</a>
+      <a href="playground.html">Playground</a>
+    <a href="decide.html">Decide</a>
+      <a href="api.html">API documentation</a>
+    </nav>
+    <nav class="foot-col" aria-label="Source and data">
+      <div class="foot-head">Source &amp; data</div>
+      <a href="board.csv">board.csv (raw)</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier" rel="noopener">GitHub</a>
+      <a href="https://huggingface.co/TaskWizerAI" rel="noopener">Hugging Face ↗</a>
+    </nav>
+    <nav class="foot-col" aria-label="Ecosystem">
+      <div class="foot-head">Ecosystem</div>
+      <a href="https://vivere-5we.pages.dev/" rel="noopener">VIVERE ↗</a>
+      <a href="https://www.amortyx.com" rel="noopener">Amortyx ↗</a>
+      <a href="https://www.mcpmanage.com" rel="noopener">MCPManage ↗</a>
+      <a href="https://github.com/aliasfoxkde/aegis" rel="noopener">Aegis ↗</a>
+      <a href="https://github.com/aliasfoxkde/GitForge" rel="noopener">GitForge ↗</a>
+    </nav>
+  </div>
+  <p class="foot-links">Apache-2.0 · local-first · no telemetry · no external requests</p>
+</footer>
+
+<script src="site-core.js"></script>
+<script src="toc.js"></script>
+<script src="sdk/decisions-sdk.js"></script>
+<script src="spacecraft-core.js"></script>
+<script src="spacecraft.js"></script>
+</body>
+</html>

@@ -9,17 +9,31 @@ It is not a chatbot, not an LLM wrapper, and not a decision-tree classifier:
 it is the decision *substrate* an AI system calls before invoking a large
 model. Jev/System One compatibility is one adapter mode, not the identity.
 
+**Live site & measured benchmark board:** [opencodifier.pages.dev](https://opencodifier.pages.dev)
+— every number this project claims, one filterable table, no hand-typed figures.
+
 ## Status
 
 **Work in progress — pre-1.0, but real and runnable today.** The
 canonical decision IR, schema adapters (native / OpenAI / Anthropic /
-Jev), deterministic engine (graphs, rules, caches, BM25 narrowing),
-backend traits, and both primary interfaces are implemented and tested:
+Jev), deterministic engine (graphs, rules, caches, BM25 narrowing,
+cross-rung escalation), candidate-conditioned decision-model backends,
+backend traits, and the CLI, HTTP, MCP, and WASM interfaces are
+implemented and tested:
 
 - `opencodifier` CLI — `decide`, `graph validate`, `serve`,
-  `mcp serve`, `models verify` (see `--help` for the exit-code contract).
-- `POST /v1/decide`, `POST /v1/graph/validate`, `GET /v1/healthz` —
-  axum server, loopback-only unless explicitly told otherwise.
+  `mcp serve`, `models verify`, `ladder fit-boolean`,
+  `recipe list`, `recipe install`
+  (see `--help` for the exit-code contract).
+- `POST /v1/decide`, `POST /v1/batch`, `POST /v1/chat/completions`,
+  `POST /v1/graph/validate`, `POST /v1/graph/run`, `POST /v1/validate`,
+  `GET /v1/models`, `GET /v1/capabilities`, `GET /v1/healthz` — axum
+  server, loopback-only unless explicitly told otherwise.
+- Decision-model rungs — candidate-conditioned scoring contracts
+  (Kai-0.6B, julia) with committed fixtures ship unconditionally; the
+  llama.cpp loopback backend (D26) sits behind the `llamacpp` cargo
+  feature, with cross-rung escalation (D27) for the verify/abstain
+  bands.
 - MCP — `opencodifier mcp serve` exposes `codify_decide`,
   `codify_batch`, `codify_graph`, `codify_validate`, `codify_verify`,
   and `codify_explain` as tools over stdio: point any MCP host at the
@@ -73,7 +87,7 @@ against.
 ```bash
 git clone https://github.com/aliasfoxkde/OpenCodifier
 cd OpenCodifier
-just ci        # fmt + clippy (strict) + tests + doc + cargo-deny
+just ci        # fmt + clippy (strict) + tests + doc + cargo-deny + aegis
 just coverage  # line coverage (cargo llvm-cov)
 ```
 

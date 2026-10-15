@@ -416,6 +416,342 @@ fn graph_validate_rejects_a_document_without_the_graph_shape() {
 }
 
 #[test]
+fn a_ladder_profile_overrides_the_gate_end_to_end() {
+    let scratch = Scratch::new("ladder");
+    let payload = scratch.write_json("request.json", &choice_request(permissive_policy()));
+    // The choice rung demands certainty the lexical engine cannot give,
+    // so the request policy's 0.0 floor is overridden into a Verify.
+    let strict = scratch.write_json(
+        "strict-ladder.json",
+        &json!({
+            "id": "strict-test-v1",
+            "per_kind": { "choice": {
+                "min_confidence": 1.0, "verify_below": 0.0,
+                "abstain_below": 0.0, "risk": "low"
+            } }
+        }),
+    );
+
+    let output = decide(&payload)
+        .arg("--ladder")
+        .arg(&strict)
+        // A Verify is non-decisive, which `decide` reports as exit 2
+        // unless the caller opts into treating it as a successful answer.
+        .arg("--abstain-is-success")
+        .output()
+        .expect("run opencodifier");
+    assert_eq!(output.status.code(), Some(0), "stderr: {:?}", output.stderr);
+    let response: Value =
+        serde_json::from_slice(&output.stdout).expect("stdout is one JSON document");
+    assert_eq!(response["outcome"], "verify", "{response}");
+
+    // The empty-rung mirror image: the identical request under a profile
+    // that never overrides anything is accepted, as without --ladder.
+    let permissive = scratch.write_json(
+        "loose-ladder.json",
+        &json!({
+            "id": "loose-test-v1",
+            "per_kind": { "choice": {
+                "min_confidence": 0.0, "verify_below": 0.0,
+                "abstain_below": 0.0, "risk": "low"
+            } }
+        }),
+    );
+    let output =
+        decide(&payload).arg("--ladder").arg(&permissive).output().expect("run opencodifier");
+    assert_eq!(output.status.code(), Some(0), "stderr: {:?}", output.stderr);
+    let response: Value =
+        serde_json::from_slice(&output.stdout).expect("stdout is one JSON document");
+    assert_eq!(response["outcome"], "accept", "{response}");
+}
+
+#[test]
+fn a_ladder_profile_refuses_to_be_empty() {
+    let scratch = Scratch::new("ladder-empty");
+    let payload = scratch.write_json("request.json", &choice_request(permissive_policy()));
+    let empty = scratch.write_json("empty-ladder.json", &json!({ "id": "empty-test-v1" }));
+
+    decide(&payload)
+        .arg("--ladder")
+        .arg(&empty)
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("cli.invalid_ladder"));
+}
+
+#[test]
+fn a_malformed_or_unreadable_ladder_is_an_input_error() {
+    let scratch = Scratch::new("ladder-bad");
+    let payload = scratch.write_json("request.json", &choice_request(permissive_policy()));
+
+    let malformed = scratch.write("malformed-ladder.json", b"{ not json");
+    decide(&payload)
+        .arg("--ladder")
+        .arg(&malformed)
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("cli.invalid_ladder"));
+
+    decide(&payload)
+        .arg("--ladder")
+        .arg(scratch.path().join("absent-ladder.json"))
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("cli.invalid_ladder"));
+}
+
+/// Evidence a single boundary separates perfectly: every low-`p_true`
+/// row is false and every high-`p_true` row is true, with a wide gap
+/// the sweep can drop the threshold into.
+fn separable_evidence() -> String {
+    let mut rows = String::new();
+    for i in 0..6 {
+        let p = 0.05 + f64::from(i) * 0.05;
+        let _ = writeln!(rows, r#"{{"p_true": {p:.2}, "label": false}}"#);
+        let p = 0.65 + f64::from(i) * 0.05;
+        let _ = writeln!(rows, r#"{{"p_true": {p:.2}, "label": true}}"#);
+    }
+    rows
+}
+
+#[test]
+fn ladder_fit_boolean_emits_a_loadable_profile() {
+    let scratch = Scratch::new("ladder-fit");
+    let evidence = scratch.write("evidence.jsonl", separable_evidence().as_bytes());
+    let out = scratch.path().join("fitted-profile.json");
+
+    let output = opencodifier()
+        .args(["ladder", "fit-boolean"])
+        .arg("--evidence")
+        .arg(&evidence)
+        .arg("--id")
+        .arg("fit-test-v1")
+        .arg("--out")
+        .arg(&out)
+        .output()
+        .expect("run opencodifier");
+    assert_eq!(output.status.code(), Some(0), "stderr: {:?}", output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("ok: fitted boolean threshold"), "{stdout}");
+    assert!(stdout.contains("12 rows"), "{stdout}");
+
+    // The document is the real artifact: the fitted threshold sits in
+    // the boolean rung and the id is the one the caller chose.
+    let document: Value = serde_json::from_slice(&fs::read(&out).expect("profile bytes"))
+        .expect("profile is one JSON document");
+    assert_eq!(document["id"], "fit-test-v1", "{document}");
+    let threshold = document["per_kind"]["boolean"]["boolean_threshold"]
+        .as_f64()
+        .expect("fitted threshold is a number");
+    assert!((0.0..1.0).contains(&threshold), "threshold {threshold} outside (0, 1)");
+
+    // The round-trip contract: the engine loads the emitted document
+    // through --ladder. It only overrides Boolean rungs, so a choice
+    // request under it accepts exactly as it would without it.
+    let payload = scratch.write_json("request.json", &choice_request(permissive_policy()));
+    decide(&payload)
+        .arg("--ladder")
+        .arg(&out)
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("\"outcome\": \"accept\""));
+}
+
+#[test]
+fn ladder_fit_boolean_refuses_reserved_ids() {
+    let scratch = Scratch::new("ladder-fit-id");
+    let evidence = scratch.write("evidence.jsonl", separable_evidence().as_bytes());
+
+    for id in ["", "none"] {
+        opencodifier()
+            .args(["ladder", "fit-boolean"])
+            .arg("--evidence")
+            .arg(&evidence)
+            .arg("--id")
+            .arg(id)
+            .arg("--out")
+            .arg(scratch.path().join("profile.json"))
+            .assert()
+            .failure()
+            .code(1)
+            .stderr(predicates::str::contains("cli.ladder_id_refused"));
+    }
+}
+
+#[test]
+fn ladder_fit_boolean_names_the_malformed_row() {
+    let scratch = Scratch::new("ladder-fit-json");
+    let evidence =
+        scratch.write("evidence.jsonl", b"{\"p_true\": 0.9, \"label\": true}\n{ not json\n");
+
+    opencodifier()
+        .args(["ladder", "fit-boolean"])
+        .arg("--evidence")
+        .arg(&evidence)
+        .arg("--id")
+        .arg("fit-test-v1")
+        .arg("--out")
+        .arg(scratch.path().join("profile.json"))
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("schema.invalid_json"))
+        .stderr(predicates::str::contains("line 2"));
+}
+
+#[test]
+fn ladder_fit_boolean_refuses_non_probabilities() {
+    let scratch = Scratch::new("ladder-fit-range");
+    let evidence = scratch.write(
+        "evidence.jsonl",
+        b"{\"p_true\": 0.9, \"label\": true}\n{\"p_true\": 1.5, \"label\": false}\n",
+    );
+
+    opencodifier()
+        .args(["ladder", "fit-boolean"])
+        .arg("--evidence")
+        .arg(&evidence)
+        .arg("--id")
+        .arg("fit-test-v1")
+        .arg("--out")
+        .arg(scratch.path().join("profile.json"))
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("schema.invalid_json"))
+        .stderr(predicates::str::contains("not a probability"));
+}
+
+#[test]
+fn ladder_fit_boolean_refuses_empty_evidence_and_missing_files() {
+    let scratch = Scratch::new("ladder-fit-empty");
+    let blank = scratch.write("blank.jsonl", b"\n\n");
+    let out = scratch.path().join("profile.json");
+
+    // Only blank lines: nothing to fit.
+    opencodifier()
+        .args(["ladder", "fit-boolean"])
+        .arg("--evidence")
+        .arg(&blank)
+        .arg("--id")
+        .arg("fit-test-v1")
+        .arg("--out")
+        .arg(&out)
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("cli.ladder_empty_evidence"));
+
+    // A missing evidence file is an input error, not a crash.
+    opencodifier()
+        .args(["ladder", "fit-boolean"])
+        .arg("--evidence")
+        .arg(scratch.path().join("absent.jsonl"))
+        .arg("--id")
+        .arg("fit-test-v1")
+        .arg("--out")
+        .arg(&out)
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("cli.unreadable_input"));
+}
+
+#[test]
+fn ladder_fit_boolean_refuses_an_unwritable_output() {
+    let scratch = Scratch::new("ladder-fit-out");
+    let evidence = scratch.write("evidence.jsonl", separable_evidence().as_bytes());
+
+    opencodifier()
+        .args(["ladder", "fit-boolean"])
+        .arg("--evidence")
+        .arg(&evidence)
+        .arg("--id")
+        .arg("fit-test-v1")
+        .arg("--out")
+        .arg(scratch.path().join("no").join("such").join("dir").join("profile.json"))
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("cli.unwritable_output"));
+}
+
+#[test]
+fn ladder_fit_boolean_carries_the_base_policy_into_the_rung() {
+    let scratch = Scratch::new("ladder-fit-base");
+    let evidence = scratch.write("evidence.jsonl", separable_evidence().as_bytes());
+    let out = scratch.path().join("fitted-profile.json");
+    let base = scratch.write_json(
+        "base-policy.json",
+        &json!({ "min_confidence": 1.0, "verify_below": 0.5, "abstain_below": 0.25, "risk": "low" }),
+    );
+
+    let output = opencodifier()
+        .args(["ladder", "fit-boolean"])
+        .arg("--evidence")
+        .arg(&evidence)
+        .arg("--id")
+        .arg("fit-base-v1")
+        .arg("--out")
+        .arg(&out)
+        .arg("--base")
+        .arg(&base)
+        .output()
+        .expect("run opencodifier");
+    assert_eq!(output.status.code(), Some(0), "stderr: {:?}", output.stderr);
+
+    // The emitted rung is the caller's policy with the fitted threshold
+    // applied — the base is preserved, not replaced by defaults.
+    let document: Value = serde_json::from_slice(&fs::read(&out).expect("profile bytes"))
+        .expect("profile is one JSON document");
+    let rung = &document["per_kind"]["boolean"];
+    assert_eq!(rung["min_confidence"], 1.0, "{document}");
+    assert_eq!(rung["verify_below"], 0.5, "{document}");
+    assert!(rung["boolean_threshold"].is_number(), "{document}");
+
+    // A malformed base policy fails JSON parsing (`schema.invalid_json`);
+    // a well-formed one that is not a policy fails the decode
+    // (`schema.invalid_value`). Both are input errors naming the file.
+    let malformed = scratch.write("bad-policy.json", b"{ not json");
+    opencodifier()
+        .args(["ladder", "fit-boolean"])
+        .arg("--evidence")
+        .arg(&evidence)
+        .arg("--id")
+        .arg("fit-base-v1")
+        .arg("--out")
+        .arg(&out)
+        .arg("--base")
+        .arg(&malformed)
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("schema.invalid_json"));
+
+    let not_a_policy = scratch.write_json(
+        "wrong-type-policy.json",
+        &json!({ "min_confidence": "high", "verify_below": 0.5, "abstain_below": 0.25, "risk": "low" }),
+    );
+    opencodifier()
+        .args(["ladder", "fit-boolean"])
+        .arg("--evidence")
+        .arg(&evidence)
+        .arg("--id")
+        .arg("fit-base-v1")
+        .arg("--out")
+        .arg(&out)
+        .arg("--base")
+        .arg(&not_a_policy)
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("schema.invalid_value"));
+}
+
+#[test]
 fn models_verify_accepts_matching_bytes_and_rejects_tampered_ones() {
     let scratch = Scratch::new("models");
     let bytes = b"opencodifier decision model artifact bytes";
@@ -576,7 +912,18 @@ fn serve_ends_cleanly_when_the_operator_interrupts_it() {
     let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_opencodifier"))
         .args(["serve", "--bind", &addr.to_string()])
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        // The child's stderr is captured, never discarded: under the
+        // instrumented coverage build this test once failed as
+        // `code() == None` with zero diagnostics (2026-10-11, run
+        // 23d5e45f). A signal-death with no captured output is
+        // undiagnosable from the CI receipt alone.
+        .stderr(Stdio::from(
+            std::fs::File::create(
+                std::env::temp_dir()
+                    .join(format!("oc-serve-interrupt-{}-stderr", std::process::id())),
+            )
+            .expect("create stderr capture"),
+        ))
         .spawn()
         .expect("spawn opencodifier serve");
 
@@ -602,7 +949,15 @@ fn serve_ends_cleanly_when_the_operator_interrupts_it() {
     assert!(interrupted, "could not deliver SIGINT to the serve process");
 
     let status = child.wait().expect("serve exits after the interrupt");
-    assert_eq!(status.code(), Some(0), "SIGINT must shut the server down gracefully");
+    let err_path =
+        std::env::temp_dir().join(format!("oc-serve-interrupt-{}-stderr", std::process::id()));
+    let child_err = std::fs::read_to_string(&err_path).unwrap_or_default();
+    let _ = std::fs::remove_file(&err_path);
+    assert_eq!(
+        status.code(),
+        Some(0),
+        "SIGINT must shut the server down gracefully (exit {status:?}, child stderr: {child_err:?})"
+    );
 }
 
 #[test]
@@ -819,7 +1174,7 @@ fn mcp_serve_answers_a_real_session_over_stdio() {
     let response = &decided["structuredContent"];
     assert_eq!(response["answers"].as_array().expect("answers").len(), 1);
     assert_eq!(response["answers"][0]["type"], "choice");
-    assert!(!response["trace"]["entries"].as_array().expect("trace").is_empty());
+    assert!(response["trace"]["entries"].as_array().is_some_and(|entries| !entries.is_empty()));
 }
 
 #[test]
@@ -936,4 +1291,26 @@ fn recipe_install_rejects_an_unknown_name() {
         .failure()
         .code(1)
         .stderr(predicates::str::contains("cli.unknown_recipe"));
+}
+
+#[test]
+fn ladder_fit_boolean_refuses_non_utf8_evidence() {
+    let scratch = Scratch::new("ladder-fit-utf8");
+    // Raw invalid UTF-8: the boundary the from_utf8 check owns, before
+    // any JSON parsing happens.
+    let evidence = scratch.write("evidence.jsonl", &[0xFF, 0xFE, b'\n']);
+
+    opencodifier()
+        .args(["ladder", "fit-boolean"])
+        .arg("--evidence")
+        .arg(&evidence)
+        .arg("--id")
+        .arg("fit-test-v1")
+        .arg("--out")
+        .arg(scratch.path().join("profile.json"))
+        .assert()
+        .failure()
+        .code(1)
+        .stderr(predicates::str::contains("schema.invalid_json"))
+        .stderr(predicates::str::contains("invalid utf-8"));
 }

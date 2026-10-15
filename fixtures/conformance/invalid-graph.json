@@ -1,0 +1,25 @@
+{
+  "graph": {
+    "version": 1,
+    "nodes": [
+      {
+        "id": "a",
+        "kind": "rule",
+        "depends_on": [
+          "b"
+        ]
+      },
+      {
+        "id": "b",
+        "kind": "rule",
+        "depends_on": [
+          "a"
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "code": "graph.cycle",
+    "message": "graph contains a cycle through node `a`"
+  }
+}

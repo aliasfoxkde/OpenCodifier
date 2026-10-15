@@ -1,0 +1,443 @@
+# Integrating OpenCodifier — the adoption guide
+
+One entry point for every way to wire the decision runtime into your
+tooling: coding agents, MCP clients, HTTP services, CI, IDEs, Rust and
+WASM hosts. First-party integrations (Amortyx, the agent harness)
+appear here as **worked examples of the same public surfaces**, never
+as prerequisites — see [D29](DECISIONS.md): no first-party stack is
+privileged, and nothing here requires any sibling product.
+
+**Honesty rule.** Every endpoint, flag, and tool name below is verified
+against the shipped tree (audit 2026-10-02: `routes.rs`, `args.rs`,
+`opencodifier-mcp/src/lib.rs`). Where a capability does *not* exist yet
+it is labeled as planned and linked to its [Phase 19](PLAN.md) item —
+we do not document aspirational surfaces.
+
+---
+
+## 1. The four surfaces at a glance
+
+| Surface | Shape | Best for |
+|---|---|---|
+| HTTP (`opencodifier serve`) | JSON over loopback, native `/v1/*` | services, CI gates, routers, anything that speaks HTTP |
+| MCP (`opencodifier mcp serve`) | six `codify_*` tools on stdio | coding agents and MCP clients (Claude Code, IDEs) |
+| CLI (`opencodifier …`) | one-shot processes, `--format` selectable | scripts, cron, shell pipelines, format conversion |
+| Library (`opencodifier-*` crates) | in-process Rust, strict layering | embedding the engine in your own binary |
+| WASM (`opencodifier-wasm`) | the zero-ML decision runtime | browser and sandboxed hosts (D23) |
+
+All four surfaces execute the **same engine** through the same
+canonical IR: normalize → deterministic rules/filters → candidate
+narrowing → fast semantic scoring → (optional) decision model →
+confidence gate → accept / verify / abstain. A decision refused for low
+confidence is a *successful* response everywhere — abstention is an
+outcome, not an error.
+
+---
+
+## 2. HTTP — `opencodifier serve`
+
+### 2.1 Start it
+
+```bash
+opencodifier serve                 # binds 127.0.0.1:8177 by default
+opencodifier serve --addr 127.0.0.1:9200
+```
+
+The loopback bind is the default by policy (PLANNING §73); exposing a
+non-loopback address requires passing one explicitly — the runtime
+never opts itself into the network. `GET /v1/healthz` is the readiness
+probe.
+
+### 2.2 Routes (all shipped; verified against `opencodifier-http/src/routes.rs`)
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/v1/decide` | POST | one canonical request → typed decisions + trace |
+| `/v1/batch` | POST | up to 16 requests; one item's failure is that item's `error` object — the transport stays `200` when the batch itself was well-formed |
+| `/v1/chat/completions` | POST | OpenAI chat-completions shape over the same engine: messages become the state, a strict `json_schema` `response_format` names the questions; content is the structured-output JSON, outcome rides in the `opencodifier` extension object. Free-form generation (`json_object`, prose properties, no format) is refused `schema.unsupported_generation_field` — see §2.5 |
+| `/v1/validate` | POST | decode-and-validate only: preflight a payload (question kinds, candidate counts) before paying for execution |
+| `/v1/graph/validate` | POST | validate a declarative graph document |
+| `/v1/graph/run` | POST | execute a graph document (body carries `request` + graph) |
+| `/v1/models` | GET | the model lanes actually active (e.g. `relational-v1\|builtin-lexical-v2` for the base binary) — reports what runs, never a catalog of aspirations |
+| `/v1/capabilities` | GET | what this build can decide (kinds, rungs, features) |
+| `/v1/healthz` | GET | liveness/readiness |
+
+### 2.3 A minimal decision call
+
+The native request names questions over a state; candidates are
+runtime data, never baked into the model:
+
+```bash
+curl -s http://127.0.0.1:8177/v1/decide -H 'content-type: application/json' -d '{
+  "state": {"text": "Checkout errors hit 12% eight minutes after a deploy. Rollback window closes in 20 minutes."},
+  "questions": [{
+    "type": "choice",
+    "id": "action",
+    "text": "Which action should the on-call take?",
+    "candidates": [
+      {"id": "rollback", "description": "roll back to the last healthy build"},
+      {"id": "hotfix",   "description": "patch forward on the broken build"},
+      {"id": "wait",     "description": "watch dashboards and hold"}
+    ]
+  }]
+}'
+```
+
+No `policy` or `metadata` needed: omitted wire fields take the engine's
+defaults. The response carries the decision at two levels — per
+question, the chosen candidate and the **full probability
+distribution** (`answers[].choice`, `answers[].distribution`); for the
+request as a whole, the calibrated confidence and the outcome of the
+confidence gate (`confidence.calibrated_confidence`, `outcome`) — plus
+the deterministic execution `trace`. Outcomes: `accept`, `verified`,
+`verify`, `abstain`, `escalate`, `no_valid_candidate`.
+
+Treat `abstain` as a first-class answer: your code should route on it
+(fall back, ask a human, escalate) exactly as it routes on `accept`.
+
+Error envelope, everywhere:
+
+```json
+{ "error": { "code": "schema.invalid_value", "message": "…" } }
+```
+
+Stable codes are namespaced `ir.*` (payload refused by the IR), `schema.*`
+(wire decode), `engine.*` (execution), so a client can distinguish
+"your payload is wrong" from "the runtime could not decide".
+
+### 2.4 Wire formats over HTTP — `x-opencodifier-format` (D30)
+
+The decode routes (`/v1/decide`, `/v1/batch`, `/v1/validate`) accept a
+request header selecting the wire adapter:
+
+```bash
+# An existing OpenAI-shaped structured-output request, no rewriting:
+curl -s http://127.0.0.1:8177/v1/decide \
+     -H 'content-type: application/json' \
+     -H 'x-opencodifier-format: openai' \
+     -d @chat-shaped-request.json
+
+# Anthropic-shaped messages, Jev/System-One shapes likewise:
+-H 'x-opencodifier-format: anthropic'
+-H 'x-opencodifier-format: jev'
+```
+
+- Values: `native` (default — also when the header is absent) |
+  `openai` | `anthropic` | `jev`. Unknown values are `400`
+  `schema.invalid_value`; the surface never guesses.
+- **Symmetric**: the same adapter decodes the request and projects the
+  response, so an OpenAI-shaped client gets an OpenAI-shaped answer.
+  Batch items are each projected through the batch's adapter.
+- **Errors keep one contract**: the native
+  `{"error": {"code", "message"}}` envelope on every route regardless
+  of format.
+- **Format is transport, not identity**: cache keys are computed on the
+  canonical request after decode, so the same semantic request in two
+  formats shares one cache entry.
+- Fidelity limits are each adapter's own documented posture — where a
+  wire format cannot express an IR feature, it is refused or disclosed,
+  never silently converted (PLANNING §7/§42). Graph routes
+  (`/v1/graph/*`) stay native-only: a graph document has no external
+  analog.
+
+**`/v1/systemone` does not exist and will not be claimed.** That path
+is the Jev/System-One ecosystem's convention (now also used by
+Fastino's GLiDE demo). [D31](DECISIONS.md) closed the question: the
+header above is the integration path; a dedicated route would be a
+pure alias with zero new capability.
+
+### 2.5 `POST /v1/chat/completions` — the OpenAI-shaped decision surface
+
+Tooling that speaks chat completions but cannot set a custom header
+(gateway routers, provider registries, no-code chains) points at this
+route. It is a **projection** of the same engine as `/v1/decide`, not a
+second pipeline — D12's adapter-first rule applied at the transport:
+
+- `messages` become the state text. `system` and `user` contents join
+  in message order; `assistant` turns are skipped (the runtime decides
+  over the caller's state, not a conversation to continue). Multimodal
+  content is refused — the IR's state is text, and silently dropping a
+  part would decide over less than was sent.
+- `response_format` must be a strict `json_schema` whose `properties`
+  name one question per property — the exact subset the
+  [OpenAI structured-outputs adapter](#24-wire-formats-over-http--x-opencodifier-format-d30)
+  documents (`string`+`enum` → choice, `boolean` → boolean,
+  `integer`+bounds → score). A `required` list is synthesized from the
+  property names when the caller omits it; a caller-supplied list is
+  honored and strict-mode-validated by the adapter.
+- The answer's `content` is the structured-output JSON — one field per
+  question holding the chosen value — exactly what a strict OpenAI
+  client parses. Outcome and calibrated confidence have no slot in a
+  chat shape, so they travel in an `opencodifier` extension object.
+- **Generation is refused, honestly**: no `response_format`, a
+  non-`json_schema` type (`json_object`), or a prose property (a
+  string with no `enum`) is `400` `schema.unsupported_generation_field`
+  naming the field. The runtime decides; it does not pretend to write
+  prose.
+- `abstain` and every other typed outcome stay `200` — the outcome
+  field carries the decision, not the transport status.
+
+```bash
+curl -s http://127.0.0.1:8177/v1/chat/completions \
+     -H 'content-type: application/json' -d '{
+  "model": "opencodifier-decision",
+  "messages": [
+    {"role": "system", "content": "On-call context: payments deploy 20:00 UTC."},
+    {"role": "user",   "content": "Checkout errors hit 12% eight minutes in. Rollback window closes in 20 minutes."}
+  ],
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": { "name": "decision", "schema": {
+      "type": "object",
+      "properties": { "action": { "type": "string",
+        "enum": ["rollback", "hotfix", "wait"] } },
+      "required": ["action"], "additionalProperties": false } }
+  }
+}'
+```
+
+For routers: register the runtime as an OpenAI-compatible provider with
+`base_url http://127.0.0.1:8177/v1` and any model name (it is echoed
+verbatim); route structured-output requests to it. No credentials sit
+on the path — the bind is loopback by policy.
+
+---
+
+## 3. MCP — `opencodifier mcp serve`
+
+Six decision tools over stdio (the only transport the local-first
+posture allows):
+
+| Tool | What it does |
+|---|---|
+| `codify_decide` | `POST /v1/decide` as a tool: native request in, native decisions + trace out |
+| `codify_batch` | the `/v1/batch` semantics, per-item error envelopes included |
+| `codify_graph` | execute a graph document |
+| `codify_validate` | preflight a payload or graph without executing |
+| `codify_verify` | re-verify a prior decision (the confidence-gated verifier path) |
+| `codify_explain` | the deterministic execution trace — the only explanation surface; chain-of-thought is never exposed |
+
+### 3.1 Register with an MCP client (Claude Code example)
+
+```bash
+claude mcp add opencodifier -- opencodifier mcp serve
+```
+
+Or in project scope (`.mcp.json`):
+
+```json
+{ "mcpServers": { "opencodifier": { "command": "opencodifier", "args": ["mcp", "serve"] } } }
+```
+
+Useful flags (same as the HTTP engine knobs):
+
+```bash
+opencodifier mcp serve \
+  --graph my-pipeline.json \     # replace the built-in default pipeline
+  --focus-budget 512 \           # decide long states on a focused view, escalate when weak
+  --ladder ladders/profile.json  # per-node-kind gates + per-rung calibration (D25/D27)
+```
+
+Any MCP-capable host works the same way: a stdio command that speaks
+MCP. There is no daemon to babysit — the engine answers in-process,
+and the zero-ML stack answers in microseconds.
+
+Shipped registration (2026-10-04), the harness this repo is developed
+under: an `opencodifier` entry in `backend-fixed/.claude/mcp.json`
+pointing at the release binary
+(`/nas/Temp/repos/OpenCodifier/target/release/opencodifier mcp serve
+--focus-budget 512` — absolute path to a foreign-repo binary is that
+manifest's established pattern), applied to the live registry with
+`python3 scripts/harnessctl.py repair` and proven with
+`harnessctl doctor`, which runs a real MCP initialize handshake
+against the configured command — the same discipline that caught the
+amortyx entry sitting registered-but-dead. A repo-local `/decide` skill
+(`.claude/skills/decide/`) exercises the HTTP surface with a real
+triage payload and is the worked example for agents that prefer the
+service over the tool.
+
+### 3.2 Using the tools from an agent
+
+Decisions are machine-actionable: an agent asks "which of these
+candidates should run?", gets back a typed decision with a
+distribution and calibrated confidence, and branches on the gate
+outcome. Because candidates are runtime data, the same tool call
+serves routing, triage, handoff gating — any choice your harness can
+enumerate. Ask `codify_explain` when you need the *why*: it returns
+the deterministic execution trace (stages, scores, gate verdicts),
+which is the audit story for CI logs as much as for agents.
+
+---
+
+## 4. CLI — scripts, cron, format conversion
+
+```
+opencodifier decide   # one request → canonical response (stdin or -i PATH)
+opencodifier graph    # graph validate/run
+opencodifier serve    # the HTTP surface above
+opencodifier mcp      # the MCP surface above
+opencodifier models   # model artifact operations
+opencodifier recipe   # the built-in recipe fleet (install/list)
+```
+
+`decide` selects the wire format, which makes it a format bridge for
+existing tooling:
+
+```bash
+cat openai-shaped-request.json | opencodifier decide --format openai
+opencodifier decide --format anthropic -i message.json
+opencodifier decide --format jev      -i systemone-request.json
+```
+
+`--format` accepts `native` (default) | `openai` | `anthropic` | `jev`.
+Each adapter projects onto/normalizes from the canonical IR and
+documents its fidelity limits — where a wire format cannot express an
+IR feature, the adapter says so explicitly rather than pretending
+(schema adapter contract, PLANNING §7/§42). Free-form generation
+fields in any incoming schema are refused with
+`unsupported_generation_field`: this runtime decides, it does not
+write prose.
+
+---
+
+## 5. Rust library — embedding the engine
+
+Consume the workspace crates directly (crates.io publication is
+Phase 19d, user-gated; today the paths are a git dependency or a
+vendored copy):
+
+| Crate | Gives you | Depends on |
+|---|---|---|
+| `opencodifier-core` | the canonical IR: validating constructors, stable `ir.*` error codes, typed decisions | nothing |
+| `opencodifier-engine` | `EngineHandle` — the full zero-ML stack (rules, narrowing, BM25, relational solver), exact-decision cache, ladder policy | core |
+| `opencodifier-schema` | the wire adapters (native/openai/anthropic/jev) + the content-hashed Decision Registry (D20) | core |
+| `opencodifier-runtime` | `InferenceBackend`/`EmbeddingBackend` traits; ONNX behind the `onnx` feature | core |
+| `opencodifier-model` | the candidate-conditioned decision model (ONNX logits, all decision math in Rust f64) | core, runtime |
+
+The layering is enforced, not advisory: `core` never depends on HTTP,
+async runtimes, or ML; heavyweight dependencies are confined to one
+crate each. Build the engine the way the binary does —
+`EngineHandle::lexical()` is the default zero-ML stack — and you get
+the same determinism guarantees the surfaces above are tested against
+(double-replay bit-identical traces).
+
+---
+
+## 6. WASM — the decision runtime in the browser
+
+`opencodifier-wasm` compiles the **zero-ML decision runtime** (D23):
+rules, narrowing, lexical scoring, cache — no model rungs. Time and
+threads are seam-gated (`clock.rs`, `THREADS_AVAILABLE`), so the same
+API works single-threaded in a browser. Build and smoke it with
+`just check-wasm` (wasm32 check + Node smoke over `pkg/`). Typical
+use: pre-screening decisions client-side, escalating to a full engine
+over HTTP only when confidence is thin.
+
+---
+
+## 7. CI and harnesses — decisions as gates
+
+The deterministic-first pattern in a pipeline: run the decision
+runtime next to your build and let a typed decision — not a regex —
+gate the step. Because `abstain` is a first-class outcome, a gate can
+be configured to *fail open* (abstain → human review) or *fail
+closed* (abstain → block) purely through `DecisionPolicy`
+(`min_confidence` / `verify_below` / `abstain_below`), per node and
+per decision kind via `LadderPolicy` (D25/D27) — no workflow DSL
+required.
+
+- **Decide via HTTP** in any CI: start `opencodifier serve` as a
+  service, `curl /v1/decide`, branch on the outcome. Everything stays
+  local; no vendor call, no keys.
+- **Batch triage** with `/v1/batch` (≤16 items, per-item errors, one
+  wake-up).
+- **Audit** with the trace: every accepted decision carries its
+  execution trace and the artifact versions (graph / model /
+  calibration / policy) folded into its cache key, so an artifact
+  update invalidates stale cached decisions by construction.
+- OpenCodifier's own pipeline of record is GitForge (`.gitforge.yml`
+  mirrors `just ci` line-for-line); a decision-gated job is just
+  another step in that shape on your side.
+
+### 7.1 Where this fits a pipeline (and where it does not)
+
+The CI questions that are actually decisions, with their IR shapes:
+
+| Pipeline question | IR | What decides it, cheapest-first |
+|---|---|---|
+| Retry, bisect, or block on a failed job? | `choice` | exact rule over the failure signature → cache → lexical match against the known-flaky corpus → decision model; `abstain` → page a human |
+| Is this test flaky or broken? | `boolean` | historical signature rules → lexical similarity to prior flake reports → model rung for the tail |
+| Is this benchmark delta a regression or noise? | `score`/`boolean` | threshold rules on the measured distribution → calibration-aware gate (§73: probability ≠ confidence) |
+| Ship this release or hold it? | `choice` | acceptance-rule match over the release checklist state → lexical match against prior release verdicts → `abstain` = hold for human sign-off (fail closed where the risk profile says so) |
+| Which model tier should this AI-pipeline step use? | `choice` | the Amortyx §8.1 pattern, generalized: eligibility upstream, ranking here |
+
+Two properties make it pipeline-native rather than a vendor call: the
+service is local-first (no keys, no egress, works on air-gapped
+self-hosted runners), and most requests never reach a model — the
+deterministic rungs answer in microseconds, with the trace as the
+audit trail for why the gate did what it did.
+
+Honest limits: a decision runtime is **not** a workflow engine — it
+answers typed questions inside your orchestrator, it does not
+orchestrate. And its accuracy is a function of state quality: raw log
+spew gives the lexical rung nothing to match, and it abstains (the
+correct behavior) unless the pipeline extracts structure — job names,
+labels, error classes, metrics — into the state. The wins are largest
+where CI already produces structured-ish state, which is exactly where
+regex-and-keyword heuristics are silently wrong today.
+
+---
+
+## 8. First-party integrations — worked examples, not requirements
+
+These sibling products integrate over the exact surfaces documented
+above. They are listed because the stack is ours, not because they are
+special: **D29 forbids any capability that only a first-party consumer
+can reach.**
+
+### 8.1 Amortyx (LLM router) — designed, promotion-gated
+
+Doc of record: [`INTEGRATION_AMORTYX.md`](INTEGRATION_AMORTYX.md).
+Amortyx asks OpenCodifier semantic questions (`task_complexity`,
+`model_selection` among eligible candidates, …) over loopback
+`/v1/decide`, and treats `abstain` — or a dead runtime — as "run the
+existing heuristic, byte-for-byte". Decision ids promote from shadow
+to advisory to active only on measured would-have-positive evidence.
+The boundary is doctrinal (§60): OpenCodifier never sees provider keys
+or prices; Amortyx never guesses semantics.
+
+### 8.2 The agent harness (hooks + MCP)
+
+The same pattern as §3: a hooks binary or an agent session registers
+`opencodifier mcp serve` and asks typed questions at decision points
+(model choice, handoff gating, severity) instead of pattern-matching
+prose. Deterministic-first: the cheap rungs answer inline; the
+confidence gate decides whether anything more expensive may run at
+all.
+
+---
+
+## 9. Planned surfaces (tracked, not yet shipped)
+
+| Item | Phase | State |
+|---|---|---|
+| HTTP wire-format selection (`x-opencodifier-format`) | 19a | **shipped** (D30) |
+| Jev-shaped HTTP route (the `systemone` convention) | 19b | **decided: no route** (D31) — the header is the path |
+| Copy-paste quickstart exercised by tests | 19c | **shipped** (`tests/http_e2e.rs` pins the doc's exact JSON) |
+| crates.io / Homebrew / winget publication | 19d | user-gated (§58) |
+| Amortyx implementation (shadow → advisory → active) | §60 | designed; promotion-gated |
+
+---
+
+## 10. Versioning and stability expectations
+
+- The IR and its `ir.*` error codes are the stable core; wire adapters
+  project onto it and document fidelity limits rather than faking
+  support.
+- Decision definitions are content-hashed artifacts (D20): a
+  definition's identity is the SHA-256 of its canonical serialization
+  — `id`/`version` are labels.
+- Cache keys fold graph/model/calibration/policy versions, so an
+  artifact update cannot serve stale decisions.
+- Public enums are `#[non_exhaustive]`; match arms should carry a
+  fallback.

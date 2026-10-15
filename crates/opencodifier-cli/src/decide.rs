@@ -9,7 +9,6 @@
 use std::path::Path;
 
 use opencodifier_core::{DecisionOutcome, DecisionRequest, Limits};
-use opencodifier_engine::EngineHandle;
 use opencodifier_schema::WireFormat;
 use opencodifier_schema::native::Native;
 
@@ -34,7 +33,12 @@ pub(crate) fn run(args: &DecideArgs) -> Result<(), CliError> {
         None => request,
     };
 
-    let handle = EngineHandle::lexical(runtime::engine_config(None, args.focus_budget)?)?;
+    let handle = runtime::handle(
+        None,
+        args.focus_budget,
+        args.ladder.as_deref(),
+        runtime::model_rung(&args.llama)?,
+    )?;
     let (response, executed) = handle.decide_with_report(&request)?;
 
     output::print_json(&Native.encode_response(&response)?)?;

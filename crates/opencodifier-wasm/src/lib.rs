@@ -40,9 +40,13 @@
 
 use wasm_bindgen::prelude::{JsValue, wasm_bindgen};
 
-use opencodifier_core::Limits;
-use opencodifier_engine::{DecisionGraph, EngineConfig, EngineHandle, GraphDocument};
-use opencodifier_schema::{WireFormat, native::Native};
+use opencodifier_engine::{
+    EngineConfig, EngineHandle,
+    wire::{
+        WireFailure as EngineFailure, decide_batch_impl, decide_impl, run_graph_impl,
+        validate_graph_impl,
+    },
+};
 
 /// One assembled zero-ML decision runtime, shareable across the page.
 ///
@@ -115,6 +119,38 @@ impl WasmEngine {
         run_graph_impl(graph_json, request_json).map_err(wasm_error)
     }
 
+    /// Decides a batch of native-schema requests in one boundary
+    /// crossing (§11): `{"requests": [ ... ]}` in, one decision each,
+    /// `{"results": [...], "count": N}` out.
+    ///
+    /// The envelope is the `POST /v1/batch` body — the same `requests`
+    /// key MCP `codify_batch` uses — and its items are native-schema
+    /// request objects (what [`Self::decide`] takes), not pre-stringified
+    /// payloads. Every request is decided here, in wasm, in input order,
+    /// on this engine: one crossing for the whole batch, and one cache
+    /// across it, so a request repeated inside a batch is a cache hit and
+    /// a page's warmed decisions stay warm.
+    ///
+    /// Each entry of `results` is that item's `{"response": ...}` or,
+    /// when the item's decode or execution failed, its
+    /// `{"error": {"code", "message"}}` with the same codes
+    /// [`Self::decide`] reports. One item's refusal is that item's
+    /// result, never a failure of the batch.
+    ///
+    /// # Errors
+    ///
+    /// A JSON error value for a batch that is unusable as a batch:
+    /// unparseable JSON (`schema.invalid_json`), an envelope without a
+    /// `requests` array (`schema.invalid_value`), or more requests than
+    /// [`opencodifier_engine::MAX_BATCH`] (`schema.limit_exceeded`) —
+    /// the ceiling the HTTP
+    /// batch enforces, so a page cannot enqueue what the runtime would
+    /// refuse.
+    #[wasm_bindgen]
+    pub fn decide_batch(&self, requests_json: &str) -> Result<String, JsValue> {
+        decide_batch_impl(&self.handle, requests_json).map_err(wasm_error)
+    }
+
     /// The engine identity decisions are cached under: graph, model,
     /// calibration, engine, and embedding components. Deterministic per
     /// build, so a page can pin behavior to the artifact it loaded.
@@ -139,84 +175,9 @@ pub fn opencodifier_version() -> String {
     env!("CARGO_PKG_VERSION").to_owned()
 }
 
-/// Decodes, decides, and encodes — the whole wire contract in one
-/// function, shared by the binding and the native tests.
-fn decide_impl(handle: &EngineHandle, request_json: &str) -> Result<String, EngineFailure> {
-    let payload: serde_json::Value =
-        serde_json::from_str(request_json).map_err(EngineFailure::MalformedJson)?;
-    let request = Native.decode_request(&payload, &Limits::default())?;
-    let response = handle.decide(&request)?;
-    let encoded = Native.encode_response(&response)?;
-    serde_json::to_string(&encoded).map_err(EngineFailure::MalformedJson)
-}
-
-/// Decodes a graph document and validates it, returning the graph
-/// version and node count.
-fn validate_graph_impl(graph_json: &str) -> Result<(u64, usize), EngineFailure> {
-    let document: GraphDocument =
-        serde_json::from_str(graph_json).map_err(EngineFailure::MalformedJson)?;
-    let (version, nodes) = (document.version, document.nodes.len());
-    DecisionGraph::new(version, document.nodes)?;
-    Ok((version, nodes))
-}
-
-/// Validates a graph, decodes a request, decides on a throwaway engine.
-fn run_graph_impl(graph_json: &str, request_json: &str) -> Result<String, EngineFailure> {
-    let document: GraphDocument =
-        serde_json::from_str(graph_json).map_err(EngineFailure::MalformedJson)?;
-    let graph = DecisionGraph::new(document.version, document.nodes)?;
-    let handle = EngineHandle::ephemeral(graph)?;
-    decide_impl(&handle, request_json)
-}
-
-/// The error half of the wire contract: a stable code plus its message,
-/// serialized to JSON exactly once, at the boundary.
-#[derive(Debug)]
-enum EngineFailure {
-    MalformedJson(serde_json::Error),
-    Schema(opencodifier_schema::SchemaError),
-    Engine(opencodifier_engine::EngineError),
-}
-
-impl From<opencodifier_schema::SchemaError> for EngineFailure {
-    fn from(error: opencodifier_schema::SchemaError) -> Self {
-        Self::Schema(error)
-    }
-}
-
-impl From<opencodifier_engine::EngineError> for EngineFailure {
-    fn from(error: opencodifier_engine::EngineError) -> Self {
-        Self::Engine(error)
-    }
-}
-
-impl EngineFailure {
-    /// The stable error code (`schema.invalid_value`, `engine.timeout`,
-    /// `graph.cycle`, ...).
-    fn code(&self) -> String {
-        match self {
-            Self::MalformedJson(_) => "schema.invalid_json".to_owned(),
-            Self::Schema(error) => error.code().to_owned(),
-            Self::Engine(error) => error.code().to_owned(),
-        }
-    }
-}
-
-impl std::fmt::Display for EngineFailure {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::MalformedJson(error) => write!(formatter, "{error}"),
-            Self::Schema(error) => write!(formatter, "{error}"),
-            Self::Engine(error) => write!(formatter, "{error}"),
-        }
-    }
-}
-
 /// Lifts a failure into JS as a JSON error value: `{"code", "message"}`.
 fn wasm_error(error: impl Into<EngineFailure>) -> JsValue {
-    let failure = error.into();
-    let payload = serde_json::json!({ "code": failure.code(), "message": failure.to_string() });
-    JsValue::from_str(&payload.to_string())
+    JsValue::from_str(&error.into().error_json().to_string())
 }
 
 #[cfg(test)]
@@ -227,6 +188,8 @@ mod tests {
     use opencodifier_core::{
         Candidate, ChoiceQuestion, DecisionPolicy, DecisionQuestion, RequestMetadata, State,
     };
+    use opencodifier_engine::{MAX_BATCH, wire::decide_value};
+    use opencodifier_schema::{WireFormat, native::Native};
 
     /// A native-schema choice request, small enough to read whole.
     fn request_json() -> String {
@@ -397,5 +360,359 @@ mod tests {
         let first = engine().decide(&request_json()).unwrap();
         let second = engine().decide(&request_json()).unwrap();
         assert_eq!(first, second);
+    }
+
+    /// The Display half of the error boundary is plain Rust: none of the
+    /// three arms constructs a `JsValue`, so a host test can prove they
+    /// all format (the JSON half stays with the Node smoke test).
+    #[test]
+    fn the_error_boundary_formats_every_failure_class() {
+        let malformed = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
+        let failures = [
+            EngineFailure::MalformedJson(malformed),
+            EngineFailure::Schema(opencodifier_schema::SchemaError::unsupported("question type")),
+            EngineFailure::Engine(opencodifier_engine::EngineError::Cancelled),
+        ];
+        for failure in failures {
+            let shown = failure.to_string();
+            assert!(!shown.is_empty(), "{failure:?} must format");
+        }
+    }
+
+    /// The choice request of [`request_json`], as a value — what a batch
+    /// item is, since the envelope carries objects, not strings.
+    fn request_value() -> serde_json::Value {
+        serde_json::from_str(&request_json()).unwrap()
+    }
+
+    /// A second request, different in kind, so a batch can be proven to
+    /// answer in order rather than to repeat one answer.
+    fn boolean_request_value() -> serde_json::Value {
+        let request = opencodifier_core::DecisionRequest::new(
+            State::from_text("the parser needs tests before the release"),
+            vec![DecisionQuestion::Boolean(
+                opencodifier_core::BooleanQuestion::new("needs_tests", "Does this need tests?")
+                    .unwrap(),
+            )],
+            DecisionPolicy::default(),
+            RequestMetadata::default(),
+        )
+        .unwrap();
+        Native.encode_request(&request).unwrap()
+    }
+
+    /// The response as a client receives it: serialized, then parsed
+    /// again. The canonical form the conformance fixtures are compared
+    /// in — both sides cross the same wire, so neither side's in-memory
+    /// float bit is expected to survive (see the conformance test).
+    fn wire_canonical(response: &serde_json::Value) -> serde_json::Value {
+        serde_json::from_str(&serde_json::to_string(response).unwrap()).unwrap()
+    }
+
+    /// Whether two floats sit at most one ulp apart, negatives ordered so
+    /// the bit patterns stay monotonic. The zero-ML stack is deterministic
+    /// within a build, but not bit-identical across build targets: the
+    /// same BM25 fold over the same query lands one ulp apart on x86-64
+    /// and on wasm32 (measured, not assumed). The conformance fixtures pin
+    /// the wire decision and let the last bit of a float move.
+    fn within_one_ulp(left: f64, right: f64) -> bool {
+        let ordered = |bits: u64| if bits >> 63 == 1 { !bits } else { bits | (1 << 63) };
+        let (left, right) = (ordered(left.to_bits()), ordered(right.to_bits()));
+        left.abs_diff(right) <= 1
+    }
+
+    /// The first place two wire documents disagree, or `None` when they
+    /// agree canonically: same structure, same text, same integers, and
+    /// float leaves within one ulp of each other. Both sides have already
+    /// been through [`wire_canonical`], so this compares what a client
+    /// receives, never an in-memory representation.
+    fn canonical_difference(
+        actual: &serde_json::Value,
+        expected: &serde_json::Value,
+        path: &str,
+    ) -> Option<String> {
+        use serde_json::Value;
+        match (actual, expected) {
+            (Value::Number(actual), Value::Number(expected)) => {
+                let (actual, expected) =
+                    (actual.as_f64().unwrap_or(f64::NAN), expected.as_f64().unwrap_or(f64::NAN));
+                (actual != expected && !within_one_ulp(actual, expected))
+                    .then(|| format!("{path}: {actual} vs {expected}"))
+            }
+            (Value::String(actual), Value::String(expected)) => {
+                (actual != expected).then(|| format!("{path}: {actual:?} vs {expected:?}"))
+            }
+            (Value::Bool(actual), Value::Bool(expected)) => {
+                (actual != expected).then(|| format!("{path}: {actual} vs {expected}"))
+            }
+            (Value::Null, Value::Null) => None,
+            (Value::Array(actual), Value::Array(expected)) => {
+                if actual.len() != expected.len() {
+                    return Some(format!("{path}: {} entries vs {}", actual.len(), expected.len()));
+                }
+                actual.iter().zip(expected).enumerate().find_map(|(index, (actual, expected))| {
+                    canonical_difference(actual, expected, &format!("{path}[{index}]"))
+                })
+            }
+            (Value::Object(actual), Value::Object(expected)) => actual
+                .iter()
+                .find_map(|(key, actual)| match expected.get(key) {
+                    Some(expected) => {
+                        canonical_difference(actual, expected, &format!("{path}.{key}"))
+                    }
+                    None => Some(format!("{path}.{key}: unexpected")),
+                })
+                .or_else(|| {
+                    expected.iter().find_map(|(key, _)| {
+                        (!actual.contains_key(key)).then(|| format!("{path}.{key}: missing"))
+                    })
+                }),
+            _ => Some(format!("{path}: {actual} vs {expected}")),
+        }
+    }
+
+    /// Wraps items in the batch envelope: the `POST /v1/batch` body.
+    fn envelope(items: &[serde_json::Value]) -> String {
+        serde_json::json!({ "requests": items }).to_string()
+    }
+
+    /// A batch answers every request in input order, each in its own
+    /// `response` slot, with a `count` that matches what went in (§11:
+    /// one crossing, not one crossing per request).
+    ///
+    /// The references come from fresh engines: a shared engine would have
+    /// the batch's own cache state in its traces, and the assertion is
+    /// about ordering, not cache warmth (that is the next test's).
+    #[test]
+    fn batch_answers_every_request_in_order() {
+        let choice = decide_impl(&engine().handle, &request_json()).unwrap();
+        let alone = decide_impl(
+            &engine().handle,
+            &serde_json::to_string(&boolean_request_value()).unwrap(),
+        )
+        .unwrap();
+
+        let batched: serde_json::Value = serde_json::from_str(
+            &decide_batch_impl(
+                &engine().handle,
+                &envelope(&[request_value(), boolean_request_value()]),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(batched.get("count"), Some(&serde_json::json!(2)), "{batched}");
+        let results = batched.get("results").and_then(serde_json::Value::as_array).unwrap();
+        assert_eq!(results.len(), 2, "{batched}");
+        assert_eq!(
+            results[0].get("response"),
+            Some(&serde_json::from_str::<serde_json::Value>(&choice).unwrap()),
+            "first in, first answered"
+        );
+        assert_eq!(
+            results[1].get("response"),
+            Some(&serde_json::from_str::<serde_json::Value>(&alone).unwrap()),
+            "second in, second answered"
+        );
+    }
+
+    /// One item's refusal is that item's result: a batch of one good and
+    /// one malformed request still answers the good one, and the bad slot
+    /// carries the same typed code `decide` would have thrown.
+    #[test]
+    fn batch_isolates_a_failing_request() {
+        let engine = engine();
+        let batched: serde_json::Value = serde_json::from_str(
+            &decide_batch_impl(
+                &engine.handle,
+                &envelope(&[request_value(), serde_json::json!({ "state": { "text": "" } })]),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let results = batched.get("results").and_then(serde_json::Value::as_array).unwrap();
+        assert_eq!(results.len(), 2, "{batched}");
+        assert!(results[0].get("response").is_some(), "the good item answers: {batched}");
+        let error =
+            results[1].get("error").unwrap_or_else(|| panic!("bad item reports: {batched}"));
+        assert!(
+            error
+                .get("code")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .starts_with("schema."),
+            "{error}"
+        );
+        assert!(
+            !error
+                .get("message")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .is_empty(),
+            "{error}"
+        );
+    }
+
+    /// An empty batch is a successful batch of zero decisions, not an
+    /// error: `count` says so.
+    #[test]
+    fn an_empty_batch_answers_zero_results() {
+        let batched: serde_json::Value =
+            serde_json::from_str(&decide_batch_impl(&engine().handle, &envelope(&[])).unwrap())
+                .unwrap();
+        assert_eq!(batched, serde_json::json!({ "results": [], "count": 0 }), "{batched}");
+    }
+
+    /// The batch ceiling is the HTTP batch's own [`MAX_BATCH`]: one more
+    /// request than that is refused up front, before any item is decoded,
+    /// with `schema.limit_exceeded`.
+    #[test]
+    fn an_oversized_batch_is_refused_up_front() {
+        let failure =
+            decide_batch_impl(&engine().handle, &envelope(&vec![request_value(); MAX_BATCH + 1]))
+                .unwrap_err();
+        assert_eq!(failure.code(), "schema.limit_exceeded", "{failure}");
+    }
+
+    /// A batch that is not a batch — unparseable JSON, an envelope
+    /// without `requests`, a `requests` that is not a sequence — is a
+    /// controlled refusal, never a panic.
+    #[test]
+    fn a_malformed_envelope_refuses_with_typed_codes() {
+        for (payload, code) in [
+            ("not json", "schema.invalid_json"),
+            ("{}", "schema.invalid_value"),
+            (r#"{"requests": 5}"#, "schema.invalid_value"),
+            (r#"{"requests": null}"#, "schema.invalid_value"),
+        ] {
+            let failure = decide_batch_impl(&engine().handle, payload).unwrap_err();
+            assert_eq!(failure.code(), code, "{payload}: got {}", failure.code());
+        }
+    }
+
+    /// The batch shares the one engine, so its cache is the page's: a
+    /// request repeated inside a batch is answered from the cache on its
+    /// second appearance (`metrics.cache_hit`), the same as it would be
+    /// across two `decide` calls.
+    #[test]
+    fn a_batch_shares_the_engine_cache() {
+        let engine = engine();
+        let batched: serde_json::Value = serde_json::from_str(
+            &decide_batch_impl(&engine.handle, &envelope(&[request_value(), request_value()]))
+                .unwrap(),
+        )
+        .unwrap();
+        let results = batched.get("results").and_then(serde_json::Value::as_array).unwrap();
+        let metrics = |slot: usize| results[slot].get("response").unwrap().get("metrics").cloned();
+        assert_eq!(
+            metrics(0).and_then(|m| m.get("cache_hit").cloned()),
+            Some(serde_json::json!(false)),
+            "the first appearance decides"
+        );
+        assert_eq!(
+            metrics(1).and_then(|m| m.get("cache_hit").cloned()),
+            Some(serde_json::json!(true)),
+            "the second appearance hits the cache"
+        );
+    }
+
+    // §34: the conformance fixtures under `fixtures/conformance/` are the
+    // record that native and wasm are one engine on two runtimes. The
+    // native half of the contract lives here, over the same `*_impl`
+    // functions the binding calls; the wasm half runs the identical files
+    // in `tests/node/smoke.cjs`.
+
+    /// A request fixture: its path names the behavior it locks.
+    const CHOICE_FIXTURE: &str =
+        include_str!("../../../fixtures/conformance/choice-lexical-accept.json");
+    /// The relational fixture: a proof, not a score — mass 1.0 on the
+    /// proven answer.
+    const RELATIONAL_FIXTURE: &str =
+        include_str!("../../../fixtures/conformance/relational-proof.json");
+    /// The abstention fixture: no evidence, four candidates, no answer.
+    const ABSTAIN_FIXTURE: &str =
+        include_str!("../../../fixtures/conformance/abstain-no-evidence.json");
+    /// The malformed-request fixture: a typed refusal, not a panic.
+    const INVALID_REQUEST_FIXTURE: &str =
+        include_str!("../../../fixtures/conformance/invalid-request.json");
+    /// The malformed-graph fixture: a cycle the constructor refuses.
+    const INVALID_GRAPH_FIXTURE: &str =
+        include_str!("../../../fixtures/conformance/invalid-graph.json");
+
+    /// The native engine reproduces every recorded expectation.
+    ///
+    /// The comparison is **canonical, never lexical**: both sides meet as
+    /// `serde_json::Value` after the *same* JSON round-trip — the engine's
+    /// response is serialized and re-parsed exactly as a client receives
+    /// it, the fixture is parsed exactly as it ships — so a fixture's
+    /// indentation and key order are free while its structure, text, and
+    /// integers are exact. Float leaves are allowed one ulp (see
+    /// [`within_one_ulp`]), because the same Rust source does not produce
+    /// bit-identical floats on every target, and this crate exists to be
+    /// built for two of them. Refusals are compared through the same
+    /// object the boundary reports, `{"code", "message"}`.
+    ///
+    /// Regeneration: with `OPENCODIFIER_UPDATE_CONFORMANCE` set, a
+    /// mismatching decision fixture is re-recorded from the live engine
+    /// instead of failing. Cache keys embed `engine_semver`
+    /// (`cache.rs`), so a release bump re-keys every recorded decision —
+    /// re-record, then inspect the diff: the answers, confidence, and
+    /// outcome must be untouched (a version bump re-keys, it does not
+    /// re-decide). The Node smoke over `tests/node/smoke.cjs` judges the
+    /// regenerated fixtures on the wasm side.
+    #[test]
+    fn conformance_fixtures_hold_on_the_native_engine() {
+        let engine = engine();
+        let update = std::env::var("OPENCODIFIER_UPDATE_CONFORMANCE").is_ok();
+        for (name, document) in [
+            ("choice-lexical-accept", CHOICE_FIXTURE),
+            ("relational-proof", RELATIONAL_FIXTURE),
+            ("abstain-no-evidence", ABSTAIN_FIXTURE),
+            ("invalid-request", INVALID_REQUEST_FIXTURE),
+        ] {
+            let document: serde_json::Value = serde_json::from_str(document).unwrap();
+            let expected = document.get("expected").cloned().unwrap();
+            let request = document.get("request").cloned().unwrap();
+            let actual = decide_value(&engine.handle, &request).map(|value| wire_canonical(&value));
+            match actual {
+                Ok(response) => {
+                    let difference = canonical_difference(&response, &expected, name);
+                    if let (true, true) = (update, difference.is_some()) {
+                        let path = format!(
+                            "{}/../../fixtures/conformance/{name}.json",
+                            env!("CARGO_MANIFEST_DIR")
+                        );
+                        let updated =
+                            serde_json::json!({ "request": request, "expected": response });
+                        std::fs::write(
+                            &path,
+                            serde_json::to_string_pretty(&updated).unwrap() + "\n",
+                        )
+                        .unwrap();
+                        continue;
+                    }
+                    assert!(
+                        difference.is_none(),
+                        "{name}: the engine no longer matches its recorded decision: \
+                         {difference:?}"
+                    );
+                }
+                Err(failure) => assert_eq!(
+                    failure.error_json(),
+                    expected,
+                    "{name}: the engine no longer refuses as recorded"
+                ),
+            }
+        }
+    }
+
+    /// The graph fixture is refused at construction, exactly as a page's
+    /// `validate_graph` refuses it — same code, same message.
+    #[test]
+    fn the_graph_conformance_fixture_refuses_as_recorded() {
+        let document: serde_json::Value = serde_json::from_str(INVALID_GRAPH_FIXTURE).unwrap();
+        let expected = document.get("expected").cloned().unwrap();
+        let graph = document.get("graph").cloned().unwrap().to_string();
+        let failure = validate_graph_impl(&graph).unwrap_err();
+        assert_eq!(failure.error_json(), expected, "the cycle is refused as recorded");
     }
 }

@@ -4,7 +4,7 @@
       "max_candidates": 256,
       "max_execution_time": {
         "nanos": 0,
-        "secs": 10
+        "secs": 120
       },
       "max_graph_nodes": 128,
       "max_input_bytes": 1048576,

@@ -15,10 +15,13 @@ until it is calibrated.
 | relational-v1 (engine default) | 0.658 | 0.094 | 0.097 | **not shipped** |
 | gte-modernbert-onnx-fp32 | ∞ (degenerate) | 0.330 | — | not shipped |
 | qwen3.5-0.8b-q4_0 | 0.629 | 0.074 | 0.054 | shipped |
-| qwen3.5-2b-q4_k_m | 0.843 | 0.062 | 0.054 | shipped |
+| qwen3.5-2b-q4_k_m | 0.932 (exact, d15 refit) | 0.062 | 0.059 | shipped |
 | qwen3.5-4b-q3_k_s | 1.672 | 0.069 | 0.039 | shipped |
 | qwen3.5-4b-ud-q4_k_xl | 1.400 | 0.074 | 0.058 | shipped |
 | mimo-v2.6-9b-q3_k_s | 1.372 | 0.048 | 0.026 | shipped |
+| jebadiah-4b-v2-q8_0 | 1.282 (margin fit) | 0.051 | 0.047 | shipped |
+| jebadiah-9b-v2-q8_0 | 1.065 (margin fit) | 0.075 | 0.073 | shipped |
+| fork_4b-d15-v1 (JevBench 231) | 1.313 (exact, d15) | 0.070 | 0.048 | shipped |
 
 (The `builtin-lexical-v1` row from the first fit described the bare
 lexical stack, which the relational solver has since replaced as the
@@ -27,7 +30,23 @@ T 0.602, ECE 0.115 → 0.108 — remain in git history.)
 
 Shipped artifacts (validated against the engine's `CalibrationArtifact`
 schema): `calibration/{qwen3.5-0.8b-q4_0,qwen3.5-2b-q4_k_m,
-qwen3.5-4b-q3_k_s,qwen3.5-4b-ud-q4_k_xl,mimo-v2.6-9b-q3_k_s}.json`.
+qwen3.5-4b-q3_k_s,qwen3.5-4b-ud-q4_k_xl,mimo-v2.6-9b-q3_k_s,
+jebadiah-4b-v2-q8_0,jebadiah-9b-v2-q8_0,fork_4b-d15-v1}.json`. The
+jebadiah arms (2026-10-03) are `run_llama.py` margin-fit rows — the
+direct-fork runner records the winner probability only; their exact
+d15 refits ride the same distribution-emission re-run queued for the
+other margin-fit arms. The fork's own re-run has landed:
+`fork_4b-d15-v1` (2026-10-03) is the first exact fit fitted outside
+the internal suite — the rebuilt parallel-decision server emits full
+per-choice `probs` per row on the JevBench public split (231 items)
+and `fit_calibration.py` joins them to the pinned dataset labels
+(`--tasks`). Fit: T **1.313212**, ECE **0.0696 → 0.0484** in-sample.
+One fitter defect was caught on the way: score-class items carry
+integer ordinal labels while the fork's probs keys are strings, so
+unnormalized, 18 of 231 rows read as always-wrong — ECE-before
+inflated to 0.118 and the fit fell back to the margin path (T 2.377).
+The cross-check against the harness's own ECE (0.0696) exposed it;
+normalizing labels into the probs key space restored the exact path.
 
 **Shipping gate (added with the relational fit):** an artifact ships
 only if the fit does not worsen ECE. NLL — the fit objective — improves
@@ -63,6 +82,17 @@ suite is all-Choice, so the global fit and the class fit coincide).
    only; until the embedding rung gets a real confidence channel (e.g.
    a fitted density ratio, per D2's planned OOD work), its scores must
    gate by rank/margin, never by raw probability.
+   **Margin gate measured (2026-09-30).** The margins re-measurement
+   arm (`embed__gte-modernbert-onnx-fp32__margins`) recorded per-item
+   top1−top2 margins and the sweep (`embed-margin-study.md`,
+   `runner/margin_gate_study.py`) confirms margin selection works
+   where probability cannot: accepted-set accuracy rises monotonically
+   0.575 → 0.880 (coverage 0.208, margin ≥ 0.0183) → 1.000 (coverage
+   0.100, margin ≥ 0.0283), P(correct margin wider) = 0.718. The
+   embedding rung's live profile is therefore `min_confidence: 1.0`
+   (probability can never accept) + `min_margin ≈ 0.018` — a cheap
+   pre-filter that accepts ~1 in 5 items at 88%+ and escalates the
+   rest; not a replacement for the model rung.
 4. **Per-suite-class temperatures differ sharply** (printed by the
    fitter; e.g. Qwen3.5-4B-Q3_K_S: lexical_semantic 0.52 vs
    relational_compositional 13.2). One global T is a compromise. The IR
@@ -90,9 +120,113 @@ fr.probs` zipped with `sp.values` in `assemble()`, rebuild `build-pd`,
 record the provenance as `parallel-decision ad129b0+distribution`
 (`--llamacpp-branch`), then log `probs` in
 `run_llama.py::decide_single` rows. No runner-only path exists: the
-server does not send what the fit needs. Until then the margin
-temperature stands.
+server does not send what the fit needs. **Landed for the fork
+(2026-10-03):** the rebuilt server emits `f["probabilities"]`, the
+JevBench runner logs `probs`, and the fork arm's exact fit ships
+(T 1.313, ECE 0.070 → 0.048). The decoder margin-fit arms still queue
+their distribution re-runs.
+
+**Exact fit implemented (2026-09-30; refit landed, see above).** When a
+run records full per-item `probs`, `fit_calibration.py` now fits the
+real thing instead of the margin proxy: reverse-softmax temperature
+scaling, `q_i(T) = p_i^(1/T) / Σ_j p_j^(1/T)`, minimizing categorical
+NLL over all candidates. Categorical NLL is convex in β = 1/T
+(log-sum-exp of linear), so the golden-section search runs on
+β ∈ [1/200, 20] — no local-minimum caveat — with degenerate boards
+(uniform distributions, flat NLL) returning T = 1 rather than a
+bracket-edge artifact. Synthetic ground-truth validation (softmax
+boards reported at one temperature, labels drawn at another):
+
+- the exact fit recovers `T_true/T_report` within 0.05 across the grid;
+  reported==truth fits identity (T ≈ 1), as MLE requires when labels are
+  drawn from the reported distribution;
+- the **margin fit does not**: on a 5-way board with true T = 2.0 it
+  returns T = 3.0. Winner-vs-rest discards how the losing mass is
+  spread, and on multi-way boards that bias is material. The shipped
+  margin-fit artifacts above are therefore *approximations conditioned
+  on winner-gate semantics* — the ranking of T across arms (2B < 4B,
+  both < 9B sharpening) is the part to trust, not the absolute values.
+  The d15 refit replaces the 2B arm's artifact with an exact-fit one
+  when the CPU leg lands.
+
+**d15 refit landed (2026-09-30).** The parallel-decision CPU leg
+(Qwen3.5-2B) recorded full per-candidate distributions for all 120
+items, and the refit replaced that arm's artifact with the exact fit:
+**T 0.8426 → 0.9317**, ECE 0.0621 → 0.0588 (still improves, so it
+ships; the gate is "does not worsen ECE"). The exact T sits closer to
+identity than the margin proxy's 0.843 — the proxy over-sharpened on
+multi-way boards, exactly as the synthetic grid predicted. Its ECE
+(0.059) reads worse than the proxy's in-sample 0.054; that is the
+proxy overfitting the winner-vs-rest margin, not the exact fit being
+inferior — ECE here is a consistency check, and the fit objective is
+categorical NLL over the full board. The other four decoder arms keep
+margin-fit artifacts until their arms re-run with distribution
+emission (their refits reproduced the margin numbers identically).
+A schema gate now pins this in CI: `crates/opencodifier-engine/tests/
+artifact_schema_check.rs` deserializes every artifact of record into
+`CalibrationArtifact` (`deny_unknown_fields`).
 
 Fits are **in-sample**: fitted and evaluated on the same 120 items.
 ECE-after values are consistency checks, not generalization claims —
 the same n=120/single-seed limitation recorded in `REPORT.md` applies.
+
+**Per-cardinality bucket fits (2026-10-02, analysis evidence).** RESEARCH.md
+§7.3 delta 3 (from Laya's §6.3 per-option-count temperatures): the fitter now
+joins each suite item's candidate count from the seed-deterministic generator
+(`runner/fit_calibration.py`, bucket < 8 items skipped) and prints per-bucket
+temperatures. Shipped artifacts are unchanged (validated byte-identical on all
+seven arms, both fit paths). What the buckets show:
+
+- The margin-fit 4B/9B arms carry the largest cardinality gradient —
+  qwen3.5-4b-ud-q4_k_xl wants T 1.44 at k=4 but **T 0.15 at k=5** and
+  T 0.20 at k=6 (raw winner probabilities dilute as options grow, so
+  the winner-gate channel reads badly underconfident on wide boards).
+- The exact-fit 2B board (the only arm whose buckets rest on full
+  distributions, per the synthetic-grid finding that the margin proxy
+  over-sharpens multi-way boards) is flatter: k=4 0.82, k=5 1.49,
+  k=6 0.77 around its global 0.93. Trust the exact-fit buckets'
+  *shape*; treat the margin-fit buckets as upper bounds on the
+  gradient until those arms re-run with distribution emission (landed
+  for the fork's JevBench arm as `fork_4b-d15-v1`; the suite arms
+  remain queued).
+- n=18/n=15 at k=5/k=6 — the k=5/k=6 buckets are small-sample fits and
+  inherit the in-sample caveat above; the k=4 bucket (n=87) is the
+  only well-populated one.
+
+## Risk–coverage evidence (2026-10-07)
+
+`fit_calibration.py` now measures the risk–coverage curve alongside
+ECE and records `aurc_before` / `aurc_after` / `accuracy_at_coverage`
+in every fit's provenance (RESEARCH.md §15.6 item 1; the engine's
+`CalibrationFit` carries the same optional fields and refuses an
+artifact whose AURC worsens). The table above is unchanged: every T
+and ECE re-verified bit-identical to the 2026-09-28 fits — the
+regeneration was field-additive, checked per artifact against HEAD.
+
+AURC before/after are equal for every shipped arm, as they must be:
+temperature scaling is monotone in the winner probability, so it
+reorders nothing and the curve (rank-based) cannot move. The values
+are the selective-prediction evidence of record — e.g.
+mimo-v2.6-9b-q3_k_s AURC 0.050, accuracy 1.000 @ 50 % coverage /
+0.885 @ 80 %, versus the board's worst ranker,
+qwen3.5-4b-noqat-q4_0 at AURC 0.882 (degenerate, no artifact) — and
+the ship/load gates reading them become load-bearing the moment a
+non-monotone scheme (per-class isotonic, a verifier blend) writes
+artifacts. The two exact-refit artifacts of record
+(`qwen3.5-2b-q4_k_m`, `fork_4b-d15-v1`) are deliberately NOT
+regenerated by this pass: their fits come from the d15
+distribution-emission runs, not the margin-fit run JSONs, and a
+margin refit would silently replace the better fit.
+
+### Evidence floor (2026-10-08)
+
+The floor from §15.6 item 1 is now enforced on both sides: the engine
+refuses an artifact presenting the risk–coverage pair on fewer than
+200 items (`SELECTIVE_PREDICTION_MIN_ITEMS`), and the fitter omits the
+pair (and the accuracy-at-coverage map) from the artifact below the
+floor — the values stay in its analysis output and table, where they
+are evidence at any n. The 231-item JevBench arm clears the floor; the
+120-item internal-suite artifacts in `calibration/` predate it and
+still carry the pair on disk, which nothing in-repo loads through the
+engine's loader — the next compute-box refit regenerates them into the
+floor-honest shape (analysis-only aurc), changing no T or ECE value.

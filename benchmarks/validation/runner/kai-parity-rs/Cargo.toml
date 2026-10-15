@@ -1,0 +1,16 @@
+[package]
+name = "kai-parity-rs"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Compute-host parity run: the Rust Kai-0.6B contract + ONNX transport against the real quantized export (task #92)."
+
+[dependencies]
+opencodifier-model = { path = "../../../../crates/opencodifier-model", features = ["tokenizers"] }
+opencodifier-runtime = { path = "../../../../crates/opencodifier-runtime", features = [
+    "runtime-onnx-dynamic",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[workspace]

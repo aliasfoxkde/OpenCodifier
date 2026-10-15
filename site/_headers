@@ -1,0 +1,3 @@
+# charset for the raw text asset Cloudflare Pages serves without a type
+/robots.txt
+  Content-Type: text/plain; charset=utf-8

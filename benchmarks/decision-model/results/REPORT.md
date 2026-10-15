@@ -8,9 +8,9 @@ per artifact, D14). The charts in [`charts/`](charts/) are rendered by
 [`../runner/plot.py`](../runner/plot.py) directly from those run JSONs —
 they are a view of the record, never a source.
 
-**Status: 48 runs (2026-09-25 → 2026-09-28).** Binding tier picks are in
-`docs/DECISIONS.md` D16 (amended ×3, extended ×1); this report is the
-evidence behind them.
+**Status: 53 board runs (2026-09-25 → 2026-09-29).** Binding tier picks
+are in `docs/DECISIONS.md` D16 (amended ×3, extended ×1); this report is
+the evidence behind them.
 
 ## Executive summary
 
@@ -44,6 +44,14 @@ tiers are overconfident (T 0.84–1.67, frontier ECE 0.048 → 0.026), the
 embedding rung's fit is degenerate (ordering-only, no artifact), and the
 engine's proof/delegate stack rejects a global temperature too (its
 proofs are already certain; no artifact).
+
+The external field also has a new floor data point: **VTX-JEV-3** (see
+the Phase 17 section) — a 20 MB static-embedding decision engine —
+scores **0.242 (LF2) / 0.317 (FP32)** on this suite and **0.411**
+(family-macro 0.432) on the JevBench public split through its own vendor
+client. It confirms the sub-millisecond static-embedding latency claim
+and loses to the zero-ML engine everywhere except raw wall clock, which
+is the ladder's whole argument in one row.
 
 ## Methodology
 
@@ -93,6 +101,12 @@ batched tails exceeded the old fixed limit.
 5. **chat-only screens** (`llama_chat_baseline_only`) — forks with no
    `/v1/decision` endpoint (K2-Horizon). Sampled decode, JSON-writing:
    context rows, never comparable to decision rows; excluded from charts.
+6. **ONNX runtime arm** (`run_onnx.py`) — the optimum-exported
+   `onnx-community/Qwen3.5-2B-ONNX` graphs driven directly by
+   onnxruntime, re-implementing the fork's exact tree math (log-softmax
+   per divergence node summed along candidate paths). Tests the product's
+   own model-rung format (`ort`, §73) against llama.cpp on identical
+   weights.
 
 ### Metrics
 
@@ -184,6 +198,7 @@ on-disk MiB at sweep time.
 | Qwen3.5-2B UD-Q6_K_XL | 1779 | 0.97 / 0.80 / 0.50 | 0.758 | 0.079 | 2.17 s | yes |
 | Qwen3.5-2B UD-Q8_K_XL | 2704 | 1.00 / 0.80 / 0.50 | 0.767 | 0.111 | 2.18 s | yes |
 | **Qwen3.5-2B Q4_K_M (balanced)** | 1222 | 0.95 / 0.72 / 0.50 | 0.725 | **0.062** | 1.73 s | yes |
+| Qwen3.5-2B ONNX q4 (onnx-community, caveat) | 1540 | 0.88 / 0.60 / 0.50 | 0.658 | 0.064 | ≥15.2 s† | yes |
 | Qwen3.5-4B Q3_K_M | 2188 | 1.00 / 0.93 / 0.40 | 0.775 | 0.093 | 5.66 s | yes |
 | **Qwen3.5-4B Q3_K_S (reference)** | 2009 | 1.00 / 0.95 / 0.45 | **0.800** | 0.069 | 6.78 s | yes |
 | Qwen3.5-4B UD-IQ2_XXS | 1450 | 0.97 / 0.50 / 0.38 | 0.617 | 0.079 | 3.70 s | yes |
@@ -203,6 +218,11 @@ on-disk MiB at sweep time.
 | qwen2.5-3b-instruct | 2008 | 0.90 / 0.75 / 0.38 | 0.675 | 0.263 | 2.58 s | yes |
 
 \* embedding rows report mean ms/item (`ms_per_item`), not a p50 block.
+
+† ONNX row: the recorded run's host was under concurrent load for parts
+of both passes (see its `caveat` field); the true quiet-host p50 is
+lower, but the conclusion below does not depend on where exactly between
+"≥15 s" and "a few seconds" it lands. Size is the q4 file set on disk.
 
 ### Long-context A/B: focused extraction (engine arm, §45)
 
@@ -269,7 +289,11 @@ Qwen3.8-4B: 0.767 vs 0.742; Jev-0.8B: 0.217 vs 0.000). Chat won only
 within the ±2–3-item noise band (gemma-3-4b 0.775 vs 0.750; qwen0.5b
 0.433 vs 0.392). Writing distills degrade hardest when forced to commit
 through token paths (Qwen3.8 series chat > decision is the exception that
-proves the rule: those tunes were trained *for* JSON-writing).
+proves the rule: those tunes were trained *for* JSON-writing). The
+Jev-0.8B row now has a third readout that closes the story: its
+**native verdict-slot interface scores 0.8083** on the same weights and
+the same suite (F26) — the 0.217 tree / 0.000 chat rows were never about
+the model.
 
 ### Bulk throughput (batched contexts, per-decision ms)
 
@@ -301,6 +325,24 @@ across sizes.
 
 **2-bit cliff**: at 4B, 0.617; at 2B, 0.383–0.450. Nothing at or below
 2 bits is shippable for decision quality, whatever its size.
+
+**Winnow-E4B requant ladder (2026-10-03, r11b).** Six quants cut from
+the Q8_0 release artifact with `--allow-requantize` (requant, not
+from-F16), letters lane, stock build, -t 12: Q4_K_M 0.817 / 973 ms /
+det-FLIP (Δp 0.998), Q4_K_S **0.825 / 951 ms / det-clean** — the
+operating point at 2.3× the Q8_0 speed for −1.7 pp — Q4_0 0.717 with
+16 invalid distributions, IQ4_XS 0.692 / ECE 0.196 / det-FLIP (0.473),
+IQ3_M 0.658 / det-FLIP (0.984), Q3_K_S **0.408 with 41/120 malformed
+distributions** and det-FLIP (0.997). The ladder is a provenance
+result, not a size law: the K-quants hold to 4-bit then cliff, while
+legacy Q4_0 and the i-quants collapse *at the same bit widths* that
+hold when cut from F16 (the 9B's F16-sourced Q3_K_S: 0.817). Rule:
+from-Q8_0 requants stay K-quant ≥ 4-bit; i-quants get quantized
+from F16 only. Second rule: **determinism replay per quant before
+ship** — 4 of 6 requants flipped predictions between identical
+replays, including the deployment default Q4_K_M; only Q4_K_S and
+Q4_0 were replay-clean. The per-quant ECE numbers ride on surviving
+distributions and therefore track validity, not calibration quality.
 
 **Ternary / sub-1-bit packing (2026-09-28 extension).** Bonsai-4B — a
 546 MiB (~1.1 bpw) ternary-class 4B — scores **0.650**, the best
@@ -379,7 +421,115 @@ rung's runtime; the 226 MB q4-b32 build is a free memory fallback**
 (identical quality, 2.6× smaller) if a deployment is RAM-bound, never a
 speed play. Finding F21, threat #12 (quantizer op coverage).
 
+## Runtime A/B: ONNX vs llama.cpp on the same weights (Phase 17)
+
+The product's model rung reads ONNX (`InferenceBackend` behind the `ort`
+feature, §73), while every decision-arm row above was produced by
+llama.cpp. This A/B closes that gap: the optimum-exported
+`onnx-community/Qwen3.5-2B-ONNX` graphs driven directly by onnxruntime
+(`runner/run_onnx.py`), re-implementing the fork's tree math exactly —
+per-divergence-node log-softmax over allowed tokens, summed along each
+candidate path, softmax over candidates (`decision-engine.cpp
+finish_tree`), byte-identical prompt construction (`compile_schema` /
+`render_prompt`), suffix tokenized separately from the prompt like the
+server does. The qwen3_5 hybrid state (18 conv+linear-recurrent layers,
+6 GQA KV layers, 3-channel position ids) is threaded manually; the
+graph's `present`→`past` naming is asymmetric and `logits` is not the
+first output, so outputs are indexed by name. Cross-validation: greedy
+free decoding matches the llama.cpp qwen3_5 implementation on 3/3 probe
+prompts, including a 13-token generation that stresses recurrent state.
+
+| run | acc | ECE | p50 | peak RSS |
+|---|---|---|---|---|
+| Qwen3.5-2B GGUF Q4_K_M (llama.cpp decision arm) | **0.725** | **0.062** | **1.73 s** | **1222 MiB** |
+| Qwen3.5-2B ONNX q4 (MatMulNBits, onnxruntime CPU) | 0.658 | 0.064 | ≥15.2 s (caveat) | 3158 MiB |
+
+Per class the gap is metadata 0.95 → 0.875 and lexical 0.72 → 0.60, with
+relational tied at 0.50 — 22 disagreements, of which the ONNX arm wins
+7. ECE parity (0.064 vs 0.062) and the prompt-parity probes say the
+scorer is faithful; the accuracy gap is quantization quality (int4
+MatMulNBits vs Q4_K_M), concentrated in the classes that need
+fine-grained token probabilities. Latency is prefill-bound (~10.8 s of
+the 15.2 s p50 at ~140 prompt tokens, ≈70 ms/token) — ORT's MatMulNBits
+CPU path is far behind llama.cpp's prefill kernels here. The int8
+`quantized` variant was probed and produces correct output but decodes
+~20× slower than q4 on this CPU (43.7 s vs 1.9 s for identical greedy
+work); q4f16/fp16 are untestable (fp16 CPU EP unavailable, no GPU).
+
+Verdict: **llama.cpp dominates the ONNX runtime on every axis for this
+decision arm on a CPU host** — accuracy (quant), latency (9×+), memory
+(2.6×). The ONNX arm earns its keep as the runtime-portability
+reference: it proves the tree scoring is runtime-independent, and it is
+the format the product's own model rung consumes. It does not enter the
+fusion ladder (dominated on both axes by the GGUF rung it would
+replace).
+
+### Device A/B: Vulkan iGPU vs CPU (Qwen3.5-2B decision arm, 2026-09-30)
+
+Same weights (Q4_K_M), same fork tree (`thecodacus parallel-decision`,
+tree ad129b0 both legs — the JSON `llamacpp_branch` field is null for
+the vkab arms, a chain-driver gap; same-source is established from the
+build provenance: both `build-pd` and `build-vk` configured from tree
+38de7eb/ad129b0 within minutes of each other, 12:10–12:18), same suite,
+serial `--parallel 1 --decision-seqs 24`, quiet-host load gate. CPU leg:
+`-ngl 0 -t 12`. Vulkan leg: `build-vk` (Vulkan backend, RADV/LLVMpipe
+class APU — Vega 8 iGPU), `-ngl 99 -t 6`.
+
+| leg | acc | ECE | mean | p50 | p95 | wall | CPU-s | peak RSS |
+|---|---|---|---|---|---|---|---|---|
+| CPU (-ngl 0, -t 12) | 0.725 | 0.062 | 3.29 s | 2.93 s | 6.82 s | 1741 s | 16 685 | 7098 MiB |
+| **Vulkan (-ngl 99, -t 6)** | **0.725** | 0.063 | **1.47 s** | **1.35 s** | **2.63 s** | **804 s** | **388** | 5272 MiB |
+
+**2.23× faster at identical accuracy** (per-class flips offset: lexical
+0.725→0.750, relational 0.500→0.475 — item-level GPU/CPU numerics
+differ, the aggregate does not). ECE is flat (0.062→0.063). Within-run
+determinism is perfect on both legs (`max_prob_delta` 0.0,
+`predictions_match` true). The resource column is the sleeper result:
+**CPU-seconds drop 43×** (16 685 → 388) — the iGPU absorbs the math and
+frees the host, which matters exactly when the runtime shares a machine
+with the deterministic engine that is supposed to outrank it. Peak RSS
+falls 26% (KV cache + logits off the host heap).
+
+Verdict: on this class of APU the Vulkan backend is a pure win for the
+model rung — same decisions, less than half the latency, a rounding
+error of host CPU. It does not change D16 (the balanced pick is a
+latency/memory trade already measured), but it moves the deployment
+posture: a `0.725 @ 1.35 s p50` ladder tier no longer needs a
+CPU-only host assumption. Threat to validity: single device, single
+quant, single suite; Vulkan numerics are device-specific, so the
+row-of-record remains the CPU leg.
+
+Recording conditions: the ONNX run's host carried concurrent load
+(peaks 40–117) during parts of both passes; its result JSON carries the
+full caveat and the resource trace (28,218 CPU-s over 6,923 s wall).
+Accuracy and determinism are load-independent (deterministic tree math;
+replay delta 0.0).
+
+### Fork params A/B: context, threads, prompt diet (2026-10-01 → 10-03)
+
+All arms run the rebuilt parallel-decision binary (`ad129b0`),
+Qwen3.5-4B-UD-Q4_K_XL, decision-seqs 24, tree mode, 200-task suite
+unless noted; values are lifted verbatim from the revision entries
+(the arms were tabulated here after the fact). Every arm's own
+double-replay was clean (`predictions_match`, max-prob delta 0.0).
+Headline: **quality is invariant to threads and context** — t08, t16,
+ctx4k, and ctx16k are float-identical (0.800 / ECE 0.0736, per-class
+identical) — while **latency is monotone in context** and the prompt
+diet is dominated (collapse is monotone in diet depth and hits
+`metadata_match` first).
+
+| arm | threads / ctx | suite | acc | ECE | p50 | load window | status |
+|---|---|---|---|---|---|---|---|
+| t08 | 8t / 8k | 200-task | 0.800 | 0.0736 | 7630 ms | quiet | row of record for 8k threads |
+| ctx4k | 12t / 4k | 200-task | 0.800 | 0.0736 | 4833 ms | quiet | cheapest verified configuration |
+| ctx16k | 12t / 16k | 200-task | 0.800 | 0.0736 | 8040 ms | quiet | latency monotone in context |
+| t16 | 16t / 8k | 200-task | 0.800 | 0.0736 | 19.2 s | 48→78 (storm) | quality of record; speed NOT of record |
+| diet200 | 12t / 8k | 200-task | 0.633 | 0.1203 | 15855 ms | 45.6→23.8 | dominated — do not ship |
+| diet100 | — | 200-task | 0.508 | 0.1487 | 7.5 s | 18.5→17.1 (clean) | dominated — do not ship |
+| params__long | 14t / 8192 | 120-item long suite | 0.7667 | 0.0825 | 46.7 s | 14.5→17.3 (clean) | long-suite arm of record (#32); prefill-bound (~46.5 s of 46.7 s) |
+
 ## External anchor: JevBench public split (Phase 17)
+
 
 Every number above this section is internal (our suite, our seeds). The
 JevBench public split (231 items; choice 139 / noul 74 / score 18; mean
@@ -391,13 +541,116 @@ scoring drift against every published row is zero by construction.
 
 | arm | n | accuracy | macro | ECE | Brier | p50 | status |
 |---|---:|---:|---:|---:|---:|---:|---|
-| **engine** (`relational-v1` via `/v1/decide`) | 231 | **0.3766** | 0.4011 | 0.402 | 0.890 | **2.0 ms** | done, det 231/231 |
-| **jev_native bridge** (Jev-Style-0.8B-v3 Q4_K_M verdict slot) | 231 | **0.6494** | 0.6378 | 0.080 | 0.425 | 6.72 s | done, det 231/231 |
-| fork_4b (tree mode, D16 config) | 231 | — | — | — | — | — | pending quiet host |
+| **engine** (`relational-v1` via `/v1/decide`) | 231 | 0.3766 | 0.4011 | 0.402 | 0.890 | **2.0 ms** | done, det 231/231 |
+| **jev_native bridge** (Jev-Style-0.8B-v3 Q4_K_M verdict slot) | 231 | 0.6494 | 0.6378 | **0.080** | **0.425** | 6.72 s | done, det 231/231 |
+| **vtx** (VTX-JEV-3 LF2 via vendor `JevClient`) | 231 | 0.4113 | 0.4318 | 0.126 | 0.684 | **7.9 ms** | done, det 231/231 |
+| **fork_4b** (tree mode, D16 config, fork-default T — **fedora anchor**, 2026-10-02) | 231 | **0.7662** | **0.7571** | 0.070 ¹ | 0.305 ¹ | 2.28 s | done, det 231/231 (labels) |
+| **nli-zeroshot** (deberta-v3-base-zeroshot-v2.0 `onnx/model.onnx`, entailment renorm, 2026-10-08) | 231 | 0.5325 | 0.4904 | 0.232 | 0.648 | 0.57 s | done, det 231/231 |
+| **gguf: imajev-2b** (mindchain Q4_K_M, authors' standard prompt, shipped T=1.646 letter readout, unknown→abstain scored incorrect, 2026-10-08) | 231 | 0.7359 | 0.7449 | 0.032 | 0.315 | 3.83 s | done, det 231/231 (226 valid + 5 abst) |
+| **gguf: decider-2b-v11** (Mapika Q4_K_M, authors' `prompt.build` + temperature module, 2026-10-08) | 231 | 0.7576 | 0.7632 | 0.058 | 0.332 | 2.54 s | done, det 231/231 |
+
+¹ ECE/Brier come from the decision-identical build-`d15` arm
+(`fork_4b-d15-v1`, same host/build/split, predictions verified equal on
+all 231 items): the anchor's own tree mode ships the winner's mass only
+(label-only mapping, D15), but the `d15` rebuild emits full per-choice
+distributions, and its raw-board ECE 0.070 / Brier 0.305 are the fork's
+calibration of record. Exact d15 refit on those distributions: T 1.313,
+ECE 0.070 → 0.048 in-sample (`calibration/fork_4b-d15-v1.json`). The
+first run of this arm (this NAS box,
+2026-09-30: 0.6667 / macro 0.6541, p50 15.5 s through a co-tenant
+storm) is superseded by the clean-host anchor; the 23-task delta
+exceeds the strands retrain-noise bar and is recorded as an unresolved
+run-vintage discrepancy (no seed at the fork's default decision
+temperature; single draw each) — `docs/BENCHMARKS.md` carries the full
+note plus the instruction-template A/B (#76) and the anchor-joined
+fusion study.
 
 Published anchors for the same split: hosted Jev 86.6 %, llm-qwen3.5-4b
 80.5 % / 651 ms, Jev-Style-2B 73.6 %, decider-2b 71.0 %, open-jev-2b
-64.5 %, Jev-Style-0.8B 64.1 % (our bridge row), Laya 58.4 %.
+64.5 %, Jev-Style-0.8B 64.1 % (our bridge row), Laya 58.4 %. A second,
+newer anchor set (autotrust's runs of the same public 231, scored
+family-macro, published 2026-09-27): autotrust/JEV-27B **88.70**,
+TypeSafe Jev 1.13 hosted **87.18**, Open-Jev-9B 77.13,
+NeoHorse-Jev-4B 75.73, Kev-4B 73.71, Laya English 55.82 — our rows on
+that scale: fork_4b 75.71 (fedora anchor), bridge 63.78, vtx 43.18, engine 40.11. The full six-benchmark
+external comparison lives in `docs/BENCHMARKS.md`.
+
+**Reading the vtx row.** VTX-JEV-3 is a Model2Vec-class static embedding
+table (255,753 × 256, 2-bit LF2 quantized, 20.5 MB on disk; FP32 variant
+262 MB) with a position-gated attention pooler, distilled on
+`SargeDev/jev-distill-corpus-v3`. It answers every kind as a
+candidate-conditioned choice (cosine softmax, scale 15), run through the
+vendor client because the pooler is not reproducible from the FP32 table
+by mean pooling. The vendor's latency claim reproduces exactly — 0.79 ms
+vendor-side p50 per suite decision, 7.9 ms client-wall on JevBench items
+(up to 16 options, each an encode). Its accuracy does not: **0.4113 /
+macro 0.4318** is 3.5 pp above the zero-ML engine and ~23 pp below the
+0.8B bridge — static similarity routes intent-shaped families (fact
+0.750, policy 0.750, ambiguous 0.571 — it guesses where the engine
+abstains) and collapses exactly where composition is required
+(long_policy 0.105, multi_hop 0.167, routing 0.250). Calibration
+0.126 ECE sits between the engine (0.402) and the native 0.8B stack
+(0.080). On our own suite it is *below* every embedding-rung row
+(0.242 LF2 / 0.317 FP32 vs gte 0.575; metadata class 0.175–0.200 —
+constraint checking is the opposite of what a static table can do), and
+the 2-bit LF2 table costs a further 7.5 pp against its own FP32 weights.
+Net: the sub-millisecond tier is real, the decision quality is not there
+— the row is the ladder's cheapest rung measured, not a new tier (D16
+unchanged).
+
+**Reading the nli row.** The 24j zero-shot NLI cross-encoder
+(deberta-v3-base-zeroshot-v2.0, its own published `onnx/model.onnx` —
+705 MB fp32, no conversion) scores **0.5325 / macro 0.4904**: above the
+engine (0.3766) and vtx (0.4113), below the 0.8B bridge (0.6494), and
+its calibration is the worst of the trained arms (ECE 0.232, Brier
+0.648 — confidently wrong on the families it fails). Family profile is
+the cleanest separation of any arm measured: entailment-shaped decisions
+score near ceiling (tool_selection 1.000, intent 0.875, adversarial
+0.833, extraction 0.833, ordinal 0.833, fact 0.750 — the candidate
+description *is* the hypothesis and the item state *is* the premise),
+while reasoning-shaped families collapse below chance
+(multi_hop 0.111, trap 0.125, ambiguous 0.143, tradeoff 0.167,
+long_policy 0.211) — a cross-encoder cannot compose hops it cannot see
+in one premise–hypothesis pair. Operational posture is perfect —
+231/231 valid native distributions, zero failures, full 231/231 replay
+determinism — and the substrate is proven: the same graph, tokenizer,
+and softmax path passed the committed 10-row fixture at 1e-6 (fixture
+gate 1e-4) in `nli-parity-rs` before this run. Verdict for 24j's
+remaining item: the quality read **does not** justify wiring NLI as a
+general decider, and **does** support the designed role — a
+confidence-gated *verifier* restricted to entailment-shaped decision
+classes (descriptive choice candidates), where its near-ceiling agreement
+is the second opinion §19 wants; wiring that band stays open in PLAN 24j
+pending a rung-level decision. Cost note: $0 (local CPU), p50 0.57 s per
+item at 4 threads (the premise is encoded once per option), p95 6.9 s on
+long_policy items. D14 registration: graph/tokenizer/config digests are
+in `../results/models.manifest.json`; per-run hashes recorded in the
+run's own manifest.
+
+**Reading the gguf rows (task #125).** Two third-party 2B decision
+models, each measured under its own author's protocol (JEVBENCH.md
+arm 6): decider-2b-v11 Q4_K_M **0.7576** / macro 0.7632, imajev-2b
+Q4_K_M **0.7359** / macro 0.7449 (226 valid native+unknown
+distributions, 5 unknown-argmax abstentions scored incorrect per the
+authors' own rule; decider 231/231 valid). Both land between the 0.8B
+bridge (0.6494) and the 4B fork (0.7662) — the first independent
+replication of the 2B tier on this suite. The anchor deltas are
+protocol-shaped, not harness-shaped: decider's +4.8 pp over its 71.0 %
+board row and imajev's 4–5 pp deficit to its card record (0.788 under
+4-rotation + calibration pooling; 0.779 raw single-pass) bracket a
+harness that measured the bridge at +0.9 pp vs self-report. Per-split,
+the 2B wall is identical on both — easy 1.000 / 0.958, original 0.875 /
+0.903, hard 0.577 / 0.532 — composition-heavy items, the same families
+where the engine abstains honestly. The calibration receipts are the
+second product: both shipped temperatures hold single-pass (ECE 0.058
+under the authors' noul 1.624 / choice 1.164 split; 0.032 at a flat
+1.646) — the third and fourth trained arms under 0.1 ECE on this
+suite, against the engine's raw 0.393. No serving wiring: 2.5–3.8 s
+p50 serial CPU under a co-tenant load window (load 20–54; p95 spikes
+are load artifacts) buys no dominance over the fork's 2.28 s at higher
+accuracy. D14 hashes registered (`../results/models.manifest.json`);
+per-run manifests and raw evidence outside both repos
+(`runs/jevbench/{imajev,decider}-2b-gguf/`).
 
 **Reading the bridge row.** 0.6494 (150/231) vs the published 64.1 %
 (148/231) is a +0.9 pp reproduction delta on the authors' own harness —
@@ -442,6 +695,42 @@ same 231 items take ~60 s with the run directory on tmpfs. Runs v1–v3
 are quarantined partials; the of-record run is `runs/jevbench/engine-v4`
 (out-of-tree), rerun fresh, never patched up.
 
+## Fusion study: what a confidence-gated ladder would score (post-hoc)
+
+`runner/fusion_study.py` simulates the deterministic-first ladder offline,
+joining **measured** per-item arm rows (probabilities, predictions,
+latencies — all harness measurements, nothing re-inferred) and walking a
+threshold-gated escalation per item: accept a rung when its winner
+probability clears the gate, else fall through; cost = rungs incurred.
+Outputs of record: `results/fusion-suite.md`, `results/fusion-jevbench.md`,
+`results/fusion-jevbench-bridge.md`.
+
+**Suite (engine relational-v1 → gte-ONNX-fp32 → Qwen3.5-2B decision arm):**
+the ladder reaches **0.867 blended** (engine t=0.55, fallback t=0.30;
+routing 54 % engine / 1 % embed / 45 % LLM) at **753 ms mean** — vs 0.725
+for the best single arm (the 2B itself) at 1735 ms. Under a 497 ms budget
+it still scores **0.800** (71 % engine / 29 % LLM, 410 ms). Per class at
+the best point: metadata 1.00, lexical 0.72, **relational 0.88** (the
+engine's proofs keep confident relational items at 1.3 ms; the hedged ones
+escalate to the LLM). Oracle bound on the joined set: 0.975 — headroom
+remains for a better-calibrated gate. The mixed-rung ECE (0.127) is the
+next work item: D15 per-rung temperature before trusting the blended
+confidence. The embedding rung's gate is since measured: probability
+never calibrates there (degenerate fit, CALIBRATION finding 3), but the
+rank/margin gate does — margin ≥ 0.0183 accepts 20.8 % of items at 0.880
+accuracy, monotone to 1.000 at margin ≥ 0.0283 (`embed-margin-study.md`,
+`runner/margin_gate_study.py`).
+
+**JevBench-231 (engine → vtx, engine → bridge):** engine+vtx reaches
+**0.455** (vs 0.411 best single, +4.4 pp at 6.3 ms mean; oracle 0.584).
+But engine+bridge **fails to beat the bridge alone**: best gated fusion
+0.632 vs 0.6494 bridge-only, because the engine's JevBench calibration is
+broken (ECE 0.402) — its overconfident wrong answers survive any useful
+gate. That is the measured §19 lesson: **an escalation gate is only as
+good as its rung's calibration on the distribution it is gating**, so
+gates must be domain-validated (or fitted per-domain) before they are
+trusted to route.
+
 ## Findings
 
 - **F1 — Tier scheme (D16 ×3).** Four measured tiers: MiMo-9B Q3_K_S
@@ -484,7 +773,7 @@ are quarantined partials; the of-record run is `runs/jevbench/engine-v4`
   token paths and JSON chat are both outside its trained interface, so
   the row measures the harness-to-model distance, and zero transfer was
   observed. A native verdict-slot readout arm is future harness work
-  (backlog #25).
+  (backlog #25) — **landed 2026-09-30, see F26.**
 - **F11 — Chat is the wrong interface for decisions.** Same weights,
   same questions: chat loses or ties everywhere, adds sampling
   nondeterminism, and loses calibration entirely. K2's 7B chat screen
@@ -583,6 +872,178 @@ are quarantined partials; the of-record run is `runs/jevbench/engine-v4`
   0.650 @ 613 ms) — D16 amended; (c) a global temperature cannot
   calibrate a proof/delegate stack (CALIBRATION.md finding 2), so the
   engine keeps identity calibration until per-mode calibration exists.
+- **F23 — The ladder beats its best rung on home ground: 0.867 suite at
+  753 ms.** Post-hoc fusion over measured rows (`fusion_study.py`): gate
+  the engine at t=0.55, escalate hedged items to the Qwen3.5-2B decision
+  arm, and the blend scores +14.2 pp over the best single arm at 43 % of
+  its latency; under a 497 ms budget it still holds 0.800. Relational
+  compositional rises to 0.88 — proofs keep the confident items, the LLM
+  answers the hedges. Oracle 0.975 says better gates have room. The
+  blended ECE (0.127) needs per-rung D15 calibration before exposure.
+- **F24 — The same ladder loses out-of-domain: gates inherit their
+  rung's calibration.** On JevBench the engine's ECE is 0.402; gating
+  on it *lowers* the bridge's 0.6494 to 0.632 (engine+vtx does add
+  +4.4 pp over vtx-only, 0.455). A confidence gate is not free
+  architecture — it must be validated or fitted on the distribution it
+  routes, which is precisely the §19 uncertainty-gate contract.
+- **F25 — Same weights, different runtime: llama.cpp beats ONNX on every
+  axis for this decision arm on CPU.** The optimum ONNX export of
+  Qwen3.5-2B driven by onnxruntime — with the fork's tree math
+  re-implemented exactly and greedy-parity-validated — scores 0.658 /
+  ECE 0.064 where the GGUF Q4_K_M build scores 0.725 / 0.062, at ≥9×
+  the latency (prefill-bound, ~70 ms/token through MatMulNBits) and
+  2.6× the memory. The accuracy gap is quantization quality, not
+  runtime or scorer error (relational tied at 0.50; int8 decodes ~20×
+  slower still). ONNX remains the product's model-rung format for
+  portability (§73) and the WASM seam, but the benchmark decision arm
+  stays on llama.cpp, and the fusion ladder is unchanged (the ONNX arm
+  is dominated by the GGUF rung it would replace).
+- **F26 — Interface is the model: the native verdict-slot readout lifts
+  Jev-Style-0.8B from 0.217 to 0.8083 on identical weights.** The
+  F10 mismatch arm now has its native control (`jev_native_verdict_slot`,
+  macjev-render-v1 render + macjev-readout-v1 fused decode over the
+  authors' shipped `readout_config.json` temperatures): 0.8083 blended
+  (lexical 0.825, metadata 1.000, relational 0.600), ECE 0.157 on their
+  global T = 0.880, p50 1.30 s / p95 3.99 s, deterministic
+  (`max_prob_delta` 0.0). A +59 pp swing from readout alone — larger
+  than any model swap on the board — confirming F10: candidate-id token
+  paths and JSON chat were measuring the harness, not the tune. Two
+  honest caveats keep the row from entering the tier board: the native
+  protocol has no instruction/system channel, so the suite's
+  instructions field goes unused here (it is part of the prompt in every
+  other arm), and its calibration is the authors' shipped temperature,
+  not a D15 fit. It is the comparability bridge's suite-side anchor:
+  the same interface that scores 0.6494 on JevBench scores 0.8083 at
+  home.
+- **F27 — D26 closes: the shipped ladder + model rung blend lands
+  0.842 @ 117 ms mean on the locked suite, measured through the real
+  engine.** The B5 wire-through (`serve --ladder ladders/fusion-v1.json
+  --llama --llama-model-id 'pd-fork-38de7eb|gemma4-e2b-it-qat-q4_0|tree-v2'`)
+  took the full 120-item suite twice against a live build-pd
+  `llama-server`: blended **0.842** (criterion ≥ 0.80) at **117.2 ms
+  mean** (criterion ≤ 1 s; p50 0.54 ms, p95 459 ms), replay bit-exact
+  (Δp 0.000), every row `accept` — the model rung's tree-readout
+  distributions are confident enough that D27 cross-rung escalation
+  converts all `Verify`/`Abstain` outcomes into model decisions.
+  37/120 items escalate (their p50 443 ms ≈ the standalone letters
+  arm's 422.9 ms — same weights, same host); 69 % of traffic never
+  touches the model rung. The blend's shape: the model rung rescues
+  the metadata class (0.23 lexical-standalone → 0.88 blended) at a
+  small lexical-class cost (0.88 → 0.78 — lexical-correct-but-low-
+  margin items escalate and the model misses some). Versus the F23
+  simulation (0.867 @ 753 ms): the real gates trade ~2.5 pp accuracy
+  for a 6.4× faster mean — fusion-v1's margins were fitted on the
+  letters readout's confidence shape, and the tree readout's shape
+  differs; a tree-shaped margin refit is the obvious next lever
+  (D15 artifact, per-rung calibration seam). Board row
+  `engine__rung-qate2b-q4_0-fusion.json`; BENCHMARKS.md footnote ¹⁴.
+- **F28 — the tree-shaped gate refit lands 0.933 @ 260 ms through the
+  real engine, beating every arm and every simulated blend on the
+  board.** The F27 next-lever executed end to end. (1) *Contract-faithful
+  collection*: `collect_tree.py` gathers the model rung's tree
+  distributions for all 120 items under the engine rung's exact payload
+  (DEFAULT_INSTRUCTIONS, candidate ids, `mode: "tree"`) — the standalone
+  rung lands **0.758**, not the letters arm's 0.808: letters-era
+  readout numbers do not transfer to the served shape (meta/lex/rel =
+  1.00 / 0.93 / 0.35; the rung is near-perfect on lexical semantics,
+  poor on relational — precisely the division of labor the solver/rung
+  split assumes). (2) *The refit*: margins captured per item for the
+  lexical arm (the IR always ships the full distribution;
+  `run_engine.py` now stores it) and swept against the tree rows —
+  **the margin axis is flat on lexical/BM25 confidences** (accuracy
+  identical across margin floors 0.00–0.11), so fusion-v1's 0.0183
+  floor — measured on embedding-cosine margins in the letters shape —
+  was doing no work in the served shape; the confidence axis is the
+  discriminator. Shipped `ladders/fusion-v2.json`: accept at
+  winner-confidence ≥ 0.56 (full-suite optimum, modal per-half fit,
+  mid-plateau — 0.933 holds over 0.55–0.58), margin 0.0. (3) *Engine
+  validation*: `engine__rung-qate2b-q4_0-fusion-v2.json` — blended
+  **0.933** @ **259.8 ms** mean (p50 0.94 ms, p95 1210 ms), 56/120
+  escalations, replay bit-exact (Δp 0.000), first run stamped with the
+  new `config.host` provenance field. The offline sweep predicted the
+  engine exactly (0.933 / 242 ms sim vs 0.933 / 260 ms served). Zero
+  lexical accepts are wrong at the gate; every residual error is a
+  model-rung error on an escalated item, 2 of which fall below the
+  0.56 gate and are honestly flagged `verify` (v1's `min_confidence
+  0.0` masked this distinction). Honest caveat: 0.933 is **in-sample**
+  — the gate was fitted on the scored suite. Per-half refits
+  (400 trials) never beat fixed-0.56 held-out (max Δ +0.000) and
+  select 0.54–0.56 in 68 % of trials; conservative out-of-sample
+  estimate ~0.90, above v1's 0.842 either way. Instrument artifacts:
+  `runner/collect_tree.py`, `runner/tree_margin_refit.py`,
+  `runs/tree__e2bqat-q4_0-collect.json`,
+  `runs/engine__relational-v1-margins.json`. Board rows
+  `engine__rung-qate2b-q4_0-fusion-v2.json` +
+  `tree__e2bqat-q4_0-collect.json`; BENCHMARKS.md footnote ¹⁵.
+- **F29 — the F28 gate holds out of sample: 0.892 held-out vs v1's
+  0.800, and the advantage transfers undiminished (+9.2 pp OOS vs +9.1
+  in-sample) with zero threshold drift.** Suite v3
+  (`suite_holdout.json`, seed 20261005, byte-locked; class B drawn from
+  a second disjoint 40-row pool of the authoring table — the one class
+  a seed cannot refresh — zero id/context overlap with v1, 40/40/40
+  balance; see F30 for the pre-measurement hardening). Four arms on the
+  same fedora host, same stack as F28, all replay bit-exact:
+  lexical-only **0.700** (class B is hardest for BM25 here — lex class
+  0.375 vs 0.225 on v1 — so this is a genuine transfer test, not a
+  re-measurement), model rung alone **0.750** (meta 1.00 / lex 0.80 /
+  rel 0.45 — the F28 division-of-labor shape replicates), fusion-v1
+  **0.800** @ 169.4 ms mean (42 escalations), fusion-v2 **0.892** @
+  321.8 ms mean (60 escalations, 2 flagged `verify`; p50 136.7 ms).
+  The in-sample 0.933 discounted to **0.892 held-out** — inside the
+  predicted ~0.90 band — while the v2 > v1 gap held at +9.2 pp: the
+  refit's edge does not depend on seeing the suite. Threshold drift:
+  swept on holdout rows, the optimum plateau is **0.56–0.59 — the
+  shipped 0.56 sits inside it**; the margin axis stays flat. The
+  hardening itself did real work: lexical-only fell 0.742 → 0.700 when
+  the keyword hooks were removed, and the v2 − v1 gap *widened* from
+  +6.6 (first, leaky, holdout measurement) to +9.2 — weaker lexical
+  evidence sends more items to the rung that is actually better on
+  class B, which is the exact behavior the gate was fitted to produce.
+  Deployment note: at 60/120 escalations the holdout p50 crosses into
+  rung territory — p50 "mostly-lexical" behavior is suite-dependent,
+  which is precisely what per-deployment gate refits
+  (`tree_margin_refit.py`) are for. The marketable claim is now
+  two-sided: **0.933 in-sample / 0.892 held-out, both above v1's 0.842
+  / 0.800 under the identical stack and host**. Runs:
+  `engine__holdout-{lexical,fusion-v1,fusion-v2}.json`,
+  `tree__e2bqat-q4_0-holdout.json` (suite sha `6e9b6e0f…`);
+  BENCHMARKS.md "Held-out suite".
+- **F30 — suite integrity audit: every answer is either structurally
+  re-derivable or a verified human tag, and nothing external enters
+  the benchmark.** Response to a direct reviewer question ("did we
+  hardcode Q/A pairs or include datasets to inflate numbers?").
+  `runner/audit_suite.py` is the committed adversarial reader of
+  `suite/generate_suite.py`: it re-derives every class-A answer by
+  parsing the context's constraint lines and checking the unique
+  satisfier, re-derives every class-C answer from the rendered edges
+  (chain root = failing node in a dependency edge; count = unique
+  healthy max; order = node with no predecessor) — 80/80 exact on both
+  suites — and for class B (human-labeled by construction) enforces
+  the structural claims: answer among candidates, 40/40/40 balance,
+  and a keyword-leak test (no item may be solvable by word-overlap
+  scoring alone). Findings and dispositions: **one v1 item (B-0533)
+  is keyword-leakable** — disclosed and accepted; v1 is frozen under
+  113 committed runs and the leak is a 1.25% difficulty discount, not
+  a scoring-path effect (the lexical arm scores 0.225 on v1 class B —
+  if pairs were authored to match the scorer, that number would be
+  near 1.0); **six holdout items were leakable** and were reworded
+  (labels unchanged) *before* the F29 numbers above were measured —
+  the fix can only make the suite harder; **a cross-suite id
+  collision** (position-derived ids shared by v1 and the holdout) was
+  fixed by namespacing holdout ids `h*` with a suite-version bump —
+  contexts were always disjoint; ids now are too. The audit also
+  verifies main/holdout disjointness (ids AND contexts), byte-lock
+  regeneration of both suites, stdlib-only provenance (no imports
+  beyond json/random/sys/pathlib, no network, no dataset files under
+  `suite/`), and — checked separately in the runners — that outgoing
+  payloads carry context/question/candidates only; suite answers
+  appear solely in stored result rows and scoring. The letters suite
+  (`suite_long.json`) inherits all of this: it is mechanically derived
+  from the audited `suite.json` (same seed, `derived_from` embedded,
+  gold answers unchanged, contexts padded with vocabulary-disjoint
+  distractors). JevBench is upstream's own 231-item split, unmodified
+  — that independence is the point. Command:
+  `python3 runner/audit_suite.py` (exit 0 = pass).
 
 ## Threats to validity
 
@@ -626,6 +1087,20 @@ are quarantined partials; the of-record run is `runs/jevbench/engine-v4`
     nodes only — 46 attention-path MatMuls stay fp32 and the embedding
     Gather is untouched — so the 226 MB q4 arm is not a whole-graph
     4-bit result, and its numbers say nothing about fully-int4 encoders.
+13. **The F28 gate is fitted on the scored suite (in-sample).** The
+    0.933 headline carries a gate-selection component: per-half refits
+    never beat fixed-0.56 held-out and the threshold is the modal fit,
+    but the honest out-of-sample expectation is ~0.90 on suites of this
+    size. MEASURED (F29, suite_holdout.json v3): held-out 0.892 vs v1's
+    0.800, optimum plateau 0.56–0.59 containing the shipped 0.56 — the
+    discount is real (~4 pp) but the refit's advantage survives
+    undiminished (+9.2 pp OOS vs +9.1 in-sample).
+14. **Host provenance starts 2026-10-05.** Run JSONs now stamp
+    `config.host`; earlier rows carry no host field and the board mixes
+    NAS-era rows (co-tenant load) with idle-fedora rows. Accuracy rows
+    are host-independent (deterministic readouts); cross-era speed
+    comparisons are not — the fusion-v1-vs-v2 ladder comparison (¹⁴ vs
+    ¹⁵) is fully same-host (fedora), the first clean one for ladders.
 
 ## Reproduction
 
@@ -733,3 +1208,696 @@ hash is a changed artifact and invalidates the row (D14).
   (tool_selection/fact 1.000), weak exactly where the engine abstains
   honestly (long_policy 0.105, ambiguous 0.143). fork_4b pending quiet
   host. Archived `runs/jevbench/bridge-v1`.
+- **2026-09-29 (static-embedding survey arm)** — 51 board runs (+2 vtx
+  suite rows) and the third JevBench arm: **VTX-JEV-3** (VTXAI), a
+  255,753×256 Model2Vec-class static table (20.5 MB 2-bit LF2; 262 MB
+  FP32) with a position-gated attention pooler, distilled on
+  `SargeDev/jev-distill-corpus-v3`, driven through its vendor
+  `JevClient` (`run_vtx.py` new; JevBench `vtx` arm new). Suite: 0.242
+  LF2 / 0.317 FP32 at 1.09 / 0.80 ms p50 — below every embedding rung,
+  quantization costs 7.5 pp. JevBench public 231: 0.4113 (macro 0.4318,
+  ECE 0.126, p50 7.9 ms, det 231/231) — engine+3.5 pp, bridge−23 pp.
+  Vendor sub-millisecond latency claim confirmed; decision quality not
+  at the Jev-class field's. External target bar recorded
+  (`docs/BENCHMARKS.md`): autotrust/JEV-27B mean 84.07 over six public
+  benchmarks (JevBench 88.70 family-macro) — the number to reach while
+  staying faster, smaller, and easier to adopt. No tier changes (D16
+  unchanged).
+- **2026-09-29 (ladder fusion + resource accounting)** — same 53 runs,
+  two new measured analyses and a harness upgrade. `fusion_study.py`
+  (post-hoc, measured rows only): suite ladder engine→gte→Qwen3.5-2B
+  hits **0.867 @ 753 ms** vs 0.725 best single (F23; oracle 0.975),
+  while the same gate on JevBench *underperforms* the bridge alone
+  (0.632 vs 0.6494) because the engine's out-of-domain ECE is 0.402 —
+  gates inherit their rung's calibration (F24). Runners now carry a
+  `/proc`-based resource monitor (`runner/resources.py`): peak RSS,
+  CPU-seconds, IO bytes, wall time land in every future run JSON under
+  `resources` and in summary.md's new peak-RSS column (prior runs show
+  `—`). Training research recorded in `docs/TRAINING.md` (LoRA /
+  decision-head adapter feasibility on this host). No tier changes.
+- **2026-09-30 (ONNX runtime arm)** — 55 runs on the board, first
+  non-llama.cpp decision arm: the optimum ONNX export of Qwen3.5-2B driven by
+  onnxruntime with the fork's tree math re-implemented exactly
+  (`runner/run_onnx.py`; greedy parity vs llama.cpp 3/3 probes).
+  **0.658 / ECE 0.064 / ≥15.2 s p50 (contention caveat) / 3158 MiB**
+  vs GGUF Q4_K_M 0.725 / 0.062 / 1.73 s / 1222 MiB on the same weights —
+  llama.cpp wins every axis (F25; gap is quantization quality, relational
+  tied at 0.50; int8 decodes ~20× slower still). ONNX stays the product's
+  model-rung format for portability; the benchmark arm and the fusion
+  ladder stay on llama.cpp. No tier changes (D16 unchanged).
+- **2026-09-30 (quiet-batch close-out, part 1)** — five quiet-window
+  results, no tier changes (D16 unchanged). **Native verdict-slot suite
+  arm** (`jev_native_verdict_slot`): Jev-Style-0.8B-v3 through its own
+  readout scores **0.8083 / ECE 0.157 / p50 1.30 s** on the same weights
+  that scored 0.217 tree / 0.000 chat — interface is the model (F26;
+  backlog #25 closed). **Margin gate study** (`runner/margin_gate_study.py`
+  → `embed-margin-study.md`): the embedding rung cannot be gated on
+  probability (degenerate fit) but margin ≥ 0.0183 accepts 20.8 % of
+  items at 0.880 accuracy, monotone to 1.000 at 0.0283 — CALIBRATION
+  finding 3 closed, the rung's live profile is `min_confidence: 1.0` +
+  `min_margin ≈ 0.018`. **d15 exact refit landed**: the parallel-decision
+  CPU leg recorded full per-candidate distributions (120/120) and the
+  Qwen3.5-2B artifact refits exactly, T 0.8426 → 0.9317 (ECE 0.0621 →
+  0.0588; the margin proxy over-sharpened as the synthetic grid
+  predicted); a new engine test pins every artifact of record to the
+  `CalibrationArtifact` schema. **Vulkan device A/B**: the Vega 8 iGPU
+  leg matches the CPU leg's accuracy (0.725 / ECE 0.063) at 2.23× the
+  speed (p50 1.35 s vs 2.93 s) using 1/43rd the host CPU-seconds — the
+  deployment posture for the model rung moves (Device A/B section);
+  row-of-record stays CPU. **Vision probe PASS (#42)**:
+  LFM2.5-VL-450M Q4_K_M (229 MB) + mmproj Q8_0 (103 MB) load and decide
+  on CPU — probe A (text state) answers `restart_cache` in 0.33 s and
+  probe B (the same state rendered into an image) answers identically
+  in 1.42 s (`runs/vision__lfm25vl-450m.json`): the "state as image"
+  seam is real on a 450M VL model — a capability gate passed, not an
+  accuracy row. **Ladder wiring landed in the engine**
+  (`LadderPolicy` per-node/per-kind gate overrides, D25; empty =
+  byte-identical; identity-decorated cache keys; traces name the rung
+  that gated). fork_4b's watchdog-killed pre-d15 run was preserved as
+  salvage (`fork4b-kill-salvage.md`, context only) and is re-running on
+  the rebuilt ad129b0 binary; the params A/B (ctx, threads, diet) and
+  cross-builds are still measuring in the quiet chain — integration
+  part 2 follows them.
+- **2026-10-01 (storm recovery + cross-build matrix)** — the co-tenant
+  load storm held 1-min load above 40 all night (the recovery driver's
+  arm gates recorded 42–78; the previous afternoon's spike hit 151 and
+  cost fork_4b its first run), so the quiet chain
+  was re-driven by a gate-checked recovery driver
+  (`runs/storm_recovery_20261001.log`: an arm starts only on a clean
+  gate and records `load_avg` start/end inside its result). **§58
+  cross-build matrix closed 4/4** at its named verification level
+  (rustc 1.98.1 + zig 0.16.0, from the repo root after the first pass
+  tripped on cwd): aarch64-linux-gnu (dynamic), aarch64-linux-musl
+  (static), aarch64-darwin, x86_64-darwin — link + `file`-magic only,
+  no foreign-arch execution claimed (D24 status block). **t16 landed
+  (rc=0)**: 0.800 / ECE 0.0736, every metric float-identical to the
+  t08 arm — aggregate and all three per-class accuracies, and ECE at
+  full float precision (0.07363460237781208 in both run JSONs), which
+  is consistent only with identical per-item predictions and
+  probabilities across thread counts; each run's own double-replay was
+  also clean (predictions match, max-prob delta 0.0). But its latency
+  row (p50 19.2 s, load 48→78 start-to-end) is load-confounded against
+  t08's 7.6 s and is not of record for speed; the threads row of
+  record stays with t08 until a quiet re-arm. **fork_4b recovery arm rc=1, honest root cause**: the
+  storm driver's own script pointed the JevBench dataset at
+  `$REPO/datasets/public` (FileNotFoundError on `easy.jsonl`) instead
+  of `jevbench-ref/datasets/public` — a driver path bug, not an engine
+  or model failure; a running script is never edited in place, so a
+  follower script with the corrected `JREF` path re-queues the arm and
+  will file `runs/jevbench/fork_4b-v1/`. **diet100 launched 07:53**
+  (in flight at this entry). The D9 criterion-baseline driver parks
+  until Class L (load < 30): the new engine/http benches were
+  smoke-verified under load 70–90 and those numbers are marked DIRTY —
+  context for B3's build-once case, never citable as D9 results. No
+  tier changes (D16 unchanged).
+- **2026-10-01 (params A/B matrix, quiet-window arms)** — the CTX /
+  threads / prompt-diet arms landed and are integrated here (supersedes
+  this entry's "diet100 in flight" note: diet100 was watchdog-killed at
+  load 438.75 and marked `.contaminated`; a re-arm is queued to
+  complete the curve). All arms are the rebuilt parallel-decision
+  binary, Qwen3.5-4B-UD-Q4_K_XL, decision-seqs 24, tree mode, 200-task
+  suite unless noted; every arm's own double-replay was clean
+  (`predictions_match`, max-prob delta 0.0). **Finding 1 — quality is
+  invariant to threads and context**: t08 (8t/8k, quiet), t16
+  (16t/8k, storm-gated), ctx4k (12t/4k, quiet 4.9→15.3) and ctx16k
+  (12t/16k, quiet 16.6→20.1) all score **0.800 / ECE 0.0736** —
+  aggregate, all three per-class accuracies (0.95 / 1.0 / 0.45), and
+  ECE at full float precision (0.07363460237781208 in all four run
+  JSONs) are identical, i.e. identical per-item predictions and
+  probabilities everywhere. Threads and context are performance knobs
+  with zero measured quality effect at this suite's context lengths.
+  **Finding 2 — ctx4k is the cheapest verified configuration**: p50
+  4833 ms / mean 5513 ms / wall 1778 s at full quality, vs ctx16k p50
+  8040 ms / wall 5117 s — latency is monotone in context within the
+  12-thread family. The 8k row of record stays t08 (quiet, p50 7630
+  ms): no 12-thread/8k arm exists, so the threads axis is not cleanly
+  isolated (t16's p50 19.2 s is the storm row already marked
+  not-of-record). **Finding 3 — the prompt diet is dominated, do not
+  ship**: diet200 (12t/8k, load 45.6→23.8) collapses to 0.633
+  accuracy with `metadata_match` 1.0→0.525 and relational
+  0.45→0.425 (lexical 0.95 unchanged), ECE worsening 0.0736→0.1203 —
+  and it is the slowest arm (p50 15 855 ms). The diet trims exactly
+  the metadata evidence the suite's metadata class runs on. Negative
+  on both axes; the rung's context budget stays full-context, 4k
+  floor verified. No tier changes (D16 unchanged).
+- **2026-10-02 (fork_4b JevBench arm + diet curve closed)** — the
+  re-queued fork arm landed (`runs/jevbench/fork_4b-v1/`, chain
+  `fork4b_diet100_chain_20261001.log`, gate-checked 25.4→19.7):
+  **0.6667 (154/231), family-macro 0.6541**, replay-deterministic
+  231/231, paraphrase agreement 0.861 (36 pairs), zero route fee, wall
+  3.9 h, label-only mapping (D15) so no ECE/Brier row. Board A's best
+  accuracy row, and the measured answer to arm 3's competitor claim:
+  jev.page's decision-tuned 4B publishes 80.5 % / 651 ms; the same
+  backbone quant through the fork's constrained tree readout, untrained,
+  lands 66.7 % — the 13.8-point gap is the training recipe, not the
+  harness (the bridge reproduced the authors' own row at +0.9 pp). p50
+  15.5 s is storm-contaminated context (D16 internal p50 for the same
+  weights: 4.9 s on the 120-item suite), never a speed row. Retrain
+  noise on fork-class comparisons stays σ ≈ 3.2/231 (RESEARCH.md §6.5).
+  **diet100 re-arm landed** (`params__diet100.json`, clean gate
+  18.5→17.1, double-replay clean, max-prob delta 0.0): **0.508 /
+  ECE 0.1487**, per-class lexical 0.95 / metadata 0.275 / relational
+  0.30, p50 7.5 s — completing the prompt-diet curve started by
+  diet200's 0.633: the collapse is monotone in diet depth
+  (full → 0.800, 200 → 0.633, 100 → 0.508) and hits
+  `metadata_match` first and hardest (1.0 → 0.525 → 0.275) while
+  lexical holds 0.95 throughout — the suite's metadata class runs on
+  evidence the diet deletes. Conclusion unchanged and strengthened:
+  the rung ships full-context (4k floor verified); no diet tier. The
+  params A/B's `long` arm (~3.7k-token contexts) and the
+  jebadiah-4b-v2 board arm were the last measurements in flight —
+  both landed 2026-10-03 (entries below); the board's D16 tiers are
+  unchanged by either. **Board-A fusion closed
+  (`fusion-jevbench-fork.md`)**: the full ladder — engine → vtx → 4B
+  fork — joined over all three arms' per-item rows (231/231; the
+  label-only fork's winner mass recovered from its raw payloads,
+  abstained engine rows gate as never-accept per D27). Oracle **0.823**
+  (engine+vtx was 0.584 — the fork adds the headroom); best gated point
+  **0.636 at engine t=0.95 / vtx t=0.75, mean 14.2 s — under the fork
+  alone (0.667)**, because the cheap rungs' accepted mass stays wrong
+  even at strict gates. F24's rule twice-confirmed: on Board A the
+  ladder is a cost policy (engine t=0.50 answers 81 % of items at
+  2 ms for 0.524), not an accuracy policy; the accuracy-competitive
+  points route ~⅔ of items to the fork. `fusion_study.py` gained the
+  third rung, raw-payload probability recovery, and position-based
+  final-rung semantics (the last rung answers even with no probability
+  channel — the t=0.0 convention broke on label-only rows). The rewrite
+  also fixed the study's single-arms JevBench ECE line, which had
+  derived correctness as `pred == answer` — always false on rows that
+  carry `correct`, not labels — so every JevBench single-arm ECE was
+  inflated (engine 0.798 → the harness's 0.402; the regenerated
+  fusion-jevbench*.md cascade tables are bit-identical, confirming no
+  cascade behavior moved).
+- **2026-10-02 (fedora anchor; #76 template A/B; fusion re-joined)** —
+  the arm fleet re-ran on the clean fedora host
+  (`~/oc-model-eval/fedora_queue.sh`, build-pd @ ad129b0, T = 14,
+  gate < 20 throughout): **fork_4b-fedora-v1 0.7662 (177/231),
+  family-macro 0.7571, p50 2.28 s** — the fork number of record,
+  superseding the NAS 0.6667 row (supersession note in the Board-A
+  table above; the 23-task delta is an unresolved run-vintage
+  discrepancy, larger than the strands retrain-noise bar, with the
+  fork's default decision temperature unseeded in both runs).
+  Instruction-template A/B (#76): `Decide.` 0.7662, rules-phrasing
+  **0.7749** (nominal best, not adopted), `@task` 0.7576 — a 4-of-231
+  spread, inside single-draw noise; the template question is closed
+  for this fork at this n. **build-d15 arm decision-identical to the
+  anchor (0.7662, same predictions)** — the D15 full-distribution
+  patch changes reporting only, so the #61 calibration refit carries
+  no accuracy claim. Board-A fusion re-joined on the anchor
+  (`fusion-jevbench-fork-anchor.md`): oracle **0.853**, best gated
+  **0.688 @ engine t=0.95 / vtx t=0.80, mean 3.2 s** — still under
+  the fork alone (0.766), but the anchor's sharper winner-probability
+  channel (llm-rung ECE **0.070** vs the NAS arm's 0.142) buys the
+  same routing shape (engine 32 %, llm 68 %) at 4.4× lower mean
+  latency, and the vtx rung earns zero routing at the best point.
+  F24's rule stands a third time. **Anchor replicate landed
+  (`fork_4b-anchor-rep1-v1`, fresh server session, same build /
+  instructions / split) — bit-identical to the anchor**: 231/231 rows
+  match on both `predicted` and `raw_sha256`, in-run replay 231/231
+  (`predictions_match: true`), acc/macro identical at 0.7662/0.7571
+  (p50 1.74 s). Board-A single-draw variance at this configuration is
+  measured at zero on the anchor host, which sharpens the superseded
+  NAS row's standing: its 10-point delta to the anchor cannot be
+  sampling noise and remains an unresolved run-vintage/config
+  discrepancy (what the NAS-era session actually ran), with a seeded
+  or fork-greedy cross-check of that configuration the only remaining
+  way to explain it. (The follower queue's `rc=1` on this arm was a
+  script artifact — `rc` initialized to 1 and only overwritten on
+  failure — not a runner failure; script fixed for future arms.)
+- **2026-10-03 (params A/B `long` arm landed — #32 closed)** —
+  `params__long.json` (fedora, build-pd @ ad129b0, T = 14, ctx 8192,
+  decision-seqs 24, gated follower script, load 14.5 → 17.3 — clean
+  window, no storm): **0.7667 (80/120), ECE 0.0825** on the derived
+  long suite (measured context p50 3,025 tokens, range 2,977–3,185 —
+  the "~3.7k" planning figure was an overestimate). Per-class:
+  lexical_semantic **0.825**, metadata_match **1.0**,
+  relational_compositional 0.475. **p50 46.7 s/item (mean 48.3, max
+  106.8), prefill-bound** — p50 prefill 46.5 s of the 46.7 s total
+  (~65 tok/s prefill on 14 CPU threads); wall 2 h 58 m, peak RSS
+  5.3 GB. Readings: (1) long-context accuracy sits at the anchor's
+  level (0.7667 vs 0.7662 on the mixed board) — no sign of
+  long-context collapse, though the item sets differ. (2) The latency
+  profile is prefill, not decode: a CPU ladder that routes long items
+  to the LLM rung pays ~47 s/item, so the F23/F24 cost-policy reading
+  of the ladder sharpens — long contexts are exactly where the cheap
+  rungs must decide. (3) The rungs are complementary on long items:
+  the engine arm on the same suite (0.683) wins
+  relational_compositional **0.95** vs the fork's 0.475, the fork
+  wins lexical_semantic 0.825 vs 0.225 — the fork's global weak class
+  is the engine's global strong class. **Two-rung oracle on the 120
+  joined long items: 0.9417 (113/120; 7 items miss both)** — the
+  highest oracle measured on any board slice, from two rungs, no vtx.
+  The fusion-estimation caveat stands (post-hoc, gated thresholds not
+  refit on this slice), but the shape argues for per-context-length
+  routing: long items are where engine-first ordering pays most.
+  Params A/B fully closed: no tier changes (D16 unchanged);
+  full-context floor verified again at long context.
+- **2026-10-03 (jebadiah-4b-v2 Q8_0 board arm — #78 first arm)** —
+  `llama__jebadiah-4b-v2-Q8_0.json` (fedora, build-pd @ ad129b0,
+  T = 12, ctx 8192, decision-seqs 24, board suite sha 9f0afaf6, full
+  lanes: single + replay + batched + chat; wall 25 m, peak RSS
+  14.4 GB, load 0.0 → 19.5): **0.800 (96/120), ECE 0.0512**, per-class
+  metadata 1.00 / lexical 0.90 / relational 0.50, determinism clean
+  (max prob delta 0.0). **Fastest 4B-tier decision lane on the
+  board: p50 2.72 s/item** (vs Qwen3.5-4B-UD-Q4_K_XL 4.9 s,
+  Qwen3.8-4B-Distill 3.8 s) at tied-best 4B accuracy with better
+  calibration than the anchor (0.051 vs 0.074). The HF card lists 5B
+  params despite the `4b` name; Q8_0 quant (~5.4 GB weights,
+  mradermacher GGUF, model sha 73bf1189…); text-only arm (the repo's
+  mmproj files unused). Relational sits at the ≤ 4B ceiling (0.50,
+  does not cross); the class shape is the familiar
+  engine-complementary one — rel 0.50 is exactly where the relational
+  solver (0.95) takes over in a ladder. Calibration artifact
+  **shipped: margin fit T = 1.282, ECE 0.051 → 0.047** — the
+  `run_llama.py` direct-fork lane records winner probability only,
+  so the exact d15 refit for this arm rides the distribution-emission
+  re-run queued for the margin-fit cohort (same as the other
+  `run_llama.py` arms). Board B row added; D16 tiers unchanged.
+- **2026-10-03 (jebadiah-9b-v2 Q8_0 board arm — new board leader)** —
+  `llama__jebadiah-9b-v2-Q8_0.json` (fedora, build-pd @ ad129b0,
+  T = 12, ctx 8192, decision-seqs 24, board suite sha 9f0afaf6, full
+  lanes: single + replay + batched + chat; wall 54.5 m, load 4.1 →
+  13.2): **0.8333 (100/120), ECE 0.0753**, per-class metadata 1.00 /
+  lexical 0.95 / **relational 0.55 — the highest model-arm relational
+  score on the board**, determinism clean (max prob delta 0.0).
+  **p50 5.63 s/item** — the 9B accuracy crown changes hands at 2.5×
+  the incumbent's speed: MiMo-V2.6-9B-Q3_K_S held 0.817 at p50 14.3 s
+  (ECE 0.048); jebadiah-9b-v2 takes 0.833 at 5.6 s with worse raw
+  calibration (0.075 vs 0.048 — its margin-fit artifact shipped at
+  T = 1.065, ECE 0.075 → 0.073). Same family size-sweep as the 4B arm
+  above (0.800 → 0.833, rel 0.50 → 0.55, p50 2.7 s → 5.6 s): the
+  recipe scales and stays fast — the "relational needs 9B" reading
+  sharpens into "relational needs the right 9B". The
+  relational-ceiling line in BENCHMARKS.md now names both 9B crossers.
+  D16 tiers unchanged (tier boundaries were set by cost, not this
+  ranking). Nothing in flight: the #78 queue resumes with Winnow-E4B
+  and the vtx permutation replay (runner work first).
+
+- **2026-10-03 (fork_4b-d15-v1 exact d15 calibration — Board A fork
+  ECE/Brier filled; fedora queue complete)** — the queue's last
+  deliverable. The build-`d15` arm (`fork_4b-d15-v1`, fedora
+  i5-13600K, -t 14, 2026-10-02) records full per-choice `probs` for
+  all 231 JevBench items — the distribution emission CALIBRATION.md
+  located on 2026-09-28 landed in the fork build and ran — so the
+  fork's Board A calibration cells are sourced from native
+  distributions instead of reading "—": **ECE 0.070, Brier 0.305**
+  (harness summary 0.0696 / 0.30460). The arm is decision-identical to
+  the anchor: predictions verified equal programmatically 231/231,
+  accuracy/macro identical at 0.7662 / 0.7571. The exact d15 refit on
+  those distributions ships `calibration/fork_4b-d15-v1.json`:
+  **T 1.313212, ECE 0.0696 → 0.0484** (categorical-NLL reverse-softmax
+  fit, in-sample, n = 231) — the first artifact fitted on the public
+  split rather than the internal 120-item suite. One fitter defect
+  found and fixed en route: score-class items carry integer ordinal
+  labels (`expected` 0–3) while the fork's probs keys are strings, so
+  18 unnormalized rows read as always-wrong — the first fit took the
+  margin path (T 2.377, ECE-before inflated to 0.118); cross-checking
+  ECE-before against the harness's own 0.0696 caught it, `str()`
+  normalization restored the exact path (ordinal family fit 0.050 vs
+  the corrupted 200.000). The fitter now loads `run_jevbench.py` arm
+  dirs directly (`--tasks` label join, skip-and-continue on missing
+  arms, real source suite stamped into the artifact); all seven prior
+  artifacts re-ran byte-identically (REGEN-CLEAN). Honesty anchors
+  unchanged: this segment's latencies are .contaminated (storm
+  window, load 10–16 during the arms) and t08 stays the threads row of
+  record. Queue state: `fedora_queue_20261002.log` ended QUEUE
+  COMPLETE with the process exited; `params__long` landed via the
+  follower (rc=0, 2026-10-03 00:00:05) after the main queue's long arm
+  died rc=2 — #32/#53 stay closed as recorded above; r10
+  (stock-letters parity) and r11 (Winnow quant bake-off) remain
+  chained and integrate on landing.
+
+- **2026-10-03 (r10 letters parity — stock-vs-fork cross-build lane;
+  r11 relaunched as r11b)** — both parity arms ran on the stock build
+  (llama.cpp-stock, constrained-letters readout, fedora i5-13600K,
+  -t 12, quiet window, load 5.0–10.4 — these latencies are usable, and
+  t08 remains the threads row of record for the fork lane) and rc=1'd
+  on a runner bug, not a measurement failure: `compare_fork` required
+  `probs` on the fork side, but the jebadiah fork rows carry winner
+  probability only — 0 rows joined, then the summary line KeyError'd
+  after the JSON was written (hence rc=1 with complete files).
+  `run_stock.py` fixed (winner-only join mode, guarded summary, new
+  `--recompare` post-hoc mode) and both results recomputed in place —
+  no re-measurement:
+  - **jebadiah-4b-v2 Q8_0, stock letters**: **0.833 / ECE 0.052 /
+    p50 1.97 s** vs the fork tree arm's 0.800 / 0.051 / 2.72 s —
+    **winner agreement 0.908** (120/120 joined). The fork is not
+    load-bearing at 4B: plain letters readout is a better operating
+    point on the same artifact (+3.3 pp). Confound recorded: build,
+    readout, and threads changed together (stock+letters+12t vs
+    fork+tree+14t); isolating the readout alone needs a fork-letters
+    arm (r9's letters quants ran fork-build — cross-check queued).
+  - **jebadiah-9b-v2 Q8_0, stock letters**: **0.142 / ECE 0.501 /
+    p50 2.87 s** — **winner agreement 0.150** with the fork tree's
+    0.833. All 120 rows valid and confidently wrong (determinism
+    clean, max prob delta 0.0): the constrained letters readout
+    collapses on the 9B. The 9B's board advantage is therefore a
+    property of the fork's tree readout, not the artifact alone —
+    "relational needs the right 9B" sharpens into "needs the right
+    9B, read through the fork's tree mode".
+  - r11 (Winnow-E4B quant bake-off) failed 6/6 before any measurement:
+    the queue passed `--mmproj` to `llama-quantize` (no such flag —
+    usage dump) and omitted `--allow-requantize` (required from a Q8_0
+    source). Relaunched as **r11b** (new follower script: six points,
+    same letters lane, tower stays F16; Q4_K_M requant verified
+    5.0G/28 s before its arm started). Board B rows added
+    (BENCHMARKS.md `parity__*` + footnote 4). Composite re-scoring of
+    the letters lanes deferred until the composite has a scripted
+    scorer (currently hand-derived; the Spd/Res normalizations are not
+    in code).
+- **2026-10-03 (r11b requant bake-off)** — 6 new Board B arms: the
+  repaired r11 landed all six Winnow-E4B requant
+  points (`--allow-requantize` from the Q8_0 artifact, tower stays
+  F16). Q4_K_S is the operating point (0.825 / ECE 0.101 / p50
+  951.4 ms, det-clean) at 2.3× the Q8_0 speed; Q4_K_M 0.817 but
+  det-FLIP (Δp 0.998); Q4_0 0.717 (16 invalid dists); IQ4_XS 0.692
+  (det-FLIP 0.473); IQ3_M 0.658 (det-FLIP 0.984); Q3_K_S collapses to
+  0.408 with 41/120 malformed distributions (det-FLIP 0.997). Three
+  findings (recorded in REPORT §Quant ladders and
+  BENCHMARKS footnote 5): (1) the requant collapse is *provenance*, not
+  bit-width — K-quants hold to 4-bit, i-quants/legacy Q4_0 do not,
+  against the 9B's F16-sourced Q3_K_S holding 0.817 at the same width;
+  (2) determinism replay must gate every deployment quant — 4 of 6
+  flipped, including the default pick Q4_K_M; (3) per-quant ECE tracks
+  distribution validity here, not calibration quality. r11b queue
+  process confirmed exited; queue chain r10→r11b closed.
+- **2026-10-03 (r12 TypeSafeAI-ecosystem arms: 1 of 4 measured)** — the
+  user-named candidates (Kev-4B, NeoHorse-Jev-4B, Julia-1, Qyvos) ran
+  the letters lane where the format allowed. **Kev-4B Q4_K_M measured**:
+  0.617 (meta 1.00 / lex 0.95 / rel 0.525), ECE 0.151, p50 1378.2 ms,
+  25/120 invalid distributions (worst of any passing arm), replay-clean
+  (Δp 0.000) — Board B row + footnote 6. Placement: well under
+  Winnow-E4B (0.842) on this suite; its published strength is the
+  JevBench axis (73.71 macro). The other three are format/arch
+  findings, not runs: **NeoHorse-Jev-4B Q4_K_M is unloadable** in the
+  stock build (`expected 728 tensors, got 426` — foreign/newer arch
+  export); **Julia-1 Q8_0** (168 MB ≈ 160M params) **loads as a
+  `laya`-arch decision model whose context is pooling-only** — logits
+  refused even with `--pooling none`, so the letters lane cannot drive
+  it; **Qyvos ships safetensors + a Python `julia` package (Bend-language
+  router), no GGUF**. Follow-up lanes, in preference order: Julia-1 via
+  its official ONNX export (parity cases + accuracy metrics included —
+  the natural `InferenceBackend` arm for `opencodifier-runtime`), a
+  laya-GGUF endpoint lane, NeoHorse under a newer llama.cpp, a
+  `julia`-package adapter for Qyvos. Fleet note: an unrelated sibling
+  CUDA llama-server (port 8080) shares fedora; it does not contend with
+  CPU arms.
+- **2026-10-04 (r13 gemma-4n + Winnow-12B bake-off; r14 NeoHorse base
+  alternative — 6 new Board B arms)** — all arms ran the stock letters
+  lane (fedora i5-13600K, -t 12; load gate < 20 two-sample, per-run
+  load recorded, windows 4.2–18.7). Every artifact a third-party
+  release download, no requants. Board rows + footnote 7. Headlines:
+  - **gemma-4-E2B-qat (unsloth UD-Q4_K_XL, 2.5 GB) is the new
+    small-model operating point**: 0.767 / ECE 0.137 / p50 454 ms /
+    0 invalid distributions / replay-clean (Δp 0.020). Below
+    Winnow-E4B Q8_0 (0.842) but 4.8× faster — and the size class of
+    the VIVERE transfer target (#88), which now has a measured
+    baseline on this lane.
+  - **gemma-4 E4B collapses** — it 0.367 (41/120 invalid dists, det
+    flip Δp 0.247), qat 0.400 (33 invalid, Δp 1.000). Same family,
+    twice the parameters of the E2B, worse: the failure mode is
+    corrupted distribution *emission* under the constrained readout
+    (jebadiah-9b-v2 collapsed to confident wrongness; the E4B arms
+    emit malformed distributions). QAT did not rescue it.
+  - **Winnow-12B inverts its own family**: Q4_K_M 0.542 / Q8_0 0.350
+    (board-worst ECE 0.445) vs Winnow-E4B's 0.842. The 12B arms do
+    cross the relational ceiling (0.65 / 0.62) yet lose overall —
+    compositional strength without calibrated decision quality.
+    Provenance caveat: the two quants come from different publishers
+    (Piotr1215 Q4_K_M, EldanRing Q8_0), so part of the Q8 < Q4 gap
+    may be publisher divergence rather than quantization.
+  - **NeoHorse-1-4B base (TokenRhythm), untuned: 0.583 with perfectly
+    clean emission** (0 invalid, Δp 0.000) — beats both tuned
+    Winnow-12B arms. The Jev-tuned NeoHorse-Jev-4B stays unloadable
+    (footnote 6); the base model measures fine, closing the
+    GGUF half of that follow-up lane (the newer-llama.cpp retry for
+    the Jev-tuned artifact remains open).
+  - Board implication: under this readout, decision quality is not
+    monotone in parameters — the operating-point conversation moves
+    from "bigger" to "right arch + clean emission + QAT". Queue chain
+    r12→r13→r14 closed (r13 QUEUE COMPLETE 08:05:35; r14
+    self-serialized behind it, done 08:20:20).
+- **2026-10-04 (r15 gemma-4-E2B 4-bit landscape: official-weights vs
+  unsloth, and the matched-quant QAT A/B — 4 new Board B arms)** —
+  user-directed: measure the "official Q4_K_M" and the smallest 4-bit
+  unsloth quant, testing the suspicion that unsloth quants beat
+  official. Provenance finding first: **no official Google GGUF
+  export exists** (with a valid HF token the weights repo shows
+  safetensors only; every `-GGUF` repo name 404s — "Repository not
+  found", an auth-independent 404). The official-weights arm is
+  therefore lmstudio-community's **plain Q4_0 of the official QAT
+  release**. All four arms ran the stock letters lane (fedora
+  i5-13600K, -t 12, quiet windows, load 0.5–11.5). Findings:
+  - **Official-weights Q4_0 wins the 4-bit class outright**:
+    0.808 / ECE 0.102 / p50 423 ms / 0 invalid dists / replay-clean
+    (Δp 0.020) vs the r13 unsloth UD-Q4_K_XL arm's 0.767 / 0.137 /
+    454 ms — +4.1 pp, better calibrated, faster. The suspicion
+    ("unsloth beats official") is **refuted** on this lane. Caveat:
+    the lmstudio file is 3.12 GiB vs unsloth's 2.44 GiB (the dynamic
+    mix compresses harder), so the gap is bits-plus-recipe, not
+    recipe alone.
+  - **Matched-quant QAT A/B — QAT is carrying everything**: unsloth
+    UD-Q4_K_XL on non-QAT weights scores **0.375** (vs 0.767 QAT at
+    the identical quant), breaks determinism (Δp 0.645), and emits
+    9 malformed distributions. Non-QAT Q4_K_S: 0.433, Δp 0.676,
+    9 invalid. The QAT checkpoint's "QAT-lossless" property is the
+    single reason the 4-bit gemma arms work on this lane.
+  - **Sub-4-bit floor holds for QAT weights**: UD-Q2_K_XL 0.483 with
+    a determinism flip (Δp 0.502), zero invalid dists — better than
+    any non-QAT 4-bit arm (QAT > bits, up to a point) but far under
+    the 4-bit QAT arms; the operator floor (4-bit K-or-legacy or
+    higher) is confirmed on QAT checkpoints too.
+  - Board action: the small-model operating point moves to the
+    official-weights Q4_0 arm (0.808 / 423 ms / clean). The r13
+    footnote-7 non-training levers (per-class routing to the
+    relational solver, post-hoc calibration) now apply on top of a
+    stronger base. Queue chain r13→r14→r15 closed; runner unmodified
+    (all arms on the existing letters lane, stock build).
+
+- **2026-10-04 (r16 QAT-format rescue test + matched-format control —
+  2 new Board B arms)** — r15 left two open questions: (a) was the
+  r13 E4B-qat collapse (0.400 at unsloth UD-Q4_K_XL, 33 malformed
+  distributions, Δp 1.000) a quant-format mismatch — Google QAT
+  targets plain Q4_0, not K-quant dynamic mixes — or arch-level; and
+  (b) how big is the QAT effect at *matched* format. Two arms, both
+  ready-made release downloads, stock letters lane (fedora
+  i5-13600K, -t 12, load windows 0.2–11.5, same suite sha as r15):
+
+  - **e4bqat-official-q4_0** — lmstudio-community
+    gemma-4-E4B-it-QAT-Q4_0.gguf (native-format Q4_0 of the official
+    QAT release, 4.80 GiB): **0.558 / ECE 0.169 / p50 884 ms; 29/120
+    invalid dists; replay-clean (Δp 0.026)**; by class 0.90 lex /
+    1.00 meta / 0.50 rel.
+  - **e2b-noqat-q4_0** — unsloth gemma-4-E2B-it Q4_0 (non-QAT
+    weights, 2.83 GiB), the matched-format control: **0.350 / ECE
+    0.435 / p50 472 ms; 11/120 invalid dists; determinism FLIP
+    (Δp ≈ 1.0)**; by class 0.21 / 0.71 / 0.30.
+
+  Findings:
+
+  - **The E4B verdict is two-part.** The rescue is real but partial:
+    0.400 → 0.558 (+15.8 pp) at the native format, with emission
+    hygiene improving (33 → 29 invalid) and determinism restored
+    (Δp 1.000 → 0.026). Format mismatch therefore explains the r13
+    collapse's *instability*, but E4B-QAT at its best measured
+    configuration still trails E2B-QAT Q4_0 by ~25 pp with the
+    worst invalid-distribution rate in the family — an arch-level
+    deficit remains.
+  - **Primary-source research (same day) finds no published
+    explanation for that deficit — and one direct contradiction.**
+    The gemma-4 tech report (arXiv:2607.02770v2 §2.5) states QAT
+    targets mobile int2/int4+int8 (E-series ship it) *and* Q4_0;
+    Q4_0 is the secondary ecosystem export for E2B/E4B. Unsloth
+    publishes the *opposite* ordering to ours — their UD-Q4_K_XL
+    beats naive Q4_0 (98.16 vs 89.29 top-1, KLD vs BF16-QAT) and
+    they state "q4_0 to degrade accuracy despite being bigger" —
+    on byte-identical-class files (LM Studio's Q4_0 is within 300 B
+    of Google's official GGUF = their naive baseline). Our lane
+    measures 0.808 (Q4_0) > 0.767 (UD). Reconciliation: their metric
+    is token-level KLD/top-1 vs BF16; ours is exact-distribution
+    decision accuracy under a constrained readout — the orderings
+    genuinely differ by metric. Their own E4B-vs-E2B KLD data
+    (0.00121 vs 0.00173 mean) predicts E4B should be *better*
+    calibrated, the reverse of our measured collapse — so the E4B
+    deficit is not scale fidelity either. llama.cpp's gemma-4 PLE
+    implementation was verified correct in source (issue #22243
+    closed as a false alarm); the file-size mystery is solved
+    (llama.cpp promotes the tied per-layer-embedding table, ~46 % of
+    E2B params, to Q6_K; unsloth drops it). Full notes:
+    the E4B lane closes as "arch-level, cause unpublished" — the
+    remaining candidates (larger PLE table, 42-layer geometry,
+    different KV-share) are structural, not runtime bugs in our
+    config (no speculative decoding, CPU path, rc=0).
+  - **Matched-format QAT A/B: +45.8 pp, and stability comes only
+    from QAT.** Non-QAT E2B at Q4_0 is worse than the r15 non-QAT
+    K-quant arms (0.350 vs 0.375/0.433) and is the second arm ever
+    to flip determinism completely (Δp ≈ 1.0, after r13's E4B-qat
+    and r11b's requants). Combined with r15: at identical format
+    QAT is worth +45.8 pp (Q4_0) and +39.2 pp (UD-Q4_K_XL); the
+    "QAT-lossless" property is the entire viability case for 4-bit
+    gemma on this lane, and non-QAT small gemma needs ≥ 8 bits
+    (unsloth's own recommendation, now corroborated twice).
+  - Board action: operating point unchanged (E2B-QAT Q4_0, 0.808 /
+    423 ms / clean). The E4B rescue lane is closed with findings;
+    E4B-class gemma is not a deployment candidate under this
+    readout. Calibration artifacts fitted for both arms
+    (gemma-4-e4b-qat-q4_0, gemma-4-e2b-noqat-q4_0) under the
+    standard ECE-gate rule.
+
+- **2026-10-04 (r17 second-family QAT A/B + clef-flash backbone —
+  4 new Board B arms)** — user-directed follow-up testing whether
+  the r15/r16 QAT findings generalize beyond gemma. Four arms, all
+  ready-made release downloads, stock letters lane (fedora
+  i5-13600K, -t 12, load windows 0.2–9.0, same suite sha):
+
+  - **yoozlabs-qwen35-08b-qat-q4_0** (0.47 GiB): **0.608 / ECE
+    0.061 / p50 178 ms; 3/120 invalid; Δp 0.000**; 0.72 / 0.76 /
+    0.40 by class.
+  - **yoozlabs-qwen35-4b-qat-q4_0** (2.37 GiB): **0.542 / ECE
+    0.237 / p50 910 ms; 0 invalid; Δp 0.000**; 0.65 / 0.62 / 0.35.
+  - **qwen35-4b-noqat-q4_0** (unsloth non-QAT control, 2.41 GiB):
+    **0.092 / ECE 0.567 / p50 966 ms; 0 invalid; Δp 0.000**;
+    0.12 / 0.05 / 0.10.
+  - **clef-flash-q4_k_m** (bartowski, 5.44 GiB): **0.008 / ECE
+    0.529 / p50 1690 ms; 115/120 invalid; Δp 0.000**; 5 valid
+    predictions total.
+
+  Findings:
+
+  - **"QAT rescues legacy Q4_0" generalizes; "QAT is the best
+    4-bit path" does not.** Matched-format on Qwen3.5-4B: +45.0 pp
+    (0.092 → 0.542) — the same magnitude as gemma-E2B's +45.8 pp —
+    but the family's non-QAT K-quants score 0.800 untouched.
+    Qwen3.5-4B at legacy Q4_0 is a dead end with or without QAT;
+    the Qwen operating point stays K-quant. Gemma's best 4-bit arm
+    happens to be QAT+Q4_0 (0.808); Qwen's is plain K-quant (0.800)
+    — QAT is format repair, not a universal upgrade.
+  - **The 0.8B sign flip**: YoozLabs QAT *regresses* accuracy vs
+    the board's non-QAT q4_0 arm (0.608 vs 0.650) while improving
+    ECE (0.061 vs 0.074) and p50 (178 vs 613 ms; cross-day caveat —
+    the non-QAT arm was measured Sep 26 on an earlier stock build).
+    At a size where the format was never broken, QAT buys speed and
+    calibration at a small accuracy cost. Provenance caveat: the
+    YoozLabs QAT checkpoints are third-party with unverified
+    training provenance; the acc delta is within the range where
+    recipe differences (not QAT per se) could explain it.
+  - **Failure-mode taxonomy sharpens**: the non-QAT 4B Q4_0
+    collapse emits *well-formed, deterministic, confidently wrong*
+    distributions (0 invalid, Δp 0.000, ECE 0.567) — the
+    jebadiah-9b confident-wrongness mode — whereas gemma's
+    non-QAT 4-bit arms corrupt emission itself (malformed dists +
+    det flips). Quantization damage has at least two distinct
+    signatures on this lane, and only one of them is visible to an
+    invalid-distribution counter.
+  - **clef-flash: emission-broken, backbone-only, no conclusions.**
+    115/120 malformed distributions is the same
+    corrupted-emission signature as the gemma E4B arms — but the
+    row cannot be read as a Clef result: the joint schema head is
+    not in the GGUF (llama.cpp has no such compute graph), so this
+    measures Cloudflare's post-trained Qwen3.5-9B backbone under a
+    readout it was never tuned for (its default template opens a
+    `<think>` block). Follow-up: the `--template` runner-flag lane
+    before drawing any inference about the backbone. No calibration
+    artifact ships (5 valid rows cannot fit a temperature).
+  - Board action: no operating-point change — Qwen stays K-quant
+    (4B UD-Q4_K_XL 0.800 / 0.8B q4_0 0.650); gemma's small-model
+    point stays official-QAT Q4_0 (0.808). Calibration artifacts
+    shipped for two arms (qwen3.5-0.8b-qat-q4_0 T=1.072,
+    qwen3.5-4b-qat-q4_0 T=5.303); the fitter refused the non-QAT
+    control outright (T=inf — temperature cannot repair ECE 0.567
+    confident-wrongness), and clef-flash is deliberately
+    artifact-free (5 valid rows).
+
+- **Decision-model landscape (2026-10-04 research record, user-
+  directed)** — the "decision model" category now has two
+  architecture families plus outliers, verified by repo probes
+  (file inventories) and primary pages:
+
+  - **Family A — joint-head, prefill-only scoring** (backbone +
+    separate head; one logit per allowed option, softmax per
+    question; non-autoregressive, no text generation):
+    Cloudflare **Clef** (frozen Qwen3.8-27B + rank-256 LoRA +
+    `joint_head.safetensors`, 0.24 GiB) and **Clef-flash** (frozen
+    Qwen3.5-9B + vision encoder + `joint_head`, 0.23 GiB; 38.8 ms
+    median latency on their GPUs), and **vllm-sr Decision-2.0-Kai-
+    0.6B** (Qwen3-0.6B-Base backbone + `decision_head.safetensors`).
+    This is the same shape as our candidate-conditioned
+    `opencodifier-model` rung — two independent validations of the
+    design. Their training recipes read like our rules doc: Brier
+    loss for calibration, RLCD with partial credit for adjacent
+    ordinal choices (relevant to our score kind), and synthetic
+    permutations of field orders/prompts/schema structures (our
+    readout permutations). Their APIs are Jev/SystemOne-compatible
+    (`state` + `questions{choice|noul|score, criteria}`; noul =
+    our boolean) — inside our Jev adapter's surface.
+  - **Family B — constrained autoregressive decoding** (what our
+    letters lane measures; Jev-style verdict slots / letter
+    grammars). Every GGUF arm on Board B is family B. **A GGUF
+    cannot express family A**: the joint head is a custom compute
+    graph (Clef's own HF repo only loads via its
+    `joint_schema_model.py`), so community GGUFs are backbone-only
+    — the r17 clef-flash row demonstrates what that yields (0.008,
+    115/120 invalid). Family-A arms belong to the
+    `InferenceBackend` code lane (the Kai-0.6B-ONNX export with its
+    parity fixtures is the ready-made candidate), not llama.cpp.
+  - **Outliers**: SupersonicLabs **Julia-1** — mmBERT-small
+    *encoder*, 0.54 GiB, pooling-only (llama.cpp loads it as
+    laya-arch); a candidate for the ONNX arm, not the letters lane.
+    Contrastive-LM **CLM-v0.1-8B** — `.pt` checkpoint only, no
+    GGUF/ONNX release; skipped under the no-local-conversions rule.
+  - Published-number caveat: Cloudflare's Decision Index latencies
+    (38.8–209 ms) are their GPU serving stack with the full
+    joint-head model; they are not comparable to our CPU letters
+    lane, and their quality numbers are not reproducible from any
+    GGUF derivative. Ecosystem context for position: Jev, Laya,
+    Kev-9B, DiffusionGemma-Jev round out the family-A/B spread.
+- **2026-10-04 (r18/r18b — infrastructure, no board change)** — a research
+  sweep (RESEARCH.md §10) hypothesized the bench binaries lacked AVX-VNNI;
+  r18 built a fresh native binary on fedora (`build-stock-r18`) to test it.
+  The premise was FALSE — a verification artifact: `objdump` had been run on
+  the `llama-server` wrapper, but in this build layout the quant kernels live
+  in `libggml-cpu.so`, which carries 357–393 `vpdpbusd` sites in every build
+  (stock 357, fork 393, r18 357). VNNI was always engaged; corrected in
+  RESEARCH.md §10.1 the same day. r18's lasting outputs, all measured:
+  - **Thread sweep** (E2B-QAT Q4_0, `-fa on`, pp400/n1, 3 reps):
+    `-t 12` prefill 229.6 ± 7.8 t/s vs `-t 6` 203.0 ± 3.8 (**+13.1%**);
+    decode tg1 21.8 vs 20.6 t/s — irrelevant to single-token readout. The
+    runner's hardcoded `-t 12` is validated by measurement; no published
+    13600K sweep existed before this one.
+  - **Cross-build determinism** (r18b: `build-stock` vs `build-stock-r18`,
+    independent builds, same commit and seed): **120/120 identical
+    predictions, max cross-build probability delta 0.000000000**, identical
+    accuracy (0.808) and ECE (0.102). Decision outputs are build-stable —
+    the letters lane's bit-reproducibility contract holds across compilers.
+  - **Latency is NOT build-stable**: p50 460.2 ms (r18 build) vs 422.9 ms
+    (stock) on bit-identical outputs (+8.8%). Pin the binary for latency
+    comparability across days; the board's cross-day latency caveat gains a
+    mechanism candidate (codegen, not scheduling).
+  - Board unchanged (no new arms); calibration artifacts unaffected — ECE
+    bit-identical across builds, so no drift refit is triggered.
+- **2026-10-06 (r22 — Qwen3.8 distill arms: both measured, no letters-lane
+  lift over untuned Qwen3.5 at either size)** — the user-named empero-ai
+  arms (full-parameter distills of Qwen3.8 2.4T A95B *into the Qwen3.5
+  architecture*, ready-made Q4_K_M, Apache-2.0; weight shas recorded in the
+  results). Letters lane, stock build, -t 12, 3-perm, load-gated:
+  - **Qwen3.8-2B Q4_K_M: 0.725** (lex 0.875 / meta 0.944 / rel 0.450),
+    ECE 0.113, p50 384.3 ms, 4 invalid distributions, replay-clean
+    (Δp 0.000). Ties untuned Qwen3.5-2B Q4_K_M (0.725) on accuracy with a
+    different behavior profile (rel 0.45 vs 0.50, ECE 0.113 vs 0.062) —
+    coincidence at 87/120, not a re-upload (distinct weight sha; the
+    sha-check discipline from this same day's 0.8B duplicate find).
+  - **Qwen3.8-4B Q4_K_M: 0.792** (lex 0.900 / meta 1.000 / rel 0.475),
+    ECE 0.051, p50 1013.5 ms, **0 invalid distributions — the cleanest
+    emission measured on this lane**, replay-clean. Under untuned
+    Qwen3.5-4B (0.800).
+  - Reading: capability distillation into an existing small arch did not
+    convert into typed-decision lift at either size — consistent with the
+    D16 line that interface and emission quality dominate this readout.
+    The arms' value is elsewhere: the 4B is the natural E1 body / verifier
+    candidate (clean emission, Qwen3.5 arch = LoRA-proven targets), and
+    the 2B is the fastest >0.7 arm measured (384 ms p50).
+  - Companion provenance finding: gatilin and Atomic-Germ "different" 0.8B
+    distills are byte-identical (same sha256) — one arm, not two; verify
+    community releases by sha before counting arms.
+  - Board B rows added. These arms do not move the pre-registered E1
+    gates (suite ≥ 0.68 / JevBench ≥ 0.6494 apply to OUR tuned arms).

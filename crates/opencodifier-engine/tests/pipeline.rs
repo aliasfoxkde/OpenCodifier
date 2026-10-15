@@ -18,11 +18,13 @@ use common::{
     two_way,
 };
 use opencodifier_core::{
-    DecisionOutcome, DecisionPolicy, FactValue, NodeId, RequestMetadata, State,
+    DecisionAnswer, DecisionOutcome, DecisionPolicy, DecisionQuestion, Distribution, FactValue,
+    NodeId, OodMode, RequestMetadata, State,
 };
 use opencodifier_engine::{
     Action, CacheConfig, Classifier, Condition, DecisionEngine, DecisionGraph, EngineConfig,
-    EngineError, EngineIdentity, ManualClock, MockClassifier, NodeKind, Rule, SystemClock,
+    EngineError, EngineIdentity, LexicalClassifier, ManualClock, MockClassifier, NodeKind, Rule,
+    SystemClock,
 };
 
 #[test]
@@ -206,7 +208,7 @@ fn safe_mode_never_eliminates_on_lexical_score_alone() {
     let safe_engine = engine_with(safe, Arc::new(MockClassifier::new("mock/test"))).unwrap();
     let (safe_response, safe_report) = safe_engine.decide_with_report(&request).unwrap();
     assert_eq!(safe_report.narrowing()[0].after(), 5, "safe mode must keep every candidate");
-    assert!(safe_report.lexical()[0].pruned().is_empty());
+    assert_eq!(safe_report.lexical()[0].pruned(), []);
     assert_eq!(safe_response.metrics().candidates_out, 5);
     assert_eq!(trace_int(&safe_response, "lexical", "safe_mode"), Some(&FactValue::Boolean(true)));
 
@@ -325,7 +327,7 @@ fn a_starved_question_reports_no_valid_candidate() {
     assert_eq!(response.outcome(), DecisionOutcome::NoValidCandidate);
     assert!(report.narrowing()[0].is_starved());
     assert_eq!(report.narrowing()[0].after(), 0);
-    assert!(response.answers().is_empty());
+    assert_eq!(response.answers(), []);
 }
 
 #[test]
@@ -640,6 +642,265 @@ fn the_ood_channel_is_live_and_gates_acceptance() {
     let (gated, _) =
         engine_with(config(1), classifier).unwrap().decide_with_report(&request).unwrap();
     assert_eq!(gated.outcome(), DecisionOutcome::Verify, "OOD above the ceiling must verify");
+}
+
+/// A scripted classifier with caller-chosen lexical coverage: the
+/// distribution is held fixed while the input-likeness evidence varies,
+/// isolating the lexical-band OOD channel from distribution shape (D28).
+#[derive(Debug)]
+struct CoveredClassifier {
+    pairs: Vec<(&'static str, f64)>,
+    coverage: f64,
+}
+
+impl Classifier for CoveredClassifier {
+    fn decide(
+        &self,
+        _state: &State,
+        _question: &DecisionQuestion,
+    ) -> Result<Distribution, EngineError> {
+        Distribution::from_pairs(self.pairs.clone()).map_err(EngineError::from)
+    }
+
+    fn decide_extended(
+        &self,
+        state: &State,
+        question: &DecisionQuestion,
+        _index: Option<&opencodifier_engine::Bm25Index>,
+    ) -> Result<(Distribution, Option<f64>), EngineError> {
+        Ok((self.decide(state, question)?, Some(self.coverage)))
+    }
+
+    fn model_id(&self) -> &'static str {
+        "covered/test"
+    }
+}
+
+#[test]
+fn the_lexical_band_mode_swaps_the_ood_signal_not_the_distribution() {
+    // Same sharp distribution both times — 0.9 clears the accept gate in
+    // distribution terms. Only the coverage evidence differs: fully
+    // grounded input → OOD exactly 0.0 → accept; weakly grounded input →
+    // OOD 0.8 > the 0.5 ceiling → verify (PLANNING §19, D28).
+    let candidates: Vec<(&str, &str)> =
+        vec![("local-small", "small local model"), ("cloud-large", "cloud")];
+    let policy = DecisionPolicy::default()
+        .with_ood_mode(OodMode::LexicalBand)
+        .with_ood_ceiling(0.5)
+        .unwrap();
+    let request = request_with_policy(
+        State::from_text("Summarize research across many sources and compare findings"),
+        vec![choice_question("model", &candidates)],
+        policy,
+        RequestMetadata::default(),
+    );
+
+    let (grounded, _) = engine_with(
+        config(1),
+        Arc::new(CoveredClassifier {
+            pairs: vec![("local-small", 0.9), ("cloud-large", 0.1)],
+            coverage: 1.0,
+        }),
+    )
+    .unwrap()
+    .decide_with_report(&request)
+    .unwrap();
+    assert_eq!(grounded.confidence().ood_score, 0.0, "full coverage is zero OOD");
+    assert_eq!(grounded.outcome(), DecisionOutcome::Accept);
+
+    let (ungrounded, _) = engine_with(
+        config(1),
+        Arc::new(CoveredClassifier {
+            pairs: vec![("local-small", 0.9), ("cloud-large", 0.1)],
+            coverage: 0.2,
+        }),
+    )
+    .unwrap()
+    .decide_with_report(&request)
+    .unwrap();
+    assert!((ungrounded.confidence().ood_score - 0.8).abs() < 1e-12);
+    assert_eq!(ungrounded.outcome(), DecisionOutcome::Verify);
+}
+
+#[test]
+fn the_ood_mode_is_policy_selected_and_defaults_to_entropy() {
+    // Byte-identical default (D28): with the default mode the coverage
+    // evidence never reaches the gate — the same 0.9/0.1 distribution
+    // reports the distributional proxy (≈ 0.469) whether the rung saw a
+    // grounded or ungrounded input.
+    let candidates: Vec<(&str, &str)> =
+        vec![("local-small", "small local model"), ("cloud-large", "cloud")];
+    let request = request_with_policy(
+        State::from_text("Summarize research across many sources and compare findings"),
+        vec![choice_question("model", &candidates)],
+        DecisionPolicy::default().with_ood_ceiling(0.5).unwrap(),
+        RequestMetadata::default(),
+    );
+    for coverage in [1.0, 0.2] {
+        let (response, _) = engine_with(
+            config(1),
+            Arc::new(CoveredClassifier {
+                pairs: vec![("local-small", 0.9), ("cloud-large", 0.1)],
+                coverage,
+            }),
+        )
+        .unwrap()
+        .decide_with_report(&request)
+        .unwrap();
+        assert!(
+            (response.confidence().ood_score - 0.469).abs() < 0.01,
+            "coverage {coverage} must not leak into the default OOD signal"
+        );
+        assert_eq!(response.outcome(), DecisionOutcome::Accept);
+    }
+
+    // Fallback (D28): a rung that exposes no lexical evidence decides in
+    // lexical-band mode exactly as it would in entropy mode — the
+    // MockClassifier returns no support, so the entropy signal stands in.
+    let request = request_with_policy(
+        State::from_text("Summarize research across many sources and compare findings"),
+        vec![choice_question("model", &candidates)],
+        DecisionPolicy::default()
+            .with_ood_mode(OodMode::LexicalBand)
+            .with_ood_ceiling(0.3)
+            .unwrap(),
+        RequestMetadata::default(),
+    );
+    let (fallback, _) = engine_with(config(1), two_way(("local-small", 0.9), ("cloud-large", 0.1)))
+        .unwrap()
+        .decide_with_report(&request)
+        .unwrap();
+    assert!(
+        (fallback.confidence().ood_score - 0.469).abs() < 0.01,
+        "no-evidence rungs must fall back to the entropy signal"
+    );
+    assert_eq!(fallback.outcome(), DecisionOutcome::Verify);
+}
+
+/// Wraps a mock and counts how often the executor handed over a prebuilt
+/// BM25 index — the observable of the build-once handoff (#80).
+#[derive(Debug)]
+struct IndexProbe {
+    inner: MockClassifier,
+    handed: std::sync::atomic::AtomicUsize,
+}
+
+impl IndexProbe {
+    fn wrapped() -> Arc<Self> {
+        Arc::new(Self {
+            inner: MockClassifier::new("mock/probe"),
+            handed: std::sync::atomic::AtomicUsize::new(0),
+        })
+    }
+
+    fn handed(&self) -> usize {
+        self.handed.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+impl Classifier for IndexProbe {
+    fn decide(
+        &self,
+        state: &State,
+        question: &DecisionQuestion,
+    ) -> Result<Distribution, EngineError> {
+        self.inner.decide(state, question)
+    }
+
+    fn decide_extended(
+        &self,
+        state: &State,
+        question: &DecisionQuestion,
+        index: Option<&opencodifier_engine::Bm25Index>,
+    ) -> Result<(Distribution, Option<f64>), EngineError> {
+        if index.is_some() {
+            self.handed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+        self.inner.decide_extended(state, question, index)
+    }
+
+    fn model_id(&self) -> &'static str {
+        "probe/test"
+    }
+}
+
+#[test]
+fn the_executor_hands_the_lexical_index_to_the_deciding_classifier_once() {
+    // filter -> lexical -> choice: the lexical node builds the index, and
+    // the choice node must reuse it instead of rebuilding (#80).
+    let candidates: Vec<(&str, &str)> =
+        vec![("local-small", "small local model"), ("cloud-large", "cloud model")];
+    let graph = DecisionGraph::new(
+        1,
+        vec![
+            node("normalize", NodeKind::Normalize, &[]),
+            node("rule", NodeKind::Rule, &["normalize"]),
+            node("filter", NodeKind::Filter, &["rule"]),
+            node("lexical", NodeKind::Lexical, &["filter"]),
+            node("choice", NodeKind::Choice, &["lexical"]),
+            node("output", NodeKind::Output, &["choice"]),
+        ],
+    )
+    .unwrap();
+    let probe = IndexProbe::wrapped();
+    let engine =
+        engine_with(EngineConfig::new(graph), Arc::clone(&probe) as Arc<dyn Classifier>).unwrap();
+    let request = choice_request(&candidates);
+    let (response, _) = engine.decide_with_report(&request).unwrap();
+    assert_eq!(response.answers().len(), 1);
+    assert_eq!(probe.handed(), 1, "the choice node must receive the lexical node's index");
+
+    // Without a lexical node there is nothing to hand over: the classifier
+    // builds its own and the decision is unchanged.
+    let graph = DecisionGraph::new(
+        1,
+        vec![
+            node("normalize", NodeKind::Normalize, &[]),
+            node("rule", NodeKind::Rule, &["normalize"]),
+            node("filter", NodeKind::Filter, &["rule"]),
+            node("choice", NodeKind::Choice, &["filter"]),
+            node("output", NodeKind::Output, &["choice"]),
+        ],
+    )
+    .unwrap();
+    let bare = IndexProbe::wrapped();
+    let engine =
+        engine_with(EngineConfig::new(graph), Arc::clone(&bare) as Arc<dyn Classifier>).unwrap();
+    engine.decide_with_report(&request).unwrap();
+    assert_eq!(bare.handed(), 0, "no lexical node means no index to hand over");
+}
+
+#[test]
+fn the_index_handoff_produces_the_distribution_the_classifier_makes_alone() {
+    // The mispairing hazard of a stale index: scores paired with the wrong
+    // candidates. With filter -> lexical -> choice, the handed index and a
+    // locally built one cover identical documents in identical order, so
+    // the engine's distribution must equal the classifier's own over the
+    // same narrowed candidate list — to the bit.
+    let candidates: Vec<(&str, &str)> =
+        vec![("local-small", "summarize local research sources"), ("cloud-large", "cloud")];
+    let graph = DecisionGraph::new(
+        1,
+        vec![
+            node("normalize", NodeKind::Normalize, &[]),
+            node("rule", NodeKind::Rule, &["normalize"]),
+            node("filter", NodeKind::Filter, &["rule"]),
+            node("lexical", NodeKind::Lexical, &["filter"]),
+            node("choice", NodeKind::Choice, &["lexical"]),
+            node("output", NodeKind::Output, &["choice"]),
+        ],
+    )
+    .unwrap();
+    let engine = engine_with(EngineConfig::new(graph), Arc::new(LexicalClassifier::new())).unwrap();
+    let (response, _) = engine.decide_with_report(&choice_request(&candidates)).unwrap();
+    let DecisionAnswer::Choice { distribution, .. } = &response.answers()[0] else {
+        panic!("choice answer");
+    };
+
+    let state = State::from_text("Summarize research across many sources and compare findings");
+    let question = choice_question("model", &candidates);
+    let direct = LexicalClassifier::new().decide(&state, &question).unwrap();
+    assert_eq!(*distribution, direct, "the handoff must not shift a single bit");
 }
 
 #[test]

@@ -1,0 +1,16 @@
+{
+  "format_version": 1,
+  "scheme": "temperature",
+  "model_id": "e1e-qwen3.5-2b-holdout",
+  "calibration_version": 1,
+  "default_temperature": 3.361557,
+  "temperatures": {
+    "choice": 3.361557
+  },
+  "fit": {
+    "items": 120,
+    "ece_before": 0.179237,
+    "ece_after": 0.116711,
+    "source": "e1 slot-readout eval of /home/mkinney/t5500-bundle/eval/suite_holdout.json (sha256 6e9b6e0fe3ded2bb), single-run arm eval-holdout-best, model /home/mkinney/t5500-bundle/runs/e1-e-qwen2b/adapter-best; winner-vs-rest margin fit, in-sample"
+  }
+}

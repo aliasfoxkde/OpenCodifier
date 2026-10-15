@@ -96,7 +96,7 @@ id, calibration version, engine semver. Other crates reference
 **Amendment (2026-09-28, relational solver):** the model id in the key
 is the **live classifier's** id — `DecisionEngine::new` derives
 `identity.model_id` from `Classifier::model_id()` at construction, and
-wrapper classifiers compose their ids (`relational-v1|builtin-lexical-v1`),
+wrapper classifiers compose their ids (`relational-v1|builtin-lexical-v2`),
 so a swapped or decorated classifier invalidates cached decisions
 without caller bookkeeping. A hand-set `EngineIdentity::model_id` is
 never trusted over the decider that actually runs.
@@ -146,6 +146,8 @@ re-ordering, candidate narrowing subset-safety. Fixtures under
 | *(default)* | core, engine, schema | serde, thiserror, sha2 — nothing heavy |
 | `onnx` | opencodifier-runtime | ort rc.13 (D2) |
 | `runtime-onnx-dynamic` | opencodifier-runtime | ort `load-dynamic` |
+| `llamacpp` | opencodifier-model | ureq (HTTP client only, D26) |
+| `tokenizers` | opencodifier-model | `tokenizers` 0.22 + `fancy-regex` (Kai reference encoder, D33) |
 | `http` | opencodifier-http | axum 0.9, tokio |
 | `mcp` | opencodifier-mcp | rmcp 2.2 (D1) |
 | `cli` | opencodifier-cli | clap v4 |
@@ -153,6 +155,11 @@ re-ordering, candidate narrowing subset-safety. Fixtures under
 
 No crate may enable another crate's heavyweight feature transitively;
 the default build of the whole workspace stays ML-free and runtime-free.
+
+*Dated 2026-10-05 (task #92): the `llamacpp` and `tokenizers` rows were
+added for the model rungs — D26's llama.cpp client and D33's Kai
+contract. `onnx` is reinstated for the Kai rung under the D2 pin, see
+D33.*
 
 ## D12 — HTTP surface: axum 0.8, `/v1` prefix
 
@@ -228,6 +235,23 @@ fit (T = 0.658) worsens ECE (0.094 → 0.097): no artifact ships, the
 arm keeps identity calibration, and the retired `builtin-lexical-v1`
 artifact was removed with the bare-lexical stack it described. The
 fitter enforces the gate.
+
+**Amendment (2026-10-07, risk–coverage gate):** ECE alone no longer
+gates an artifact, because calibration error and selective prediction
+measurably diverge (RESEARCH.md §15.1: a better-calibrated model can
+rank worse). The fit provenance carries optional `aurc_before` /
+`aurc_after` / `accuracy_at_coverage` (serde-defaulted — historical
+artifacts load unchanged), the fitter records them for every fit, and
+both the fitter's ship gate and the engine's load gate
+(`TemperatureCalibration::from_artifact`) refuse an artifact whose AURC
+worsens beyond fitter rounding slack (1e-9). For temperature scaling
+the gate is currently a witness, not a constraint — a monotone
+rescaling cannot reorder items, so `aurc_after == aurc_before` is the
+expected reading — and it becomes load-bearing with the first
+non-monotone scheme. The regenerated field-additive artifacts and the
+selective-prediction numbers of record live in
+`benchmarks/decision-model/results/CALIBRATION.md` (§ Risk–coverage
+evidence, 2026-10-07).
 
 ## D16 — Decision-model picks: tier scheme (measured, Phase 13; amended ×8)
 
@@ -781,14 +805,21 @@ is proven, and nothing ships a claim its evidence cannot carry:
   it today.
 - **windows-x86_64-gnu** — the full workspace (all ten crates incl.
   `opencodifier-wasm`) compiles clean for
-  `x86_64-pc-windows-gnu` with the mingw linker present. Link + smoke
-  run pending a quiet window (compile under the load storm took 51
-  minutes; a link+run build is quiet-window work). Verification level
-  when built: link success + `file` PE magic + a stated
-  not-executed-here caveat, since this host cannot run Windows.
+  `x86_64-pc-windows-gnu` with the mingw linker present. **Linked
+  (2026-10-02, 2m44s at -j4 alongside the measurement chain):**
+  `opencodifier.exe` (PE32+ console, x86-64) and
+  `opencodifier_wasm.dll` (cdylib), zero warnings. Verification level
+  is link success + `file` PE magic + a stated not-executed-here
+  caveat — and that is this host's terminal level for the target: no
+  wine and no Windows machine exists here, so the smoke run is not
+  "pending a quiet window", it is structurally out of scope for this
+  host (a Windows box or CI runner with wine would be the venue).
 - **linux-aarch64** — `aarch64-unknown-linux-{gnu,musl}` targets
-  installed, `cargo-zigbuild`/`zig` present for linking. Build + QEMU
-  smoke pending quiet.
+  installed, `cargo-zigbuild`/`zig` present for linking; both linked
+  2026-10-01 (the gnu one dynamically, the musl one static). A smoke
+  run is structurally out of scope on this host for the same reason
+  as windows: no qemu-user (and no arm hardware) exists here — an
+  arm box or a qemu-capable runner would be the venue.
 - **darwin x86_64/aarch64** — rust targets installed; `cargo-zigbuild`
   can link Mach-O without an Apple SDK. Verification is link success +
   `file` magic only: no macOS host runs it here, no codesigning or
@@ -806,3 +837,795 @@ is proven, and nothing ships a claim its evidence cannot carry:
 Rule the matrix enforces: a target either has named verification
 evidence or is named as pending — the release page never says
 "supported" where the truth is "compiles".
+
+**Status 2026-10-01 — the staged cells now carry their named
+evidence.** The overnight cross-build run (recorded matrix:
+`runs/crossbuild__matrix.md`, rustc 1.98.1 / zig 0.16.0, from the repo
+root) links all four remaining targets: `aarch64-unknown-linux-gnu`
+(dynamically linked ELF aarch64, 4.4 MB),
+`aarch64-unknown-linux-musl` (statically linked ELF aarch64),
+`aarch64-apple-darwin` and `x86_64-apple-darwin` (Mach-O arm64 /
+x86_64). Per this record, that is link + `file`-magic verification
+only — no foreign-arch execution is claimed (no qemu on the host; no
+macOS host exists here). `windows-x86_64-gnu` **joined the linked set
+2026-10-02** (`opencodifier.exe` PE32+ + `opencodifier_wasm.dll`,
+`file`-magic verified, not executed — no wine/Windows on this host, so
+smoke stays structurally out of scope here, not merely quiet-window
+pending). What remains open in the matrix is unchanged: registry
+publication is an explicit user go, and native smoke exists only for
+linux-x86_64.
+
+**Status 2026-10-07 — the release recipe widened to nine legs, three of
+them new to this record.** `just release-build <target>` now stages and
+attests every cell of the matrix (the recipe's preflight fails with the
+missing tool's name when a leg lacks its toolchain):
+
+- **android-aarch64** (`aarch64-linux-android`) — the CLI binary,
+  linked by `cargo-zigbuild`; verification level: link + `file` magic
+  (no Android host or emulator here; execution is structurally out of
+  scope, same rule as darwin).
+- **ios-aarch64** (`aarch64-apple-ios`) — **the `opencodifier-ffi`
+  staticlib, not a CLI binary**: with no Apple SDK on this host no
+  linked Mach-O image can be produced or codesigned, and pretending
+  otherwise would be the "compiles = supported" lie this record bans.
+  The library is the honest artifact — an `ar` archive whose members
+  are arm64 Mach-O objects a host app links against the C ABI
+  (`include/ocffi.h`), which IS producible and attestable without an
+  SDK.
+- **wasm32-unknown-unknown** — formalized from "pkg/ rides the
+  release" to a versioned dual-glue bundle
+  (`opencodifier-<v>-wasm32-unknown-unknown.tar.gz`: `pkg-web/` +
+  `pkg-nodejs/` from `wasm-pack --release`), gzip-magic attested.
+
+Supporting machinery, all in this commit: `scripts/generate_attestation.py`
+grew per-target artifact contracts (container + arch + static/member
+probes for PE32+, Mach-O, `ar`, and gzip — an unmapped target refuses to
+attest rather than shipping unverified); `just release-checksums` writes
+`dist/sha256sums.txt`; `opencodifier-ffi` is the new staticlib crate
+(C-ABI JSON boundary over `opencodifier_engine::wire`, the same module
+the WASM binding calls — one wire contract, every transport).
+
+## D25 — The escalation ladder is engine-internal per-node policy, never IR (2026-09-30)
+
+The fusion study (F23: engine→gte→2B blend 0.867 vs 0.725 best single)
+bounds what a confidence-gated ladder can score, and the rungs'
+confidences are not commensurable — a relational proof is p = 1.0 by
+construction, the embedding rung's scores are ordering-only (D15
+finding 3: the probability fit is degenerate; the measured gate is
+`min_margin ≈ 0.018`, `results/embed-margin-study.md`), and the model
+rung carries a fitted temperature. One request-level policy cannot gate
+all of them. The wiring decision:
+
+- **`LadderPolicy` composes the existing gate type; the IR does not
+  move.** Engine config gains optional per-node / per-kind
+  `DecisionPolicy` overrides (`opencodifier-engine/src/ladder.rs`),
+  resolved at the existing confidence gate: `per_node[id]` →
+  `per_kind[kind]` → request policy. No wire change, no schema change —
+  `pub(crate)`-level plumbing only (`QuestionDecision::decided_by`
+  records which node decided, so the threshold node re-resolves the
+  same rung).
+- **The cache stores completed (gated) responses**, so the stale-gate
+  hazard is real; the protection is identity: a configured ladder
+  decorates the engine's model id as `|ladder-v1@<id>` (same rule as
+  focused extraction, D6) and rides every cache key. A changed ladder
+  re-keys; it never re-gates old responses. Assembly refuses a
+  non-empty ladder whose `id` is empty or `"none"` — an anonymous
+  ladder is a correctness bug, not a style choice.
+- **Empty ladder is byte-identical to no ladder** — no decoration, no
+  `policy_source` trace facts, locked wire fixtures. The ladder ships
+  opt-in (F24: gates inherit their rung's calibration; per-domain
+  calibration precedes a default-on ladder).
+- **Traces explain the gate**: when an override fires, the decide and
+  threshold entries record `policy_source` (`node:<id>` /
+  `kind:<name>`) — the no-hidden-thresholds rule applies to the ladder
+  like every other gate.
+- **`NodeSpec::threshold` remains unwired** (validated and
+  fingerprinted since introduction, never consumed by the executor).
+  The ladder composes alongside it; wiring the graph scalar to the
+  gate is a separate, deliberate change with its own record.
+
+**Amendment (2026-10-01 — per-rung calibration and shipped profiles).**
+The ladder's remaining D25 scope is wired and the profile documents
+ship:
+
+- **Per-rung calibration.** `LadderPolicy` carries
+  `calibrations: BTreeMap<String, Arc<dyn Calibration>>` keyed by the
+  same `node:<id>` / `kind:<name>` strings the trace records; the
+  executor resolves it beside the policy and a rung calibration
+  replaces the engine-level calibration for that rung's questions
+  (`None` = unchanged, byte-identical). The trace records
+  `calibration_source` when one fires. A calibration-only ladder is
+  non-empty — validate() demands the identity for it too, so an
+  artifact swap can never re-gate decisions under single-policy cache
+  keys.
+- **`ProofAwareCalibration`** (CALIBRATION finding 2, no artifact
+  shipped): exact proofs arrive as single-entry distributions at
+  p = 1.0 and pass through raw; multi-entry distributions delegate to
+  the inner calibration. Its `version()` is the inner version — safe
+  because the wrapper only changes semantics inside a ladder whose id
+  decorates the cache identity; bump the ladder id when wrapper
+  behavior changes, exactly like an artifact swap.
+- **Profiles are data.** `LadderProfile` (serde, `deny_unknown_fields`)
+  loads a JSON document — per-kind/per-node policies through
+  `DecisionPolicy`'s validated mirror, rung calibrations as D15
+  artifacts with an optional `proof_aware` wrapper — and refuses an
+  empty profile. The CLI surfaces it as `--ladder <PATH>` on `decide`,
+  `serve`, and `mcp serve` through the one shared `runtime::engine_config`,
+  so the three interfaces cannot drift. HTTP config surfacing stays
+  deferred: no engine-configuration surface exists on `/v1` yet
+  (D12), and a flag that silently re-gates a running server would
+  need its own record.
+- **Shipped profiles** (`ladders/`, kept loadable by test):
+  `fusion-v1` — rule rung accepts proofs at 1.0; classifier kinds run
+  the measured accept-on-margin shape (`min_confidence 0.0` +
+  `min_margin 0.0183`, `results/embed-margin-study.md` — the gate
+  cascade is demote-only, so accept-on-margin is expressed by a
+  probability gate that never fires and a margin floor that demotes
+  near-ties). `proofs-only-v1` — only proofs accept outright.
+  Ladders remain opt-in (F24: per-domain calibration precedes any
+  default-on ladder).
+
+**Amendment (2026-10-08 — the fitted Boolean boundary rides the same
+seam).** RESEARCH §15.6 item 2 measured the largest single lever in the
+sweep: a Boolean verdict taken at the hard argmax is the wrong
+operating point for skewed tasks (tuned thresholds moved F1
+0.499 → 0.748 on UNFAIR-ToS, 0.243 → 0.353 on GoEmotions; median tuned
+threshold 0.86). The boundary is policy, not code:
+
+- **`DecisionPolicy::boolean_threshold: Option<f64>`** — the question
+  is answered true when `p_true >= threshold`. Validated strictly
+  inside `(0, 1)`; `None` — the default — is byte-identical
+  everywhere (serialization omits it, so canonical forms, cache keys,
+  and wire fixtures do not move). It composes through the existing
+  `RawDecisionPolicy` mirror, so profile documents carry it per-kind
+  like any other gate override.
+- **The executor never rewrites the distribution.** Agreement with the
+  argmax passes through untouched. A flip keeps the model's measured
+  distribution exactly as it is — no valid binary distribution can put
+  a minority verdict on top — and instead the *answer* describes the
+  verdict actually given: `value` follows the boundary, `probability`
+  is the verdict's own mass (e.g. answering false at `p_true = 0.6`
+  means 0.4), and calibrated confidence maps that mass through the
+  rung's calibration via `Calibration::calibrate_probability` (new
+  provided trait method, identity default, D15-consistent;
+  `TemperatureCalibration` applies the same per-entry rescale it
+  applies to the top; `ProofAwareCalibration` delegates). The gate
+  therefore reads the honest confidence: a threshold-overruled verdict
+  at minority mass routes to verify/abstain unless the rung's own
+  gates accept it. Statistical dimensions (entropy, margin, OOD,
+  top probability) stay the distribution's — they describe the
+  evidence, not the verdict.
+- **Traces disclose both facts**: the deciding node records
+  `boolean_threshold` whenever a boundary is configured, and
+  `boolean_flipped = true` when it overruled the argmax. Absent
+  otherwise — no hidden thresholds, no noise on unconfigured runs.
+- **The offline fitter is `opencodifier ladder fit-boolean`.**
+  `opencodifier-engine/src/ladder_fit.rs` sweeps `0.50..=0.99` in
+  0.01 steps, scores F1 on the true class, breaks ties toward the
+  smallest threshold, and emits the profile document (`id` +
+  `per_kind.boolean`) composed over a base policy. `id` empty or
+  `"none"` is refused at emit (the id decorates every cache key).
+  Every emitted document round-trips through the real
+  `LadderProfile` loader in tests, so a fitted profile can never
+  drift from what `--ladder` accepts. Evidence is JSONL
+  `{"p_true": f64, "label": bool}`; the grid uses integer-then-divide
+  arithmetic so emitted boundaries are clean decimals an operator can
+  diff across fits.
+
+**Amendment (2026-10-08 — the elicited-abstain candidate rides the
+same seam).** RESEARCH §15.6 item 3: an elected "none of these" was
+right in 17 of 18 research cases — a rung that cannot say "the state
+does not decide this" is forced to guess, and the guess ships with
+high confidence (E1-C measured relational mean top-prob 0.917 against
+0.610 accuracy). The escape hatch is policy, not code:
+
+- **`DecisionPolicy::abstain_candidate: Option<AbstainCandidate>`** —
+  a candidate id + description pair. The id *marks* the abstain
+  candidate: `prepare_question` appends the synthetic candidate last
+  (after rerank sort) to every choice question of a policy that
+  carries one, unless a declared candidate already owns the id — then
+  that declared candidate takes the abstain role and nothing is
+  appended. Construction refuses an empty id, the reserved id
+  `"none"`, and an empty description; the builder re-validates.
+- **Election is a terminal abstention.** When the top answer is the
+  marked candidate, the outcome is `Abstain` regardless of confidence
+  — the gate cascade and the escalation walk's outcome re-derivation
+  both defer to it (a 0.99-confidence "none of these" is not
+  re-derived into an acceptance). The answer is withheld from the
+  response, so the synthetic id can never leak into an accepted
+  answer set.
+- **Traces disclose both facts** on the deciding node:
+  `abstain_candidate` whenever a candidate rides a choice question,
+  `abstain_elicited = true` only when elected. Absent otherwise.
+- **Default byte-identity.** `None` — the default — serializes as
+  absent (canonical forms, cache keys, and wire fixtures do not
+  move), appends nothing, records no facts, and leaves every decision
+  byte-identical to the pre-field engine (integration-tested).
+- **Handoff note:** an appended candidate breaks the lexical
+  build-once handoff (D28) — the handing index has no score for the
+  synthetic — so the classifier builds its own index in that case
+  (bit-identical either way).
+
+## D26 — The model rung is a prompt-shaped Classifier over llama.cpp, not a tensor backend (2026-10-02)
+
+The escalation ladder (D25) has one missing rung: the decision model
+the measured board says is worth escalating to (F23: the simulated
+engine→gte→2B blend scores 0.867 @ 753 ms vs 0.725 best single). The
+serving reality on this host is the llama.cpp `parallel-decision`
+fork — its native verdict-slot readout is the only interface that ever
+scored the Jev-Style weights honestly (F26: 0.8083 native vs 0.217
+tree-mode mismatch, F10), and ONNX Runtime is not the path (F25: ≥9×
+prefill-bound latency; no Vulkan EP exists to fix it). The wiring
+decision:
+
+- **The rung implements `Classifier`, not `InferenceBackend`.**
+  `InferenceBackend` is the tensor-in/tensor-out contract of the ONNX
+  serving path (D7: named `DenseTensor`s). The fork's readout is
+  prompt-shaped — a rendered candidate-conditioned prompt in,
+  verdict-slot logprobs out. Forcing one shape onto the other would
+  fabricate tensors and re-create the F10 interface mismatch this
+  board spent a phase correcting. `LlamaDecisionClassifier`
+  implements `opencodifier_engine::Classifier` (decide →
+  `Distribution`) and assembles through `EngineHandle::new` /
+  `with_ladder` as decider or verifier — zero engine changes, the
+  same seam every other rung uses.
+- **Rust owns the decision math.** The server returns logprobs; the
+  softmax over the verdict slot and any calibration happen in Rust
+  f64 (D7), and confidence is calibrated through the existing D15
+  seam before any gate reads it. Server-reported probabilities are
+  never exposed raw.
+- **One crate, one feature, one new dependency.** The client lives in
+  `opencodifier-model` behind a `llamacpp` feature; the HTTP client
+  is `ureq` (sync, `default-features = false`, `json` only) — blocking
+  matches the engine's sync core (D5), and a leaf crate gains no async
+  runtime. Plain HTTP, deliberately: the endpoint is loopback by the
+  bind rule, and every Rust TLS backend (`ring`, `aws-lc-rs`) drags in
+  either an OpenSSL-derived license outside `deny.toml`'s allowlist or
+  a C toolchain build for a hop TLS cannot help. Without the feature
+  the default build is dependency-identical; with it, cargo-deny
+  licenses and advisories gate the addition like any other.
+- **No live server in the test suite.** A minimal `Transport` trait
+  (JSON in, JSON out) is the injection seam: unit tests script
+  verdict-slot responses, timeouts, malformed payloads, and non-200s
+  through a mock. Real-server integration is opt-in against a
+  loopback endpoint (the bind rule — a default must never point at a
+  remote host) and skips when absent.
+- **Determinism is a contract, not a hope.** Sampling is pinned
+  greedy server-side; `model_id()` composes build + GGUF + readout
+  config and feeds cache keys like any classifier's (D6); timeouts
+  ride the engine's `Deadline` seam; retries are bounded and
+  explicit, never ambient. Double-replay of a suite arm must be
+  bit-identical before any number is of record.
+- **Weights never ship (D14).** The backend addresses a
+  user-provided llama-server; no GGUF in the repository, no
+  download-at-runtime, no vendored model artifacts.
+
+Acceptance is the F23 target the ladder has been simulating: blended
+accuracy ≥ 0.80 at ≤ 1 s mean on the locked suite, measured
+in-process through the real engine, not through the benchmark
+harness's post-hoc blend.
+
+## D27 — Cross-rung escalation: a configured rung list, fired only by the gate (2026-10-02)
+
+D25 gave every rung its own gate; D26 gave the ladder its model rung.
+What the F23 cascade actually does is still missing: when a rung's
+gate does not accept, the question moves to the *next* rung. Today a
+non-accepting outcome dead-ends in `Verify`/`Abstain` against a single
+optional verifier. The decision:
+
+- **Fallbacks are an engine-level ordered rung list, not graph nodes.**
+  `Rung { classifier, calibration, policy }` (all optional beyond the
+  classifier) lives in `ladder.rs` because it *is* a ladder rung — the
+  same escalation vocabulary, now with an ordered tail. The graph stays
+  a declarative DAG of pipeline stages; model routing is engine
+  configuration, and no IR or wire shape changes. Engines assemble
+  through `DecisionEngine::new_with_rungs` /
+  `EngineHandle::with_rungs`; every existing constructor passes an
+  empty list and is unaffected.
+- **The gate is the only trigger — never two classifiers on a happy
+  path.** At the threshold node the primary rung is gated exactly as
+  today. Only a non-`Accept` outcome (`Verify` *or* `Abstain` — both
+  mean "this rung could not decide") fires the next rung, which is
+  gated by *its own* policy when it carries one, else the deciding
+  node's ladder-resolved policy. The list walks until a rung accepts
+  or is exhausted; the last rung's outcome stands and the existing
+  verifier cascade (agree → `Verified`, disagree → `Abstain`) applies
+  to the *final* distribution. Abstention at the end of the list
+  remains a successful outcome, never an error.
+- **Rung overrides are honest about scope.** A rung's calibration
+  replaces the engine-level calibration for its own distribution (the
+  D15 seam, per rung, as B4 did for gates); a rung's policy replaces
+  the node-resolved policy the same way. Fallbacks decide on the full
+  state over the already-narrowed question — the same inputs the
+  verifier gets today — and their distributions are clipped to the
+  surviving candidate set like every other classifier's.
+- **Cache identity carries the rung list.** A non-empty list decorates
+  the model id `|rungs-v1@<model>@<cal-ver>+…` in list order, so a
+  changed composition (model swap, calibration refit, list reorder)
+  re-keys every cached decision mechanically. A rung's *policy* has no
+  version of its own: changing one is an artifact change under the
+  same discipline D25 set for calibrations — express it by bumping the
+  ladder id (or altering the composition the decoration already sees).
+- **The trace explains the walk.** A question that escalated gains
+  `rungs_fired` and a `rung_chain` fact naming each rung's model, top
+  key, and gate outcome in order — the deterministic-explainability
+  rule (§71) applied to routing, no chain-of-thought involved. An
+  engine without fallbacks emits byte-identical traces, which the
+  fixture suite asserts.
+- **Confidence-gated, budget-aware.** Each rung firing passes the
+  wave guard (deadline + cancellation) before the call, so a rung
+  walk cannot outrun the request's budget.
+
+## D28 — The OOD channel gains a policy-selected input-likeness mode (2026-10-02)
+
+Measured motivation (REPORT, JevBench engine row; RESEARCH §9.1): the
+zero-ML ladder admits 81% of adversarial items with a 0.377-accuracy
+rung, and a 3-rung fusion tops out *below* its best single arm —
+because the OOD channel feeding `ood_ceiling` is **normalized answer
+entropy**, which measures the shape of the distribution, not whether
+the input resembles anything the rung was calibrated on. The policy
+seam (`Policy::with_ood_ceiling`, §19) has existed since Phase 14; it
+has been receiving the wrong signal. The decision:
+
+- **Two deterministic OOD modes, selected by policy, never fused.**
+  `OodMode::AnswerEntropy` (the default — today's behavior,
+  byte-identical) and `OodMode::LexicalBand`. In lexical-band mode the
+  OOD score is `1 − lexical_coverage`, where coverage is the fraction
+  of non-stop query tokens (the closed BM25 stop-word list, same
+  tokenizer) present in the best-scoring document's term set —
+  computable from the index the rung already builds, zero new
+  inference, fully deterministic. Answer-entropy stays the fallback
+  wherever a rung exposes no lexical evidence (relational proofs,
+  the model rung), so every rung has a defined OOD value in both
+  modes.
+- **No-evidence is maximal OOD.** A query whose informative tokens are
+  all stop words yields coverage 0 → OOD 1. A lexical rung that cannot
+  lexically ground its input must escalate, not trust a softmax over
+  nothing — the §73 posture, made mechanical.
+- **Policy selects; the ladder composes.** `DecisionPolicy` gains
+  `ood_mode` (serde default `answer_entropy`; old payloads
+  deserialize unchanged), so the D25/D27 machinery overrides it per
+  node, per kind, and per fallback rung like every other gate. The
+  gate relationship check is unchanged (mode is orthogonal to
+  `abstain_below <= verify_below <= min_confidence`). Cache identity
+  is carried by the existing ladder decoration, and a policy change
+  re-keys mechanically through it.
+- **Raw lexical evidence leaves the classifier through the deciding
+  path only.** `Classifier::decide_extended(state, question, index)`
+  returns `(Distribution, Option<f64>)` — the coverage of the best
+  document — with a default impl delegating to `decide` and returning
+  `None`. The `index` parameter is the build-once handoff (task #80):
+  the executor may pass the narrowing node's already-built index for
+  the identical candidate set; classifiers remain free to ignore it
+  and build their own (bit-identical either way — same documents,
+  same index, same scores).
+- **What this is not.** Not a trained density model, not a learned
+  projector — a deterministic lexical grounding signal, the
+  input-unlikeness evidence available before any model exists (the
+  same doctrine the entropy placeholder's own comment states). It
+  also deliberately does not change what `ood_score` means under the
+  default mode: existing traces, artifacts, and calibration cells
+  remain valid; only policies that opt into `lexical_band` get the
+  new semantics, and they get them spelled out here.
+
+## D29 — First-party integrations are adapters over the public surfaces, never a privileged stack (2026-10-02)
+
+User directive (2026-10-02): OpenCodifier will integrate with Amortyx
+and the other in-house services "for full stack and compatibility …
+but we don't want to force people to use one stack, workflow, pipeline,
+or another."
+
+- **The public surfaces are the only surfaces.** Everything an
+  in-house consumer can do — HTTP (`/v1/decide`, `/v1/batch`,
+  `/v1/graph/*`, `/v1/validate`, `/v1/models`, `/v1/capabilities`),
+  MCP (the six `codify_*` tools), the CLI, the Rust crates, the WASM
+  runtime — is what any third party gets. A first-party integration
+  may not take a back door: no in-process linkage beyond the public
+  crate layering, no endpoint that only Amortyx/Control-Center can
+  call, no feature that ships only through a first-party path.
+- **First-party consumers are examples, not requirements.** The
+  default posture stays exactly what PLANNING.md §1 states:
+  fully local, offline, no accounts. Installing Amortyx, the harness,
+  or any sibling service is never a prerequisite for any OpenCodifier
+  capability, and no OpenCodifier capability may detect or prefer a
+  first-party consumer.
+- **Each side keeps its own responsibilities** (INTEGRATION_AMORTYX.md
+  §1, unchanged): OpenCodifier makes semantic decisions; Amortyx makes
+  economic/operational ones; neither absorbs the other. The Jev
+  adapter doctrine generalizes: compatibility with any ecosystem —
+  Jev/System-One, Fastino-style `systemone` callers, OpenAI or
+  Anthropic clients — is an adapter mode over the IR, never the
+  identity of the runtime.
+- **Failure posture stays degrade-to-consumer.** A first-party
+  consumer must treat the decision runtime as optional: connection
+  refused, timeout, or `abstain` falls back to that consumer's own
+  prior behavior (the INTEGRATION_AMORTYX.md §4 rule). No consumer's
+  availability may depend on the decision runtime's availability.
+- **Docs follow the same rule.** `docs/INTEGRATIONS.md` documents
+  third-party integration paths as the primary story; first-party
+  integrations appear in it as worked examples of the same public
+  surfaces, pointing at their own design docs of record.
+
+## D30 — Wire-format selection over HTTP is an explicit header, native by default (2026-10-02)
+
+Phase 19a. The `OpenAI`/`Anthropic`/`Jev` adapters were reachable only
+through the CLI `--format` flag and as library types; every HTTP route
+decoded through `Native`. Adopters with existing OpenAI-, Anthropic-,
+or Jev-shaped tooling had to shell out to the CLI to be understood.
+
+- **Selection is the `x-opencodifier-format` request header**, valued
+  with the adapters' own stable `name()`s (`native` | `openai` |
+  `anthropic` | `jev`). Not an envelope field: a drop-in OpenAI or
+  Anthropic client posts *its own* body shape and cannot be asked to
+  wrap it. Not content negotiation: `Content-Type` describes the
+  media type, not the decision-runtime projection, and sniffing a body
+  to pick a decoder is exactly the guesswork this surface refuses.
+  Header absent ⇒ `Native`, so every pre-D30 caller — and every
+  recorded trace, benchmark, and fixture — is byte-identical.
+- **Decode and encode are symmetric per request.** The same adapter
+  that decodes the request projects the response
+  (`/v1/decide`, and every `/v1/batch` item), so an OpenAI-shaped
+  client gets an OpenAI-shaped answer and never parses our native
+  envelope to reach its data. `/v1/validate` decodes through the
+  selected adapter but keeps the runtime's own verdict shape — a
+  preflight has no external shape to preserve. The graph routes stay
+  native-only: a graph document is a native construct with no external
+  analog.
+- **Errors keep one contract.** The `{"error": {"code", "message"}}`
+  envelope is the native one on every route regardless of the selected
+  format. A client integrates against exactly one error vocabulary;
+  projecting errors into vendor shapes would fork that vocabulary per
+  format for no capability.
+- **An unknown format name is a refusal, never a guess**:
+  `400` `schema.invalid_value` naming the supported set. Header
+  matching is case-insensitive on the value; the adapters remain
+  stateless value objects built per request, so no server state grows.
+- **Cache semantics are unchanged by construction**: decisions are
+  keyed on the canonical IR *after* decode, so the same semantic
+  request arriving as `native` and as `openai` shares one cache entry —
+  the format is transport, not identity.
+- **Fidelity stays the adapter's own documented posture** (PLANNING
+  §7/§42): where a format cannot express an IR feature the adapter
+  refuses or discloses — the HTTP layer adds selection, not silent
+  conversion. `/v1/systemone` still does not exist and is still not
+  claimed (Phase 19b decides whether a Jev-shaped route earns its
+  place under these same rules).
+
+## D31 — No dedicated Jev-shaped route; the format header is the integration path (2026-10-02)
+
+Phase 19b, closing the question D30 left open. The Jev/System-One
+ecosystem (and Fastino's GLiDE demo) convention is a
+`/v1/systemone` path. Does a route by that name earn its place?
+
+- **No.** D30's `x-opencodifier-format: jev` header already carries the
+  entire capability: the same adapter, the same decode/encode
+  symmetry, the same cache identity. A `/v1/systemone` route would be
+  a byte-for-byte alias of `POST /v1/decide` with the header
+  pre-set — new surface, zero new capability, a second URL to document,
+  version, and keep honest.
+- **Identity doctrine (CLAUDE.md) is the tiebreaker**: OpenCodifier is
+  not a Jev clone — Jev/System-One compatibility is one adapter mode,
+  not the identity. Promoting a Jev convention to a top-level route
+  inverts that: it advertises the adapter mode as the product's shape.
+  Headers compose; brands should not.
+- **Revisit condition, stated up front**: a concrete consumer that
+  cannot set a request header (a hard-coded ecosystem client with no
+  configuration surface) changes the calculus. Then the alias route
+  ships as pure dispatch to the decide handler with the Jev adapter
+  selected — no separate pipeline, no separate error contract, no
+  separate cache namespace. Until a named consumer exists, the route
+  stays unshipped and `/v1/systemone` stays unclaimed.
+- **Jev-shaped callers are served today**: `POST /v1/decide` with
+  `x-opencodifier-format: jev` (HTTP), `opencodifier decide --format
+  jev` (CLI), `Jev` adapter in-process (library). This is documented as
+  the integration path in `INTEGRATIONS.md` §2.4, not a workaround.
+
+## D32 — The request execution ceiling follows the rung's measured tail: 10 s → 120 s (2026-10-05)
+
+- **What changed**: `Limits::default().max_execution_time` (the IR's
+  per-request wall-clock ceiling and the schema's validation reference)
+  is 120 s, not 10 s. A request may declare any deadline at or under
+  the ceiling and never above it; the engine still runs at
+  `min(request, server config)`, so nothing about enforcement moves.
+- **Why**: the ceiling was calibrated before the model rung existed.
+  Its measured CPU tail — a 15 KB long-policy state over a
+  5-candidate parallel readout — is ~22 s, so every long-document
+  escalation died as `schema.limit_exceeded: 120 > 10` before any
+  model token was scored. Found by the JevBench full-system runs
+  (task #105): the proofs-only ladder aborted twice on exactly this
+  (first as `engine.timeout` under the old adapter's 10 s payload,
+  then as a hard rejection when the adapter declared more than the
+  IR allowed).
+- **What it is not**: not a loosening of enforcement. The hostile-
+  input posture is unchanged — the ceiling is still finite, still
+  validated at the wire, still min-ed with the server's own config.
+  D9 per-stage performance budgets are unaffected (they measure
+  engine stages, not request deadlines).
+- **Revisit condition**: if a rung's measured tail ever exceeds the
+  ceiling, the ceiling moves again — to the measured tail, not to a
+  round number.
+
+## D33 — The Kai-0.6B-ONNX decision rung: contract in `opencodifier-model`, transport behind the reinstated `onnx` feature (2026-10-05)
+
+- **What shipped**: the Kai-0.6B-ONNX rung (task #92) as two pieces.
+  `opencodifier-model::kai` is the *contract* — exact prompt rendering
+  (`decision2-segmented-options-global-query-v1`), tokenization, pointer
+  computation with in-pipeline assertions, the fitted 5-level score
+  bias, and `f64` softmax. It is **feature-free** and verified against a
+  frozen, trimmed upstream parity fixture
+  (`kai/fixtures/kai-reference-trimmed.json`, 3 of the 11 recorded
+  cases, with provenance). `opencodifier-runtime::kai::KaiOnnxBackend`
+  is the *transport*: the four named graph inputs, integral-valued `f32`
+  index tensors, and raw logits — no softmax (D7), no calibration.
+- **`onnx` is reinstated under the D2 pin, not re-decided.** D2's pin is
+  kept exactly: `ort = "=2.0.0-rc.13"`, `default-features = false`,
+  features `["std", "ndarray", "api-21"]` (`std` is required — ort's
+  rc.13 needs `ndarray/std`; `api-21` is D2's own re-entry condition,
+  compiling the bindings below ort's default `api-27`, which no
+  available dylib satisfies). D2's two measured FAIL legs still stand as recorded:
+  the api-27 dylib gap and the cross-implementation softmax
+  bit-identity. The second is now irrelevant *by construction* — the
+  rung never computes softmax inside the graph, so there is no
+  cross-implementation float to disagree. The first is a deployment
+  constraint, handled by `runtime-onnx-dynamic` (system dylib) exactly
+  as D2 prescribed. A **graph execution against real weights has not
+  been run on this host** — the feature compiles, is lint-clean, and is
+  unproven end-to-end until the compute-host parity run.
+- **The contract differs from the §10.5 summary; the fixture won.**
+  Three deltas, each verified against the upstream runtime's own
+  fixture, not inferred: (1) **no truncation** — a prompt over
+  `max_input_tokens` (8192) is refused (`max_length_exceeded` upstream,
+  `model.prompt_too_long` here); truncating would silently move every
+  pointer. (2) **no `len(state_ids)` base offset** — pointers are
+  absolute token indices into the whole prompt, the option segment's
+  last token; the state-relative base belonged to the Strands packer
+  (§6.5's model), a different model. (3) **temperature is 1 for every
+  kind** — there is no per-kind temperature table; the only fitted
+  correction is the 5-level score bias.
+- **`tokenizers` is a new heavyweight dep for `opencodifier-model`,
+  feature-gated.** The reference HF encoder only loads behind it
+  (`0.22` line, `fancy-regex` backend — pure Rust, no C dependency).
+  The feature-free path carries a built-in byte-level BPE oracle over
+  the fixture's merge closure, and a test asserts the two encoders
+  agree on every frozen segment, so the default build reproduces the
+  fixture without the dependency.
+- **Revisit condition**: any change to the served artifact, its
+  `prompt_version`, or the bias table changes `MODEL_ID` and invalidates
+  cached decisions (D6); the fixture test must be re-frozen against the
+  new upstream fixture in the same commit.
+
+## D34 — The Julia-1 ONNX decision rung: a five-input graph, a Metaspace fixture closure, and the first Rust-side execution on real weights (2026-10-05)
+
+- **What shipped**: the second ONNX rung (task #92), beside D33's Kai.
+  `opencodifier-model::julia` is the contract — upstream
+  `julia.data.sequence` packing (`PROMPT_VERSION =
+  "julia-data-sequence-v1"`), marker computation (the option's `<mask>`
+  *start* index — the opposite pointer convention from Kai's last-token
+  `answer_pos`), `f64` softmax, and **no fitted bias table** (upstream
+  publishes none; inventing calibration is forbidden). 
+  `opencodifier-runtime::julia::JuliaOnnxBackend` is the transport,
+  feature-gated behind the same reinstated `onnx` (D33/D2).
+- **The graph has five inputs, not four.** Introspecting the real
+  export (`onnxruntime` `get_inputs()`) shows `input_ids`,
+  `attention_mask`, `marker_pos`, `marker_mask`, **and `qtype`**
+  (`int64[batch]`: choice 0, score 1, noul 2). The four-input transport
+  drafted from the parity script's first four feed calls would have
+  failed at `session.run` on every request; the parity script happened
+  to pass `qtype`, and only introspection makes the requirement
+  explicit. Contract and transport carry `qtype` from the start
+  (`JuliaKind::qtype`), and `validate_shapes` refuses a
+  wrong-width row. Lesson recorded: a graph's published signature is
+  read off the artifact, never off the caller that happens to work.
+- **The fixture tokenizer is a derivation closure, not a vocab
+  subset.** Julia-1's tokenizer is Metaspace (space → `▁`) with byte
+  fallback, so final ids cannot be re-derived from final ids alone.
+  `julia/fixtures/julia-fixture-tokenizer.json` assigns each real
+  token's GPT-2-alphabet spelling its real id and composes each
+  spelling with a left-to-right merge chain (filler ids for
+  intermediates); chains are ordered metaspace-runs-first then
+  longest-first, and a demote-and-verify repair loop moves any pair
+  that fires outside its run's chain. The generator
+  (`benchmarks/validation/runner/julia_fixture_gen2.py`) verifies every
+  frozen segment byte for byte against the Rust oracle algorithm
+  before shipping; a tree-side test re-proves it against
+  `kai.rs`'s byte-level BPE oracle (model crate). The full tokenizer
+  behind the `tokenizers` feature remains the serving path.
+- **Verified end-to-end on the compute host (fedora) 2026-10-05.**
+  (1) Python parity `julia1_parity.py`: 100/100 `parity-cases.json`
+  rows, max |Δlogit| 7.8e-5 against the export's official bar — the
+  export matches PyTorch. (2) **Rust-side**
+  (`benchmarks/validation/runner/julia-parity-rs`, `runtime-onnx-dynamic`
+  over the pip `onnxruntime` 1.30.0 dylib): 3/3 fixture argmax, max
+  |Δlogit| 6.3e-5 — ids, markers, tensors, graph execution, and logits
+  all reproduced from the shipped Rust path. This is the first
+  Rust-side graph execution on real weights for any ONNX rung; D33's
+  open boundary is closed for Julia-1 and **still open for Kai** (the
+  Kai graph exists at `model_quantized.onnx` on the compute host; its
+  Rust-side run is pending, same runner pattern).
+- **Packaging reality**: plain `--features onnx` does not link on this
+  host (no static ort backend — ort's own "Enable the `download-binaries`
+  feature" linker error); `runtime-onnx-dynamic` is the only verifiable
+  packaging here, exactly as D2 prescribed. The output width is exactly
+  the declared option count (no padding lane), so the transport's
+  `[batch, width]` check holds against the real graph.
+- **Fixture boundary**: the frozen fixture carries 3 *choice* rows only
+  (narrowest/median/widest of the 100); the export records no
+  `noul`/`score` parity cases, so those kinds are exercised in-tree
+  with a stub tokenizer over the same sequence math — the kind-generic
+  parts (packing, markers, `qtype`, softmax) are pinned, the
+  kind-specific logits are not.
+- **Revisit condition**: as D33 — any change to the served artifact or
+  `prompt_version` changes `MODEL_ID` and invalidates cached decisions
+  (D6); the fixture re-freezes against the new upstream fixture in the
+  same commit.
+- **Dated addendum (same day): the Kai boundary is closed too.**
+  `benchmarks/validation/runner/kai-parity-rs` runs the full Rust Kai
+  path — request text → `HfTokenizer` → collate → `KaiOnnxBackend` →
+  the contract's own `probabilities` (softmax + fitted score bias) —
+  against the real quantized export on the compute host: **11/11
+  `ref.json` encodes byte-identical** (ids, option pointers, answer
+  pointer rebuilt from text, not fed pre-tokenized), **11/11 argmax,
+  max |Δp| 0.0174** (`language/lang`, the quantization residual on a
+  choice case). The score case lands at 0.0014 only *with* the fitted
+  bias applied — the raw-softmax comparison (python checker: 0.0392 on
+  `review/damage`) omits the bias the upstream runtime itself applies,
+  confirming the bias table is the export pipeline's own correction
+  and belongs on the serving path. No graph-execution boundary remains
+  open for either ONNX rung.
+
+## D35 — Lexical confidence is bounded: no BM25 softmax output may reach 1.0 (2026-10-06)
+
+- **What changed**: the lexical classifier's three decision paths
+  (choice, boolean, score) pass their BM25 scores through
+  `bound_lexical_spread` before the softmax. When the top score exceeds
+  `LEXICAL_LOG_ODDS_CAP` (`ln(99)` ≈ 4.595), the top is pulled to the
+  cap and the rest compress into `[0, cap]`, order-preserving. Below
+  the cap nothing changes. Model id `builtin-lexical-v1` →
+  `builtin-lexical-v2` (D6 re-key: cached v1 confidences include
+  saturated 1.0 values).
+- **Why**: the boolean hypothesis is an unbounded BM25 score against a
+  fixed zero null, and the score is a term-frequency product — state
+  length × question-term overlap. Past ~37, `softmax([evidence, 0])`
+  returns *exactly* 1.0 in `f64`. Measured on the JevBench `long_policy`
+  items (task #115): 15 KB policy prose drove boolean evidence to 42–64
+  and choice score gaps to 60+, saturating confidence to 1.0, and the
+  exact-proof ladder (`min_confidence: 1.0`) accepted those as proofs —
+  four wrong answers at maximum confidence (3× noul predicted "no" on
+  gold-"yes" items via the negation-polarity flip firing on rubric
+  text; 1× choice winner = the criterion whose words the state repeated
+  most). All four reproduced bit-exactly by an independent replication
+  of the arithmetic. This is also why the winner-prob gate refit
+  (#114) hit the grid edge: p≈1.0 was a state-length proxy, not a
+  correctness signal — the p≈1.0 band converted at 0.235 while the
+  [0.5, 0.6) band converted at 0.769.
+- **What it is not**: not a calibration claim. 0.99 is not a calibrated
+  confidence; it is a structural ceiling that keeps lexical overlap
+  from certifying better than 99:1 odds and from impersonating exact
+  proofs. Predictions are unchanged everywhere (the bound preserves
+  score order), so engine accuracy on any suite is unchanged; what
+  changes is routing under confidence gates — saturated lexical
+  answers now escalate instead of self-accepting at p = 1.0 — and the
+  entropy/margin features are no longer constant-zero for exactly the
+  items where saturation fired. The `relational` solver's proofs are
+  untouched: exact proofs over extracted facts remain the only source
+  of proof-grade confidence in the zero-ML stack.
+- **Revisit condition**: if a calibrated lexical artifact (fit through
+  the `Calibration` seam) ever supersedes the raw hypothesis, the cap
+  moves under it — calibrated confidence may exceed the cap only by
+  fitting, never by saturation.
+
+
+## D36 — The coverage floor is a ratchet, and a red lane must say its number (2026-10-06)
+
+- **What was found**: workspace line coverage measured **79.25%**
+  (3,955/19,061 lines missed; 77.41% functions; 80.59% regions) against
+  a CI floor of 98.5 — the GitForge coverage lane has been red since
+  the B5/B6/Kai/Julia expansion (8,404 lines added since the 2026-09-29
+  baseline bfd6488), and the failure was invisible in practice because
+  GitForge's jobs-level API returns `[]` for finished runs, leaving no
+  job-level truth to read.
+- **Measurement first**: a throwaway worktree at the baseline commit,
+  measured with this host's exact toolchain, reproduces the recorded
+  baseline (**98.13% lines** engine crate) — the measurement
+  environment is exonerated; the debt is real and concentrated in the
+  escalation core the expansion grew (executor.rs 980 missed,
+  ladder.rs 424, classifier.rs 294, engine.rs 251, narrowing.rs 184,
+  lexical.rs 169, handle.rs 155). The mature paths never regressed
+  (rules 99.82%, relational 98.95%, cache 98.14%). Zero ignored tests:
+  absent tests, not skipped ones.
+- **Decision 1 — ratchet**: the CI floor moves to the measured current
+  value (98.5 → per-tranche schedule in `scripts/coverage_floor.py`
+  invocations, starting at the post-expansion measurement) and rises
+  with each landed Phase 20 tranche back to 98.5. A permanently-red
+  lane is a lying signal — every future red becomes dismissible. A
+  green ratchet makes decay structurally impossible and coverage a
+  monotonic ledger. Closing ~2.5k lines of core tests before anything
+  else was rejected: it leaves the lane red for weeks anyway and
+  blocks every other gate signal behind it.
+- **Decision 2 — a red lane must say its number**: `coverage_floor.py`
+  already prints the measured value and the floor on both pass and
+  fail; the missing half is GitForge-side — job logs and job results
+  must be queryable after a run finishes (the jobs-level API returns
+  `[]` for completed runs today). That observability fix is tracked
+  against GitForge itself (Phase 20h), not against this repo.
+- **Revisit condition**: when Phase 20g restores 98.5, the ratchet
+  clause is retired and the floor is again a fixed constant; any
+  future intentional debt (e.g. generated code) gets a scoped waiver
+  in `docs/COVERAGE.md`, never a lowered floor.
+- **Update (2026-10-07) — ratchet re-based on the pinned image.** The
+  89.28 % measurement this decision ratcheted from came from a local
+  rustc whose coverage mapping is finer-grained than the CI image's;
+  inside `opencodifier-ci-rust:2` the same tree measures **98.03 %
+  DA** (17,433/17,783, two independent runs agreeing to the line;
+  350-line residual classified in `docs/COVERAGE.md`, where the
+  "escalation core debt" reading above is corrected — executor.rs is
+  36/973 `DA`-missed in-image, not 980 lines dark). The schedule
+  becomes 89.0 → **97.5** (now, 0.53 under measured) → 98.5 (as the
+  Phase 20 tranches close the reachable residual). Standing rule
+  added: only an in-image measurement may move the floor; local
+  toolchains are for tranche targeting, never for floor arithmetic.
+- **Update (2026-10-08) — ratchet retired at the reachable ceiling.**
+  Phase 20g's tranches recovered every unit-reachable line (cli
+  ladder 65, itemgen classes, the macjev render fall-through) and the
+  closing line-by-line pass over the residual found the pool **empty**:
+  the remaining 298 `DA` misses (98.39 %, 18,187/18,485 in-image) are
+  all in proven-infeasible classes — `#[non_exhaustive]` wildcards no
+  in-crate test can construct, defensive-unreachable typed arms kept
+  so a future change fails loudly, wasm `JsValue` boundaries that
+  SIGABRT a host test, binary-entry mains, ffi contract-violation
+  guards (full ledger in `docs/COVERAGE.md`). Reaching 98.5 would
+  require deleting honest defensive code or covering infeasible lines,
+  so the "restore 98.5" exit condition is amended: **the floor rests
+  at 97.5 as the fixed constant** and the ratchet clause is retired
+  now rather than at 98.5. The revisit clause's own remedy applies
+  verbatim — the residual *is* the scoped waiver, recorded group by
+  group in `docs/COVERAGE.md`; a future tranche that finds a genuinely
+  reachable line reopens the ratchet upward.
+
+## D37 — Generated relational/contrastive items are solver-verified in-engine, never emitted unproven (2026-10-07)
+
+- **What was found**: the r2 post-mortem (TRAINING.md §9.6) traced the
+  decision model's relational weakness to the data, not the rung: the
+  e1-sft corpus carries almost no relational-analog rows and its
+  labels are not contrastive — nothing supervises *why* a
+  plausible-looking wrong answer is wrong. Prompt-side rebalancing
+  alone cannot fix that; the wrong-answer slots need provable
+  exclusions.
+- **Decision**: relational/contrastive corpus items are generated by
+  the new `opencodifier-itemgen` crate, which samples symbolic fact
+  graphs, renders them through the engine's own extraction grammar,
+  and verifies each item against [`RelationalSolver`] — the same
+  zero-ML stack the serving rung decides with. An item ships only
+  when the solver proves its gold at probability 1.0 over the full
+  ballot, which makes every non-gold slot's " no" supervision exact
+  by construction. Verification is three-layered: round-trip
+  extraction (the rendered text must re-extract to the constructed
+  fact set), solver proof (unique probability-1.0 gold), and a
+  non-blocking lexical probe recorded per family (the AFLITE-style
+  separability number the pilots read for hardness).
+- **The suite stays the judge**: generated items are held to a
+  *stricter* standard than the decision suite itself, whose relational
+  items are labeled by hand and are not always uniquely provable under
+  the solver's operators (suite item C-0000 is the recorded example).
+  The suite is never modified to match the solver; generated items are
+  never added to it; the two surfaces stay separate by design.
+- **Hard-negative discipline** (per Kabra et al., ICLR 2026, and the
+  §9.8 research pass): every ballot carries ≥5 slots with ≥3
+  near-misses, each carrying a named structural reason it is wrong
+  (symptom, standalone failure, healthy peer, runner-up, waiter,
+  degraded-heavy, zero-report). Structural diversity comes from four
+  sampler families × four entity domains × four question phrasings ×
+  per-item graph shapes; a suite-collision guard (exact normalized
+  match plus shared 12-word span) rejects near-duplicates of suite
+  items instead of emitting them, and the manifest reports the count.
+- **Determinism**: the corpus is a pure function of (seed, n) —
+  SplitMix64 in-crate, no RNG dependency, byte-identical reruns
+  asserted by test. A deterministic `--probe-every` split routes a
+  held-out slice to a separate file so pilots can tell generator
+  overfitting from rule learning.
+- **Rejected**: generating without in-engine verification (a label
+  the solver later disagrees with trains the model against its own
+  serving rung); free-form LLM generation for these rows (not
+  deterministic, not verifiable locally, violates the
+  deterministic-first principle); soft-label smoothing over the
+  ballot (masks which exclusions are exact versus approximate).

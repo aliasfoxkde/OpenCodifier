@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Pre-paint theme resolution — mirrors index.html; owned by site-core.js. -->
+<script>
+(function () {
+  "use strict";
+  var mode = "system";
+  try {
+    var v = localStorage.getItem("oc-theme");
+    if (v === "light" || v === "dark" || v === "system") mode = v;
+  } catch (e) { /* storage unavailable: system default */ }
+  var resolved = mode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : mode;
+  document.documentElement.setAttribute("data-theme", resolved);
+  document.documentElement.setAttribute("data-theme-mode", mode);
+})();
+</script>
+<title>OpenCodifier — AI Civilization in 60 Seconds</title>
+<meta name="description" content="A small city where a dozen citizens decide ~1.3 times a second on the Decisions SDK: sleep, urgent eating and childbirth are rules that are never asked, farm vs work vs build vs trade vs explore is scored on the snapshot, and genuine near-ties go to the OpenCodifier engine compiled to WASM in your tab — under a batching budget. Inject a shortage and watch the cascade: hunger climbs, farming takes over, construction stalls. Seeded, deterministic, population coherent by construction.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:site_name" content="OpenCodifier">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://opencodifier.pages.dev/civ60.html">
+<meta property="og:title" content="OpenCodifier — AI Civilization in 60 Seconds">
+<meta property="og:description" content="AI Civilization in 60 Seconds on the Decisions SDK — rules first (sleep, urgent eat, have-child), scored candidates for the rest, and budgeted near-ties escalated to the engine. Inject events and watch one decision cascade through the city. All local, all auditable.">
+<meta property="og:image" content="https://opencodifier.pages.dev/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="tw.css">
+</head>
+<body>
+<a class="skip-link" href="#civ60">Skip to AI Civilization in 60 Seconds</a>
+
+<div class="bg-mesh" aria-hidden="true"></div>
+
+<nav class="nav">
+  <a class="brand" href="index.html">
+    <img src="assets/logo.svg" alt="" width="22" height="22">
+    opencodifier
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="benchmarks.html">Benchmarks</a>
+    <a href="playground.html" aria-current="page">Playground</a>
+    <a href="decide.html">Decide</a>
+    <a href="api.html">API</a>
+  </div>
+  <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Theme: system (matches your device) — activate for light">
+    <svg class="tt-auto" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.2 14.5A8.3 8.3 0 0 1 9.5 3.8a8.3 8.3 0 1 0 10.7 10.7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+  <a class="nav-gh" href="https://github.com/aliasfoxkde/OpenCodifier" aria-label="OpenCodifier on GitHub" rel="noopener">
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+  </a>
+  <a class="btn btn-small nav-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+  <a class="btn btn-small" href="api.html">API docs</a>
+  <details class="nav-menu">
+    <summary aria-label="Open menu"><span></span><span></span><span></span></summary>
+    <div class="nav-menu-panel">
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">Benchmarks</a>
+      <a href="playground.html" aria-current="page">Playground</a>
+    <a href="decide.html">Decide</a>
+      <a href="api.html">API</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier">GitHub ↗</a>
+      <div class="nav-menu-foot">
+        <a class="nav-menu-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+        <span class="nav-menu-themeslot" aria-hidden="true"></span>
+      </div>
+    </div>
+  </details>
+</nav>
+
+<header class="hero hero-slim" id="top">
+  <h1><span class="grad">AI Civilization in 60 Seconds</span> — one decision cascades</h1>
+  <p class="hero-sub">
+    A dozen citizens, each deciding about once a second — and the city has a
+    shape. <strong>SLEEP (energy drained), urgent EAT (hunger ≥ 80, food on
+    hand) and HAVE-CHILD (surplus plus a roof) are rules, never questions.</strong>
+    Everything else is scored on the snapshot — farm, work, build, trade,
+    explore, and fight or flee when raiders come — and genuine near-ties go to
+    the engine <strong>under a batching budget</strong>: the city holds a few
+    ask-tokens per sim-second, and a citizen with no token falls back to the
+    argmax rule and says so on the rung. Inject a shortage and watch the
+    cascade: the granary empties, hunger climbs, FARM and EAT take over, wood
+    production slows, construction stalls. Click a citizen to follow its
+    decision stream.
+  </p>
+  </header>
+
+<main>
+<section id="civ60" class="section" data-toc-label="AI Civilization in 60 Seconds">
+  <div id="civ60-root" aria-label="AI Civilization in 60 Seconds game"></div>
+
+  <div class="grid-2 game-about">
+    <div class="card">
+      <h3>What decides what</h3>
+      <ul class="checks">
+        <li><strong>Three decisions are rules, full stop.</strong> An exhausted
+          citizen SLEEPS; a starving one with food EATS; a healthy one with
+          surplus and a roof HAS A CHILD. None is ever put on the wire — a test
+          scans every escalated request across a live run and asserts
+          <em>sleep</em> and <em>have-child</em> never appear as candidates.</li>
+        <li><strong>The rest is scored, then budgeted.</strong> farm, work,
+          build, trade, explore — plus fight and flee under raid — each score
+          on the needs snapshot (food deficit, wood need, homeless share, raid
+          pressure). When the top two land within 1.2 value points the engine
+          arbitrates, if the city has an ask-token left; the budget refills at
+          N asks per sim-second. No token → the argmax rule decides and the
+          rung says so.</li>
+        <li><strong>The cascade is the product.</strong> A shortage is not a
+          scripted animation: it empties the granary, the food-deficit term
+          lifts FARM's score, citizens re-decide, wood income drops, BUILD
+          stalls, homelessness grows. The spec test measures the farm+eat share
+          of decisions in a 30-second window after the event and asserts it
+          beats the uneventful baseline.</li>
+        <li><strong>Population is coherent by construction.</strong> pop =
+          start + births + migrants − deaths − fled, and the summary carries
+          every term plus the boolean — births are never laundered as migration
+          and raid deaths stay in the identity. The stats overlay checks it
+          every frame.</li>
+      </ul>
+    </div>
+    <div class="card card-honest">
+      <h3>Honest edges</h3>
+      <ul class="crosses">
+        <li>The engine is a budgeted voice, not the boss: at the default
+          budget of 2 asks/s twelve citizens decide ~16 times per sim-second,
+          so most decisions are rules — and every one of them says so on the
+          rung. Set the budget to 0 and the city runs entirely on rules.</li>
+        <li>The engine often declines to arbitrate: a flat three-way contest
+          lands between the abstain floor and the confidence gate, and the
+          runtime returns abstain rather than guess. That is the honest
+          outcome — the argmax rule takes over and the rung says so.</li>
+        <li>Citizens are dots on a town-square grid, not agents with pathfinding
+          — the point is the decision distribution, and the chart of food,
+          wood, population and homes over time is the ledger of what those
+          decisions did.</li>
+        <li>The scoreboard is session-only, auto-recorded at every 500th
+          decision: close the tab and it is gone. Nothing leaves this page.</li>
+      </ul>
+    </div>
+  </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer-grid">
+    <div class="foot-about">
+      <div class="foot-brand">opencodifier</div>
+      <p>A local-first decision runtime: typed decisions with calibrated confidence, a
+        deterministic execution trace instead of chain-of-thought, and refusal as a
+        first-class outcome. Pong, Life, Pac-maze, Apex Line, Sparring Partner, Ask the Engine,
+        Tower Defense, Ant Colony, and AI Civilization in 60 Seconds run on the same Decisions SDK — the scoreboard lives in this tab and nowhere else.</p>
+      <a class="foot-tag" href="https://github.com/TaskWizer" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><path d="M7.5 12.2l3 3L16.5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Built with TaskWizer AI technologies
+      </a>
+    </div>
+    <nav class="foot-col" aria-label="Site">
+      <div class="foot-head">Site</div>
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">The measured board</a>
+      <a href="playground.html">Playground</a>
+    <a href="decide.html">Decide</a>
+      <a href="api.html">API documentation</a>
+    </nav>
+    <nav class="foot-col" aria-label="Source and data">
+      <div class="foot-head">Source &amp; data</div>
+      <a href="board.csv">board.csv (raw)</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier" rel="noopener">GitHub</a>
+      <a href="https://huggingface.co/TaskWizerAI" rel="noopener">Hugging Face ↗</a>
+    </nav>
+    <nav class="foot-col" aria-label="Ecosystem">
+      <div class="foot-head">Ecosystem</div>
+      <a href="https://vivere-5we.pages.dev/" rel="noopener">VIVERE ↗</a>
+      <a href="https://www.amortyx.com" rel="noopener">Amortyx ↗</a>
+      <a href="https://www.mcpmanage.com" rel="noopener">MCPManage ↗</a>
+      <a href="https://github.com/aliasfoxkde/aegis" rel="noopener">Aegis ↗</a>
+      <a href="https://github.com/aliasfoxkde/GitForge" rel="noopener">GitForge ↗</a>
+    </nav>
+  </div>
+  <p class="foot-links">Apache-2.0 · local-first · no telemetry · no external requests</p>
+</footer>
+
+<script src="site-core.js"></script>
+<script src="toc.js"></script>
+<script src="sdk/decisions-sdk.js"></script>
+<script src="civ60-core.js"></script>
+<script src="civ60.js"></script>
+</body>
+</html>

@@ -1415,6 +1415,6 @@ mod tests {
         let text = noul_request_text();
         let wire: RequestWire = serde_json::from_str(&text).unwrap();
         assert_eq!(wire.clone(), wire);
-        assert!(!format!("{wire:?}").is_empty());
+        assert_ne!(format!("{wire:?}"), "");
     }
 }

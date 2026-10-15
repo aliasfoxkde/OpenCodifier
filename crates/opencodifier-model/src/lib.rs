@@ -10,6 +10,8 @@
 //! ```text
 //!   engine::Classifier  ◄── EmbeddingClassifier (any EmbeddingBackend)
 //!                       ◄── CandidateConditionedModel (any InferenceBackend)
+//!                       ◄── LlamaDecisionClassifier (llama.cpp fork, D26)
+//!                       ◄── kai contract + KaiOnnxBackend (task #92)
 //!   model::ModelManifest ── pins artifact bytes (SHA-256, D14)
 //!   runtime::InferenceBackend / EmbeddingBackend
 //! ```
@@ -24,6 +26,25 @@
 //!   decision model: shape-checked logits, Rust-side softmax (D7). **No
 //!   weights ship in V1**; without a trained artifact this is exercised
 //!   by tests and stays out of every default pipeline.
+//! * [`LlamaDecisionClassifier`] — the model rung of the escalation
+//!   ladder (D26): the measured tree-mode contract of the
+//!   `parallel-decision` llama.cpp fork as a
+//!   [`Classifier`](opencodifier_engine::Classifier), full distribution
+//!   required, math renormalized in Rust. The HTTP client lives behind
+//!   the `llamacpp` feature (see the [`llamacpp`] module); the
+//!   classifier itself is transport-agnostic and always compiled.
+//! * The [`kai`] contract module — the Kai-0.6B-ONNX decision rung
+//!   (task #92): exact prompt rendering, pointer computation with
+//!   in-pipeline assertions, the fitted score bias, and `f64` softmax,
+//!   all feature-free and verified against a frozen upstream parity
+//!   fixture. The ONNX transport itself lives in
+//!   `opencodifier_runtime::kai`, behind the `onnx` feature.
+//! * The [`julia`] contract module — the Julia-1 ONNX decision rung
+//!   (task #92): the upstream `julia.data.sequence` packing contract,
+//!   marker computation with in-pipeline assertions, and `f64` softmax
+//!   (no fitted bias for this model), feature-free and verified against
+//!   a frozen upstream parity fixture. The ONNX transport lives in
+//!   `opencodifier_runtime::julia`, behind the `onnx` feature.
 //!
 //! # Example
 //!
@@ -58,9 +79,42 @@
 pub mod decision;
 pub mod embedding;
 pub mod error;
+pub mod julia;
+pub mod kai;
+pub mod llamacpp;
 pub mod manifest;
+pub mod nli;
+pub mod render;
 
 pub use decision::{CANDIDATES_INPUT, CONTEXT_INPUT, CandidateConditionedModel, LOGITS_OUTPUT};
 pub use embedding::EmbeddingClassifier;
 pub use error::ModelError;
+pub use julia::{
+    CLS_ID, HEAD_LENGTH, JULIA_FIXTURE, JULIA_FIXTURE_TOKENIZER, JuliaEncoding, JuliaKind,
+    JuliaOption, JuliaQuestion, MASK_ID, MAX_LENGTH, MAX_OPTIONS, MIN_OPTIONS, OPTION_TOKEN_LIMIT,
+    PROMPT_VERSION as JULIA_PROMPT_VERSION, SEP_ID,
+};
+#[cfg(feature = "tokenizers")]
+pub use kai::HfTokenizer;
+pub use kai::{
+    BpeTokenizer, FIXTURE, FIXTURE_TOKENIZER, KaiBatch, KaiEncoding, KaiKind, KaiOption,
+    KaiPayload, KaiQuestion, KaiSegments, KaiTokenizer, MAX_CANDIDATES, MAX_INPUT_TOKENS,
+    MAX_SCORE_LEVELS, MIN_CANDIDATES, PAD_ID, PROMPT_VERSION, SCORE_BIAS, apply_score_bias,
+    canonical_json, probabilities, score_batch, score_bias, softmax,
+};
+#[cfg(feature = "llamacpp")]
+pub use llamacpp::UreqTransport;
+pub use llamacpp::{
+    DEFAULT_INSTRUCTIONS, DEFAULT_TIMEOUT, LlamaConfig, LlamaDecisionClassifier, LlamaError,
+    Transport,
+};
 pub use manifest::ModelManifest;
+// The NLI verbalization verifier (PLAN 24j). `nli::FIXTURE` stays
+// module-path — the plain `FIXTURE` name is the Kai contract's, and
+// the two files freeze different runs.
+#[cfg(feature = "nli")]
+pub use nli::serving::{OnnxNliScorer, verifier_from_dir};
+pub use nli::{
+    ENTAIL_INDEX, NliScorer, NliVerifier, Verbalizer, entailment_distribution, hypotheses, premise,
+    verify_fixture,
+};

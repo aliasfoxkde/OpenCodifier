@@ -12,10 +12,12 @@ members = [
     "crates/opencodifier-mcp",
     "crates/opencodifier-cli",
     "crates/opencodifier-wasm",
+    "crates/opencodifier-ffi",
+    "crates/opencodifier-itemgen",
 ]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.6.0"
 edition = "2024"
 # MSRV policy: the oldest stable toolchain the workspace is tested against
 # in CI. Bumps are breaking changes and recorded in CHANGELOG.md.

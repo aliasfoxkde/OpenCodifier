@@ -55,7 +55,7 @@
       "max_questions": 32,
       "max_candidates": 256,
       "max_graph_nodes": 128,
-      "max_execution_time": { "secs": 10, "nanos": 0 },
+      "max_execution_time": { "secs": 120, "nanos": 0 },
       "max_retrieval_results": 64
     }
   }
