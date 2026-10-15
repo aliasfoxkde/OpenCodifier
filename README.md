@@ -92,8 +92,9 @@ just coverage  # line coverage (cargo llvm-cov)
 ```
 
 Requires a stable Rust toolchain (MSRV 1.90, declared in `Cargo.toml`).
-Contribution rules are in [`CONTRIBUTING.md`](CONTRIBUTING.md); the
-security policy is in [`SECURITY.md`](SECURITY.md).
+Contribution rules are in
+[`CONTRIBUTING.md`](.github/CONTRIBUTING.md); the security policy is
+in [`SECURITY.md`](.github/SECURITY.md).
 
 ## Ecosystem
 

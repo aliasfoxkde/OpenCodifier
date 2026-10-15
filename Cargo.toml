@@ -20,7 +20,7 @@ members = [
 version = "0.6.1"
 edition = "2024"
 # MSRV policy: the oldest stable toolchain the workspace is tested against
-# in CI. Bumps are breaking changes and recorded in CHANGELOG.md.
+# in CI. Bumps are breaking changes and recorded in .github/CHANGELOG.md.
 rust-version = "1.90"
 license = "Apache-2.0"
 repository = "https://github.com/aliasfoxkde/OpenCodifier"
