@@ -282,7 +282,10 @@ window.ocLazyBoot = function (el, fn) {
     sel.appendChild(o);
   }
   sel.addEventListener("change", () => {
-    if (sel.value && sel.value !== page + ".html") location.href = sel.value;
+    /* navigate only to a URL derived from the static GAMES table — the
+       DOM-read select value is matched against it, never used as a target */
+    const hit = GAMES.find(([g]) => g + ".html" === sel.value);
+    if (hit && hit[0] !== page) location.href = hit[0] + ".html";
   });
   if (onHub) {
     /* the hub also gets a text filter over its game cards — find, then go */
