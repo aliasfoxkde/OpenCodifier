@@ -1767,3 +1767,42 @@ Release candidate: unchanged — E1-E. t33p is evidence, not a
 candidate. Next levers, evidence-ranked: consensus-flip patch /
 strands consensus pass (quality-first), T3.4 4B contingency, #150
 eval lane.
+
+## T88 imatrix Q4_K_M arm: FAIL on all three gates (2026-10-15, 10:20 AM Central)
+
+The #88 quant bake-off imatrix leg, executed end-to-end on fedora
+(T5500 still down): peft `merge_and_unload` of t33p onto the Qwen3.5-2B
+base (F16) → fork converter `--no-mtp` → stride-25 in-domain corpus
+(≈6,900 rows rendered) → `llama-imatrix --chunks 1500` →
+`llama-quantize --imatrix … Q4_K_M` (1.19 GB) → two fork-lane JevBench
+passes (port 8097, `--decision-seqs 24`, CPU).
+
+| gate | threshold | measured | verdict |
+|---|---|---|---|
+| G1 determinism replay | byte-identical rows | runner's own `results.jsonl` vs `results-replay.jsonl` differ in **both** runs, and run A ≠ run B | **FAIL** |
+| G2 board leg | ≥ 0.6494 | **0.6104** | **FAIL** (−3.9 pts) |
+| G3 no-regression | ≥ 0.648 (F16-LoRA 0.6580 − 1 pt) | **0.6104** | **FAIL** (−4.8 pts) |
+
+Two process notes recorded honestly: (1) the arm script's G1 check
+diffed a `rows.jsonl` path the runner does not write — that FAIL line
+was a script bug — but the runner's **built-in** replay comparison
+fails on its own, so the determinism verdict stands regardless;
+(2) the imatrix pass needed `--chunks 1500` (whole-file default ≈ 9 h
+under CI co-tenancy; chunk-capped finished in < 1 min once load
+dropped).
+
+This arm is triple-dead: it violates the standing quant floor
+(every deployment quant passes determinism replay), the release gate,
+and the no-regression line. **Nothing publishes from this arm; E1-E
+remains the only release candidate** — the quant bake-off now has a
+verdict for the imatrix leg matching the historical pattern (4 of 6
+requants flipped; quantization of this adapter is not safe at Q4_K_M).
+
+Attribution run in flight at write time: unquantized merged-F16
+through the identical fork lane (`runs/jevbench/fork-t88diag`,
+started 10:24 AM Central). Reading: ≈ 0.658 ⇒ the Q4_K_M quantization
+is the culprit — next levers Q5_K_M, more imatrix chunks, base-model
+imatrix, or a separately-trained adapter; ≈ 0.61 ⇒ the
+`merge_and_unload` → `convert_hf_to_gguf` path itself regresses —
+audit LoRA scaling (B-application) against `convert_lora_to_gguf`
+before any further quant work. Verdict to be appended.
