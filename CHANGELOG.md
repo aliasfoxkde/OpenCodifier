@@ -6,10 +6,186 @@ project does not yet guarantee a stable public API — version `0.x`
 releases may break, and every breaking change is recorded in this file
 (and reflected in `docs/DECISIONS.md` where a binding decision moves).
 
-## [Unreleased]
+## [0.6.0] — 2026-10-15
+
+The engine learns when not to answer: selective-prediction evidence
+floors and elicited abstention join the calibration stack, the corpus
+toolchain becomes a first-class item generator crate, and the
+benchmark program closes its corpus-composition question — merged-v6
+passes the release gate and the first gated weights ship.
 
 ### Added
 
+- Engine — selective prediction end to end: a label-overlap preflight
+  that abstains before extraction guesses (`d5f4733`), a
+  selective-prediction evidence floor (`df230f5`), boolean gate fit
+  with elicited abstain (`c5d2527`), and risk-coverage acceptance for
+  calibration artifacts (`d9b86e9`) — a calibration artifact now earns
+  deployment by its risk-coverage curve, not a single operating point.
+- `opencodifier-itemgen` — new crate: the relational/contrastive item
+  generator that builds suite items, extracted from ad-hoc scripts
+  (`70a59af`).
+- Schema — shared byte-exact macjev renderer, one implementation for
+  tests and tools (`8b415d2`); noul non-string sides skip with unit
+  tests (`661925d`).
+- Model — NLI verbalization verifier contract for the #15 enhancement
+  program (`a6a2e07`).
+- Benchmarks — the training/corpus toolchain of record: soft-label
+  trainer path + corpus builders (`9937045`), VIVERE teacher-score
+  campaign tool (`5b800cb`) + batched teacher scoring (`cfdf760`),
+  trainer resume-state + `--resume` (`c44ad6a`), GGUF parity fixtures
+  with the BOS serving-path root cause (`0364e17`), corpus-prep gates
+  for merged-v4/v5/v6 lanes (`bf5370f`, `d464cdb`), reporting parity
+  metrics over frozen evidence (`4b2cab8`) + the cost table mapping to
+  the board CSV (`dc89d22`), the rel200 eval slice + iterate-B val
+  history (`da0f599`), the e1 calibration lane + JevBench slot arm
+  (`224929b`), and the MiniCPM5 arm (`b52fbaa`).
+- Site — Decisions SDK + shell kit (`3740523`), the 12-game SDK game
+  library (`9ef9906`), the chrome round: switcher + ratings
+  (`6b066b1`), a wiki-style docs page (`f4530cb`), the decide console
+  (`f7a56bb`), the board data page + quickstart + landing fixes
+  (`e617e35`), and board parity + billed-cost columns (`505e648`).
+- CI — test/e2e lanes build on container-local disk (`6cbf4d0`); heavy
+  lanes fit the 4G container cap (`e427961`).
+
+### Fixed
+
+- e1 readout anchor off-by-one token (`7082a46`); length-bucket chunk
+  splitting kept intact (`d989c9d`); itemgen compiles under the pinned
+  1.90 toolchain (`de8b944`); wasm conformance keys + intra-doc link
+  (`a265d81`); perkind argv honors rows/suite paths (`4494142`).
+
+### Verified — the corpus-composition question closes
+
+- T3.3' (2B on merged-v6-full): **release gate PASS ×2** — suite
+  holdout 0.6917 (≥ 0.68) and JevBench 0.6580 (≥ 0.6494) — second own
+  arm through the gate (TRAINING.md, 2026-10-15). The comparison with
+  E1-E closes the corpus-volume lever: confidence-gated volume ≠
+  transfer; E1-E (0.8083 / 0.6840) remains the release candidate.
+- First gated weights published:
+  `aliasfox/OpenCodifier-Decision-2B-v6full` (per-surface numbers,
+  shipped per-kind calibration, withheld-corpus disclosure).
+- Engineering levers measured: length-bucketing +31.3% replicates,
+  b4-bucket sweet spot +44.4% (T2.3); causal_conv1d buys +29.2% tok/s
+  but fails same-seed trajectory parity — throughput lever, banned
+  from gate arms (T2.2, fixed comparator).
+
+## [0.5.0] — 2026-10-07
+
+The escalation ladder gains its model rung and its cross-rung walk,
+and the runtime gains embedding surfaces: the transport-neutral wire
+boundary shared by the WASM binding and a new C-ABI static library,
+plus a nine-leg release matrix with per-target attestations.
+
+### Added
+
+- B6 — cross-rung escalation (D27): a configured, ordered `Rung` list
+  (`classifier` + optional per-rung calibration and gate policy) the
+  threshold node walks when a rung's gate does not accept — `Verify` and
+  `Abstain` both mean "this rung could not decide". The gate is the only
+  trigger: an accepted question runs exactly one classifier; the walk
+  stops at the first accepting rung or the end of the list; the existing
+  verifier cascade reads the final rung's distribution; each firing
+  passes the deadline/cancellation guard. Cache identity carries the list
+  (`|rungs-v1@<model>@<cal-ver>+…`, in order) so composition changes
+  re-key mechanically; traces gain `rungs_fired` + `rung_chain` naming
+  each rung's model, answer, and gate outcome. Empty list = byte-identical
+  engine (12 new integration tests).
+- B5 — the model rung of the escalation ladder (`LlamaDecisionClassifier`,
+  D26): the measured `POST /v1/decision` tree-mode contract of the
+  llama.cpp `parallel-decision` fork as an `opencodifier_engine::Classifier`
+  in `opencodifier-model`. The classifier itself is transport-agnostic and
+  always compiled; the loopback HTTP transport (`UreqTransport`, ureq,
+  plain HTTP — the endpoint is loopback by the bind rule) sits behind the
+  `llamacpp` feature. Honesty rules enforced in type: the fork's full
+  `distribution` object is **required** (a winner-only response is a typed
+  refusal, never a synthesized probability), entries are read in the
+  question's declared answer order, refused unless they cover exactly the
+  declared answer set, and renormalized in Rust f64 before
+  `Distribution::from_pairs`. Errors carry the HTTP status in the message
+  (the engine keeps only the reason string). 15 tests including an
+  end-to-end escalation: default policy accepts a confident distribution,
+  a 0.95 per-kind `LadderPolicy` sends it to `Verify` with the
+  `policy_source` trace fact naming the model rung.
+- `opencodifier_engine::wire` — the transport-neutral native-schema
+  boundary (§57, §68): `decide`, `decide_batch` (the `POST /v1/batch`
+  envelope, `MAX_BATCH` ceiling, per-item `{"response"}`/`{"error"}`
+  results), `validate_graph`, and `run_graph` (D19 throwaway-engine
+  parity). Every embedding surface walks the same decode → decide →
+  encode contract and reports the same stable codes.
+- `opencodifier-ffi` (D24) — the zero-ML runtime as a C-ABI static
+  library over the wire module: ten `oc_*` entry points with a
+  thread-local last error, panic and null-argument guards, stable
+  `ffi.*` codes alongside `schema.*`/`engine.*`/`graph.*`, and a
+  hand-written `include/ocffi.h` whose signatures the integration
+  tests redeclare, so header and implementation cannot drift
+  silently. The workspace lint table is restated with exactly one
+  documented exception (`unsafe_code`, allowed only where pointer
+  handling is the boundary) and a drift-guard test pins the copy to
+  the workspace table.
+- Nine-leg release matrix (`just release-matrix`, D24): x86_64
+  gnu + musl, aarch64 gnu, x86_64 windows, macOS x86_64 + aarch64,
+  android aarch64, iOS aarch64 (a static library — an archive of
+  objects, produced honestly without an Apple SDK), and the
+  wasm32-unknown-unknown dual-glue bundle (web + nodejs). Every
+  artifact gets a per-target attestation whose container and probe
+  rules `generate_attestation.py` now generalizes; `just
+  release-checksums` writes `sha256sums.txt`.
+
+### Changed
+
+- `opencodifier-schema` is a regular dependency of the engine (was
+  dev-only) so `wire` can decode at the boundary; layering stays
+  acyclic (schema depends on core only — D11's default row). The WASM
+  crate is slimmed to call the shared module; its 17 tests, including
+  the conformance fixtures, pass unchanged.
+
+## [0.4.0] — 2026-10-02
+
+The engine-enhancement track (B1–B4) plus the research record: D9's
+performance budgets are finally measured, the hot paths they exposed
+are fixed, and the escalation ladder ships as configuration.
+
+### Added
+
+- D9 criterion benches + the first committed baseline bundle (PLAN
+  18i, B1): benches for the unmeasured per-stage budgets — normalize
+  decode, rule match at scale, BM25 narrowing at 256 candidates
+  (build + score-all), embedding rerank — plus an HTTP bench for the
+  2 ms round-trip budget, a `just bench` recipe, and
+  `benchmarks/baselines/criterion` (d9-baseline). Measured at Class L
+  (load < 30): `bm25_index_build_256` (3332 µs) and
+  `bm25_score_all_256` (1164 µs) run over their 1 ms budgets — the
+  measured justification for the B3 build-once work; every other row
+  is in budget (cache hit 25 µs vs 2232 µs full pipeline).
+- Escalation-ladder wiring (PLANNING.md §24, D25):
+  `opencodifier_engine::LadderPolicy` — optional per-node then
+  per-kind `DecisionPolicy` overrides resolved at the confidence gate
+  the deciding node already uses, on `EngineConfig::with_ladder` /
+  `EngineHandle::with_ladder`. An empty ladder is byte-identical to no
+  ladder (no decoration, no trace facts, unchanged fixtures); a
+  configured ladder decorates the model id (`|ladder-v1@<id>`) so every
+  cache key re-keys — the cache stores completed gated responses, so
+  identity decoration is what keeps a changed ladder from replaying an
+  old gate — and a non-empty ladder without an id is refused at
+  assembly (`EngineError::InvalidConfig`). Traces name the rung whose
+  gate fired (`policy_source`).
+- Per-rung calibration and shipped ladder profiles (B4): a rung may
+  carry its own `Calibration` — key-set and precedence identical to
+  the policy overrides, `None` byte-identical, a
+  `calibration_source` fact in the trace — plus
+  `ProofAwareCalibration`, which passes single-entry distributions
+  (exact proofs, p = 1.0) through raw and delegates the hedging tail
+  (its `version()` is the inner version; the ladder id re-keys).
+  Profiles are data: `LadderProfile` (`deny_unknown_fields`) parses
+  a JSON document into a validated, fitted ladder via
+  `into_ladder()`, refusing empty profiles and artifacts that fail
+  `TemperatureCalibration::from_artifact` (the error names the
+  rung). One `runtime::engine_config()` loads the `--ladder` flag
+  for CLI decide, serve, and mcp serve, so the interfaces cannot
+  drift. Shipped under `ladders/`: `fusion-v1` (the fusion-study
+  ladder: proofs gate themselves, classifier kinds accept on margin
+  alone) and `proofs-only-v1` (accept exact proofs only).
 - Semantic graph nodes and the D22 optimizer (PLAN 18h, D21/D22):
   `embedding` (annotate-only), `retrieve` (`top_n`/`floor`,
   floor-never-starves, every drop trace-named), and `rerank` (permutes,
@@ -37,6 +213,99 @@ releases may break, and every breaking change is recorded in this file
   install failure arms. Lines 98.97 % on the lcov `DA` basis; the 125
   remaining unexecuted lines are each classified with an enforcing
   fact in `docs/COVERAGE.md`.
+- Static-embedding survey arm: VTX-JEV-3 (`VTXAI/VTX-JEV-3`,
+  Model2Vec-class 255,753×256 2-bit table with a position-gated
+  attention pooler, Apache-2.0) on both boards — `runner/run_vtx.py`
+  (suite: LF2 0.242 / FP32 0.317, the 7.5 pp quantization cost
+  measured) and `runner/run_jevbench.py --arm vtx` (public 231:
+  0.4113 accuracy, 0.4318 family-macro, ECE 0.126, 7.9 ms p50,
+  deterministic, native probabilities only) through the vendor
+  `inference.py` `JevClient`, whose pooler plain Model2Vec loading
+  does not reproduce. The vendor sub-millisecond latency claim
+  reproduces; the accuracy sits at the zero-ML engine's level, not the
+  Jev-class field's — not a new tier (D16 unchanged).
+- `docs/BENCHMARKS.md`: the complete measured comparison in one page —
+  both boards (JevBench public 231 and the locked 120-item suite), the
+  full 53-run model board, the D16 tiers, and every external row with
+  provenance: the official TypeSafe Jev 1.13 hosted-API numbers, the
+  autotrust/JEV-27B six-benchmark table (their runs, target bar 84.07
+  mean), the JevBench authors' board, and the
+  `SargeDev/jev-distill-corpus(-v3)` training-corpus landscape.
+  Written website-liftable.
+- Fusion study (`runner/fusion_study.py` + `results/fusion-*.md`): the
+  confidence-gated ladder simulated post-hoc over measured per-item arm
+  rows — suite blend engine → gte-ONNX → Qwen3.5-2B scores **0.867 @
+  753 ms** vs 0.725 best single (F23), while the same gate on JevBench
+  falls below the bridge alone (0.632 vs 0.6494) because the engine's
+  out-of-domain ECE is 0.798: gates inherit their rung's calibration
+  (F24).
+- Resource accounting in every runner (`runner/resources.py`): `/proc`-
+  based monitor recording peak RSS (`VmHWM`), CPU-seconds, IO bytes and
+  wall time per arm into run JSONs (`resources`) and summary.md's new
+  peak-RSS column; prior runs show `—`.
+- `docs/TRAINING.md`: adapter-training research record — the JEV-27B
+  recipe class (frozen base + small trained decision block), LoRA
+  provenance and serving economics, what a 0.8 B decision-head/LoRA run
+  costs on this GPU-less host (1–2 CPU-days first run), the community
+  checkpoint it must beat (Jev-Style-0.8B 0.6494), and a costed E0–E3
+  experiment ladder.
+- ONNX runtime decision arm (`runner/run_onnx.py`): the optimum
+  `onnx-community/Qwen3.5-2B-ONNX` q4 export driven by onnxruntime with
+  the fork's exact tree scoring ported to Python (greedy-parity
+  validated at the probe stage; hybrid qwen3_5 state threaded manually,
+  including the asymmetric `present.`→`past_key_values.` output naming).
+  Same weights as the GGUF arm: acc **0.658** / ECE 0.064 vs 0.725,
+  prefill-bound ≥9× slower, 2.6× the peak RSS (F25) — llama.cpp keeps
+  the decision rung; ONNX stays the product's portability format.
+- Native verdict-slot readout arm (`runner/run_jevbench.py --arm
+  jev_native` + suite driver): Jev-Style-0.8B-Decision-v3 through its
+  own `macjev` render/readout scores **0.8083** on the locked suite
+  (F26) — the same weights that scored 0.217 tree / 0.000 chat; the
+  F10 interface-mismatch row now has its native control, and the
+  comparability bridge has a suite-side anchor (0.8083 home vs 0.6494
+  JevBench, both with the authors' shipped temperatures).
+- Rank/margin gate study (`runner/margin_gate_study.py` +
+  `results/embed-margin-study.md`): the embedding rung's probability is
+  uncalibratable (degenerate fit), but its top1−top2 margin gates
+  cleanly — margin ≥ 0.0183 accepts 20.8 % of suite items at 0.880
+  accuracy, monotone to 1.000 at 0.0283 (CALIBRATION finding 3 closed;
+  live profile `min_confidence: 1.0` + `min_margin ≈ 0.018`).
+- Exact d15 calibration refit: the parallel-decision fork now emits
+  full per-candidate distributions, and the Qwen3.5-2B artifact of
+  record refits from the full board (reverse-softmax temperature,
+  T 0.8426 → 0.9317, ECE 0.0621 → 0.0588) — the margin proxy
+  over-sharpened on multi-way boards, as its own synthetic validation
+  predicted. `crates/opencodifier-engine/tests/artifact_schema_check.rs`
+  pins every artifact of record to the engine's `CalibrationArtifact`
+  schema.
+- Vulkan device A/B (suite, Qwen3.5-2B Q4_K_M): the Vega 8 iGPU leg
+  matches the CPU leg's accuracy (0.725 / ECE 0.063) at 2.23× the speed
+  (p50 1.35 s vs 2.93 s) for 1/43rd the host CPU-seconds and 26 % less
+  peak RSS — the model rung no longer assumes a CPU-only host
+  (REPORT.md "Device A/B").
+- `docs/RESEARCH.md`, the standing frontier record (B0): the ladder
+  design validated against 2025 cascade literature (Gatekeeper loss,
+  early abstention, rational cascades, per-class isotonic
+  calibration); logprob-confidence and constrained-decoding findings
+  for the single-token readout; the System-One board sweep; HRM's
+  halt head read as B6-inside-the-model and the HRM-Text GGUF serving
+  contracts (PrefixLM one-batch prefill, template-as-contract, expert
+  routing never merged); prompting/template levers ranked with the
+  measured diet A/B (prompt content is first-order). Includes the
+  runtime correction — ONNX Runtime ships no Vulkan EP, so the model
+  rung targets the llama.cpp fork, not ORT.
+- D24 §58 distribution matrix closed: all five distribution targets
+  verified at their named levels (overnight cross-build 4/4 at
+  link+file level; no foreign-arch execution claimed), and the
+  storm-recovery chain re-drove the measurement arms a load storm
+  killed — t16 landed with every metric float-identical to t08
+  (thread invariance; the latency row load-confounded, not of
+  record). PLAN/SPEC_COVERAGE rows narrowed to the true remainder
+  (windows link+smoke, registry publication on explicit user go).
+- Vision capability probe (REPORT 18i): LFM2.5-VL-450M Q4_K_M +
+  mmproj Q8_0 answers the rendered decision context identically to
+  text (0.33 s vs 1.42 s, CPU) — a capability gate, not an accuracy
+  row.
 
 ### Changed
 
@@ -47,16 +316,56 @@ releases may break, and every breaking change is recorded in this file
   sequential on wasm32 (`std::thread::spawn` traps there;
   `RunReport::parallel_waves` is 0 by construction). Native behavior
   is byte-identical.
+- Constant-factor latency wins across the engine's hot paths (B2),
+  every change byte-identical in output: the reranker's candidate
+  index built by `enumerate()` instead of a linear `position()` scan
+  per candidate (kills an O(n²)); narrowing's per-question id views
+  through `HashSet` membership; the survive-filter's pruned sets
+  built once per question and `surviving_ids` no longer cloning full
+  candidates to throw the bodies away; the rerank-order sort on a
+  prebuilt rank map with first-occurrence semantics; the embedding
+  scorer's query norm hoisted out of the per-candidate cosine loop.
+  `rules.rs` bucket membership inspected and declined — the buckets
+  are tiny, conversion would be a pessimization.
+- BM25 narrowing rebuilds once per question instead of rescanning
+  (B3): per-document term-frequency maps built at index time (was
+  O(documents × query terms × document length) per question), the
+  query tokenized once per `score_all` sweep (was once per document),
+  and `score()`/`score_all()` sharing one `score_terms` path summed
+  in sorted-term order — scores bit-identical, verified by a
+  contract test. Handing the classifier an already-built index was
+  considered and rejected: the `Arc<dyn Classifier>` seam belongs to
+  embedding/ONNX models, not BM25.
+- Coverage-floor debt from the above landed with it (the CI coverage
+  lane had dipped to 98.32 % against the 98.5 % floor): new tests
+  pin the profile-artifact fit refusal naming its rung, the plain
+  non-proof-aware rung calibration path, `LadderPolicy` equality
+  semantics, and `EngineHandle::with_ladder` success plus
+  `InvalidConfig` propagation. Floor re-measured at 98.55 %; the
+  GitForge pipeline of record is green on the release commit (run
+  `5635156b`).
+
+### Fixed
+
+- `yoke-derive` 0.8.3 → 0.8.4: the pinned version was yanked
+  upstream mid-window, turning `cargo deny` advisories red on
+  pipelines after the lockfile was last touched.
+- `.aegis/baseline.json` restored to `--format json` after a
+  regeneration had written aegis's default text report — the gate's
+  JSON loader refused to parse it and every scan failed at baseline
+  load. Regenerated in-tree from the committed tree.
 
 ### Deferred
 
-- JevBench external-anchor runs (PLAN Phase 17): the 231-item public
-  split through the official harness — engine arm (rerun in flight),
-  native verdict-slot bridge vs the published 64.1 % row, and the 4B
-  fork arm. Results land in REPORT.md. Storm-gated.
-- Params A/B on the 4B decision arm (threads/ctx/prompt diet) and the
-  first native verdict-slot run on our 120-item suite: queued behind
-  the shared-host load storm.
+- JevBench 4B fork arm rerun (fork4b-v2) and the diet100 ctx16k leg:
+  in flight on the shared host at release time; results land in
+  REPORT.md when done.
+- Criterion before/after deltas for the B2/B3 changes: the committed
+  d9-baseline was measured in a quiet window; the deltas need the
+  same window class to be comparable.
+- Windows link+smoke cross-build and registry publication: awaiting
+  explicit operator go (D24 closure narrows these to the only §58
+  items not verified).
 
 ## [0.3.0] — 2026-09-29
 
@@ -314,7 +623,8 @@ history.
   (563ad3f; folded from Unreleased — this item shipped in 0.1.0 but
   was left unstaged there).
 
-[Unreleased]: https://github.com/aliasfoxkde/OpenCodifier/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/aliasfoxkde/OpenCodifier/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.4.0
 [0.3.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.3.0
 [0.2.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.2.0
 [0.1.1]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.1.1

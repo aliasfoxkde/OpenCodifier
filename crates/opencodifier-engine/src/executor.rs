@@ -23,13 +23,13 @@
 //! synchronous executor cannot safely abandon work mid-flight, which is
 //! why every node's work is bounded by construction (PLANNING.md §67).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 use opencodifier_core::{
-    Candidate, CandidateId, ChoiceQuestion, ConfidenceReport, DecisionAnswer, DecisionMetrics,
-    DecisionOutcome, DecisionPolicy, DecisionQuestion, DecisionRequest, DecisionTrace,
-    Distribution, FactValue, NodeId, QuestionId, State, TraceEntry,
+    AbstainCandidate, Candidate, CandidateId, ChoiceQuestion, ConfidenceReport, DecisionAnswer,
+    DecisionMetrics, DecisionOutcome, DecisionPolicy, DecisionQuestion, DecisionRequest,
+    DecisionTrace, Distribution, FactValue, NodeId, OodMode, QuestionId, State, TraceEntry,
 };
 
 use crate::cache::CacheKey;
@@ -64,8 +64,11 @@ enum NodeOutput {
     /// Distributions and answers for the questions this node decides,
     /// plus the run's focused-extraction counts.
     Decided(Vec<QuestionDecision>, crate::focus::FocusSummary),
-    /// Outcomes after the confidence gate and verifier cascade.
-    Resolved(Vec<(QuestionId, DecisionOutcome, Option<bool>)>),
+    /// Outcomes after the confidence gate and verifier cascade, plus the
+    /// decisions an escalation walk replaced (D27): a question answered
+    /// by a later rung ships that rung's distribution, answer, and
+    /// confidence, so the replacement rides back to the run state.
+    Resolved(Vec<(QuestionId, DecisionOutcome, Option<bool>)>, Vec<QuestionDecision>),
     /// Whether a branch condition held.
     Branched(bool),
     /// Semantic (embedding) scores per choice question, best first —
@@ -111,6 +114,17 @@ struct NodeExecution {
     thread: String,
 }
 
+/// Why a decision abstained ahead of the confidence gate (RESEARCH
+/// §15.6): elicitation elected the configured abstain candidate, or the
+/// label-overlap preflight measured a label-noise-dominated pair.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum AbstainReason {
+    /// The decision elected the policy's abstain candidate (item 3).
+    Elicited,
+    /// The label-overlap preflight hit the policy ceiling (item 4).
+    LabelOverlap,
+}
+
 /// One question's answer, from the decision node until the response is
 /// assembled.
 #[derive(Debug, Clone)]
@@ -127,6 +141,22 @@ pub(crate) struct QuestionDecision {
     pub(crate) outcome: DecisionOutcome,
     /// Whether the verifier ran for this question.
     pub(crate) verification_triggered: bool,
+    /// Whether a configured Boolean threshold overruled the argmax —
+    /// trace disclosure for the no-hidden-thresholds rule.
+    pub(crate) boolean_flipped: bool,
+    /// Why this question abstained ahead of the confidence gate
+    /// (RESEARCH §15.6), if it did. Terminal: the escalation walk never
+    /// re-derives it into an acceptance, and a synthetic abstain
+    /// candidate's answer never reaches the response.
+    pub(crate) abstained: Option<AbstainReason>,
+    /// The preflight's measurement: the maximum pairwise label overlap
+    /// and the pair that produced it (`"a|b"`), when the policy opts in
+    /// and the question is a choice with at least two scanned labels.
+    pub(crate) label_overlap: Option<(f64, String)>,
+    /// The node that decided this question (id and kind), so the
+    /// threshold node can re-apply the same rung's policy — ladder
+    /// resolution must not depend on which graph path is re-traced.
+    pub(crate) decided_by: (String, NodeKind),
 }
 
 /// Diagnostics about one execution, for callers that want more than the
@@ -242,6 +272,9 @@ pub(crate) struct Executor<'a> {
     clock: &'a Arc<dyn Clock>,
     classifier: &'a Arc<dyn Classifier>,
     verifier: Option<&'a Arc<dyn Classifier>>,
+    /// Ordered escalation rungs (D27) — consulted at the threshold node
+    /// only while the previous rung's gate does not accept.
+    fallbacks: &'a [crate::ladder::Rung],
     request: &'a DecisionRequest,
     key: CacheKey,
     deadline: Deadline,
@@ -289,6 +322,7 @@ impl<'a> Executor<'a> {
         clock: &'a Arc<dyn Clock>,
         classifier: &'a Arc<dyn Classifier>,
         verifier: Option<&'a Arc<dyn Classifier>>,
+        fallbacks: &'a [crate::ladder::Rung],
         request: &'a DecisionRequest,
         key: CacheKey,
         deadline: Deadline,
@@ -299,6 +333,7 @@ impl<'a> Executor<'a> {
             clock,
             classifier,
             verifier,
+            fallbacks,
             request,
             key,
             deadline,
@@ -324,6 +359,9 @@ impl<'a> Executor<'a> {
 
     /// Executes the graph to completion.
     pub(crate) fn run(mut self) -> EngineResult<GraphOutcome> {
+        // Validated graphs are acyclic (`DecisionGraph::new` refuses
+        // cycles), so `waves()` is always `Some` here; the arm keeps `run`
+        // total if that invariant ever changes.
         let Some(waves) = self.config.graph.waves() else {
             return Err(EngineError::Cycle { node: self.config.graph.output().id.to_string() });
         };
@@ -517,8 +555,8 @@ impl<'a> Executor<'a> {
                 (NodeOutput::Decided(decided, focus), entries)
             }
             NodeKind::Threshold => {
-                let (resolved, entries) = self.resolve_threshold(id)?;
-                (NodeOutput::Resolved(resolved), entries)
+                let (resolved, replacements, entries) = self.resolve_threshold(id)?;
+                (NodeOutput::Resolved(resolved, replacements), entries)
             }
             NodeKind::Branch => {
                 // A branch with no condition always fires.
@@ -809,32 +847,123 @@ impl<'a> Executor<'a> {
     /// candidate list otherwise, always minus lexical and `retrieve`
     /// prunes.
     fn candidates_in_play(&self, choice: &ChoiceQuestion) -> Vec<Candidate> {
+        let (pruned_lexically, pruned_semantically) = self.pruned_sets(choice.id());
         let base: Vec<Candidate> = match self.narrowing.get(choice.id()) {
             Some(outcome) => outcome.surviving().to_vec(),
             // No narrowing ran: every declared candidate is in play.
             None => choice.candidates().to_vec(),
         };
         base.into_iter()
-            .filter(|candidate| self.is_surviving(choice.id(), candidate.id()))
+            .filter(|candidate| {
+                !pruned_lexically.contains(candidate.id())
+                    && !pruned_semantically.contains(candidate.id())
+            })
             .collect()
     }
 
     /// The candidate ids of one question still in play (see
-    /// [`Executor::candidates_in_play`]).
+    /// [`Executor::candidates_in_play`]). Ids only: the full-candidate
+    /// clone in [`Executor::candidates_in_play`] is wasted work here, and
+    /// the id list is the same length.
     fn surviving_ids(&self, choice: &ChoiceQuestion) -> BTreeSet<CandidateId> {
-        self.candidates_in_play(choice)
-            .into_iter()
-            .map(|candidate| candidate.id().clone())
+        let (pruned_lexically, pruned_semantically) = self.pruned_sets(choice.id());
+        let base: &[Candidate] = match self.narrowing.get(choice.id()) {
+            Some(outcome) => outcome.surviving(),
+            None => choice.candidates(),
+        };
+        base.iter()
+            .map(Candidate::id)
+            .filter(|id| !pruned_lexically.contains(*id) && !pruned_semantically.contains(*id))
+            .cloned()
             .collect()
     }
 
-    /// Whether one candidate survived every pruning stage so far.
-    fn is_surviving(&self, question: &QuestionId, candidate: &CandidateId) -> bool {
-        !self.pruned_lexically.get(question).is_some_and(|pruned| pruned.contains(candidate))
-            && !self
-                .pruned_semantically
-                .get(question)
-                .is_some_and(|pruned| pruned.contains(candidate))
+    /// The per-question pruned-id sets, built once for the survive-filter
+    /// loops instead of probing the backing `Vec`s once per candidate
+    /// (B2). Membership semantics are exactly the former `is_surviving`:
+    /// a candidate survives when it appears in neither prune list.
+    fn pruned_sets(&self, question: &QuestionId) -> (HashSet<&CandidateId>, HashSet<&CandidateId>) {
+        (
+            self.pruned_lexically.get(question).map_or(&[][..], Vec::as_slice).iter().collect(),
+            self.pruned_semantically.get(question).map_or(&[][..], Vec::as_slice).iter().collect(),
+        )
+    }
+
+    /// The build-once handoff (D28/#80) for one question: the lexical
+    /// node's index over the surviving candidates, when that index covers
+    /// exactly the deciding list in the same order. Reusable only when
+    /// the deciding list is exactly those documents in the same order —
+    /// a later `retrieve` prune or `rerank` reorder changes the list, and
+    /// a length-equal order mismatch would silently mispair scores with
+    /// candidates. An elicited-abstain candidate (appended by
+    /// `prepare_question`) also breaks the equality — the handoff index
+    /// has no score for it — so anything else hands `None` and the
+    /// classifier builds its own (bit-identical either way).
+    fn lexical_handoff(
+        &self,
+        question: &DecisionQuestion,
+        narrowed: &DecisionQuestion,
+    ) -> Option<&crate::lexical::Bm25Index> {
+        let (DecisionQuestion::Choice(choice), DecisionQuestion::Choice(narrowed_choice)) =
+            (question, narrowed)
+        else {
+            return None;
+        };
+        self.narrowing.get(choice.id()).zip(self.lexical.get(choice.id())).and_then(
+            |(outcome, scores)| {
+                let index = scores.index()?;
+                let same_order = outcome
+                    .surviving()
+                    .iter()
+                    .map(Candidate::id)
+                    .eq(narrowed_choice.candidates().iter().map(Candidate::id));
+                same_order.then_some(index)
+            },
+        )
+    }
+
+    /// Maximum pairwise lexical overlap over candidate labels
+    /// (RESEARCH §15.6 item 4 preflight): Jaccard over each name's
+    /// lowercase alphanumeric tokens. The cheapest reliable overlap
+    /// signal — labels are a few tokens, where BM25's IDF is degenerate
+    /// and embeddings are the most expensive layer for the same verdict.
+    /// Returns the score and the pair that produced it (`"a|b"`, in
+    /// candidate order); `None` for fewer than two candidates. Ties keep
+    /// the first pair in scan order, so the measurement is
+    /// deterministic under candidate reordering.
+    #[allow(clippy::cast_precision_loss)] // set counts, not measurements
+    fn max_label_overlap(candidates: &[&Candidate]) -> Option<(f64, String)> {
+        if candidates.len() < 2 {
+            return None;
+        }
+        let tokens: Vec<HashSet<String>> = candidates
+            .iter()
+            .map(|candidate| {
+                candidate
+                    .id()
+                    .as_str()
+                    .to_lowercase()
+                    .split(|ch: char| !ch.is_ascii_alphanumeric())
+                    .filter(|token| !token.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .collect();
+        let mut best: Option<(f64, usize, usize)> = None;
+        for i in 0..tokens.len() {
+            for j in (i + 1)..tokens.len() {
+                let (left, right) = (&tokens[i], &tokens[j]);
+                let intersection = left.intersection(right).count();
+                let union = left.union(right).count();
+                let score = if union == 0 { 0.0 } else { intersection as f64 / union as f64 };
+                if best.is_none_or(|(top, _, _)| score > top) {
+                    best = Some((score, i, j));
+                }
+            }
+        }
+        best.map(|(score, i, j)| {
+            (score, format!("{}|{}", candidates[i].id().as_str(), candidates[j].id().as_str()))
+        })
     }
 
     /// Asks the classifier about every question of this node's kind.
@@ -846,11 +975,29 @@ impl<'a> Executor<'a> {
         let mut decided = Vec::new();
         let mut entries = Vec::new();
         let mut focus = crate::focus::FocusSummary::default();
+        // Ladder resolution (PLANNING.md §24): the deciding node's own
+        // gate wins over the request policy, so an escalation ladder can
+        // hold exact rungs to p ≥ 1.0 while the model rung uses its
+        // calibrated thresholds. `None` when no override applies —
+        // byte-identical to the single-policy engine.
+        let (policy, ladder_source) = self.config.ladder.resolve(id, kind).map_or_else(
+            || (self.request.policy(), None),
+            |(policy, source)| (policy, Some(source)),
+        );
+        // Per-rung calibration (D15/B4): a rung's confidences are not
+        // commensurable with the engine default's, so a configured rung
+        // calibration replaces it for this rung's questions. `None`
+        // leaves the engine-level calibration — byte-identical.
+        let ladder_calibration = self.config.ladder.resolve_calibration(id, kind);
         for question in self.request.questions() {
             if !Self::wants(kind, question) {
                 continue;
             }
-            let Some(narrowed) = self.prepare_question(question) else { continue };
+            let Some(narrowed) = self.prepare_question(question, policy.abstain_candidate()) else {
+                continue;
+            };
+            // Build-once handoff (D28/#80): see `lexical_handoff`.
+            let handoff = self.lexical_handoff(question, &narrowed);
             // Focused extraction (PLANNING.md §45): when configured and the
             // state exceeds the budget, the classifier reads a per-question
             // view; a weak view escalates to the full state before any
@@ -863,21 +1010,31 @@ impl<'a> Executor<'a> {
                 Some(view) => (&view.state, view.extracted),
                 None => (&self.state, false),
             };
-            let distribution = self.classifier.decide(decide_state, &narrowed)?;
-            let (mut distribution, mut clipped) = Self::clip(&distribution, &narrowed)?;
+            let (raw, mut lexical_support) =
+                self.classifier.decide_extended(decide_state, &narrowed, handoff)?;
+            let (mut distribution, mut clipped) = Self::clip(&raw, &narrowed)?;
             let mut escalated = false;
-            if extracted && Self::escalation_warranted(self.request.policy(), &distribution) {
-                let full = self.classifier.decide(&self.state, &narrowed)?;
-                let (full, full_clipped) = Self::clip(&full, &narrowed)?;
+            if extracted && Self::escalation_warranted(policy, &distribution) {
+                let (full_raw, full_support) =
+                    self.classifier.decide_extended(&self.state, &narrowed, handoff)?;
+                let (full, full_clipped) = Self::clip(&full_raw, &narrowed)?;
                 distribution = full;
                 clipped = full_clipped;
+                lexical_support = full_support;
                 escalated = true;
             }
+            let (calibration, calibration_source) = ladder_calibration.as_ref().map_or_else(
+                || (self.config.calibration.as_ref(), None),
+                |(calibration, source)| (*calibration, Some(source.clone())),
+            );
             let decision = Self::decide_question(
                 &narrowed,
                 distribution,
-                self.request.policy(),
-                self.config.calibration.as_ref(),
+                policy,
+                calibration,
+                id,
+                kind,
+                lexical_support,
             )?;
             let mut detail = vec![
                 ("question", FactValue::Text(question.id().to_string())),
@@ -888,6 +1045,16 @@ impl<'a> Executor<'a> {
                 ("model", FactValue::Text(self.classifier.model_id().to_owned())),
                 ("clipped", FactValue::Integer(int(clipped))),
             ];
+            if let Some(source) = &ladder_source {
+                detail.push(("policy_source", FactValue::Text(source.clone())));
+            }
+            if let Some(source) = calibration_source {
+                detail.push(("calibration_source", FactValue::Text(source)));
+            }
+            // The no-hidden-thresholds rule applies to the fitted Boolean
+            // boundary like every other gate (RESEARCH §15.6 item 2), and
+            // an overruled argmax is disclosed, not silent.
+            Self::push_gate_disclosures(&mut detail, &narrowed, policy, &decision);
             if let Some(view) = &view {
                 detail.push(("focus_engaged", FactValue::Boolean(view.extracted)));
                 detail.push(("focus_kept", FactValue::Integer(int(view.kept_sentences))));
@@ -907,6 +1074,47 @@ impl<'a> Executor<'a> {
         Ok((decided, focus, entries))
     }
 
+    /// Discloses every configured gate on the deciding trace entry —
+    /// the no-hidden-thresholds rule (RESEARCH §15.6): a fitted Boolean
+    /// boundary, the elicited-abstain candidate, and the label-overlap
+    /// ceiling each name themselves when configured, and an overruled
+    /// argmax or an abstention is disclosed, not silent.
+    fn push_gate_disclosures(
+        detail: &mut Vec<(&'static str, FactValue)>,
+        narrowed: &DecisionQuestion,
+        policy: &DecisionPolicy,
+        decision: &QuestionDecision,
+    ) {
+        if matches!(narrowed, DecisionQuestion::Boolean(_))
+            && let Some(threshold) = policy.boolean_threshold()
+        {
+            detail.push(("boolean_threshold", FactValue::Float(threshold)));
+            if decision.boolean_flipped {
+                detail.push(("boolean_flipped", FactValue::Boolean(true)));
+            }
+        }
+        if matches!(narrowed, DecisionQuestion::Choice(_))
+            && let Some(candidate) = policy.abstain_candidate()
+        {
+            detail.push(("abstain_candidate", FactValue::Text(candidate.id().to_string())));
+            if matches!(decision.abstained, Some(AbstainReason::Elicited)) {
+                detail.push(("abstain_elicited", FactValue::Boolean(true)));
+            }
+        }
+        if matches!(narrowed, DecisionQuestion::Choice(_))
+            && let Some(limit) = policy.max_label_overlap()
+        {
+            detail.push(("max_label_overlap", FactValue::Float(limit)));
+            if let Some((score, pair)) = &decision.label_overlap {
+                detail.push(("label_overlap", FactValue::Float(*score)));
+                detail.push(("label_overlap_pair", FactValue::Text(pair.clone())));
+                if matches!(decision.abstained, Some(AbstainReason::LabelOverlap)) {
+                    detail.push(("label_overlap_abstained", FactValue::Boolean(true)));
+                }
+            }
+        }
+    }
+
     /// Whether a focused view's distribution is too weak to trust: below
     /// the policy's accept gate, or flat enough to trip the §19 entropy
     /// ceiling when one is set. Reverse escalation re-decides on the full
@@ -919,19 +1127,88 @@ impl<'a> Executor<'a> {
             || distribution.entropy() >= policy.entropy_ceiling()
     }
 
-    /// Applies the confidence gate and the verifier cascade to every
-    /// decided question.
-    fn resolve_threshold(&self, id: &str) -> EngineResult<(Resolutions, Vec<TraceEntry>)> {
-        let policy = self.request.policy();
+    /// Applies the confidence gate, the escalation walk (D27), and the
+    /// verifier cascade to every decided question. Decisions a fallback
+    /// rung answered are returned as replacements: the walk's final rung
+    /// owns the question's distribution, answer, and confidence.
+    fn resolve_threshold(
+        &self,
+        id: &str,
+    ) -> EngineResult<(Resolutions, Vec<QuestionDecision>, Vec<TraceEntry>)> {
         let mut resolved = Vec::new();
+        let mut replacements = Vec::new();
         let mut entries = Vec::new();
         for (question_id, decision) in &self.decisions {
-            let outcome = decision.report.outcome_for(policy);
+            // The gate re-applies the deciding rung's policy: the cached
+            // response was gated by whatever policy its deciding node
+            // resolved, so the live gate must read the same rung to stay
+            // consistent with it (PLANNING.md §24; a changed ladder
+            // re-keys via the identity decoration, it does not re-gate
+            // cached responses). No ladder override for this node → the
+            // request policy, and the trace gains no `policy_source`
+            // fact — byte-identical to the single-policy engine.
+            let (node_id, kind) = &decision.decided_by;
+            let (policy, ladder_source) = self.config.ladder.resolve(node_id, *kind).map_or_else(
+                || (self.request.policy(), None),
+                |(policy, source)| (policy, Some(source)),
+            );
+            // The escalation walk (D27): only a non-accepting gate fires
+            // the next rung, so an accepted question runs exactly one
+            // classifier. Each rung is gated by its own policy when it
+            // carries one, else the node-resolved policy; its
+            // calibration replaces the engine-level one for its own
+            // distribution.
+            let mut live = decision;
+            let mut chain: Vec<String> = Vec::new();
+            for rung in self.fallbacks {
+                if live.report.outcome_for(policy) == DecisionOutcome::Accept {
+                    break;
+                }
+                // A rung walk may not outrun the request's budget.
+                self.guard()?;
+                let (raw, lexical_support) =
+                    rung.classifier.decide_extended(&self.state, &live.question, None)?;
+                let (distribution, _) = Self::clip(&raw, &live.question)?;
+                let calibration =
+                    rung.calibration.as_deref().unwrap_or(self.config.calibration.as_ref());
+                let rung_policy = rung.policy.as_ref().unwrap_or(policy);
+                let escalated = Self::decide_question(
+                    &live.question,
+                    distribution,
+                    rung_policy,
+                    calibration,
+                    node_id,
+                    *kind,
+                    lexical_support,
+                )?;
+                chain.push(format!(
+                    "{}(top={}, {})",
+                    rung.classifier.model_id(),
+                    escalated.distribution.top().key,
+                    outcome_name(escalated.report.outcome_for(rung_policy))
+                ));
+                replacements.push(escalated);
+                // `live` follows the freshest replacement: the walk's
+                // final answer is the last rung's, and the verifier
+                // cascade below must read that one.
+                live = &replacements[replacements.len() - 1];
+            }
+            // `live` borrows `replacements`; the outcome and verifier
+            // cascade below only read it. An elected abstention is
+            // terminal: the report alone would re-derive the cascade's
+            // outcome and could accept a confident "none of these". A
+            // label-overlap abstention (RESEARCH §15.6 item 4) is
+            // terminal for the same reason.
+            let outcome = if live.abstained.is_some() {
+                DecisionOutcome::Abstain
+            } else {
+                live.report.outcome_for(policy)
+            };
             let (final_outcome, agreement, verifier) = if outcome == DecisionOutcome::Verify {
                 match self.verifier {
                     Some(verifier) => {
-                        let alternative = verifier.decide(&self.state, &decision.question)?;
-                        let agree = alternative.top().key == decision.distribution.top().key;
+                        let alternative = verifier.decide(&self.state, &live.question)?;
+                        let agree = alternative.top().key == live.distribution.top().key;
                         if agree {
                             (DecisionOutcome::Verified, Some(true), "agree")
                         } else {
@@ -945,24 +1222,49 @@ impl<'a> Executor<'a> {
             } else {
                 (outcome, None, "none")
             };
-            entries.push(TraceEntry::new(
-                id,
-                [
-                    ("question", FactValue::Text(question_id.to_string())),
-                    ("threshold", FactValue::Float(policy.min_confidence())),
-                    (
-                        "passed",
-                        FactValue::Boolean(
-                            decision.report.calibrated_confidence >= policy.min_confidence(),
-                        ),
+            let mut detail = vec![
+                ("question", FactValue::Text(question_id.to_string())),
+                ("threshold", FactValue::Float(policy.min_confidence())),
+                (
+                    "passed",
+                    FactValue::Boolean(
+                        live.report.calibrated_confidence >= policy.min_confidence(),
                     ),
-                    ("outcome", FactValue::Text(outcome_name(final_outcome))),
-                    ("verifier", FactValue::Text(verifier.to_owned())),
-                ],
-            ));
+                ),
+                ("outcome", FactValue::Text(outcome_name(final_outcome))),
+                ("verifier", FactValue::Text(verifier.to_owned())),
+            ];
+            // Which rung's gate fired — only when a ladder override
+            // decided it, so default traces stay byte-identical.
+            if let Some(source) = ladder_source {
+                detail.push(("policy_source", FactValue::Text(source)));
+            }
+            // The escalation walk, only when it fired (D27): the chain
+            // names each rung's model, answer, and its own gate outcome,
+            // so the trace explains routing without exposing any model
+            // reasoning.
+            if !chain.is_empty() {
+                detail.push(("rungs_fired", FactValue::Integer(int(chain.len()))));
+                detail.push(("rung_chain", FactValue::Text(chain.join(" -> "))));
+            }
+            entries.push(TraceEntry::new(id, detail));
             resolved.push((question_id.clone(), final_outcome, agreement));
         }
-        Ok((resolved, entries))
+        // Keep only questions the walk actually re-answered: a rung
+        // firing for one question must not displace another's primary
+        // decision. `replacements` accumulates one entry per fired rung,
+        // and the last entry per question is the walk's final answer.
+        let mut final_replacements: Vec<QuestionDecision> = Vec::new();
+        {
+            let mut last_index: BTreeMap<QuestionId, usize> = BTreeMap::new();
+            for (index, replacement) in replacements.iter().enumerate() {
+                last_index.insert(replacement.answer.question_id().clone(), index);
+            }
+            for index in last_index.into_values() {
+                final_replacements.push(replacements[index].clone());
+            }
+        }
+        Ok((resolved, final_replacements, entries))
     }
 
     /// `true` when this node decides questions of `question`'s kind.
@@ -982,7 +1284,11 @@ impl<'a> Executor<'a> {
     /// `NoValidCandidate` instead of failing the run. Survivors are the
     /// rule-filtered set minus lexical prunes minus `retrieve` prunes,
     /// ordered by any `retrieve`/`rerank` node that ran (D21).
-    fn prepare_question(&self, question: &DecisionQuestion) -> Option<DecisionQuestion> {
+    fn prepare_question(
+        &self,
+        question: &DecisionQuestion,
+        abstain: Option<&opencodifier_core::AbstainCandidate>,
+    ) -> Option<DecisionQuestion> {
         let DecisionQuestion::Choice(choice) = question else { return Some(question.clone()) };
         // The narrowed shape when a `filter` node ran; the full question
         // otherwise — a semantic graph may narrow only through `retrieve`.
@@ -995,10 +1301,14 @@ impl<'a> Executor<'a> {
             }
             None => choice.clone(),
         };
+        let (pruned_lexically, pruned_semantically) = self.pruned_sets(choice.id());
         let mut surviving: Vec<Candidate> = narrowed
             .candidates()
             .iter()
-            .filter(|candidate| self.is_surviving(choice.id(), candidate.id()))
+            .filter(|candidate| {
+                !pruned_lexically.contains(candidate.id())
+                    && !pruned_semantically.contains(candidate.id())
+            })
             .cloned()
             .collect();
         if surviving.is_empty() {
@@ -1008,9 +1318,30 @@ impl<'a> Executor<'a> {
             return None;
         }
         if let Some(order) = self.reranked.get(choice.id()) {
-            surviving.sort_by_key(|candidate| {
-                order.iter().position(|kept| kept == candidate.id()).unwrap_or(usize::MAX)
-            });
+            // Rank map instead of `position()` inside the sort comparator;
+            // `or_insert` keeps the first occurrence, matching the former
+            // linear scan exactly (B2).
+            let mut rank: HashMap<&CandidateId, usize> = HashMap::with_capacity(order.len());
+            for (position, kept) in order.iter().enumerate() {
+                rank.entry(kept).or_insert(position);
+            }
+            surviving
+                .sort_by_key(|candidate| rank.get(candidate.id()).copied().unwrap_or(usize::MAX));
+        }
+        // Elicited abstention (RESEARCH §15.6 item 3): the synthetic
+        // candidate rides LAST — deterministic position, declared
+        // candidates keep their order, and earlier graph stages (rules,
+        // narrowing, lexical) never see it. A declared candidate that
+        // already owns the id is left alone: the configured id *marks*
+        // the abstain candidate, declared or synthetic, so electing it
+        // abstains either way.
+        if let Some(candidate) = abstain
+            && !surviving.iter().any(|existing| existing.id().as_str() == candidate.id())
+        {
+            // Id and description were validated at policy construction,
+            // so this cannot fail in practice; a `None` here is the
+            // prepare-question contract for "cannot be prepared".
+            surviving.push(Candidate::new(candidate.id(), candidate.description()).ok()?);
         }
         let rebuilt = ChoiceQuestion::new(choice.id().as_str(), narrowed.text(), surviving).ok()?;
         Some(DecisionQuestion::Choice(rebuilt))
@@ -1080,29 +1411,128 @@ impl<'a> Executor<'a> {
         Ok((normalized, clipped))
     }
 
+    /// The verdict a configured Boolean threshold selects when it
+    /// disagrees with the argmax (RESEARCH §15.6 item 2 — never hard-0.5
+    /// a Boolean). `p_true >= threshold` answers true, anything else
+    /// answers false; agreement with the argmax is `None` — a
+    /// byte-identical pass-through. The flip carries the verdict's own
+    /// mass because no valid binary distribution can put a minority
+    /// verdict on top: answering false at `p_true = 0.6` means answering
+    /// with 0.4 of the mass, and the honest confidence is 0.4's.
+    fn flipped_boolean_verdict(
+        distribution: &Distribution,
+        threshold: f64,
+    ) -> Option<(&'static str, f64)> {
+        let p_true = distribution.probability_of("true").unwrap_or(0.0);
+        let key = if p_true >= threshold { "true" } else { "false" };
+        if distribution.top().key == key {
+            return None;
+        }
+        let mass = if key == "true" { p_true } else { 1.0 - p_true };
+        Some((key, mass))
+    }
+
     /// Turns a normalized distribution into an answer and a confidence
     /// report.
     ///
     /// The confidence path is explicit (PLANNING.md §18, §73): the
     /// configured [`Calibration`](crate::calibration::Calibration) maps the
     /// raw top probability to calibrated confidence, and the OOD channel
-    /// carries the deterministic distributional signal (normalized entropy
-    /// — the only input-unlikeness evidence available before a trained
-    /// density model exists; see [`distributional_ood`]). Policy reads the
-    /// dimensions separately in `ConfidenceReport::outcome_for`; nothing
-    /// is fused silently.
+    /// carries a deterministic input-unlikeness signal selected by policy
+    /// (D28): normalized answer entropy by default, or the inverse of the
+    /// deciding rung's lexical coverage when the policy opts into
+    /// [`OodMode::LexicalBand`] (falling back to entropy where the rung
+    /// exposes no lexical evidence; see [`distributional_ood`]). Policy
+    /// reads the dimensions separately in `ConfidenceReport::outcome_for`;
+    /// nothing is fused silently.
+    ///
+    /// A policy carrying a `boolean_threshold` moves the Boolean verdict
+    /// boundary: the answer is `p_true >= threshold`, not the argmax.
+    /// Agreement passes through untouched; a flip keeps the model's
+    /// distribution (and the report's statistical dimensions) exactly as
+    /// measured, while the answer's value, probability, and calibrated
+    /// confidence describe the verdict actually given — through
+    /// [`Calibration::calibrate_probability`], since a flipped verdict
+    /// carries minority mass and is never the top `calibrate` reads.
+    /// Without the field everything passes through byte-identically.
     fn decide_question(
         question: &DecisionQuestion,
         distribution: Distribution,
         policy: &DecisionPolicy,
         calibration: &dyn crate::calibration::Calibration,
+        decided_by: &str,
+        decided_kind: NodeKind,
+        lexical_support: Option<f64>,
     ) -> EngineResult<QuestionDecision> {
+        let boolean_verdict = match (question, policy.boolean_threshold()) {
+            (DecisionQuestion::Boolean(_), Some(threshold)) => {
+                Self::flipped_boolean_verdict(&distribution, threshold)
+            }
+            _ => None,
+        };
         let top = distribution.top().clone();
-        let ood = distributional_ood(&distribution);
-        let calibrated =
-            calibration.calibrate(crate::calibration::question_class(question), &distribution);
+        // Elicited abstention (RESEARCH §15.6 item 3): a rung that selects
+        // the abstain candidate — the candidate carrying the policy's
+        // configured id, synthetic or declared — has declined to decide,
+        // whatever its confidence in the decline. Abstention is a
+        // successful outcome: it is never "verified" into an acceptance,
+        // and the gate cascade does not apply to it.
+        let abstain_elicited = match (question, policy.abstain_candidate()) {
+            (DecisionQuestion::Choice(choice), Some(candidate)) => {
+                top.key == candidate.id()
+                    && choice
+                        .candidates()
+                        .iter()
+                        .any(|existing| existing.id().as_str() == candidate.id())
+            }
+            _ => false,
+        };
+        // Label-set overlap preflight (RESEARCH §15.6 item 4): when the
+        // policy sets a ceiling, measure the candidate labels' maximum
+        // pairwise lexical overlap and abstain when the top-two
+        // similarity reaches it — a rung cannot honestly separate labels
+        // that are near-duplicates, and the measured E1-C failure mode
+        // (top-prob 0.917 on 0.610 accuracy) is exactly the shape this
+        // manufactures. The configured abstain candidate is a synthetic
+        // escape hatch, not a label, so it never enters the scan.
+        let label_overlap = Self::measure_label_overlap(question, policy);
+        let overlap_abstained = matches!(
+            (question, policy.max_label_overlap()),
+            (DecisionQuestion::Choice(_), Some(limit))
+                if label_overlap.as_ref().is_some_and(|(score, _)| *score >= limit)
+        );
+        let abstained = if abstain_elicited {
+            Some(AbstainReason::Elicited)
+        } else if overlap_abstained {
+            Some(AbstainReason::LabelOverlap)
+        } else {
+            None
+        };
+        // D28: the policy selects what the OOD channel measures. The
+        // default mode is answer entropy (the historical signal,
+        // byte-identical); lexical-band mode consumes the rung's
+        // input-likeness evidence and falls back to entropy where the
+        // rung exposes none. The two are never fused.
+        let ood = match policy.ood_mode() {
+            OodMode::LexicalBand => lexical_support
+                .map_or_else(|| distributional_ood(&distribution), |coverage| 1.0 - coverage),
+            // `#[non_exhaustive]`: future modes degrade to the entropy
+            // signal until classified here.
+            _ => distributional_ood(&distribution),
+        };
+        let calibrated = match &boolean_verdict {
+            Some((_, mass)) => calibration
+                .calibrate_probability(crate::calibration::question_class(question), *mass),
+            None => {
+                calibration.calibrate(crate::calibration::question_class(question), &distribution)
+            }
+        };
         let report = ConfidenceReport::from_distribution(&distribution, calibrated, ood, None)?;
-        let outcome = ConfidenceReport::outcome_for(&report, policy);
+        let outcome = if abstained.is_some() {
+            DecisionOutcome::Abstain
+        } else {
+            ConfidenceReport::outcome_for(&report, policy)
+        };
         let answer = match question {
             DecisionQuestion::Choice(choice) => DecisionAnswer::Choice {
                 question_id: choice.id().clone(),
@@ -1110,12 +1540,20 @@ impl<'a> Executor<'a> {
                 distribution: distribution.clone(),
                 confidence: report.calibrated_confidence,
             },
-            DecisionQuestion::Boolean(boolean) => DecisionAnswer::Boolean {
-                question_id: boolean.id().clone(),
-                value: top.key == "true",
-                probability: top.probability,
-                confidence: report.calibrated_confidence,
-            },
+            DecisionQuestion::Boolean(boolean) => {
+                let (value, probability) = match &boolean_verdict {
+                    // A threshold-flipped verdict carries its own honest
+                    // mass, not the argmax's.
+                    Some((key, mass)) => (*key == "true", *mass),
+                    None => (top.key == "true", top.probability),
+                };
+                DecisionAnswer::Boolean {
+                    question_id: boolean.id().clone(),
+                    value,
+                    probability,
+                    confidence: report.calibrated_confidence,
+                }
+            }
             DecisionQuestion::Score(score) => {
                 let expected = Self::expected_value(&distribution);
                 DecisionAnswer::Score {
@@ -1142,7 +1580,33 @@ impl<'a> Executor<'a> {
             report,
             outcome,
             verification_triggered: false,
+            boolean_flipped: boolean_verdict.is_some(),
+            abstained,
+            label_overlap,
+            decided_by: (decided_by.to_owned(), decided_kind),
         })
+    }
+
+    /// The label-overlap preflight's measurement (RESEARCH §15.6
+    /// item 4): the candidate labels' maximum pairwise lexical overlap
+    /// when the policy opts in and the question is a choice. The
+    /// configured abstain candidate is a synthetic escape hatch, not a
+    /// label, so it never enters the scan.
+    fn measure_label_overlap(
+        question: &DecisionQuestion,
+        policy: &DecisionPolicy,
+    ) -> Option<(f64, String)> {
+        let (DecisionQuestion::Choice(choice), Some(_)) = (question, policy.max_label_overlap())
+        else {
+            return None;
+        };
+        let abstain_id = policy.abstain_candidate().map(AbstainCandidate::id);
+        let scanned: Vec<&Candidate> = choice
+            .candidates()
+            .iter()
+            .filter(|candidate| Some(candidate.id().as_str()) != abstain_id)
+            .collect();
+        Self::max_label_overlap(&scanned)
     }
 
     /// Expected value of a distribution over positional weights.
@@ -1208,7 +1672,14 @@ impl<'a> Executor<'a> {
                 self.focus.engaged += focus.engaged;
                 self.focus.escalated += focus.escalated;
             }
-            NodeOutput::Resolved(resolved) => {
+            NodeOutput::Resolved(resolved, replacements) => {
+                // A replaced decision is inserted whole: the escalation
+                // walk's final rung owns the question's distribution,
+                // answer, and confidence (D27), and the outcome patch
+                // below must land on that decision, not the primary's.
+                for replacement in replacements {
+                    self.decisions.insert(replacement.answer.question_id().clone(), replacement);
+                }
                 for (id, outcome, agreement) in resolved {
                     if let Some(decision) = self.decisions.get_mut(&id) {
                         decision.outcome = outcome;
@@ -1243,7 +1714,16 @@ impl<'a> Executor<'a> {
         for question in self.request.questions() {
             match self.decisions.get(question.id()) {
                 Some(decision) => {
-                    answers.push(decision.answer.clone());
+                    // An elected abstention carries no answer: the rung
+                    // declined to decide, and the synthetic candidate id
+                    // is internal (RESEARCH §15.6 item 3). A label-overlap
+                    // abstention likewise ships no answer — the "choice"
+                    // it would carry is the very ambiguity the policy
+                    // refused. The per-question outcome still records the
+                    // abstention.
+                    if decision.abstained.is_none() {
+                        answers.push(decision.answer.clone());
+                    }
                     outcomes.push((question.id().clone(), decision.outcome));
                 }
                 // The node that would have answered this question was
@@ -1352,13 +1832,12 @@ impl<'a> Executor<'a> {
 #[allow(clippy::cast_precision_loss)] // answer-set sizes are tiny
 fn distributional_ood(distribution: &Distribution) -> f64 {
     let k = distribution.entries().len();
+    // Also pins the denominator: `log2` is at least 1 once two entries
+    // survive, so no separate zero-denominator guard is needed.
     if k < 2 {
         return 0.0;
     }
     let max_entropy = (k as f64).log2();
-    if max_entropy <= 0.0 {
-        return 0.0;
-    }
     (distribution.entropy() / max_entropy).clamp(0.0, 1.0)
 }
 

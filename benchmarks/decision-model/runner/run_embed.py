@@ -41,6 +41,8 @@ from pathlib import Path
 import numpy as np
 from tokenizers import Tokenizer
 
+from resources import ResourceMonitor
+
 
 def sha256_file(path: Path) -> str:
     h = hashlib.sha256()
@@ -260,6 +262,11 @@ def run_once(enc: Encoder, suite: dict) -> tuple[list[dict], float]:
         z = sum(exps)
         probs = [e / z for e in exps]
         best = max(range(len(probs)), key=lambda i: probs[i])
+        # Winner margin (top minus runner-up softmax mass) backs the
+        # rank/margin gate form CALIBRATION.md finding 3 requires for the
+        # embedding rung; the per-candidate dict feeds post-hoc fusion
+        # studies. Additive fields — older consumers read `prob` only.
+        ordered = sorted(probs, reverse=True)
         rows.append(
             {
                 "id": it["id"],
@@ -267,6 +274,8 @@ def run_once(enc: Encoder, suite: dict) -> tuple[list[dict], float]:
                 "answer": it["answer"],
                 "pred": it["candidates"][best]["id"],
                 "prob": probs[best],
+                "margin": ordered[0] - ordered[1] if len(ordered) > 1 else ordered[0],
+                "probs": {c["id"]: p for c, p in zip(it["candidates"], probs)},
             }
         )
     return rows, t_embed
@@ -306,7 +315,20 @@ def main() -> int:
         default="parallel-decision ad129b0",
         help="fork/branch provenance recorded for the llamacpp backend",
     )
+    ap.add_argument(
+        "--caveat",
+        default=None,
+        help="recording condition worth flagging in summaries (e.g. host "
+        "contention during scoring); stored verbatim in the result and "
+        "surfaced by summarize.py",
+    )
     args = ap.parse_args()
+
+    # Rooted at this process: in-process backends (onnx/torch) are measured
+    # directly; the llamacpp backend's llama-server is a child, so the tree
+    # walk covers it too.
+    monitor = ResourceMonitor()
+    monitor.start()
 
     suite = json.loads(args.suite.read_text())
     enc = make_encoder(
@@ -352,6 +374,7 @@ def main() -> int:
         },
         "single": rows,
         "determinism": determinism,
+        **({"caveat": args.caveat} if args.caveat else {}),
         "metrics": {
             "accuracy": acc,
             "accuracy_by_class": by_class,
@@ -360,6 +383,9 @@ def main() -> int:
             "ms_per_item": t1 * 1000.0 / len(rows),
         },
     }
+    monitor.stop()
+    result["resources"] = monitor.report()
+
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, sort_keys=True, indent=1) + "\n")
     print(

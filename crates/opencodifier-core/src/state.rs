@@ -125,6 +125,9 @@ impl std::fmt::Display for FactValue {
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct State {
     text: String,
+    /// Optional on the wire: omitted means no typed facts, the shape
+    /// every text-only quickstart means.
+    #[serde(default)]
     facts: BTreeMap<String, FactValue>,
 }
 

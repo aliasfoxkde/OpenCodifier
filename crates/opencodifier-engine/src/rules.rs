@@ -835,8 +835,8 @@ mod tests {
         })
         .unwrap();
         let report = engine.evaluate(&state(), &[choice_question()]);
-        assert!(report.fired().is_empty());
-        assert!(report.facts_set().is_empty());
+        assert_eq!(report.fired(), Vec::<String>::new());
+        assert_eq!(report.facts_set(), Vec::<(String, FactValue)>::new());
         assert!(report.exclusions().is_empty());
     }
 
@@ -935,7 +935,7 @@ mod tests {
         let engine = RuleEngine::new(RuleSet::default()).unwrap();
         assert!(engine.is_empty());
         assert_eq!(engine.len(), 0);
-        assert!(engine.evaluate(&state(), &[choice_question()]).fired().is_empty());
+        assert_eq!(engine.evaluate(&state(), &[choice_question()]).fired(), Vec::<String>::new());
     }
 
     #[test]

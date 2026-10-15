@@ -74,12 +74,25 @@
 
 pub mod backend;
 pub mod error;
+pub mod julia;
+pub mod kai;
 pub mod mock;
+pub mod nli;
 pub mod tensor;
 
 pub use backend::{EmbeddingBackend, InferenceBackend};
 pub use error::RuntimeError;
+#[cfg(feature = "onnx")]
+pub use julia::JuliaOnnxBackend;
+pub use julia::{MARKER_MASK, MARKER_POS, QTYPE_INPUT};
+#[cfg(feature = "onnx")]
+pub use kai::KaiOnnxBackend;
+pub use kai::{
+    ANSWER_POS, ATTENTION_MASK, DEFAULT_GRAPH_FILE, INPUT_IDS, LOGITS_OUTPUT, MODEL_ID, OPTION_POS,
+};
 pub use mock::{MockEmbeddingBackend, MockInferenceBackend};
+#[cfg(feature = "onnx")]
+pub use nli::NliOnnxBackend;
 pub use tensor::{DenseTensor, MAX_TENSOR_ELEMENTS};
 
 #[cfg(test)]

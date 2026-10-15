@@ -1,0 +1,80 @@
+{
+ "fixture_version": 1,
+ "arm": "MoritzLaurer/deberta-v3-base-zeroshot-v2.0 (onnx/model.onnx, fp32)",
+ "entail_index": 0,
+ "template": "bare_description",
+ "items": [
+  {
+   "question_id": "A-0000",
+   "premise": "Constraints: region must be us-east-1; tier must be free; encrypted must be yes; replicas must be 2.\nCatalog:\n- target-alpha: region=us-east-1, tier=free, encrypted=yes, replicas=2.\n- target-bravo: region=us-east-1, tier=standard, encrypted=no, replicas=2.\n- target-charlie: region=eu-west-1, tier=free, encrypted=no, replicas=1.\n- target-delta: region=ap-south-1, tier=premium, encrypted=yes, replicas=5.\nQuestion: Which deployment target satisfies all of the constraints?",
+   "rows": [
+    {
+     "id": "target-alpha",
+     "hypothesis": "deployment target alpha (region=us-east-1, tier=free, encrypted=yes, replicas=2).",
+     "entailment": 0.965791,
+     "renormalized": 0.26133
+    },
+    {
+     "id": "target-bravo",
+     "hypothesis": "deployment target bravo (region=us-east-1, tier=standard, encrypted=no, replicas=2).",
+     "entailment": 0.941176,
+     "renormalized": 0.254669
+    },
+    {
+     "id": "target-charlie",
+     "hypothesis": "deployment target charlie (region=eu-west-1, tier=free, encrypted=no, replicas=1).",
+     "entailment": 0.849033,
+     "renormalized": 0.229737
+    },
+    {
+     "id": "target-delta",
+     "hypothesis": "deployment target delta (region=ap-south-1, tier=premium, encrypted=yes, replicas=5).",
+     "entailment": 0.939681,
+     "renormalized": 0.254265
+    }
+   ]
+  },
+  {
+   "question_id": "A-0001",
+   "premise": "Constraints: region must be eu-west-1; tier must be free; encrypted must be yes; replicas must be 3.\nCatalog:\n- target-alpha: region=ap-south-1, tier=free, encrypted=no, replicas=1.\n- target-bravo: region=sa-east-1, tier=standard, encrypted=no, replicas=1.\n- target-charlie: region=eu-west-1, tier=free, encrypted=yes, replicas=3.\n- target-delta: region=us-east-1, tier=free, encrypted=no, replicas=5.\n- target-echo: region=eu-west-1, tier=standard, encrypted=yes, replicas=2.\n- target-foxtrot: region=sa-east-1, tier=free, encrypted=yes, replicas=2.\nQuestion: Which deployment target satisfies all of the constraints?",
+   "rows": [
+    {
+     "id": "target-alpha",
+     "hypothesis": "deployment target alpha (region=ap-south-1, tier=free, encrypted=no, replicas=1).",
+     "entailment": 0.903647,
+     "renormalized": 0.189644
+    },
+    {
+     "id": "target-bravo",
+     "hypothesis": "deployment target bravo (region=sa-east-1, tier=standard, encrypted=no, replicas=1).",
+     "entailment": 0.824211,
+     "renormalized": 0.172973
+    },
+    {
+     "id": "target-charlie",
+     "hypothesis": "deployment target charlie (region=eu-west-1, tier=free, encrypted=yes, replicas=3).",
+     "entailment": 0.824141,
+     "renormalized": 0.172959
+    },
+    {
+     "id": "target-delta",
+     "hypothesis": "deployment target delta (region=us-east-1, tier=free, encrypted=no, replicas=5).",
+     "entailment": 0.877227,
+     "renormalized": 0.1841
+    },
+    {
+     "id": "target-echo",
+     "hypothesis": "deployment target echo (region=eu-west-1, tier=standard, encrypted=yes, replicas=2).",
+     "entailment": 0.608475,
+     "renormalized": 0.127698
+    },
+    {
+     "id": "target-foxtrot",
+     "hypothesis": "deployment target foxtrot (region=sa-east-1, tier=free, encrypted=yes, replicas=2).",
+     "entailment": 0.727257,
+     "renormalized": 0.152626
+    }
+   ]
+  }
+ ]
+}

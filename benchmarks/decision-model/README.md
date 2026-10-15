@@ -17,9 +17,22 @@ latency, and run-twice determinism:
 | `engine_builtin_lexical` | `run_engine.py` | OpenCodifier's own engine (`opencodifier serve`, builtin lexical pipeline) — the zero-ML baseline every model must beat to earn its latency |
 | `embedding_zero_shot` | `run_embed.py` | Cosine + softmax over an encoder — the "embedding similarity" layer of the ladder; backends: `onnx` (MiniLM / gte-ONNX in fp32, int8, and blockwise-int4 variants), `torch` (gte HF), `llamacpp` (GGUF embedding models via llama-server) |
 | `laya_decision` | `run_laya.py` | Laya-421M, a small purpose-trained decision model, same suite |
+| `static_embedding_decision` | `run_vtx.py` | VTX-JEV-3 through its vendor `JevClient`: a Model2Vec-class static table (255,753×256, 2-bit LF2 or FP32) with a position-gated attention pooler; each candidate encodes as `"<question> <description>"` and the model's own cosine softmax (scale 15) is the distribution. The pooler lives in the vendor client — plain Model2Vec loading does not reproduce this head |
 | `llama_decision` | `run_llama.py` | llama.cpp `parallel-decision` branch (`POST /v1/decision`): every candidate id scored as a token path forked from one cached prefix; tree mode returns the exact constrained distribution, nothing is sampled |
+| `onnx_decision` | `run_onnx.py` | the same tree scoring ported to onnxruntime over the optimum `onnx-community/Qwen3.5-2B-ONNX` export (`q4`, or int8 `quantized` for spot checks): one prefill, all candidate branches advanced in lockstep over a manually threaded hybrid qwen3_5 state (conv + linear-recurrent + 6 GQA KV layers; asymmetric `present.`→`past_key_values.` naming, `logits` not the first graph output) — the portability reference for the model rung, not a latency contender |
 | `llama_decision` chat baseline | `run_llama.py --skip-chat` opt-out | the same questions written as JSON by ordinary token-by-token chat completion at temperature 0 — what the decision arm replaces |
 | `llama_chat_baseline_only` | `run_llama.py` | chat-only screen for forks with no `/v1/decision` (K2-Horizon): sampled decode, labeled `(chat screen)` in the summary, never comparable to decision rows |
+
+Two harness utilities ride alongside the arms:
+
+- `runner/fusion_study.py` — post-hoc confidence-gated ladder simulation
+  over measured per-item arm rows (engine → embedding → LLM, or engine →
+  vtx/bridge on JevBench). Thresholds are swept; outputs of record live in
+  `results/fusion-*.md` and the findings are F23/F24 in REPORT.md.
+- `runner/resources.py` — a `/proc`-based monitor folded into every runner:
+  peak RSS (kernel `VmHWM`), CPU-seconds, IO bytes and wall time land in
+  each run JSON under `resources` and as a peak-RSS column in summary.md.
+  Runs recorded before the monitor landed show `—` there.
 
 The decision-arm design and the latency targets follow the operator-supplied
 reference (`docs/References/Can Your GPU Hit Jev's Milliseconds Mark.txt`)
@@ -52,7 +65,7 @@ RUNS=/nas/Temp/work/oc-model-eval/runs   # out-of-tree
 
 # 1. engine baseline (no ML, no models needed): the default stack is the
 #    relational solver over the lexical classifier; the run JSON's arm is
-#    the engine's live identity (e.g. relational-v1|builtin-lexical-v1)
+#    the engine's live identity (e.g. relational-v1|builtin-lexical-v2)
 python3 runner/run_engine.py --binary target/release/opencodifier \
     --out "$RUNS/engine__relational-v1.json"
 
@@ -78,12 +91,23 @@ python3 runner/run_embed.py --backend llamacpp --threads 4 \
     --llama-dir /path/to/llama.cpp \
     --out "$RUNS/embed__embeddinggemma-300M-Q8_0.json"
 
+# 2b. VTX-JEV-3 static decision engine (vendor client; --weights fp32 for
+#     the FP32-table A/B)
+python3 runner/run_vtx.py --model-dir /path/to/vtx-jev-3 \
+    --out "$RUNS/vtx__VTX-JEV-3-lf2.json"
+
 # 3. decision arm per GGUF model (downloads are operator-supplied; the
 #    runner records each file's SHA-256 into the results; --timeout
 #    bounds each request — 9B batched tails exceed the old fixed limit)
 python3 runner/run_llama.py --llama-dir /path/to/llama.cpp \
     --models-dir /path/to/models --model qwen2.5-0.5b-instruct-q4_k_m.gguf \
     --timeout 3600 --out "$RUNS/llama__qwen2.5-0.5b.json"
+
+# 3b. ONNX runtime arm — the same tree scoring over the optimum ONNX
+#     export (variants: q4, quantized; int8 decodes ~20x slower on CPU,
+#     spot checks only). Weights are operator-supplied.
+python3 runner/run_onnx.py --model-dir /path/to/qwen3.5-2b-onnx \
+    --variant q4 --out "$RUNS/onnx__qwen35-2b-q4.json"
 
 # 4. merge everything, then copy summary.md + models.manifest.json in-tree
 python3 runner/summarize.py --results-dir "$RUNS"
@@ -101,6 +125,41 @@ python3 runner/fit_calibration.py --results-dir "$RUNS" \
 Model weights never enter the repository; `models.manifest.json` (written by
 `summarize.py`) pins the SHA-256 of every artifact a result was produced
 with, per the model-manifest practice in `docs/DECISIONS.md` (D14).
+
+## Ladder runs (proofs / fusion postures)
+
+`run_jevbench.py --arm engine --ladder <file>` drives `serve` with a
+LadderPolicy; under a proofs posture (`min_confidence: 1.0`) every item
+escalates to the decision rung. The rung is NOT stock llama-server — the
+escalation contract is the parallel-decision fork's `POST /v1/decision`.
+Four failure modes, each surfacing as an instant infra-STOP after 3
+consecutive items (the runner keeps only the exception name; probe the
+payload by hand to see the body):
+
+1. `cli.model_rung_unavailable` at serve startup — the binary was built
+   without `--features llamacpp` (the default build stays
+   dependency-identical).
+2. rung 404 "File Not Found" — stock build has no `/v1/decision`; use the
+   fork build (`~/oc-model-eval/llama.cpp/build-pd` on the eval host).
+3. rung 400 "decisions are disabled" — the fork needs
+   `--decision-seqs N` (N >= 3): one slot holds the cached instructions,
+   one per context in flight, the rest are parallel questions over the
+   unified KV cache.
+4. rung-side model-id mismatch — serve validates `--llama-model-id`
+   against the id the rung reports; a bare llama-server reports the model
+   file path, so pass `--alias <id>`.
+
+Hand-built probes must also carry `metadata.limits.max_execution_time`
+(the deadline field is required, not optional).
+
+Working CPU rung (the conditions the 0.6883 proofs posture was measured
+under on the eval host's :8091):
+
+```bash
+llama-server -m gemma-4-E2B-it-QAT-Q4_0.gguf \
+    --alias gemma4-e2b-it-qat-q4_0 \
+    -c 16384 -np 1 -t 8 --decision-seqs 24
+```
 
 ## Determinism
 

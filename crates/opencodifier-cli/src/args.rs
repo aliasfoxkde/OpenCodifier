@@ -71,6 +71,8 @@ pub enum Command {
     Mcp(McpArgs),
     /// Model artifact operations.
     Models(ModelsCommand),
+    /// Ladder-profile operations (D25).
+    Ladder(LadderCommand),
     /// Built-in recipe fleet operations.
     Recipe(RecipeCommand),
 }
@@ -89,6 +91,7 @@ impl Command {
             Self::Serve(args) => crate::serve::run(&args),
             Self::Mcp(args) => crate::mcp::run(&args),
             Self::Models(models) => crate::models::run(&models.command),
+            Self::Ladder(ladder) => crate::ladder::run(&ladder.command),
             Self::Recipe(recipe) => crate::recipes::run(&recipe.command),
         }
     }
@@ -122,6 +125,19 @@ pub struct DecideArgs {
     #[arg(long, value_name = "TOKENS")]
     pub focus_budget: Option<usize>,
 
+    /// Ladder profile JSON (`ladders/README.md` in the repository):
+    /// per-node-kind confidence gates and per-rung calibration artifacts
+    /// the engine consults at its confidence gate instead of the
+    /// request's own policy. An empty default ladder runs
+    /// byte-identically to no ladder.
+    #[arg(long, value_name = "PATH")]
+    pub ladder: Option<PathBuf>,
+
+    /// The llama.cpp decision rung the engine escalates to (`--help` on
+    /// the flag for the contract).
+    #[command(flatten)]
+    pub llama: LlamaRungArgs,
+
     /// Exit 0 when the outcome is not decisive, instead of 2.
     #[arg(long)]
     pub abstain_is_success: bool,
@@ -147,6 +163,37 @@ pub enum GraphSubcommand {
     },
 }
 
+/// The llama.cpp decision rung (DECISIONS.md D26): a loopback
+/// `parallel-decision` llama-server the engine escalates to when the
+/// primary rung's gate does not accept (D27's ordered rung tail — the
+/// primary lexical stack stays first, so the model is never called on a
+/// question the cheap rungs already decided).
+///
+/// The flags ride a `llamacpp` feature build; without it `--llama` is
+/// refused at assembly with `cli.model_rung_unavailable` rather than
+/// silently ignored.
+#[derive(Debug, Default, Args)]
+pub struct LlamaRungArgs {
+    /// Base URL of a running llama-server serving the decision rung
+    /// (e.g. `http://127.0.0.1:8080`). Loopback by the local-first bind
+    /// rule; a non-loopback URL is not refused here — the endpoint is
+    /// the operator's to point at — but the default posture is local.
+    #[arg(long, value_name = "URL", requires = "llama_model_id")]
+    pub llama: Option<String>,
+
+    /// Model identity folded into the decision cache keys
+    /// (DECISIONS.md D6) — compose fork build + GGUF + readout, e.g.
+    /// `pd-fork-ad129b0|qwen3.5-2b-q4_k_m|tree-v2`. Changing it re-keys
+    /// every cached decision, exactly like a model swap.
+    #[arg(long, value_name = "ID", requires = "llama")]
+    pub llama_model_id: Option<String>,
+
+    /// Per-request server timeout in milliseconds (default 30000). The
+    /// board's CPU p50 for a 2B arm is ~1.7 s; slow models raise this.
+    #[arg(long, value_name = "MS", requires = "llama")]
+    pub llama_timeout_ms: Option<u64>,
+}
+
 /// Arguments of `opencodifier serve`.
 #[derive(Debug, Args)]
 pub struct ServeArgs {
@@ -169,6 +216,19 @@ pub struct ServeArgs {
     /// state is always decided on.
     #[arg(long, value_name = "TOKENS")]
     pub focus_budget: Option<usize>,
+
+    /// Ladder profile JSON (`ladders/README.md` in the repository):
+    /// per-node-kind confidence gates and per-rung calibration artifacts
+    /// the engine consults at its confidence gate instead of each
+    /// request's own policy. A non-empty profile decorates the cache
+    /// identity with `|ladder-v1@<id>`.
+    #[arg(long, value_name = "PATH")]
+    pub ladder: Option<PathBuf>,
+
+    /// The llama.cpp decision rung the engine escalates to (`--help` on
+    /// the flag for the contract).
+    #[command(flatten)]
+    pub llama: LlamaRungArgs,
 
     /// JSON `DecisionPolicy`. Accepted and validated for symmetry with
     /// `decide`, but policy is per-request in the canonical IR, so no
@@ -202,6 +262,18 @@ pub enum McpSubcommand {
         /// the full state is always decided on.
         #[arg(long, value_name = "TOKENS")]
         focus_budget: Option<usize>,
+
+        /// Ladder profile JSON (`ladders/README.md` in the repository):
+        /// per-node-kind confidence gates and per-rung calibration
+        /// artifacts the engine consults at its confidence gate instead
+        /// of the request's own policy.
+        #[arg(long, value_name = "PATH")]
+        ladder: Option<PathBuf>,
+
+        /// The llama.cpp decision rung the engine escalates to (`--help`
+        /// on the flag for the contract).
+        #[command(flatten)]
+        llama: LlamaRungArgs,
     },
 }
 
@@ -227,6 +299,42 @@ pub enum ModelsSubcommand {
         /// `decision.onnx`.
         #[arg(long, value_name = "PATH")]
         artifact: Option<PathBuf>,
+    },
+}
+
+/// `opencodifier ladder …`
+#[derive(Debug, Args)]
+pub struct LadderCommand {
+    /// The ladder operation to run.
+    #[command(subcommand)]
+    pub command: LadderSubcommand,
+}
+
+/// Ladder operations.
+#[derive(Debug, Subcommand)]
+pub enum LadderSubcommand {
+    /// Fit a Boolean verdict boundary from labeled evidence and emit the
+    /// ladder-profile document that carries it (RESEARCH §15.6 item 2).
+    FitBoolean {
+        /// Evidence as JSONL, one `{"p_true": <f64>, "label": <bool>}`
+        /// row per line — the model's probability for `true` and whether
+        /// `true` was actually correct.
+        #[arg(long, value_name = "PATH")]
+        evidence: PathBuf,
+
+        /// The emitted profile's id. Refused when empty or `"none"` —
+        /// the id decorates every cache key (D25).
+        #[arg(long, value_name = "ID")]
+        id: String,
+
+        /// Where to write the emitted profile document.
+        #[arg(long, value_name = "PATH")]
+        out: PathBuf,
+
+        /// Base `DecisionPolicy` JSON the profile overrides for Boolean
+        /// questions. Defaults to the policy defaults (§63).
+        #[arg(long, value_name = "PATH")]
+        base: Option<PathBuf>,
     },
 }
 

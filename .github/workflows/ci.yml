@@ -11,6 +11,11 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
 
+# Least privilege: the mirror never needs the default write-all token
+# (code-scanning: actions/missing-workflow-permissions x5).
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest

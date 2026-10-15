@@ -5,11 +5,24 @@
 // hostile input refused with the same typed codes the HTTP surface
 // reports. Run via `just check-wasm` (not part of `just ci`; the Node
 // toolchain is not a CI dependency).
+//
+// It also runs the §34 conformance fixtures from `fixtures/conformance/`
+// — the same files the crate's native test asserts on — so "wasm is
+// another execution target for the same deterministic engine" is checked
+// against recorded decisions, not just against the absence of a crash.
 
 "use strict";
 
 const assert = require("node:assert");
+const fs = require("node:fs");
+const path = require("node:path");
 const bindings = require("../../pkg/opencodifier_wasm.js");
+
+// The §34 fixtures: request fixtures decide, the graph fixture validates.
+const CONFORMANCE_DIR = path.join(__dirname, "..", "..", "..", "..", "fixtures", "conformance");
+const DECIDE_FIXTURES = ["choice-lexical-accept", "relational-proof", "abstain-no-evidence",
+    "invalid-request"];
+const GRAPH_FIXTURES = ["invalid-graph"];
 
 // The native-schema request, byte-shape what POST /v1/decide accepts
 // (same fixture shape scripts/e2e_validate.py posts).
@@ -73,6 +86,71 @@ function errorOf(thunk) {
     throw new Error("expected the call to throw");
 }
 
+// One §34 fixture document: {"request": ..., "expected": ...} (or
+// {"graph": ..., "expected": ...} for the graph cases).
+function load(name) {
+    return JSON.parse(fs.readFileSync(path.join(CONFORMANCE_DIR, `${name}.json`), "utf8"));
+}
+
+// Bit-ordered distance between two doubles, negatives folded so the
+// ordering stays monotonic — the JS twin of the crate's
+// `within_one_ulp`. The zero-ML stack is deterministic within a build,
+// but not bit-identical across build targets: the same BM25 fold over
+// the same query lands one ulp apart on x86-64 (which recorded the
+// fixture) and on wasm32 (which just answered), measured, not assumed.
+function ulpApart(left, right) {
+    const ordered = (value) => {
+        const view = new DataView(new ArrayBuffer(8));
+        view.setFloat64(0, value);
+        const raw = view.getBigUint64(0);
+        return (raw >> 63n) === 1n ? ~raw : raw | (1n << 63n);
+    };
+    const [leftBits, rightBits] = [ordered(left), ordered(right)];
+    return (leftBits > rightBits ? leftBits - rightBits : rightBits - leftBits) <= 1n;
+}
+
+// The first place two wire documents disagree, or null when they agree
+// canonically: same structure, same text, same booleans, and float
+// leaves within one ulp (see `ulpApart`). Both sides are `JSON.parse`d
+// wire documents — a fixture's whitespace and key order are free; its
+// structure, text, and decisions are exact.
+function canonicalDifference(actual, expected, at) {
+    if (typeof actual === "number" && typeof expected === "number") {
+        return actual === expected || ulpApart(actual, expected)
+            ? null : `${at}: ${actual} vs ${expected}`;
+    }
+    if (typeof actual === "string" && typeof expected === "string") {
+        return actual === expected ? null : `${at}: "${actual}" vs "${expected}"`;
+    }
+    if (typeof actual === "boolean" && typeof expected === "boolean") {
+        return actual === expected ? null : `${at}: ${actual} vs ${expected}`;
+    }
+    if (actual === null && expected === null) return null;
+    if (Array.isArray(actual) && Array.isArray(expected)) {
+        if (actual.length !== expected.length) {
+            return `${at}: ${actual.length} entries vs ${expected.length}`;
+        }
+        for (const [index, item] of actual.entries()) {
+            const difference = canonicalDifference(item, expected[index], `${at}[${index}]`);
+            if (difference !== null) return difference;
+        }
+        return null;
+    }
+    if (actual !== null && expected !== null && typeof actual === "object" &&
+        typeof expected === "object") {
+        for (const [key, value] of Object.entries(actual)) {
+            if (!(key in expected)) return `${at}.${key}: unexpected`;
+            const difference = canonicalDifference(value, expected[key], `${at}.${key}`);
+            if (difference !== null) return difference;
+        }
+        for (const key of Object.keys(expected)) {
+            if (!(key in actual)) return `${at}.${key}: missing`;
+        }
+        return null;
+    }
+    return `${at}: ${JSON.stringify(actual)} vs ${JSON.stringify(expected)}`;
+}
+
 function main() {
     const engine = new bindings.WasmEngine();
 
@@ -128,6 +206,67 @@ function main() {
     assert.strictEqual(
         errorOf(() => engine.run_graph(RETRIEVAL_GRAPH, REQUEST)).code,
         "engine.missing_backend");
+
+    // §34 conformance: the wasm artifact answers the same fixtures the
+    // native engine answers. Comparison is canonical, never lexical: both
+    // sides are JSON.parse'd (Node parses correctly rounded per
+    // ECMA-262; the artifact serializes each double to its shortest
+    // round-tripping form), so a fixture's whitespace and key order are
+    // free while its structure, text, and decisions are exact — and a
+    // float leaf may move one ulp, the cross-target BM25 drift
+    // `ulpApart` documents.
+    const assertCanonical = (actual, expected, label) => {
+        const difference = canonicalDifference(actual, expected, label);
+        assert.strictEqual(difference, null, difference ?? undefined);
+    };
+
+    for (const name of DECIDE_FIXTURES) {
+        const document = load(name);
+        let actual;
+        let refused = false;
+        try {
+            actual = JSON.parse(engine.decide(JSON.stringify(document.request)));
+        } catch (thrown) {
+            // A refused fixture: the thrown error value is the same
+            // {"code", "message"} object the fixture records.
+            actual = JSON.parse(String(thrown));
+            refused = true;
+        }
+        assertCanonical(actual, document.expected,
+            `${name} (${refused ? "refused" : "decided"})`);
+    }
+
+    for (const name of GRAPH_FIXTURES) {
+        const document = load(name);
+        // errorOf already hands back the decoded {"code", "message"} object.
+        assertCanonical(errorOf(() => engine.validate_graph(JSON.stringify(document.graph))),
+            document.expected, name);
+    }
+
+    // The batch is one boundary crossing for many decisions, with the
+    // batch wire shape `POST /v1/batch` uses.
+    const batch = JSON.parse(engine.decide_batch(JSON.stringify({
+        requests: [JSON.parse(REQUEST), JSON.parse(REQUEST)],
+    })));
+    assert.strictEqual(batch.count, 2, JSON.stringify(batch).slice(0, 200));
+    assert.strictEqual(batch.results.length, 2);
+    assert.ok(batch.results[0].response, "the first item answers");
+    assert.strictEqual(batch.results[1].response.metrics.cache_hit, true,
+        "the repeated item is a cache hit");
+    const mixed = JSON.parse(engine.decide_batch(JSON.stringify({
+        requests: [JSON.parse(REQUEST), {}],
+    })));
+    assert.strictEqual(mixed.count, 2);
+    assert.ok(mixed.results[0].response, "the good item still answers");
+    assert.ok(mixed.results[1].error.code.startsWith("schema."),
+        "the bad item reports its own schema refusal");
+    assert.strictEqual(
+        errorOf(() => engine.decide_batch(JSON.stringify({
+            requests: Array.from({ length: 17 }, () => JSON.parse(REQUEST)),
+        }))).code,
+        "schema.limit_exceeded", "the batch ceiling holds");
+    assert.strictEqual(errorOf(() => engine.decide_batch("not json")).code,
+        "schema.invalid_json");
 
     console.log("wasm smoke: all assertions passed");
 }

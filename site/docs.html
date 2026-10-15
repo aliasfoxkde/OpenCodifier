@@ -1,0 +1,1424 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Pre-paint theme resolution — mirrors index.html; owned by site-core.js. -->
+<script>
+(function () {
+  "use strict";
+  var mode = "system";
+  try {
+    var v = localStorage.getItem("oc-theme");
+    if (v === "light" || v === "dark" || v === "system") mode = v;
+  } catch (e) { /* storage unavailable: system default */ }
+  var resolved = mode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : mode;
+  document.documentElement.setAttribute("data-theme", resolved);
+  document.documentElement.setAttribute("data-theme-mode", mode);
+})();
+</script>
+<title>OpenCodifier — documentation</title>
+<meta name="description" content="The OpenCodifier deep dive: the canonical decision IR field by field, question types, calibrated confidence and the gate, the seven-rung escalation ladder, graph mode, the browser SDK, and the self-hosted binary.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:site_name" content="OpenCodifier">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://opencodifier.pages.dev/docs.html">
+<meta property="og:title" content="OpenCodifier — documentation">
+<meta property="og:description" content="The OpenCodifier deep dive: the canonical decision IR field by field, question types, calibrated confidence and the gate, the seven-rung escalation ladder, graph mode, the browser SDK, and the self-hosted binary.">
+<meta property="og:image" content="https://opencodifier.pages.dev/assets/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The OpenCodifier mark — a hexagonal C around a code glyph — over the wordmark.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://opencodifier.pages.dev/assets/og-image.png">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="tw.css">
+<style>
+/* docs.html page-local layout. Everything reuses site tokens and site
+   classes (.section, .card, .pg-table, .api-code-card, .pg-pre …); only
+   the wiki shell — sidebar, filter, section rhythm — is new, and every
+   new class is .docs- prefixed so styles.css stays untouched. */
+
+/* toc.js also builds a left rail from this page's sections. This page
+   ships its own sidebar column instead (a wiki needs the full list, not
+   a rail that hides itself), so the rail is suppressed here rather than
+   allowed to collide with it. toc.js still mirrors the section list into
+   the mobile nav menu, which this page keeps. */
+.toc-rail { display: none !important; }
+
+.docs-shell {
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr);
+  gap: 0 2.4rem;
+  align-items: start;
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 clamp(1rem, 4vw, 2rem);
+}
+
+/* ---- sidebar ---- */
+.docs-side {
+  position: sticky;
+  top: 4.3rem;
+  max-height: calc(100vh - 5.4rem);
+  overflow-y: auto;
+  padding: 1.6rem 0 2rem;
+  scrollbar-width: thin;
+}
+.docs-side-box {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 1rem 1rem 0.9rem;
+}
+.docs-side-title {
+  font-size: 0.72rem; font-weight: 800; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ink-faint); margin-bottom: 0.7rem;
+}
+.docs-filter {
+  width: 100%; box-sizing: border-box;
+  font: inherit; font-size: 0.84rem; color: var(--ink);
+  background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 8px); padding: 0.38rem 0.6rem;
+  margin-bottom: 0.6rem;
+}
+.docs-filter:focus { outline: none; border-color: var(--teal); }
+.docs-nav { display: flex; flex-direction: column; }
+.docs-nav a {
+  display: flex; gap: 0.55rem; align-items: baseline;
+  color: var(--ink-dim); text-decoration: none;
+  font-size: 0.86rem; line-height: 1.35;
+  padding: 0.34rem 0.45rem; border-radius: 7px;
+  border-left: 2px solid transparent;
+}
+.docs-nav a:hover { color: var(--teal); background: var(--tint-sm); }
+.docs-nav a.on {
+  color: var(--teal); background: var(--tint-md);
+  border-left-color: var(--teal); font-weight: 600;
+}
+.docs-num {
+  font-family: var(--mono); font-size: 0.7rem; color: var(--ink-faint);
+  flex: none; width: 0.9rem; text-align: right;
+}
+.docs-nav a.on .docs-num { color: var(--teal); }
+.docs-empty {
+  font-size: 0.8rem; color: var(--ink-faint); padding: 0.3rem 0.45rem 0.5rem;
+}
+.docs-side-foot {
+  margin-top: 0.7rem; padding-top: 0.7rem; border-top: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 0.28rem;
+}
+.docs-side-foot a {
+  color: var(--ink-faint); text-decoration: none; font-size: 0.78rem;
+}
+.docs-side-foot a:hover { color: var(--teal); }
+.docs-toggle { display: none; }
+
+/* ---- content column ---- */
+.docs-main { min-width: 0; padding-bottom: 1rem; }
+.docs-main > .section { padding: 3rem 0 0.6rem; scroll-margin-top: 4.6rem; }
+.docs-main > .section:first-child { padding-top: 2.2rem; }
+/* keep the site's per-section aura drift (styles.css scopes it to direct
+   children of main; these are one level deeper) */
+.docs-main > section[id]:nth-of-type(3n+1) { --pf: 0.055; }
+.docs-main > section[id]:nth-of-type(3n+2) { --pf: -0.042; }
+.docs-main > section[id]:nth-of-type(3n) { --pf: 0.03; }
+
+.docs-h3 {
+  margin-top: 2.1rem; font-size: 1.05rem; color: var(--ink);
+}
+.docs-anno {
+  margin: 1.2rem 0 0; font-size: 0.84rem; color: var(--ink-faint);
+}
+.docs-anno dt {
+  font-family: var(--mono); font-size: 0.78rem; color: var(--teal);
+  margin-top: 0.7rem;
+}
+.docs-anno dd { margin: 0.15rem 0 0; color: var(--ink-dim); line-height: 1.6; }
+.docs-grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; margin-top: 1.4rem; }
+.docs-rung { font-family: var(--mono); font-size: 0.78rem; color: var(--ink-faint); white-space: nowrap; }
+
+/* the one live widget on the page: seeded determinism, no engine */
+.docs-live-row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin-top: 0.4rem; }
+.docs-live-row label { font-size: 0.84rem; color: var(--ink-dim); }
+.docs-live-row input {
+  font-family: var(--mono); font-size: 0.84rem; color: var(--ink);
+  background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 8px); padding: 0.34rem 0.55rem; width: 12rem;
+}
+.docs-live-out {
+  margin-top: 0.7rem; font-family: var(--mono); font-size: 0.78rem;
+  color: var(--ink-dim); word-break: break-word;
+}
+
+@media (max-width: 980px) {
+  .docs-shell { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .docs-side { position: static; max-height: none; overflow: visible; padding: 1.4rem 0 0; }
+  .docs-toggle {
+    display: flex; width: 100%; align-items: center; justify-content: space-between;
+    font: inherit; font-size: 0.86rem; font-weight: 700; color: var(--ink-dim);
+    background: transparent; border: 0; cursor: pointer; padding: 0.2rem 0.1rem;
+  }
+  .docs-toggle::after { content: "+"; color: var(--teal); font-weight: 800; }
+  .docs-side.open .docs-toggle::after { content: "–"; }
+  .docs-side:not(.open) .docs-side-box { display: none; }
+  .docs-grid2 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .docs-nav a, .docs-side-foot a { transition: none; }
+}
+</style>
+</head>
+<body class="page-wide">
+<a class="skip-link" href="#overview">Skip to the documentation</a>
+
+<div class="bg-mesh" aria-hidden="true"></div>
+
+<nav class="nav">
+  <a class="brand" href="index.html">
+    <img src="assets/logo.svg" alt="" width="22" height="22">
+    opencodifier
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="benchmarks.html">Benchmarks</a>
+    <a href="playground.html">Playground</a>
+    <a href="decide.html">Decide</a>
+    <a href="api.html">API</a>
+    <a href="docs.html" aria-current="page">Docs</a>
+  </div>
+  <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Theme: system (matches your device) — activate for light">
+    <svg class="tt-auto" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5 5l1.8 1.8M17.2 17.2 19 19M19 5l-1.8 1.8M6.8 17.2 5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-moon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20.2 14.5A8.3 8.3 0 0 1 9.5 3.8a8.3 8.3 0 1 0 10.7 10.7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+  <a class="nav-gh" href="https://github.com/aliasfoxkde/OpenCodifier" aria-label="OpenCodifier on GitHub" rel="noopener">
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+  </a>
+  <a class="btn btn-small nav-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+  <a class="btn btn-small" href="playground.html">Run it live</a>
+  <details class="nav-menu">
+    <summary aria-label="Open menu"><span></span><span></span><span></span></summary>
+    <div class="nav-menu-panel">
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">Benchmarks</a>
+      <a href="playground.html">Playground</a>
+      <a href="decide.html">Decide</a>
+      <a href="api.html">API</a>
+      <a href="docs.html" aria-current="page">Docs</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier">GitHub ↗</a>
+      <div class="nav-menu-foot">
+        <a class="nav-menu-signin" href="#" title="Placeholder — accounts are not live yet">Sign in</a>
+        <span class="nav-menu-themeslot" aria-hidden="true"></span>
+      </div>
+    </div>
+  </details>
+</nav>
+
+<header class="hero" id="top">
+  <div class="hero-badges">
+    <span class="pill">one canonical IR</span>
+    <span class="pill">typed: choice · boolean · score</span>
+    <span class="pill">abstention is a response, not an error</span>
+  </div>
+  <h1>The deep-dive <span class="grad">docs.</span></h1>
+  <p class="hero-sub">
+    How the runtime works when you want more than a landing page: the decision IR field by
+    field, the three question types, the calibrated confidence gate, the seven-rung escalation
+    ladder, declarative graphs, the browser SDK, and the self-hosted binary. Written against the
+    crate sources — where a rung needs a backend your build does not ship, this page names the
+    refusal in the same breath. The normative wire reference is
+    <a href="api.html">api.html</a>; this page explains the machine it documents.
+  </p>
+</header>
+
+<main>
+<div class="docs-shell">
+
+<aside class="docs-side" id="docs-side">
+  <button type="button" class="docs-toggle" id="docs-toggle" aria-expanded="false" aria-controls="docs-side-box">
+    Sections
+  </button>
+  <div class="docs-side-box" id="docs-side-box">
+    <div class="docs-side-title">On this page</div>
+    <input class="docs-filter" id="docs-filter" type="search" placeholder="Filter sections…"
+           autocomplete="off" aria-label="Filter the documentation sections">
+    <nav class="docs-nav" id="docs-nav" aria-label="Documentation sections">
+      <a href="#overview"><span class="docs-num">1</span>Overview &amp; quickstart</a>
+      <a href="#ir"><span class="docs-num">2</span>The decision IR</a>
+      <a href="#question-types"><span class="docs-num">3</span>Question types &amp; criteria</a>
+      <a href="#confidence"><span class="docs-num">4</span>Confidence &amp; abstention</a>
+      <a href="#ladder"><span class="docs-num">5</span>The decision ladder</a>
+      <a href="#graph-mode"><span class="docs-num">6</span>Graph mode</a>
+      <a href="#sdk"><span class="docs-num">7</span>The browser SDK</a>
+      <a href="#self-hosting"><span class="docs-num">8</span>Self-hosting</a>
+      <a href="#methodology"><span class="docs-num">9</span>Methodology</a>
+      <a href="#faq"><span class="docs-num">10</span>FAQ</a>
+    </nav>
+    <div class="docs-empty" id="docs-empty" hidden>No section matches that.</div>
+    <div class="docs-side-foot">
+      <a href="api.html">API reference (wire truth) →</a>
+      <a href="decide.html">Decide console — run the engine →</a>
+      <a href="benchmarks.html">The measured board →</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier" rel="noopener">Source on GitHub ↗</a>
+    </div>
+  </div>
+</aside>
+
+<div class="docs-main">
+
+<!-- ============ 1. OVERVIEW ============ -->
+<section id="overview" class="section">
+  <div class="kicker">Overview</div>
+  <h2>A decision is a typed value, not a sentence.</h2>
+  <p class="lede">
+    OpenCodifier is a local-first, deterministic-first <strong>decision runtime</strong>. You
+    hand it unstructured state and a question; it returns a machine-actionable answer with a
+    calibrated confidence, a distribution over the possible answers, and the execution trace
+    that produced it. It is not a chatbot, not an LLM wrapper, and not a decision-tree
+    classifier — it is the substrate an AI system calls <em>before</em> it pays for a large
+    model.
+  </p>
+
+  <h3 class="docs-h3">The three decision types</h3>
+  <div class="table-wrap">
+    <table class="pg-table api-table">
+      <caption class="visually-hidden">The three canonical question types</caption>
+      <thead><tr><th>Type</th><th>You supply</th><th>You get back</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>choice</code></td>
+          <td>a question and a candidate list — ids plus descriptions, defined per request</td>
+          <td>the winning candidate, a full distribution over the candidates, and a confidence</td>
+        </tr>
+        <tr>
+          <td><code>boolean</code></td>
+          <td>a yes/no question as text</td>
+          <td><code>true</code>/<code>false</code> with its probability and a confidence</td>
+        </tr>
+        <tr>
+          <td><code>score</code></td>
+          <td>a question and at least two ordered level labels</td>
+          <td>the level, the full ordered distribution, and an expected value</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="body-text">
+    The candidate list is runtime-defined, not baked into a model's label set. That single
+    choice is what makes the whole system candidate-conditioned: the same engine routes a
+    ticket, picks a model, and grades a severity, because the answer space arrives with the
+    request.
+  </p>
+
+  <h3 class="docs-h3">The two rules everything else follows</h3>
+  <p class="body-text">
+    <strong>Deterministic first.</strong> The engine always spends the cheapest mechanism that
+    can decide with sufficient confidence — exact rule, cached decision, metadata filter,
+    lexical match, then, only if it must, embedding, decision model, verifier. It never runs a
+    more expensive layer than the question requires, and it never silently discards a candidate
+    on weak evidence.
+  </p>
+  <p class="body-text">
+    <strong>Refusal is first-class.</strong> Low confidence yields an explicit abstain or
+    escalate, never a forced guess — and an abstention ships as HTTP <code>200</code>, because
+    the runtime answered the question you actually asked ("can this be decided?") honestly.
+    Every hard failure has a stable, machine-readable code instead of a message to grep.
+  </p>
+
+  <h3 class="docs-h3">60-second quickstart</h3>
+  <p class="body-text">
+    This is the HTTP shape — the same envelope every surface (WASM, MCP, CLI) normalizes into.
+    Build the binary, serve it on loopback, and decide something:
+  </p>
+  <pre class="pg-pre" role="img" aria-label="Build, serve, and decide in three commands"><code>git clone https://github.com/aliasfoxkde/OpenCodifier
+cd OpenCodifier &amp;&amp; cargo build --release -p opencodifier-cli
+./target/release/opencodifier serve        # 127.0.0.1:8177, loopback only
+
+curl -s http://127.0.0.1:8177/v1/decide \
+  -H 'content-type: application/json' \
+  -d '{"state":{"text":"deploy is erroring, decide"},
+       "questions":[{"type":"boolean","id":"rollback","text":"Roll back now?"}]}'</code></pre>
+  <p class="body-text">
+    That request is the minimal legal payload: <code>policy</code> and <code>metadata</code> are
+    optional on the wire, and omitting them means the engine's default posture (accept at
+    ≥&nbsp;0.80, verify below 0.65, abstain below 0.50, risk <code>low</code>). A quickstart
+    should not have to invent housekeeping fields to ask one question.
+  </p>
+  <p class="body-text">
+    No server? The same request from the terminal:
+    <code>opencodifier decide --input request.json</code>. No install at all?
+    The <a href="decide.html">Decide console</a> runs the identical engine compiled to WASM, in
+    your tab, with no network.
+  </p>
+  <div class="card card-honest pg-note">
+    <h3>What is shipping, and what is not</h3>
+    <p>The binary is the product today: <code>decide</code>, <code>graph validate</code>,
+      <code>serve</code>, <code>mcp serve</code>, and the model/ladder/recipe tooling,
+      Apache-2.0, fully offline. The <strong>hosted API is a waitlist</strong> —
+      planned at $1 per million decisions, no endpoint yet. Nothing on this page requires it,
+      and nothing here describes an endpoint you cannot already run yourself.</p>
+  </div>
+</section>
+
+<!-- ============ 2. THE DECISION IR ============ -->
+<section id="ir" class="section">
+  <div class="kicker">The decision IR</div>
+  <h2>One request shape, one response shape.</h2>
+  <p class="lede">
+    Native JSON here; OpenAI, Anthropic, and Jev shapes are adapters that normalize into this
+    same canonical form before the pipeline sees them. Vendor formats live at the edges — this
+    is the internal truth, and it validates itself: the IR types refuse to exist in an invalid
+    state, so the engine never re-checks an invariant.
+  </p>
+
+  <h3 class="docs-h3">Request — <code>POST /v1/decide</code></h3>
+  <div class="table-wrap">
+    <table class="pg-table api-table">
+      <caption class="visually-hidden">Request fields</caption>
+      <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>state.text</code></td><td>string</td><td>yes</td>
+          <td>The unstructured state to decide on. Non-empty; ≤ <code>max_input_bytes</code>
+            (1&nbsp;MiB default). JSON pasted here is sent as text — the engine reads text.</td></tr>
+        <tr><td><code>state.facts</code></td><td>map of typed facts</td><td>no</td>
+          <td>Structured facts the rule engine and filters can act on. Each fact is tagged:
+            <code>{"kind":"text"|"integer"|"float"|"boolean"|"list", "value":…}</code>.
+            Floats must be finite — NaN is refused, so cache keys stay deterministic.</td></tr>
+        <tr><td><code>questions</code></td><td>array</td><td>yes</td>
+          <td>1–32 questions, decided in order. An empty array is
+            <code>ir.empty_questions</code> — deciding nothing is not a decision.</td></tr>
+        <tr><td><code>policy</code></td><td>object</td><td>no</td>
+          <td>The confidence/risk policy. Omitted means the engine default posture
+            (§<a class="pg-link" href="#confidence">4</a>).</td></tr>
+        <tr><td><code>metadata.request_id</code></td><td>string</td><td>no</td>
+          <td>Carried for your own correlation; never interpreted.</td></tr>
+        <tr><td><code>metadata.limits</code></td><td>object</td><td>no</td>
+          <td>Per-request resource ceiling. A request may declare anything at or under the
+            default, never above.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <dl class="docs-anno">
+    <dt>metadata.limits (defaults)</dt>
+    <dd><code>max_input_bytes</code> 1048576 · <code>max_questions</code> 32 ·
+      <code>max_candidates</code> 256 · <code>max_graph_nodes</code> 128 ·
+      <code>max_execution_time</code> 120&nbsp;s · <code>max_retrieval_results</code> 64</dd>
+  </dl>
+
+  <h3 class="docs-h3">The three question shapes</h3>
+  <div class="table-wrap">
+    <table class="pg-table api-table">
+      <caption class="visually-hidden">Question shapes</caption>
+      <thead><tr><th>Shape</th><th>Fields</th><th>Refused when</th></tr></thead>
+      <tbody>
+        <tr><td><code>{"type":"choice",…}</code></td>
+          <td><code>id</code>, <code>text</code>, <code>candidates[]</code> — each
+            <code>{id, description}</code></td>
+          <td>the candidate set is empty (<code>ir.empty_candidates</code>), an id repeats
+            (<code>ir.duplicate_candidate</code>), the text is empty
+            (<code>ir.empty_field</code>), or the set exceeds <code>max_candidates</code>
+            (<code>ir.invalid_policy</code>)</td></tr>
+        <tr><td><code>{"type":"boolean",…}</code></td>
+          <td><code>id</code>, <code>text</code></td>
+          <td>the text is empty (<code>ir.empty_field</code>)</td></tr>
+        <tr><td><code>{"type":"score",…}</code></td>
+          <td><code>id</code>, <code>text</code>, <code>levels[]</code> — each
+            <code>{label}</code>, in order</td>
+          <td>fewer than two levels (<code>ir.too_few_levels</code>), a repeated label
+            (<code>ir.duplicate_level</code>), or empty text</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="body-text">
+    Candidate <code>description</code> fields may be empty but must be present — and you should
+    write real ones: they are the primary signal the semantic layers score against. Identifiers
+    accept <code>a-z A-Z 0-9 _ - .</code> and carry a length cap; anything else is
+    <code>ir.invalid_id</code>.
+  </p>
+
+  <h3 class="docs-h3">Policy</h3>
+  <div class="table-wrap">
+    <table class="pg-table api-table">
+      <caption class="visually-hidden">Decision policy fields</caption>
+      <thead><tr><th>Field</th><th>Default</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>min_confidence</code></td><td><code>0.80</code></td>
+          <td>calibrated confidence at or above which a Low/Medium-risk answer is accepted</td></tr>
+        <tr><td><code>verify_below</code></td><td><code>0.65</code></td>
+          <td>below this, the answer goes to a verifier instead of being accepted</td></tr>
+        <tr><td><code>abstain_below</code></td><td><code>0.50</code></td>
+          <td>below this, the runtime refuses to answer at all — see
+            §<a class="pg-link" href="#confidence">4</a></td></tr>
+        <tr><td><code>risk</code></td><td><code>"low"</code></td>
+          <td><code>low | medium | high | critical</code>. High and Critical are verified even
+            when confident — this is policy you declare, never something inferred from model
+            output.</td></tr>
+        <tr><td><code>entropy_ceiling</code></td><td>off</td>
+          <td>entropy at or above this may not be accepted outright (§19 gate)</td></tr>
+        <tr><td><code>min_margin</code></td><td>off</td>
+          <td>a margin below this (a near-tie) may not be accepted outright</td></tr>
+        <tr><td><code>ood_ceiling</code> / <code>ood_mode</code></td><td>off / <code>answer_entropy</code></td>
+          <td>an out-of-distribution score above the ceiling demotes the decision;
+            <code>ood_mode</code> chooses what is measured — answer-entropy, or
+            <code>lexical_band</code> input-likeness where a lexical rung ran</td></tr>
+        <tr><td><code>boolean_threshold</code></td><td>off (argmax)</td>
+          <td>answers a boolean <code>true</code> when <code>p_true ≥ threshold</code> instead of
+            by argmax — a fitted boundary, never a hard-coded 0.5</td></tr>
+        <tr><td><code>abstain_candidate</code></td><td>off</td>
+          <td>a synthetic choice candidate <code>{id, description}</code> appended to every
+            choice question, so the deciding rung can elect "none of these" instead of guessing
+            (§<a class="pg-link" href="#confidence">4</a>)</td></tr>
+        <tr><td><code>max_label_overlap</code></td><td>off</td>
+          <td>ceiling on label-set overlap between candidates, for policies that want to
+            measure ambiguity in the candidate list itself</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="body-text">
+    The three gates must satisfy <code>abstain_below ≤ verify_below ≤ min_confidence</code>;
+    anything else is a contradictory cascade and is refused with
+    <code>ir.invalid_policy</code>. The opt-in gates serialize as absent when disabled, so a
+    policy that does not use them is byte-identical to the pre-gate form and cache keys do not
+    shift.
+  </p>
+
+  <h3 class="docs-h3">Response</h3>
+  <div class="table-wrap">
+    <table class="pg-table api-table">
+      <caption class="visually-hidden">Response fields</caption>
+      <thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>answers[]</code></td><td>per-question answers, request order</td>
+          <td>A decisive outcome (<code>accept</code>, <code>verified</code>) always carries at
+            least one; an abstention may legitimately carry none.</td></tr>
+        <tr><td><code>outcome</code></td><td>enum</td>
+          <td><code>accept</code> · <code>verified</code> · <code>verify</code> ·
+            <code>abstain</code> · <code>escalate</code> · <code>no_valid_candidate</code>.
+            Only the first two carry a usable answer.</td></tr>
+        <tr><td><code>confidence</code></td><td>report</td>
+          <td>Six dimensions, one per question request —
+            §<a class="pg-link" href="#confidence">4</a>.</td></tr>
+        <tr><td><code>trace</code></td><td>ordered entries</td>
+          <td><code>{trace_version, entries[]}</code>, each
+            <code>{node, detail}</code>. Deterministic facts about execution — never
+            chain-of-thought. Details are sorted maps, so traces diff cleanly.</td></tr>
+        <tr><td><code>metrics</code></td><td>object</td>
+          <td><code>candidates_in</code>, <code>candidates_out</code>,
+            <code>cache_hit</code>, <code>verification_triggered</code> — how hard the
+            narrowing pipeline worked and whether caching or verification engaged.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="body-text">
+    Answer shapes mirror the questions: a choice answer carries
+    <code>{question_id, choice, distribution, confidence}</code>, a boolean carries
+    <code>{question_id, value, probability, confidence}</code>, and a score carries
+    <code>{question_id, expected, level, distribution, confidence}</code>. Every distribution is
+    a complete categorical one — unique keys, each probability in <code>[0,1]</code>, total mass
+    1 within <code>1e-6</code> — or the runtime refuses to emit it
+    (<code>ir.distribution_not_normalized</code>). A score's expected value uses positional
+    weights <code>0, 1, 2, …</code> and its <code>level</code> is the floor of that value,
+    clamped to the range.
+  </p>
+
+  <h3 class="docs-h3">A full example, annotated</h3>
+  <p class="body-text">
+    This is the repo's committed fixture (<code>fixtures/native/request.json</code>): one
+    request, three question types, a policy, and explicit limits.
+  </p>
+  <pre class="pg-pre" role="img" aria-label="Annotated request example"><code>{
+  "state": {
+    "text": "route this request across local models",
+    "facts": { "context_tokens": { "kind": "integer", "value": 4096 } }
+  },
+  "questions": [
+    { "type": "choice", "id": "model",
+      "text": "Which model should serve this request?",
+      "candidates": [
+        { "id": "local-qwen", "description": "General coding and reasoning" },
+        { "id": "local-glm",  "description": "Complex reasoning" }
+      ] },
+    { "type": "score", "id": "difficulty",
+      "text": "How difficult is this request?",
+      "levels": [ {"label":"trivial"}, {"label":"easy"}, {"label":"moderate"},
+                  {"label":"difficult"}, {"label":"expert"} ] },
+    { "type": "boolean", "id": "needs_tools",
+      "text": "Does this request need tools?" }
+  ],
+  "policy":   { "min_confidence": 0.8, "verify_below": 0.65, "abstain_below": 0.5, "risk": "low" },
+  "metadata": { "request_id": "fixture-0001" }
+}</code></pre>
+  <pre class="pg-pre" role="img" aria-label="Annotated response example"><code>{
+  "answers": [
+    { "type": "choice", "question_id": "model", "choice": "local-qwen",
+      "distribution": { "entries": [ { "key": "local-qwen", "probability": 0.91 },
+                                     { "key": "local-glm",  "probability": 0.09 } ] },
+      "confidence": 0.91 },
+    { "type": "score", "question_id": "difficulty", "expected": 2.53, "level": "difficult",
+      "distribution": { "entries": [ { "key": "trivial",   "probability": 0.01 },
+                                     { "key": "easy",      "probability": 0.07 },
+                                     { "key": "moderate",  "probability": 0.42 },
+                                     { "key": "difficult", "probability": 0.38 },
+                                     { "key": "expert",    "probability": 0.12 } ] },
+      "confidence": 0.71 },
+    { "type": "boolean", "question_id": "needs_tools",
+      "value": true, "probability": 0.87, "confidence": 0.87 }
+  ],
+  "outcome": "accept",
+  "confidence": {
+    "top_probability": 0.91, "margin": 0.82, "entropy": 0.2,
+    "calibrated_confidence": 0.91, "ood_score": 0.02, "verifier_agreement": null
+  },
+  "trace":   { "trace_version": 1,
+               "entries": [ { "node": "schema.normalize",
+                              "detail": { "format": {"kind":"text","value":"native"},
+                                          "questions_in": {"kind":"integer","value":3} } } ] },
+  "metrics": { "candidates_in": 2, "candidates_out": 2,
+               "cache_hit": false, "verification_triggered": false }
+}</code></pre>
+  <dl class="docs-anno">
+    <dt>answers[1].level = "difficult"</dt>
+    <dd>expected 2.53 floors to index 2 — but the level list is ordered, and
+      <code>level</code> here is the level <em>at that position</em>: the runtime resolves the
+      expected value into a label for you, so consumers never re-derive it.</dd>
+    <dt>confidence.margin = 0.82</dt>
+    <dd>top probability minus runner-up (0.91 − 0.09). A small margin is the near-tie signal
+      that drives verification.</dd>
+    <dt>confidence.calibrated_confidence = 0.91</dt>
+    <dd>the only number a policy gate reads. Here the identity calibration is in effect, so it
+      equals the raw top probability — and the engine identity reports
+      <code>calibration_version: 0</code> so an un-calibrated run stays visible as such.</dd>
+    <dt>verifier_agreement = null</dt>
+    <dd>no verifier ran. <code>true</code> means one ran and agreed, <code>false</code> means it
+      disagreed.</dd>
+    <dt>trace.entries</dt>
+    <dd>this fixture decided through the default pipeline, so the trace opens with the schema
+      normalization entry; a graph run records one entry per node it executed.</dd>
+  </dl>
+  <p class="fineprint">The response is always the canonical native JSON projection — the CLI's
+    <code>--format</code> flag and the HTTP <code>x-opencodifier-format</code> header choose how
+    requests come <em>in</em>, never how answers go out.</p>
+</section>
+
+<!-- ============ 3. QUESTION TYPES & CRITERIA ============ -->
+<section id="question-types" class="section">
+  <div class="kicker">Question types &amp; criteria</div>
+  <h2>Choosing between three shapes — and wording them so they decide.</h2>
+  <p class="lede">
+    Every question is one of three shapes. Picking the right one is most of the integration
+    work; wording it is the rest, because the cheap rungs read text.
+  </p>
+
+  <h3 class="docs-h3">choice — pick one from a list you define</h3>
+  <p class="body-text">
+    Use it whenever the answer is one of a known set: routing, selection, triage. Descriptions
+    do the work — the lexical rung scores your question text against them, the filter rung
+    eliminates provably-out candidates on facts, and the model rung reads them as its candidate
+    conditioning. A candidate list of bare ids with empty descriptions is a request the semantic
+    layers can only guess at.
+  </p>
+
+  <h3 class="docs-h3">boolean — yes/no, with a probability</h3>
+  <p class="body-text">
+    The wire carries a boolean question as text: <code>{"id","text"}</code>. The verdict is
+    argmax over <code>{true, false}</code> unless the policy sets
+    <code>boolean_threshold</code>, in which case it is
+    <code>p_true ≥ threshold</code> — a fitted boundary from labeled evidence
+    (<code>opencodifier ladder fit-boolean</code> emits one), never a hard-coded 0.5.
+  </p>
+  <p class="body-text">
+    <strong>Criteria are composed into the question text.</strong> There is no separate criteria
+    field, because the zero-ML rungs read text — so "yes when … / no when …" is composed into a
+    single string and sent as the question. The <a href="decide.html">Decide console's</a>
+    builder shows the exact composition in its JSON view; nothing is hidden.
+  </p>
+
+  <div class="card card-honest pg-note">
+    <h3>Composed criteria must be negator-free</h3>
+    <p>The lexical rung determines a boolean's polarity by <em>counting</em> negator tokens in
+      the question text and flipping the verdict when that count is odd. The list is closed and
+      pinned by a test on both sides: <code>not, no, never, without, cannot, neither, nor</code>.
+      A criteria template that contains one bare "no" therefore inverts the answer it was trying
+      to state — a parity flip, not a parse failure, so nothing warns you. Write criteria as
+      affirmative statements ("satisfied when the invoice is a duplicate charge") and keep the
+      composed text at zero negators; an even count restores the intended reading, but zero is
+      the only count you can reason about at a glance.</p>
+  </div>
+
+  <h3 class="docs-h3">score — ordered levels, distribution, expected value</h3>
+  <p class="body-text">
+    Use it for gradations: severity, difficulty, priority. Levels are ordered by position and
+    must be unique; two is the minimum. The response keeps the full distribution over levels
+    plus the expected value and its resolved level, so a caller can threshold on the
+    distribution ("expert with p&nbsp;0.12 is not worth waking anyone") rather than on a single
+    label.
+  </p>
+
+  <h3 class="docs-h3">One request, many questions</h3>
+  <p class="body-text">
+    A request can mix all three types — the fixture above does. Each question is decided
+    independently, in order, with its own answer; the request-level <code>outcome</code> is the
+    cascade's verdict for the request as a whole. For independent workloads sent together, use
+    the batch envelope instead (<code>POST /v1/batch</code>, ≤ 16): it shares the decision cache
+    across the batch and isolates failures per item, so one malformed request never fails the
+    other fifteen.
+  </p>
+</section>
+
+<!-- ============ 4. CONFIDENCE, CALIBRATION & ABSTENTION ============ -->
+<section id="confidence" class="section">
+  <div class="kicker">Confidence, calibration &amp; abstention</div>
+  <h2>Confidence is six numbers, and one of them gates.</h2>
+  <p class="lede">
+    A single <code>confidence: 0.91</code> hides everything the verification cascade needs. The
+    response carries the full picture; the policy reads exactly one field of it — the calibrated
+    value — plus the opt-in gates you turned on.
+  </p>
+
+  <div class="table-wrap">
+    <table class="pg-table api-table">
+      <caption class="visually-hidden">Confidence report fields</caption>
+      <thead><tr><th>Field</th><th>Meaning</th><th>Gated on?</th></tr></thead>
+      <tbody>
+        <tr><td><code>top_probability</code></td><td>the winning answer's probability before calibration</td><td>no</td></tr>
+        <tr><td><code>margin</code></td><td>gap between the top two probabilities — the near-tie detector</td><td>via <code>min_margin</code></td></tr>
+        <tr><td><code>entropy</code></td><td>Shannon entropy of the answer distribution, in bits (0 = certain, log2(n) = uniform)</td><td>via <code>entropy_ceiling</code></td></tr>
+        <tr><td><code>calibrated_confidence</code></td><td>the calibrated value — <strong>the only field the cascade reads for acceptance</strong></td><td>yes</td></tr>
+        <tr><td><code>ood_score</code></td><td>out-of-distribution signal in [0,1]; higher means the input looks unlike anything the rung was fitted on</td><td>via <code>ood_ceiling</code></td></tr>
+        <tr><td><code>verifier_agreement</code></td><td><code>true</code> when a verifier ran and agreed, <code>false</code> when it disagreed, <code>null</code> when none ran</td><td>drives the verified/abstain tail</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="body-text">
+    Raw softmax probability is never exposed as confidence. Calibration is fitted per rung — an
+    exact relational proof is p&nbsp;=&nbsp;1.0 by construction, a lexical score is not a
+    probability at all, and a model rung carries a fitted temperature — and the calibration
+    version rides the engine identity and every cache key, so swapping an artifact re-keys
+    rather than silently re-scoring. Where no calibration is fitted, the identity mapping is
+    used and <code>calibration_version: 0</code> says so honestly.
+  </p>
+
+  <h3 class="docs-h3">The cascade</h3>
+  <pre class="pg-pre" role="img" aria-label="The outcome cascade in pseudocode"><code>c &lt;  abstain_below   →  ABSTAIN
+c ≥  min_confidence  →  ACCEPT  for low/medium risk, unless an uncertainty gate trips
+                        VERIFY  for high/critical risk — even confident answers
+otherwise            →  VERIFY</code></pre>
+  <p class="body-text">
+    A verifier that agrees promotes the answer to <code>verified</code>; one that disagrees
+    demotes it to abstain or escalate. Verification is confidence-gated — the runtime never runs
+    two classifiers on every request, because "check everything" is how a cheap runtime stops
+    being cheap.
+  </p>
+
+  <h3 class="docs-h3">Abstention is a response</h3>
+  <p class="body-text">
+    When calibrated confidence lands below <code>abstain_below</code>, the answer ships as an
+    <strong>HTTP 200 with <code>outcome: "abstain"</code></strong> — not a 4xx, not an error
+    envelope. The runtime answered the question you asked ("can this be decided from this
+    state?") and the answer was no. An abstention never masquerades as a failure, and a failure
+    never masquerades as a low-confidence decision.
+  </p>
+  <p class="body-text">
+    There is also an <em>elicited</em> abstention: set
+    <code>policy.abstain_candidate</code> and a synthetic choice candidate is appended to every
+    choice question, giving the deciding rung somewhere to say "none of these" instead of
+    picking the least-wrong option. A decision that elects it becomes an abstain, the answer is
+    withheld, and the trace discloses both the candidate and the elicitation
+    (<code>abstain_candidate</code> / <code>abstain_elicited</code>). The mechanism exists
+    because abstention is not emergent — in the calibration survey recorded in the research
+    notes, a model that faced items it could not know abstained on only 10.5% of them, and was
+    right 17 times out of 18 when it did. The behavior is usable; it has to be offered.
+  </p>
+
+  <h3 class="docs-h3">Refusal codes</h3>
+  <p class="body-text">
+    One envelope everywhere — <code>{"error": {"code": "…", "message": "…"}}</code> — and the
+    same codes across WASM, HTTP, MCP, and CLI. Messages are typed, never an echo of your
+    payload. These are the codes the runtime emits today:
+  </p>
+  <div class="api-code-grid">
+    <div class="api-code-card">
+      <h4><code>ir.*</code> — canonical IR validation</h4>
+      <p><code>empty_field</code> · <code>empty_candidates</code> · <code>duplicate_candidate</code>
+        · <code>too_few_levels</code> · <code>duplicate_level</code> · <code>invalid_policy</code>
+        · <code>invalid_id</code> · <code>invalid_probability</code> ·
+        <code>distribution_not_normalized</code> · <code>empty_questions</code></p>
+    </div>
+    <div class="api-code-card">
+      <h4><code>schema.*</code> — adapter layer</h4>
+      <p><code>unsupported_construct</code> · <code>unsupported_generation_field</code> ·
+        <code>missing_field</code> · <code>invalid_type</code> · <code>invalid_value</code> ·
+        <code>limit_exceeded</code> · <code>empty_questions</code> · <code>invalid_json</code></p>
+    </div>
+    <div class="api-code-card">
+      <h4><code>graph.*</code> — graph engine</h4>
+      <p><code>cycle</code> — the validator reports the first violated invariant it meets, so a
+        malformed DAG may also surface a structural code instead.</p>
+    </div>
+    <div class="api-code-card">
+      <h4><code>engine.*</code> — execution</h4>
+      <p><code>missing_backend</code></p>
+    </div>
+    <div class="api-code-card">
+      <h4><code>http.*</code> — the HTTP layer itself</h4>
+      <p><code>remote_bind_forbidden</code> · <code>bind_failed</code> · <code>serve_failed</code>
+        — the only three codes the web layer owns; everything else is relayed verbatim from
+        below.</p>
+    </div>
+    <div class="api-code-card">
+      <h4><code>cli.*</code> / <code>mcp.*</code> / <code>model.*</code></h4>
+      <p>The terminal surfaces add their own: <code>cli.escalated</code>,
+        <code>cli.bind_requires_allow_remote</code>, <code>cli.model_rung_unavailable</code>,
+        <code>mcp.session_failed</code>, and the model-artifact family
+        (<code>model.invalid_manifest</code>, <code>model.unreadable_artifact</code>, …).</p>
+    </div>
+  </div>
+  <p class="fineprint">
+    Two names that appear in friendlier summaries are not codes this runtime emits:
+    <code>gate.below_threshold</code> is not an error at all — that is an abstention, shipped as
+    HTTP 200 with <code>outcome: "abstain"</code> — and an empty candidate set refuses as
+    <code>ir.empty_candidates</code>. If a code you saw somewhere does not appear above, it is
+    not one the binary produces; the list here is checked against the crate sources.
+  </p>
+
+  <h3 class="docs-h3">Status codes</h3>
+  <p class="body-text">
+    Decisions — <strong>including abstentions</strong> — are <code>200</code>. Refusals are
+    <code>400</code> with the error envelope; oversize bodies and unknown routes are the web
+    framework's own errors. The CLI expresses the same distinction as exit codes:
+    <code>0</code> decided, <code>2</code> answered but not decisively (abstain, escalate,
+    verify, no valid candidate) unless <code>--abstain-is-success</code>, <code>1</code> input
+    error, <code>3</code> internal error. The response is printed either way.
+  </p>
+</section>
+
+<!-- ============ 5. THE DECISION LADDER ============ -->
+<section id="ladder" class="section">
+  <div class="kicker">The decision ladder</div>
+  <h2>Cheap mechanisms decide. The model pays only for the hard tail.</h2>
+  <p class="lede">
+    A decision cascades down the rungs until one of them is confident enough to accept — and
+    stops there. The engine never decides anything a cheaper rung already decided, and it never
+    runs an expensive layer on a question a cheap one settled.
+  </p>
+
+  <div class="table-wrap">
+    <table class="pg-table api-table">
+      <caption class="visually-hidden">The seven rungs, what they do, and what they cost</caption>
+      <thead><tr><th>Rung</th><th>Mechanism</th><th>What it does</th><th>Measured cost</th><th>Where it runs</th></tr></thead>
+      <tbody>
+        <tr><td class="docs-rung">1</td><td><strong>Exact rule</strong></td>
+          <td>relational proofs over extracted facts — accepts at p&nbsp;=&nbsp;1.0 by construction</td>
+          <td>~0 ms</td><td>everywhere, including WASM</td></tr>
+        <tr><td class="docs-rung">2</td><td><strong>Cached decision</strong></td>
+          <td>versioned, byte-stable replay of an identical prior decision</td>
+          <td>~0 ms</td><td>everywhere, including WASM</td></tr>
+        <tr><td class="docs-rung">3</td><td><strong>Metadata filter</strong></td>
+          <td>removes provably-out candidates on facts — narrowing, never deciding</td>
+          <td>sub-ms</td><td>everywhere, including WASM</td></tr>
+        <tr><td class="docs-rung">4</td><td><strong>Lexical / BM25</strong></td>
+          <td>hand-written scorer over candidate descriptions, gated accept</td>
+          <td>0.4 ms</td><td>everywhere, including WASM</td></tr>
+        <tr><td class="docs-rung">5</td><td><strong>Embedding</strong></td>
+          <td>static-table semantic scoring; annotates, never removes</td>
+          <td>7.9 ms</td><td>needs an embedding backend</td></tr>
+        <tr><td class="docs-rung">6</td><td><strong>Decision model</strong></td>
+          <td>candidate-conditioned parallel readout — the tail, reached only when the cheap rungs did not accept</td>
+          <td>0.3–2.3 s</td><td>needs an inference backend (CPU-only)</td></tr>
+        <tr><td class="docs-rung">7</td><td><strong>Verifier</strong></td>
+          <td>one gated shot when the gate or the risk policy demands a second opinion</td>
+          <td>on demand</td><td>needs a backend</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="fineprint">Costs are the measured figures from the ladder runs behind
+    <a href="benchmarks.html">the measured board</a> — CPU-only, consumer desktop hardware —
+    not estimates. Most requests never reach rung 5, which is the entire point.</p>
+
+  <h3 class="docs-h3">Why cheap first is a correctness property, not just a cost one</h3>
+  <p class="body-text">
+    Every rung has its own confidence character: a relational proof is certain by construction,
+    a lexical score is a similarity, a model rung's output is a calibrated distribution. Letting
+    an expensive rung re-decide a settled question would not add information — it would add a
+    second opinion with more ways to be wrong. So the ladder is a one-way valve: a rung fires
+    only while the previous rung's gate did not accept, an accepted question runs exactly one
+    classifier, and the trace records which rung answered, so every decision cites its own
+    provenance.
+  </p>
+
+  <div class="card card-honest pg-note">
+    <h3>Which rungs your build actually has</h3>
+    <p>The WASM build — this site's playground and everything the browser SDK embeds — ships
+      rungs 1–4 and the graph engine. Rungs 5–7 need inference backends a browser tab
+      deliberately does not ship; a graph that needs one returns
+      <code>engine.missing_backend</code> instead of pretending. On the server, the same zero-ML
+      stack is the default and the model rung is opt-in: the llama.cpp loopback backend sits
+      behind the <code>llamacpp</code> cargo feature and its <code>--llama</code> flags, and a
+      build without the feature refuses <code>--llama</code> with
+      <code>cli.model_rung_unavailable</code> rather than silently ignoring it.</p>
+  </div>
+</section>
+
+<!-- ============ 6. GRAPH MODE ============ -->
+<section id="graph-mode" class="section">
+  <div class="kicker">Graph mode</div>
+  <h2>Declarative DAGs, no scripting language.</h2>
+  <p class="lede">
+    A graph chains steps — normalize, decide, gate, output — into one serializable document. It
+    is data, not code: there is no embedded scripting language to sandbox, and the whole
+    document validates before a single node runs.
+  </p>
+
+  <pre class="pg-pre" role="img" aria-label="A minimal decision graph"><code>{
+  "version": 1,
+  "nodes": [
+    { "id": "normalize", "kind": "normalize" },
+    { "id": "choice",    "kind": "choice",    "depends_on": ["normalize"] },
+    { "id": "threshold", "kind": "threshold", "threshold": 0.5, "depends_on": ["choice"] },
+    { "id": "output",    "kind": "output",    "depends_on": ["threshold"] }
+  ]
+}</code></pre>
+
+  <h3 class="docs-h3">Node kinds</h3>
+  <div class="table-wrap">
+    <table class="pg-table api-table">
+      <caption class="visually-hidden">Graph node kinds</caption>
+      <thead><tr><th>Kind</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td><code>normalize</code></td><td>canonicalizes the request into the working state — conventionally the entry node</td></tr>
+        <tr><td><code>rule</code></td><td>runs the deterministic rule engine</td></tr>
+        <tr><td><code>cache</code></td><td>probes the exact-decision cache</td></tr>
+        <tr><td><code>filter</code></td><td>narrows candidates deterministically</td></tr>
+        <tr><td><code>lexical</code></td><td>scores surviving candidates lexically with BM25</td></tr>
+        <tr><td><code>choice</code> / <code>boolean</code> / <code>score</code></td><td>decides the question of that type</td></tr>
+        <tr><td><code>threshold</code></td><td>applies the confidence gate and verifier cascade; carries the graph's <code>threshold</code> knob</td></tr>
+        <tr><td><code>branch</code></td><td>conditional short-circuit: dependents are skipped when <code>when</code> is false</td></tr>
+        <tr><td><code>embedding</code></td><td>embeds the state once, scores candidates by cosine — annotates only, never removes or reorders</td></tr>
+        <tr><td><code>retrieve</code></td><td>narrows each choice question to the top-N semantically scored candidates above a floor; every dropped candidate is named in the trace, and the floor can never empty a question</td></tr>
+        <tr><td><code>rerank</code></td><td>reorders survivors by a named reranker; never removes</td></tr>
+        <tr><td><code>output</code></td><td>terminal — exactly one per graph</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="docs-h3">Validate, then run</h3>
+  <pre class="pg-pre" role="img" aria-label="Graph validate and run calls"><code>curl -s http://127.0.0.1:8177/v1/graph/validate -d @graph.json
+# → {"version": 1, "nodes": 4}
+
+curl -s http://127.0.0.1:8177/v1/graph/run \
+  -d '{"graph": { … }, "request": { … }}'</code></pre>
+  <p class="body-text">
+    Validation enforces the DAG contract locally — ids, edges, acyclicity, a single output, the
+    node limit, knob kinds — and returns a summary of what validated, so a client can confirm
+    the shape it is about to run. Execution then feeds the graph and the request through the
+    same engine; the graph's cache identity is derived from its own content, so changing the
+    graph re-keys its decisions.
+  </p>
+  <p class="body-text">
+    Two refusals are part of the design, not edge cases. A cyclic graph is refused with
+    <code>graph.cycle</code> — break the loop, do not expect the engine to guess an order. And
+    a node whose kind needs a backend the build lacks is refused with
+    <code>engine.missing_backend</code>; the runtime never silently substitutes a cheaper rung
+    and presents the answer as if the graph you wrote had executed.
+  </p>
+  <p class="body-text">
+    Per-node gate overrides live outside the graph: a ladder profile
+    (<code>serve --ladder profile.json</code>) carries full policies per node id or per node
+    kind, because a relational proof and a model rung's calibrated confidence are not
+    commensurable and one request-level policy cannot gate both well. An empty ladder runs
+    byte-identically to no ladder at all.
+  </p>
+</section>
+
+<!-- ============ 7. THE BROWSER SDK ============ -->
+<section id="sdk" class="section">
+  <div class="kicker">The browser SDK</div>
+  <h2>One global, no dependencies, DOM-free by default.</h2>
+  <p class="lede">
+    <code>sdk/decisions-sdk.js</code> is the shared runtime behind every playground game on this
+    site. It exposes a single <code>DecisionsSDK</code> global, defines no dependencies, and
+    touches the DOM only in its explicitly-marked shell section — the headless parts run under
+    Node's test runner.
+  </p>
+
+  <div class="table-wrap">
+    <table class="pg-table api-table">
+      <caption class="visually-hidden">DecisionsSDK surface</caption>
+      <thead><tr><th>Group</th><th>Members</th><th>What it is for</th></tr></thead>
+      <tbody>
+        <tr><td><code>rng</code></td><td><code>hashSeed</code>, <code>mulberry32</code>,
+            <code>makeRng</code>, <code>pick</code>, <code>randomSeed</code></td>
+          <td>seeded determinism — a string seed through FNV-1a into mulberry32. No
+            <code>Math.random</code> in game logic, ever: the same seed replays the same
+            match.</td></tr>
+        <tr><td><code>config</code></td><td><code>clamp</code>, <code>clampf</code>,
+            <code>normalize</code></td>
+          <td>spec-driven config normalization for game controls — integer clamps, float clamps,
+            strict booleans, enums with defaults.</td></tr>
+        <tr><td><code>rubric</code></td><td><code>normalize</code>, <code>score</code>,
+            <code>resolve</code></td>
+          <td>weighted criteria over normalized metrics, a per-run breakdown for auditability,
+            and tie-break-aware winner resolution.</td></tr>
+        <tr><td><code>boards / meters</code></td><td><code>sessionBoard</code>,
+            <code>meters</code>, <code>nowMs</code></td>
+          <td>a memory-only scoreboard that dies with the tab, and EMA/worst/count meters for
+            the stats overlay. Nothing a visitor does leaves the tab.</td></tr>
+        <tr><td><code>engine</code></td><td><code>engineBridge</code></td>
+          <td>the one sanctioned path to the WASM engine — below.</td></tr>
+        <tr><td><code>format</code></td><td><code>fmtMs</code>, <code>fmtPct</code>,
+            <code>fmtTime</code>, <code>fmtNum</code></td>
+          <td>shared number and duration formatting.</td></tr>
+        <tr><td><code>shell</code></td><td><code>h</code>, <code>accordion</code>,
+            <code>tabs</code>, <code>kvRow</code>, <code>fullscreen</code>,
+            <code>numericSeed</code>, <code>resetParams</code></td>
+          <td>the shared game chrome: element factory, single-open accordion, tabs, key/value
+            rows, fullscreen toggle, seed box, restore-defaults.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 class="docs-h3">engineBridge — the engine call path</h3>
+  <pre class="pg-pre" role="img" aria-label="engineBridge usage"><code>const bridge = DecisionsSDK.engineBridge({ importBase: "../wasm/", failLimit: 5 });
+
+const engine = await bridge.ensure();   // Promise&lt;engine | null&gt; — never throws
+bridge.status;                          // "off" | "loading" | "ready" | "unavailable"
+const decision = bridge.choose(request); // decision object, or null on failure
+bridge.meters.snapshot();               // { "engine.ms": {avg, worst, count, last}, … }</code></pre>
+  <p class="body-text">
+    Four honesty rules are enforced by construction rather than by convention. The boundary
+    speaks JSON strings both ways — an object into <code>decide()</code> hangs the engine, so
+    the bridge stringifies for you and parses back. An abstention from the engine is a valid
+    non-null result; only a decode or execution failure yields <code>null</code>, and call sites
+    must keep a local fallback for it. Every call is metered. And after
+    <code>failLimit</code> (default 5) consecutive failures the bridge turns itself off — a game
+    never stalls, and never pretends it asked the engine when it did not.
+  </p>
+
+  <h3 class="docs-h3">Live: the same seed, the same numbers</h3>
+  <div class="card" id="docs-live">
+    <p class="body-text" style="margin-top:0">
+      This box runs the SDK's own RNG in your tab — the same function every game seeds its
+      match with. No engine, no WASM, no network.
+    </p>
+    <div class="docs-live-row">
+      <label for="docs-seed">Seed</label>
+      <input id="docs-seed" type="text" value="route-42" spellcheck="false" autocomplete="off">
+      <button type="button" class="btn btn-small" id="docs-seed-run">Replay</button>
+    </div>
+    <p class="docs-live-out" id="docs-seed-out" aria-live="polite">loading…</p>
+    <p class="fineprint">Change the seed and the sequence changes; restore it and the sequence is
+      bit-identical. That is the whole determinism contract, running on this page.</p>
+  </div>
+
+  <h3 class="docs-h3">Deciding from a page</h3>
+  <pre class="pg-pre" role="img" aria-label="Direct WASM engine usage"><code>&lt;script type="module"&gt;
+  import init, { WasmEngine } from "./wasm/opencodifier_wasm.js";
+  await init();                        // resolves ./wasm/*_bg.wasm beside the JS
+  const engine = new WasmEngine();
+  const decision = JSON.parse(engine.decide(JSON.stringify(request)));
+&lt;/script&gt;</code></pre>
+  <p class="body-text">
+    <code>identity()</code> returns the exact versions that decide cache keys and reproduce
+    decisions; <code>decide_batch()</code> takes the same ≤16 envelope as
+    <code>POST /v1/batch</code> and isolates failures per item. Failures throw the standard
+    error envelope as the exception value — there is no third channel. The
+    <a href="playground.html">playground</a> is the working example, and
+    <a href="api.html">api.html</a> documents the module exhaustively.
+  </p>
+</section>
+
+<!-- ============ 8. SELF-HOSTING ============ -->
+<section id="self-hosting" class="section">
+  <div class="kicker">Self-hosting</div>
+  <h2>One binary. Loopback by default. No config file.</h2>
+  <p class="lede">
+    Everything ships in <code>opencodifier-cli</code>: the decision engine, the wire adapters,
+    the HTTP server, the MCP server, and the model/ladder tooling. The base binary is useful
+    with zero models installed.
+  </p>
+
+  <pre class="pg-pre" role="img" aria-label="Build and install commands"><code>cargo build --release -p opencodifier-cli        # or:
+cargo install --locked --path crates/opencodifier-cli
+
+opencodifier serve                               # 127.0.0.1:8177
+opencodifier decide --input request.json         # one decision, native format
+opencodifier graph validate graph.json           # verdict, no execution
+opencodifier mcp serve                           # six tools over stdio
+opencodifier recipe list                         # built-in graphs + fixtures</code></pre>
+
+  <h3 class="docs-h3">Subcommands</h3>
+  <div class="table-wrap">
+    <table class="pg-table api-table">
+      <caption class="visually-hidden">CLI subcommands</caption>
+      <thead><tr><th>Command</th><th>Does</th></tr></thead>
+      <tbody>
+        <tr><td><code>decide</code></td><td>decide one request and print the canonical response.
+            Flags: <code>--input</code> (file or stdin), <code>--format</code>
+            (<code>native|openai|anthropic|jev</code>), <code>--policy</code> (override JSON),
+            <code>--trace</code>, <code>--focus-budget</code>, <code>--ladder</code>,
+            <code>--llama*</code>, <code>--abstain-is-success</code>.</td></tr>
+        <tr><td><code>graph validate</code></td><td>validate a graph document against the DAG
+            contract and print a one-line verdict.</td></tr>
+        <tr><td><code>serve</code></td><td>the HTTP surface on loopback. Flags:
+            <code>--bind</code> (default <code>127.0.0.1:8177</code>),
+            <code>--allow-remote</code>, <code>--graph</code>, <code>--ladder</code>,
+            <code>--focus-budget</code>, <code>--llama*</code>.</td></tr>
+        <tr><td><code>mcp serve</code></td><td><code>codify_decide</code>,
+            <code>codify_batch</code>, <code>codify_graph</code>, <code>codify_validate</code>,
+            <code>codify_verify</code>, <code>codify_explain</code> — stdio only, so the surface
+            is local by construction.</td></tr>
+        <tr><td><code>models verify</code></td><td>check a model artifact's SHA-256 against its
+            manifest before the engine ever loads it.</td></tr>
+        <tr><td><code>ladder fit-boolean</code></td><td>fit a boolean verdict boundary from
+            <code>{"p_true","label"}</code> JSONL evidence and emit the ladder profile that
+            carries it.</td></tr>
+        <tr><td><code>recipe list / install</code></td><td>list the built-in recipe fleet, or
+            write a recipe's graph, request, and captured expected response into a directory
+            ready for <code>serve --graph</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="body-text">
+    Exit codes are a contract, printed in <code>--help</code>: <code>0</code> a decision was
+    produced, <code>1</code> input error, <code>2</code> the runtime answered but not decisively
+    (abstain, escalate, verify, no valid candidate) unless
+    <code>--abstain-is-success</code> is passed, <code>3</code> internal error. Diagnostics go
+    to stderr as <code>opencodifier: &lt;code&gt; &lt;message&gt;</code> with the same stable
+    codes the HTTP API reports — so a pipeline can branch on a refusal without parsing prose.
+  </p>
+
+  <h3 class="docs-h3">Configuration, such as it is</h3>
+  <p class="body-text">
+    There is no config file, and that is deliberate: the binary takes flags, and
+    <strong>policy lives on the request</strong> in the canonical IR — which is why the same
+    request decides the same way no matter which door it came in through.
+    <code>serve --policy</code> is accepted and <em>validated</em> for symmetry with
+    <code>decide</code>, and then reported on stderr as inapplicable, because silently ignoring
+    a flag would be a false promise. Resource limits ride the request's
+    <code>metadata.limits</code>, never above the engine's ceiling.
+  </p>
+  <p class="body-text">
+    Local-first is enforced twice, independently: the CLI refuses a non-loopback
+    <code>--bind</code> without <code>--allow-remote</code> (<code>cli.bind_requires_allow_remote</code>),
+    and the HTTP layer checks the same rule again at construction. The posture does not depend
+    on one module remembering it.
+  </p>
+
+  <h3 class="docs-h3">Observability</h3>
+  <p class="body-text">
+    Every response carries its own <code>metrics</code> and <code>trace</code>, and
+    <code>GET /v1/healthz</code> returns liveness plus the engine identity decisions are cached
+    under; <code>GET /v1/capabilities</code> reports the decision kinds, endpoints, limits, and
+    cache state this build actually has. There is no <code>/metrics</code> scrape endpoint in
+    the binary today — telemetry is per-response and per-decision, by design, and the hosted
+    tier's dashboards are built on the same fields. If you need a scrape endpoint today, run the
+    decisions through the HTTP API and aggregate the responses; the fields are already
+    structured for it.
+  </p>
+
+  <h3 class="docs-h3">Running it as a service, and in a browser</h3>
+  <p class="body-text">
+    A hardened user-level systemd unit, the <code>wasm-pack</code> build for embedding the
+    engine in your own site, and the release matrix with attestations are all on the
+    <a href="index.html#build">main page's build section</a> — same binary, same flags. The
+    short version for a service:
+  </p>
+  <pre class="pg-pre" role="img" aria-label="Minimal systemd unit"><code>[Service]
+ExecStart=%h/.local/bin/opencodifier serve
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=yes
+PrivateTmp=yes</code></pre>
+</section>
+
+<!-- ============ 9. METHODOLOGY ============ -->
+<section id="methodology" class="section">
+  <div class="kicker">Methodology</div>
+  <h2>One number per surface. Never a universal score.</h2>
+  <p class="lede">
+    Every figure this project publishes traces to a committed, deterministic run. This page
+    states the rules; <a href="benchmarks.html">the measured board</a> holds the numbers, and
+    <a href="board.csv">board.csv</a> is the raw data behind them.
+  </p>
+
+  <ul class="checks">
+    <li><strong>Per-surface, always.</strong> A JevBench split score, a locked internal-suite
+      score, and a leaderboard entry are different measurements of different things. The site
+      never averages them, and neither should you — the divergence is published, not
+      hidden.</li>
+    <li><strong>Two boards, two axes.</strong> Board A is the JevBench public split (231 items,
+      run with the authors' own harness so scoring cannot drift). Board B is a locked 120-item
+      internal suite that isolates what the field's suite does not — constraint checking,
+      paraphrase routing, relational composition. Internal context, explicitly not comparable to
+      Board A.</li>
+    <li><strong>Derived columns are labeled derived.</strong> Trust score and accuracy-per-GiB
+      are presentation-layer formulas computed in your browser with a disclosed formula. They
+      are not project measurements, and the board marks them as such.</li>
+    <li><strong>The CSV is the source of truth.</strong> The table on
+      <a href="benchmarks.html">benchmarks.html</a> is a rendering of
+      <a href="board.csv">board.csv</a>, not a separate dataset. Cite the CSV or
+      <code>docs/BENCHMARKS.md</code> — never a screenshot.</li>
+    <li><strong>Determinism is testable.</strong> Same request, same engine identity, same
+      answer — bit-identical predictions and probability vectors. Cache keys include model,
+      calibration, policy, and graph versions, so an artifact update invalidates cached
+      decisions instead of quietly re-scoring them.</li>
+    <li><strong>Claims we refuse to make stay refused.</strong> "Beats hosted Jev on accuracy"
+      is not claimed and is not true yet; "one accuracy number for every benchmark" is refused
+      on principle. The full list lives on the
+      <a href="index.html#integrity">main page</a>, and it is product, not boilerplate.</li>
+  </ul>
+  <p class="fineprint">
+    Record date for the current board: 2026-09-29, pinned by SHA-256 per model artifact in
+    <code>benchmarks/decision-model/results/models.manifest.json</code>. Method of record for
+    each board is in the repo's <code>docs/BENCHMARKS.md</code>.
+  </p>
+</section>
+
+<!-- ============ 10. FAQ ============ -->
+<section id="faq" class="section">
+  <div class="kicker">FAQ</div>
+  <h2>The questions this page exists to answer.</h2>
+  <div class="faq-list">
+    <details>
+      <summary>Is the hosted API available?</summary>
+      <p>No — it is a waitlist, planned at $1 per million decisions. Self-hosting is the product
+        and ships today: same engine, same IR, Apache-2.0, no API keys. The
+        <a href="api.html#cloud">hosted tier's terms</a> are published so you can see what is
+        planned, not what exists.</p>
+    </details>
+    <details>
+      <summary>Do I need a GPU, or any model at all?</summary>
+      <p>No. The default stack is zero-ML — rules, cache, metadata filters, lexical scoring —
+        and it is what decides most requests. Rungs 5–7 are opt-in backends: the model rung runs
+        CPU-only behind the <code>llamacpp</code> feature and its <code>--llama</code> flags, and
+        a build without the feature refuses the flag rather than ignoring it.</p>
+    </details>
+    <details>
+      <summary>Why did I get <code>outcome: "abstain"</code> instead of an answer?</summary>
+      <p>Because calibrated confidence landed under your policy's <code>abstain_below</code>, and
+        the runtime does not guess. It is a 200 response, not an error, and it is the product
+        working: a wrong answer you would have acted on is worse than a refusal you can route to
+        a human or a bigger model. Raise <code>abstain_below</code>'s neighbors or add evidence
+        to the state if you are seeing too many.</p>
+    </details>
+    <details>
+      <summary>Can it write prose, or answer free-form questions?</summary>
+      <p>No, and it refuses the attempt: free-form generation fields in an OpenAI-shaped request
+        come back as <code>schema.unsupported_generation_field</code>. Pretending to generate
+        prose is how wrappers lie. If you want prose, call a language model — and use this
+        runtime for the decision about <em>which</em> one.</p>
+    </details>
+    <details>
+      <summary>How is this different from asking an LLM and parsing the reply?</summary>
+      <p>The reply is not the product; the typed answer, the calibrated confidence, and the
+        deterministic trace are. A parsed sentence has none of those: no distribution, no
+        calibration you can audit, no replay. Most software decisions are small and repetitive —
+        routing, flagging, grading — and paying a frontier model to generate a sentence you
+        immediately parse back into an if-statement is the wrong shape.</p>
+    </details>
+    <details>
+      <summary>Can different questions in one deployment use different gates?</summary>
+      <p>Yes. <code>risk</code> on the request policy makes High and Critical verify even when
+        confident, and a ladder profile (<code>--ladder</code>) overrides gates per node id or
+        per node kind — because a relational proof and a model rung's confidence are not
+        commensurable. An empty ladder runs byte-identically to no ladder, and a non-empty one
+        re-keys the cache by its id.</p>
+    </details>
+    <details>
+      <summary>Does it work in the browser?</summary>
+      <p>Yes, for the deterministic stack: rungs 1–4 and graph mode compile to WASM, and every
+        game on the <a href="playground.html">playground</a> runs on it. Rungs 5–7 are refused
+        there with <code>engine.missing_backend</code> — a browser tab does not ship inference
+        backends, and the refusal is the honest behavior.</p>
+    </details>
+    <details>
+      <summary>Why did the CLI exit 2 when it printed an answer?</summary>
+      <p>Exit <code>2</code> is "answered, but not decisively" — abstain, escalate, verify, or no
+        valid candidate. The response is still on stdout, complete. Pass
+        <code>--abstain-is-success</code> when your pipeline treats a refusal as a fine outcome;
+        the default is the stricter posture, because pipelines that silently accept refusals
+        tend to keep them.</p>
+    </details>
+    <details>
+      <summary>Does anything leave my machine?</summary>
+      <p>Nothing. No telemetry, no accounts, no external requests from the runtime or from this
+        site's pages. The WASM playground executes entirely in your tab, and game scoreboards
+        live in tab memory only. The only data that ever leaves is the request you deliberately
+        send to the future hosted endpoint.</p>
+    </details>
+    <details>
+      <summary>Where do I report a doc that disagrees with the code?</summary>
+      <p>The GitHub tracker, please — a doc that drifts from the binary is a bug in the doc, and
+        the API page is generated against the crate sources precisely so the drift is visible.
+        Start from <a href="api.html">api.html</a> for wire behavior and this page for the
+        reasoning; if they disagree with each other, that is a bug too.</p>
+    </details>
+  </div>
+</section>
+
+</div><!-- /.docs-main -->
+</div><!-- /.docs-shell -->
+</main>
+
+<footer class="footer">
+  <div class="footer-grid">
+    <div class="foot-about">
+      <div class="foot-brand">opencodifier</div>
+      <p>This page explains the machine that <a href="api.html">api.html</a> documents. Both are
+        checked against the crate sources: where a rung needs a backend a build does not ship,
+        the page names the refusal; where a number exists, it traces to a committed run. The
+        hosted API is a waitlist — everything here runs on the binary you build yourself.</p>
+      <!-- Ecosystem-wide tag: every site in the workshop carries this. -->
+      <a class="foot-tag" href="https://github.com/TaskWizer" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="2"/><path d="M7.5 12.2l3 3L16.5 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Built with TaskWizer AI technologies
+      </a>
+    </div>
+    <nav class="foot-col" aria-label="Site">
+      <div class="foot-head">Site</div>
+      <a href="index.html">Home</a>
+      <a href="docs.html">Documentation</a>
+      <a href="benchmarks.html">The measured board</a>
+      <a href="playground.html">Playground</a>
+      <a href="decide.html">Decide</a>
+      <a href="api.html">API reference</a>
+    </nav>
+    <nav class="foot-col" aria-label="Source and data">
+      <div class="foot-head">Source &amp; data</div>
+      <a href="board.csv">board.csv (raw)</a>
+      <a href="https://github.com/aliasfoxkde/OpenCodifier" rel="noopener">GitHub</a>
+      <a href="https://huggingface.co/TaskWizerAI" rel="noopener">Hugging Face ↗</a>
+    </nav>
+    <nav class="foot-col" aria-label="Ecosystem">
+      <div class="foot-head">Ecosystem</div>
+      <a href="https://vivere-5we.pages.dev/" rel="noopener">VIVERE ↗</a>
+      <a href="https://www.amortyx.com" rel="noopener">Amortyx ↗</a>
+      <a href="https://www.mcpmanage.com" rel="noopener">MCPManage ↗</a>
+      <a href="https://github.com/aliasfoxkde/aegis" rel="noopener">Aegis ↗</a>
+      <a href="https://github.com/aliasfoxkde/GitForge" rel="noopener">GitForge ↗</a>
+    </nav>
+  </div>
+  <p class="foot-links">Apache-2.0 · local-first · no telemetry · no external requests</p>
+</footer>
+
+<script src="site-core.js"></script>
+<script src="toc.js"></script>
+<script src="sdk/decisions-sdk.js"></script>
+<script>
+/* docs.html page behaviors: sidebar filter, scrollspy, mobile toggle, and
+   one live seeded-RNG widget. No engine, no network — sdk/decisions-sdk.js
+   is the only include beyond the site chrome, and it is same-origin. */
+(function () {
+  "use strict";
+
+  /* ---- sidebar: filter + scroll to first match ---- */
+  var input = document.getElementById("docs-filter");
+  var emptyNote = document.getElementById("docs-empty");
+  var links = Array.prototype.slice.call(document.querySelectorAll("#docs-nav a"));
+  var reduceMotion = false;
+  try {
+    reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch (e) { /* matchMedia unavailable: default to instant jumps */ }
+  var timer = null;
+
+  function applyFilter() {
+    var q = input.value.trim().toLowerCase();
+    var first = null;
+    var hits = 0;
+    for (var i = 0; i < links.length; i++) {
+      var a = links[i];
+      var hit = !q || a.textContent.toLowerCase().indexOf(q) !== -1;
+      a.hidden = !hit;
+      if (hit) { hits += 1; if (!first) first = a; }
+    }
+    if (emptyNote) emptyNote.hidden = hits !== 0;
+    if (q.length >= 2 && first) {
+      var target = document.getElementById(first.getAttribute("href").slice(1));
+      if (target) {
+        target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+      }
+    }
+  }
+
+  if (input) {
+    input.addEventListener("input", function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(applyFilter, 160);
+    });
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { input.value = ""; applyFilter(); }
+    });
+  }
+
+  /* ---- scrollspy: highlight the sidebar entry for the section in view ---- */
+  var spyTargets = links.map(function (a) {
+    return { link: a, section: document.getElementById(a.getAttribute("href").slice(1)) };
+  }).filter(function (t) { return !!t.section; });
+  var ticking = false;
+  function updateSpy() {
+    var current = null;
+    for (var i = 0; i < spyTargets.length; i++) {
+      if (spyTargets[i].section.getBoundingClientRect().top <= window.innerHeight * 0.4) {
+        current = spyTargets[i];
+      }
+    }
+    for (var j = 0; j < spyTargets.length; j++) {
+      var on = spyTargets[j] === current;
+      if (spyTargets[j].link.classList.contains("on") !== on) {
+        spyTargets[j].link.classList.toggle("on", on);
+      }
+    }
+  }
+  window.addEventListener("scroll", function () {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(function () { updateSpy(); ticking = false; });
+  }, { passive: true });
+  window.addEventListener("resize", updateSpy);
+  updateSpy();
+
+  /* ---- mobile: the sidebar starts collapsed ---- */
+  var side = document.getElementById("docs-side");
+  var toggle = document.getElementById("docs-toggle");
+  if (side && toggle) {
+    toggle.addEventListener("click", function () {
+      var open = side.classList.toggle("open");
+      toggle.setAttribute("aria-expanded", String(open));
+    });
+  }
+
+  /* ---- live widget: seeded determinism, no engine ---- */
+  var seedInput = document.getElementById("docs-seed");
+  var seedBtn = document.getElementById("docs-seed-run");
+  var seedOut = document.getElementById("docs-seed-out");
+  function renderSeed() {
+    if (!seedOut) return;
+    var sdk = window.DecisionsSDK;
+    if (!sdk || typeof sdk.makeRng !== "function") {
+      seedOut.textContent = "sdk/decisions-sdk.js did not load — nothing is being simulated.";
+      return;
+    }
+    var seed = seedInput && seedInput.value ? seedInput.value : "route-42";
+    var rng = sdk.makeRng(seed);
+    var seq = [];
+    for (var i = 0; i < 6; i++) seq.push(rng().toFixed(6));
+    seedOut.textContent = "hashSeed(" + JSON.stringify(seed) + ") = " + sdk.hashSeed(seed) +
+      "  →  " + seq.join(", ");
+  }
+  if (seedBtn) seedBtn.addEventListener("click", renderSeed);
+  if (seedInput) {
+    seedInput.addEventListener("change", renderSeed);
+    seedInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") renderSeed();
+    });
+  }
+  renderSeed();
+})();
+</script>
+</body>
+</html>

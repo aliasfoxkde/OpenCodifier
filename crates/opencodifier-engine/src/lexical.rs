@@ -91,9 +91,16 @@ pub fn negation_polarity(text: &str) -> f64 {
 ///
 /// Documents are supplied once and referenced by position afterwards; the
 /// caller owns the meaning of each position (typically "candidate `i`").
+///
+/// Documents are stored as per-document term-frequency maps built once at
+/// index time: scoring probes a map instead of re-scanning every document
+/// token per query term, which was O(documents × query terms × document
+/// length) per question (B3). Map lookups only ever *read* counts — score
+/// summation still walks the query's terms in sorted term order, so
+/// scores stay bit-identical.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Bm25Index {
-    documents: Vec<Vec<String>>,
+    frequencies: Vec<std::collections::HashMap<String, usize>>,
     lengths: Vec<f64>,
     average_length: f64,
     document_frequency: std::collections::BTreeMap<String, usize>,
@@ -107,32 +114,45 @@ impl Bm25Index {
         I: IntoIterator<Item = D>,
         D: AsRef<str>,
     {
-        let documents: Vec<Vec<String>> =
-            documents.into_iter().map(|document| tokenize(document.as_ref())).collect();
+        let frequencies: Vec<std::collections::HashMap<String, usize>> = documents
+            .into_iter()
+            .map(|document| {
+                let mut counts: std::collections::HashMap<String, usize> =
+                    std::collections::HashMap::new();
+                for token in tokenize(document.as_ref()) {
+                    *counts.entry(token).or_insert(0) += 1;
+                }
+                counts
+            })
+            .collect();
+        // Document frequency is a count per term, so insertion order (map
+        // iteration order) cannot change the result; the BTreeMap keeps
+        // `document_frequency()` deterministic anyway.
         let mut document_frequency: std::collections::BTreeMap<String, usize> =
             std::collections::BTreeMap::new();
-        for document in &documents {
-            for term in document.iter().collect::<std::collections::BTreeSet<_>>() {
+        for document in &frequencies {
+            for term in document.keys() {
                 *document_frequency.entry(term.clone()).or_insert(0) += 1;
             }
         }
-        let lengths: Vec<f64> = documents.iter().map(|document| document.len() as f64).collect();
+        let lengths: Vec<f64> =
+            frequencies.iter().map(|document| document.values().sum::<usize>() as f64).collect();
         let total: f64 = lengths.iter().sum();
         let average_length =
-            if documents.is_empty() { 0.0 } else { total / documents.len() as f64 };
-        Self { documents, lengths, average_length, document_frequency }
+            if frequencies.is_empty() { 0.0 } else { total / frequencies.len() as f64 };
+        Self { frequencies, lengths, average_length, document_frequency }
     }
 
     /// Number of indexed documents.
     #[must_use]
     pub fn len(&self) -> usize {
-        self.documents.len()
+        self.frequencies.len()
     }
 
     /// `true` when nothing is indexed.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.documents.is_empty()
+        self.frequencies.is_empty()
     }
 
     /// Number of documents containing `term`.
@@ -147,26 +167,65 @@ impl Bm25Index {
     /// gap is never worth aborting a decision over.
     #[must_use]
     pub fn score(&self, query: &str, index: usize) -> f64 {
-        let Some(document) = self.documents.get(index) else { return 0.0 };
+        self.score_terms(&query_terms(query), index)
+    }
+
+    /// BM25 scores of `query` against every document, in document order.
+    ///
+    /// The query is tokenized exactly once for the whole sweep (B3) — it
+    /// was re-tokenized once per document before. Per-document work is
+    /// then frequency-map probes and one IDF evaluation per hit; the
+    /// arithmetic is identical to [`Bm25Index::score`].
+    #[must_use]
+    pub fn score_all(&self, query: &str) -> Vec<f64> {
+        let terms = query_terms(query);
+        (0..self.frequencies.len()).map(|index| self.score_terms(&terms, index)).collect()
+    }
+
+    /// Fraction of `query`'s informative (non-stop) tokens present in
+    /// document `index`'s term set — the deterministic input-likeness
+    /// signal behind [`OodMode::LexicalBand`](opencodifier_core::OodMode)
+    /// (D28).
+    ///
+    /// Repeated tokens count once; the denominator is the distinct
+    /// informative-token count. A query with *no* informative tokens has
+    /// nothing to ground it, and scores `0.0`: under the lexical-band
+    /// mode that maps to maximal OOD, so an ungroundable input escalates
+    /// rather than trusting a softmax over nothing.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
+    pub fn coverage(&self, index: usize, query: &str) -> f64 {
+        // `query_terms` runs the shared tokenizer (stop words dropped) and
+        // collapses repeats into map keys, so its keys *are* the distinct
+        // informative tokens.
+        let terms = query_terms(query);
+        if terms.is_empty() || index >= self.frequencies.len() {
+            return 0.0;
+        }
+        let document = &self.frequencies[index];
+        let hits = terms.keys().filter(|token| document.contains_key(token.as_str())).count();
+        hits as f64 / terms.len() as f64
+    }
+
+    /// Scores one document against pre-built query terms. Shared by
+    /// [`Bm25Index::score`] and [`Bm25Index::score_all`] so the two can
+    /// never drift apart arithmetically: same term order (sorted), same
+    /// operations per term, bit-identical results.
+    fn score_terms(&self, terms: &std::collections::BTreeMap<String, usize>, index: usize) -> f64 {
+        let Some(document) = self.frequencies.get(index) else { return 0.0 };
         let Some(length) = self.lengths.get(index).copied() else { return 0.0 };
         let mut total = 0.0;
-        for (term, count) in query_terms(query) {
-            let frequency = document.iter().filter(|candidate| **candidate == term).count();
+        for (term, count) in terms {
+            let frequency = document.get(term).copied().unwrap_or(0);
             if frequency == 0 {
                 continue;
             }
             // Term frequencies are small; the cast cannot lose precision.
             #[allow(clippy::cast_precision_loss)]
-            let count = count as f64;
-            total += self.term_weight(&term) * self.saturated_frequency(frequency, length) * count;
+            let count = *count as f64;
+            total += self.term_weight(term) * self.saturated_frequency(frequency, length) * count;
         }
         total
-    }
-
-    /// BM25 scores of `query` against every document, in document order.
-    #[must_use]
-    pub fn score_all(&self, query: &str) -> Vec<f64> {
-        (0..self.documents.len()).map(|index| self.score(query, index)).collect()
     }
 
     /// Inverse document frequency: `ln(1 + (N - df + 0.5) / (df + 0.5))`.
@@ -176,7 +235,7 @@ impl Bm25Index {
     /// negative score.
     #[allow(clippy::cast_precision_loss)]
     fn term_weight(&self, term: &str) -> f64 {
-        let total = self.documents.len() as f64;
+        let total = self.frequencies.len() as f64;
         let seen = self.document_frequency(term) as f64;
         (1.0 + (total - seen + 0.5) / (seen + 0.5)).ln()
     }
@@ -232,6 +291,41 @@ pub fn softmax(scores: &[f64]) -> Vec<f64> {
     exponentials.iter().map(|value| value / sum).collect()
 }
 
+/// Maximum log-odds a lexical score may certify, `ln(99)` ≈ 4.595.
+///
+/// Lexical overlap is weak evidence (PLANNING.md §45). Uncapped, a
+/// softmax over an unbounded BM25 score reaches *exactly* 1.0 in `f64`
+/// once the score passes ~37 — and that score is a term-frequency
+/// product of state length and question overlap, so it is long inputs
+/// that saturate. Measured on the `JevBench` `long_policy` items (task
+/// #115): 15 KB policy prose drove boolean and choice confidences to
+/// 1.0 and the exact-proof gate (`min_confidence: 1.0`) accepted them —
+/// wrong answers at maximum confidence, because the score measured how
+/// often the state repeats the question's terms, not whether the
+/// question is satisfied. Bounding the spread keeps every lexical
+/// distribution strictly under 1.0: term overlap can never certify
+/// better than 99:1 odds. Order-preserving, so predictions are
+/// unchanged; only confidence is bounded.
+pub const LEXICAL_LOG_ODDS_CAP: f64 = 4.595_119_850_134_59; // ln(99)
+
+/// Bounds softmax inputs so no output probability can reach 1.0.
+///
+/// Applied when the top score exceeds [`LEXICAL_LOG_ODDS_CAP`]: the top
+/// score is pulled down to the cap and every other score is compressed
+/// into `[0, cap]`, preserving order. Scores at or under the cap pass
+/// through untouched, so ordinary lexical evidence is unaffected.
+#[must_use]
+pub fn bound_lexical_spread(mut scores: Vec<f64>) -> Vec<f64> {
+    let max = scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    if !max.is_finite() || max <= LEXICAL_LOG_ODDS_CAP {
+        return scores;
+    }
+    for score in &mut scores {
+        *score = LEXICAL_LOG_ODDS_CAP - (max - *score).min(LEXICAL_LOG_ODDS_CAP);
+    }
+    scores
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -253,7 +347,7 @@ mod tests {
     fn drops_stop_words_and_overlong_tokens() {
         assert_eq!(tokenize("the and of"), Vec::<String>::new());
         let overlong = "x".repeat(MAX_TOKEN_LEN + 1);
-        assert!(tokenize(&overlong).is_empty());
+        assert_eq!(tokenize(&overlong), Vec::<String>::new());
         assert_eq!(tokenize("not").len(), 1, "negators must survive tokenization");
     }
 
@@ -301,6 +395,34 @@ mod tests {
     }
 
     #[test]
+    fn single_document_scores_match_the_score_all_sweep() {
+        // `score` and `score_all` share one arithmetic path (B3); this pins
+        // the contract in case the two are ever split again.
+        let index = Bm25Index::new([
+            "general coding and reasoning across languages",
+            "coding coding coding under deadlines",
+            "long context research summarization",
+        ]);
+        for query in ["coding reasoning", "coding", "summarization deadlines alpha"] {
+            let swept = index.score_all(query);
+            for (position, score) in swept.iter().enumerate() {
+                assert_eq!(index.score(query, position), *score);
+            }
+        }
+    }
+
+    #[test]
+    fn repeated_terms_count_through_the_frequency_map() {
+        // A document mentioning a term twice must score higher than one
+        // mentioning it once, with the frequency coming from the index-time
+        // map rather than a rescan.
+        let index = Bm25Index::new(["coding", "coding coding"]);
+        let scores = index.score_all("coding");
+        assert!(scores[1] > scores[0], "term frequency must matter");
+        assert_eq!(index.document_frequency("coding"), 2);
+    }
+
+    #[test]
     fn bm25_handles_empty_and_out_of_range_documents() {
         let empty = Bm25Index::new(Vec::<&str>::new());
         assert!(empty.is_empty());
@@ -342,7 +464,7 @@ mod tests {
         // resolves numerically rather than degrading.
         let garbage = softmax(&[f64::NAN, 1.0]);
         assert!(garbage.iter().all(|value| (value - 0.5).abs() < 1e-12));
-        assert!(softmax(&[]).is_empty());
+        assert_eq!(softmax(&[]), Vec::<f64>::new());
     }
 
     #[test]
@@ -356,6 +478,54 @@ mod tests {
         assert!(negative_infinite.iter().all(|value| (value - 0.5).abs() < 1e-12));
         let all_nan = softmax(&[f64::NAN, f64::NAN, f64::NAN]);
         assert!(all_nan.iter().all(|value| (value - 1.0 / 3.0).abs() < 1e-12));
+    }
+
+    #[test]
+    fn bound_passes_through_scores_under_the_cap() {
+        let scores = vec![1.5, 0.25, -2.0];
+        assert_eq!(bound_lexical_spread(scores.clone()), scores);
+        // Exactly at the cap is still untouched: the bound exists to stop
+        // saturation, not to rewrite ordinary evidence.
+        let at_cap = vec![LEXICAL_LOG_ODDS_CAP, 0.0];
+        assert_eq!(bound_lexical_spread(at_cap.clone()), at_cap);
+    }
+
+    #[test]
+    fn bound_caps_the_top_and_floors_the_rest() {
+        let bound = bound_lexical_spread(vec![100.0, 95.0, 3.0, 0.0]);
+        // Top pinned to the cap; anything more than the cap below the max
+        // floors at zero and ties. The winner keeps its strict lead.
+        assert_eq!(bound[0], LEXICAL_LOG_ODDS_CAP);
+        assert_eq!(&bound[1..], &[0.0, 0.0, 0.0]);
+        assert!(bound[0] > bound[1]);
+        // And the softmaxed distribution can no longer certify 1.0.
+        let probabilities = softmax(&bound);
+        assert!(probabilities.iter().all(|p| *p < 1.0));
+        assert!(probabilities[0] <= 0.99);
+    }
+
+    #[test]
+    fn bound_preserves_order_within_the_cap_window() {
+        // Scores less than the cap below the max keep their exact gaps,
+        // so argmax and ordering among contenders are unchanged (D35:
+        // predictions are identical; only confidence is bounded).
+        let bound = bound_lexical_spread(vec![100.0, 99.5, 99.0]);
+        assert_eq!(bound[0], LEXICAL_LOG_ODDS_CAP);
+        assert!(bound[1] > bound[2]);
+        assert!((bound[1] - (LEXICAL_LOG_ODDS_CAP - 0.5)).abs() < 1e-12);
+        assert!((bound[2] - (LEXICAL_LOG_ODDS_CAP - 1.0)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn bound_passes_through_when_no_value_is_orderable() {
+        // Same contract as `softmax`: no finite reference point, so the
+        // input passes through and softmax degrades to uniform instead of
+        // inventing a preference.
+        let garbage = bound_lexical_spread(vec![f64::NAN, 1.0]);
+        assert!(garbage[0].is_nan());
+        assert_eq!(garbage[1], 1.0);
+        let infinite = vec![f64::INFINITY, 1.0];
+        assert_eq!(bound_lexical_spread(infinite.clone()), infinite);
     }
 
     #[test]
@@ -377,5 +547,36 @@ mod tests {
         // With an average to normalize against the same hit scores lower.
         let normalized = Bm25Index::new(["coding coding coding", "coding"]);
         assert!(normalized.saturated_frequency(2, 3.0) < index.saturated_frequency(2, 0.0));
+    }
+
+    #[test]
+    fn coverage_measures_distinct_informative_token_hits() {
+        // "coding reasoning" has two informative tokens; the first document
+        // contains both, the second neither.
+        let index = Bm25Index::new(["coding and reasoning", "vision understanding"]);
+        assert!((index.coverage(0, "coding reasoning") - 1.0).abs() < 1e-12);
+        assert!((index.coverage(1, "coding reasoning") - 0.0).abs() < 1e-12);
+        // Stop words never count in either direction.
+        assert!((index.coverage(0, "the and of") - 0.0).abs() < 1e-12);
+        assert!((index.coverage(0, "coding the and reasoning") - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn coverage_counts_repeated_tokens_once() {
+        let index = Bm25Index::new(["coding"]);
+        // One distinct token ("coding") whichever way it repeats.
+        assert!((index.coverage(0, "coding coding coding") - 1.0).abs() < 1e-12);
+        assert!((index.coverage(0, "coding vision coding") - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn coverage_degrades_to_zero_without_groundable_input() {
+        let index = Bm25Index::new(["coding"]);
+        // Out-of-range document: no ground, maximal unlikeness.
+        assert!((index.coverage(7, "coding") - 0.0).abs() < 1e-12);
+        // A query of only stop words tokenizes to nothing: the doc comment
+        // pins that as 0.0 (maximal OOD under the lexical band).
+        assert!((index.coverage(0, "the and of") - 0.0).abs() < 1e-12);
+        assert!((index.coverage(0, "") - 0.0).abs() < 1e-12);
     }
 }

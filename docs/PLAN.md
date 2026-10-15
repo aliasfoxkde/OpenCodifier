@@ -57,6 +57,14 @@ Remaining risks tracked in §6 below.
 | 14 | Confidence truthfulness: D15 calibration + §19 gates | **done** (2026-09-28) — `Calibration` trait + fitted temperature artifacts for the tier arms; the dead OOD channel is live and policy-gated |
 | 15 | §43 relational solver: exact proofs over extracted facts | **done** (2026-09-28) — `facts` + `relational` in the engine, default zero-ML stack; engine arm 0.483 → 0.683 @ 1.3 ms, relational 0.950 (D16 ×8) |
 | 16 | §45 focused-question extraction + reverse escalation | **done** (2026-09-28) — `focus` in the engine, `--focus-budget` on the CLI; long-suite A/B answer-identical on 120/120, views p50 93 tokens (D18) |
+| 17 | External anchor: JevBench public split | **done** (2026-10-04) — engine+bridge+vtx over the benchmark's own harness; `docs/BENCHMARKS.md` is the comparison page of record |
+| 18 | Hardening pass | **done** (2026-10-02) — coverage floor 98.5 in CI, §-items closed, D19–D28 |
+| 19 | Adoption + integration documentation | **done** (2026-10-04) — `docs/INTEGRATIONS.md` + D30/D31 + 19e Amortyx E2E |
+| 20 | Coverage restoration: the escalation core | **done** (2026-10-08) — 20a ratchet done (D36); 2026-10-07 census re-based on the pinned image (**98.03 % in-image DA**, 350-line residual; the 980-line "executor debt" was a local-mapping artifact), floor 89.0 → 97.5, COVERAGE.md regenerated, 20h done; 20g tranches 1–3 done 2026-10-08 (cli ladder shell → itemgen probe/guard arms + UTF-8 boundary → macjev fall-through): **98.39 %** (18 187 / 18 485), residual 298, every line in a named infeasible class — unit-reachable pool exhausted, D36 ratchet retired at the reachable ceiling, floor rests at 97.5 fixed |
+| 21 | Site WCAG 2.1 AAA + progressive enhancement | **opened** (2026-10-06) — audit + fixes landed; deploy + X/Discord pending |
+| 22 | Docs freshness sweep | **opened** (2026-10-06) |
+| 23 | v0.5.0 release cut | **done** (2026-10-08) — tag `v0.5.0` → `0fd6a154`, 9-leg matrix rebuilt single-tree with one consistent attestation set; releases on GitForge + GitHub (19 assets, 69.4 MB) |
+| 24 | RESEARCH §15.6 enhancement program | **in progress** (2026-10-07) — items 1–4, 8–10 + §15.8 fold-ins done (ledger: RESEARCH §15.6.1); items 5/6 sized, model-rung options, deferred per the §15.6 note |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
@@ -437,6 +445,17 @@ with measurement, not opinion.
   `[0, 43)`, prism-ml-fork-only (REPORT F19). On-CPU ternary viability
   in this build is 4B-and-below; backlog #35 (Vulkan A/B) now owns the
   whole ternary ladder.
+  **Scope decision (2026-10-05, operator): the Bonsai arm is dropped
+  from campaign scope, future-scope under #35.** r20b bounded the
+  question instead of running the arm: the PTQ1_0 27B loads on the
+  PrismML fork and answers the probed suite item correctly at p≈0.995
+  (retention-consistent with the vendor's 98.2 % claim, one item), at
+  73.8 s/readout on 12 P-cores — accuracy-plausible but
+  speed-nonviable on CPU even if the full arm confirmed the claim
+  (~10 h of readouts here); only a Vulkan/GPU rung makes the class
+  worth measuring, so #35 stays its sole owner. The AtomicChat
+  abliterate LoRA is unmeasurable on the fork build (`--lora` rejected
+  at parse) — re-evaluate only if #35 reopens the fork.
 
 - **Extension 6 (2026-09-28, embedding-rung bake-off — 47 runs).**
   Backlog #37 executed: the ONNX CPU-speed question answered with a
@@ -571,7 +590,7 @@ answers before it scores them:
   candidate set, and agreed by every operator; anything else delegates
   to the inner classifier untouched. No question-text keywords: the
   facts decide what fires. `model_id` composes
-  (`relational-v1|builtin-lexical-v1`).
+  (`relational-v1|builtin-lexical-v2`).
 - **Cache-key honesty (D6/§64).** `DecisionEngine::new` now derives
   `identity.model_id` from the live classifier's `model_id()`, so a
   wrapped or swapped classifier changes keys without caller
@@ -731,7 +750,7 @@ focused decision is weak.
   CI-exact 1.90)/test/doc/deny green; generator + suite + REPORT
   recorded in the benchmark.
 
-## Phase 17 — external anchor: JevBench public split (engine + bridge done)
+## Phase 17 — external anchor: JevBench public split (engine + bridge + vtx done)
 
 Every REPORT.md number so far is internal (our suite, our seeds). Phase 17
 measures OpenCodifier on a third-party suite with published rows for
@@ -754,8 +773,9 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
 - **Arms.** engine (default deterministic stack over `/v1/decide`;
   abstain → incorrect, winner-only → label-only — never an invented
   tail), fork_4b (tree mode, label-only per D15), jev_native (native
-  probs). `runner/run_jevbench.py`, wire facts smoke-verified and
-  recorded in JEVBENCH.md.
+  probs), vtx (VTX-JEV-3 through its vendor `JevClient` with the
+  jev_native rendering). `runner/run_jevbench.py`, wire facts
+  smoke-verified and recorded in JEVBENCH.md.
 - **Sub-steps.** (1) ✅ engine arm complete run — 231/231 in one
   `run_all`, accuracy **0.3766** (macro 0.4011, chance 0.3176), ECE
   0.402, Brier 0.890, client-wall p50 **2.0 ms**; replay determinism
@@ -775,10 +795,92 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   results table. (5) optional: the fork-side full-distribution patch
   (D15) upgrades the fork arm from label-only to native Brier/ECE
   (patch written both sides, inert until fork rebuild).
+  (6) ✅ static-embedding survey arm (vtx) — VTX-JEV-3 (Model2Vec-class
+  255,753×256 table, 20.5 MB 2-bit LF2, position-gated pooler in the
+  vendor `inference.py` client) on the public 231: accuracy **0.4113**
+  (macro 0.4318), ECE 0.126, Brier 0.684, p50 **7.9 ms**, replay
+  determinism 231/231, native probabilities only; 3.5 pp above the
+  engine, ~23 pp below the 0.8B bridge, ~45 pp below the JEV-27B
+  anchor — a data point the field lacked, not a new tier (D16
+  unchanged). Suite counterpart rows `run_vtx.py`: LF2 0.242, FP32
+  0.317 (quantization costs 7.5 pp); archived `runs/jevbench/vtx-v1`.
+  (7) ✅ fusion study (post-hoc ladder over measured rows,
+  `runner/fusion_study.py` + `results/fusion-*.md`): suite
+  engine→gte→Qwen3.5-2B blend **0.867 @ 753 ms** vs 0.725 best single
+  (F23; relational 0.88, oracle 0.975, blended ECE 0.127 → per-rung D15
+  calibration is the follow-up); JevBench engine+vtx 0.455 (+4.4 pp over
+  vtx-only) but engine+bridge **0.632 < 0.6494 bridge-only** — the
+  engine's out-of-domain ECE 0.402 poisons the gate (F24; the study's
+  single-arm ECE line was recomputed 2026-10-02). Live-ladder
+  **wiring landed (2026-09-30, D25)**: `LadderPolicy` per-node/per-kind
+  gate overrides resolved at the existing confidence gate
+  (`opencodifier-engine/src/ladder.rs`), identity-decorated cache keys,
+  byte-identical when empty; thresholds become config once per-domain
+  calibration exists (opt-in ship posture). **Model rung wired
+  (2026-10-05, D26/D27)**: `LlamaDecisionClassifier`
+  (`opencodifier-model`, `llamacpp` feature — ureq loopback client over
+  the fork's `POST /v1/decision`, Rust-side softmax, no synthesized
+  probability) + cross-rung escalation tail (`with_rungs`, fired only
+  by the gate, `|rungs-v1@…` cache re-key) + CLI surfacing
+  (`--llama/--llama-model-id/--llama-timeout-ms` on `decide`, `serve`,
+  `mcp serve`; `runtime::handle` assembles lexical-primary +
+  model-rung; `ladders/README.md` "The model rung"; default build
+  stays dependency-identical and refuses `--llama` with
+  `cli.model_rung_unavailable`). **D26 acceptance MET (2026-10-05,
+  live run)**: locked suite through `opencodifier serve --ladder
+  ladders/fusion-v1.json --llama …` against the pd-fork `38de7eb`
+  `llama-server` — blended **0.842 ≥ 0.80** at **117.2 ms mean ≤ 1 s**
+  (p50 0.54 ms; 37/120 items escalate; replay bit-exact; board row
+  `engine__rung-qate2b-q4_0-fusion.json`, BENCHMARKS.md footnote ¹⁴).
+  **F28 gate refit landed (2026-10-05)**: contract-faithful tree
+  collection (`runner/collect_tree.py`) showed the model rung alone at
+  **0.758** under the engine's served shape (letters-era 0.808 does not
+  transfer); the offline sweep (`runner/tree_margin_refit.py`) found
+  the margin axis flat on lexical confidences — shipped
+  `ladders/fusion-v2.json` (accept at confidence ≥ 0.56, margin 0.0) —
+  engine-validated at **0.933 @ 259.8 ms** mean (56/120 escalations,
+  replay bit-exact, in-sample; held-out estimate ~0.90), board row
+  `engine__rung-qate2b-q4_0-fusion-v2.json`, footnote ¹⁵; run JSONs now
+  stamp `config.host` provenance. **F29 held-out validation (2026-10-05,
+  `suite_holdout.json` v3, 120 disjoint items)**: fusion-v2 **0.892** vs
+  fusion-v1 **0.800** under the identical stack and host — the refit
+  advantage transfers out-of-sample undiminished (+9.2 pp vs +9.1
+  in-sample) and the honest discount from the in-sample 0.933 lands
+  inside the predicted ~0.90 band; the holdout's own optimum gate
+  plateau is **0.56–0.59**, containing the shipped 0.56 with zero drift
+  (margin axis flat on holdout too); lexical-only fell to 0.700 once
+  the audit-hardened class B lost its keyword hooks — a genuine
+  transfer test. **F30 integrity audit (same day)**:
+  `runner/audit_suite.py` re-derives every class-A/C answer from its
+  own context (80/80 exact on both suites), enforces class-B
+  structural validity + a keyword-leak test, checks main/holdout
+  disjointness, byte-lock, and stdlib-only provenance; one v1 leak
+  disclosed (frozen suite), six holdout leaks reworded before any F29
+  measurement, cross-suite id collision fixed (`h*` namespacing).
+  Board rows `engine__holdout-*`, REPORT.md F29/F30 entries,
+  BENCHMARKS.md held-out section.
+  The embedding rung's margin
+  gate is measured (`results/embed-margin-study.md`: margin ≥ 0.0183 →
+  coverage 0.208 at acc 0.880, monotone to 1.000 at 0.0283), closing
+  CALIBRATION finding 3. (8) ✅ resource accounting: `runner/resources.py`
+  `/proc` monitor in every runner (peak RSS / CPU-s / IO / wall per arm
+  into run JSONs + summary.md peak-RSS column). (9) ✅ adapter-training
+  research record `docs/TRAINING.md` (E0–E3 experiment ladder; first
+  0.8 B decision-head/LoRA run ≈ 1–2 CPU-days on this host). (10) ✅
+  ONNX runtime arm (`runner/run_onnx.py`): the optimum q4 export of
+  Qwen3.5-2B driven by onnxruntime with the fork's tree scoring ported
+  exactly (greedy parity validated at the probe stage) — acc **0.658** /
+  ECE 0.064 vs 0.725 for llama.cpp on the *same weights*, prefill-bound
+  ≥9× slower, 2.6× the peak RSS (F25; the run carries a host-contention
+  caveat that cannot move the verdict — accuracy and determinism are
+  load-independent). Ladder unchanged; ONNX stays the portability
+  story.
 - **Accept (partial):** engine arm: zero synthesized probabilities ✅,
   replay determinism ✅, all 231 in one run ✅. Bridge reproduction ✅
   (+0.9 pp), bridge schema discipline ✅, bridge determinism ✅,
-  REPORT/JEVBENCH sections ✅. fork_4b arm pending quiet host.
+  REPORT/JEVBENCH sections ✅, vtx survey arm ✅ (native probs,
+  deterministic, documented in `docs/BENCHMARKS.md`). fork_4b arm
+  pending quiet host.
 
 ## Phase 18 — hardening pass (coverage, lints, e2e, remaining §-items)
 
@@ -898,12 +1000,35 @@ in between. Ordered so each step's output feeds the next.
   (all 15 committed graphs decide identically optimized vs not); HTTP
   identity JSONs carry `embedding_model` additively.
 - **18i — Measurement-queue completion (storm-gated; runs in quiet
-  windows).** #32 params A/B (attempt 3 driver waiting), #25 our-suite
-  native verdict-slot run, fork rebuild on `d15-full-distribution` + D15
-  refit, fork_4b JevBench arm (upgraded to native Brier/ECE by the fork
-  patch), #35 Vulkan APU arm, #42 vision probe. Accept: each lands in
-  REPORT.md with its honesty rules; the queue is ordered by information
-  value (bridge > params > native > fork > vision > Vulkan).
+  windows).** Landing in order of information value: bridge ✓
+  (0.6494), **native verdict-slot ✓ (0.8083, F26 — #25 closed)**,
+  **margin gate study ✓ (CALIBRATION 3 closed)**, **d15 exact refit ✓
+  (T 0.8426 → 0.9317 exact-fit artifact shipped)**, **Vulkan APU ✓
+  (0.725 @ 2.23× the CPU leg's speed, 1/43rd the host CPU-seconds —
+  REPORT Device A/B)**, **vision probe ✓ (#42: LFM2.5-VL-450M answers
+  a rendered decision context identically to text, 0.33 s vs 1.42 s —
+  capability gate passed)**, **#62 cross-builds ✓ (4/4 linked
+  2026-10-01, D24 status)**. Storm-recovery chain (2026-10-01, REPORT):
+  the storm-killed #32 arms are re-driven under gate policy v2 —
+  **t16 ✓**
+  (every metric float-identical to the surviving t08 arm; its latency
+  row is load-confounded and not of record), fork_4b's recovery arm
+  rc=1 on a driver dataset path (re-queued via follower with corrected
+  paths), diet100–ctx16k still in flight (days at storm pace — the
+  driver's own header). Accept: each lands in REPORT.md with its
+  honesty rules. **Relocated (2026-10-02, operator decision): the
+  remaining queue no longer runs on this box** — it is
+  infrastructure-only from here on (services/CI/storage; its load
+  floor ~17–31 makes quiet windows unreachable). The in-flight params
+  long arm (~9 h banked) was killed and the whole measurement payload
+  moved to the Fedora compute node (i5-13600K, idle by role;
+  `fedora:~/oc-model-eval`, driver script `fedora_queue.sh`): builds
+  (pre-d15 `ad129b0` + d15 `38de7eb`), a 3-item toolchain smoke
+  (passed, python 3.14), then fork_4b-fedora baseline re-run
+  (same-host anchor + cross-host determinism vs fork_4b-v1), the
+  instruction A/B (#76), the d15 arm (#61), and the long-arm re-run
+  (#32) whose result becomes the clean latency of record. Local
+  partials: `fork_4b-instr-decide-v1-local-aborted` (55/231).
 - **18j — Distribution + WASM (§57, §58, §68).** Own phases after the
   core is hard: cross-platform release matrix, Homebrew/winget/crates.io;
   `opencodifier-wasm` with the §68 security posture. Accept: per §58/§57
@@ -924,13 +1049,52 @@ in between. Ordered so each step's output feeds the next.
   missing-backend refusal; NOT part of `just ci`), 7 host tests incl.
   a manifest scan asserting no tokio/axum/reqwest/ort/libloading/dlopen,
   §68 posture structural. Browser demo rides §58.
-- **18j (§58 remainder) — matrix recorded (D24), builds storm-gated.**
-  windows-x86_64-gnu: the full workspace compiles clean (measured 2026-
-  09-29); linux-aarch64 (cargo-zigbuild) and darwin x86_64/aarch64
-  staged pending quiet-window link+smoke; macOS artifacts state the
+- **18j (§58 remainder) — builds recorded (D24 status 2026-10-02).**
+  All five targets verified at their named level: linux-x86_64
+  run-tested + e2e (platform of record), windows-x86_64-gnu **linked
+  2026-10-02** (`opencodifier.exe` PE32+ console x86-64 +
+  `opencodifier_wasm.dll` cdylib, zero warnings, 2m44s at -j4 beside
+  the measurement chain; smoke is structurally out of scope on this
+  host — no wine, no Windows machine), and the overnight cross-build
+  linked the remaining four —
+  aarch64-linux-gnu, aarch64-linux-musl (static), aarch64-darwin,
+  x86_64-darwin — at link + `file`-magic level (no foreign-arch
+  execution claimed; no qemu, no macOS host). macOS artifacts state the
   no-run/no-signing caveat in release notes. Registry publication
   (crates.io/Homebrew/winget) is an outward action awaiting explicit
   user go — never automatic.
+- **18j (§58) — the release path is a recipe, not a remembered sequence
+  (2026-10-05).** Three pieces, all locally exercised end to end at
+  v0.4.0 (commit 55b5029e6c1a): a **build matrix** (`just
+  release-preflight` / `release-build <target>` / `release-matrix`) over
+  `x86_64-unknown-linux-gnu` (host `cc`), `x86_64-unknown-linux-musl`
+  (`cc` + `musl-gcc`, produces `static-pie linked` — the linkage claim
+  in the attestation is checked, not assumed), and
+  `aarch64-unknown-linux-gnu` (`cargo-zigbuild` + `zig`); a target whose
+  toolchain is absent fails naming the missing tool (validated by
+  stripping each one out of `PATH` — rustc, cargo, `cc`, `musl-gcc`,
+  `zig`) and the matrix never narrows silently; builds are `--locked`,
+  staged to `dist/v<version>-<target>/` (gitignored), and attested. An
+  **attestation generator** (`scripts/generate_attestation.py`, schema
+  `opencodifier.attestation/1`): sha256 + bytes + target + `file` magic
+  + git commit + tree state + rustc/cargo + `Cargo.lock` sha256 +
+  workspace-tree sha256 + feature flags + build command + UTC timestamp,
+  fixed key order re-checked after serialization, every digest computed
+  from two agreeing reads, the declared triple cross-checked against the
+  artifact's magic, and a written attestation re-verified against its
+  artifact before PASS (`--check` is the consumer half; validated by
+  tamper, wrong-triple, dynamic-claimed-as-musl, and outside-repo
+  refusals). **Release notes** render from the attestations
+  (`just release-notes` over `docs/RELEASE_NOTES_TEMPLATE.md`) —
+  digests, provenance, and reproduction commands are quoted from the
+  attestation, never hand-copied, and the slots a script cannot measure
+  (highlights, gate receipts, per-artifact verification level) stay
+  explicitly human. Measured this session: all three targets built and
+  attested (musl static-pie 6,772,912 B; gnu 6,683,704 B; aarch64
+  4,597,968 B), `just release-verify` 3/3 PASS, and the staged host
+  artifact passed the full e2e suite 30/30. Still open per D24: the
+  cross lanes stay link + `file`-magic only (no qemu, no macOS host),
+  and registry publication waits for an explicit user go.
 - **Coverage close-out — DONE (2026-09-29).** The 18b gap table driven
   to its floor: 203 → 125 `DA`-missed lines by twelve tests across six
   crates (wasm public-boundary success paths, registry decode-refusal
@@ -957,16 +1121,539 @@ fills quiet windows throughout. 18j last. WGCA/web-standards: no web
 frontend exists — the clause maps to 18d's HTTP contract suite and the
 API reference; noted here so it is not silently dropped.
 
-## Spec coverage map (audit, 2026-09-28)
+## Phase 19 — adoption + integration documentation (opened 2026-10-02)
+
+User directive (2026-10-02): "add docs and clear instructions on how to
+integrate with various coding tools, harnesses, and so on that people
+use … build out solid integration, usage documentation … for ease of
+adoption" — with the D29 constraint that first-party integrations
+(Amortyx et al.) are worked examples over public surfaces, never a
+privileged stack.
+
+- **Doc of record: `docs/INTEGRATIONS.md`.** One entry point for every
+  integration path, with the honesty rule that every documented
+  endpoint, flag, and tool name is verified against the shipped tree
+  (the same discipline SPEC_COVERAGE applies to §-items). Covers: the
+  HTTP surface (native `/v1/*`), the six `codify_*` MCP tools with
+  client registration, the CLI (`--format native|openai|anthropic|jev`),
+  Rust library consumption under the dependency-layering rules, the
+  WASM zero-ML runtime (D23), CI decision-gate patterns (GitForge
+  pipeline of record), and first-party integrations as examples
+  (Amortyx → `docs/INTEGRATION_AMORTYX.md`).
+- **19a — wire-format selection over HTTP (gap, code). — DONE
+  (2026-10-02, D30).** The `x-opencodifier-format` request header
+  (`native` default | `openai` | `anthropic` | `jev`) on
+  `/v1/decide`, `/v1/batch`, `/v1/validate`; decode and response
+  projection symmetric per request, native error envelope everywhere,
+  unknown names refused `schema.invalid_value`, absent header
+  byte-identical to pre-D30 behavior, cache identity unchanged
+  (keyed post-decode). Recorded as D30; route-level round-trip,
+  unknown-format, batch, and validate tests in `routes.rs`.
+- **19b — Jev-ecosystem callers. — DECIDED (2026-10-02, D31): no
+  dedicated route.** The `/v1/systemone` convention is NOT an
+  OpenCodifier route and stays unclaimed. D30's
+  `x-opencodifier-format: jev` header carries the whole capability
+  (same adapter, same cache identity); a route would be a pure alias
+  with zero new capability, and promoting a Jev convention to a
+  top-level route would invert the identity doctrine (Jev
+  compatibility is one adapter mode, not the product's shape).
+  Revisit condition recorded in D31: a named consumer that cannot set
+  a request header.
+- **19c — quickstart + copy-paste examples. — DONE (2026-10-02).**
+  The §2.3 quickstart now works as printed (core: `state.facts`,
+  `policy`, `metadata` are optional on the wire, defaulted; a
+  hand-written minimal payload never invents housekeeping fields) and
+  is pinned by `the_documented_quickstart_round_trips_verbatim` in
+  `tests/http_e2e.rs` — the test pastes the doc's exact JSON. The §2.4
+  format-header curl is pinned over the wire too
+  (`the_format_header_selects_the_adapter_over_the_wire`: openai
+  projection + unknown-value refusal). Doc fixes found by writing the
+  test: the payload's `state` is `{"text": …}` not a bare string, the
+  question discriminator is `type` not `kind`, the error-envelope
+  example now names a real code (`schema.invalid_value` — the old
+  example's `schema.unknown_field` never existed), and the outcome
+  list names all six IR outcomes. Choice/Boolean/Score example
+  requests, MCP registration snippets, and the abstention envelope
+  were already exercised by the `http_e2e` suite (choice round-trip,
+  `policy_with_high_threshold_abstains_with_a_200`, score levels,
+  batch per-item errors).
+- **19d — publish path (blocked on user go, unchanged).** crates.io /
+  Homebrew / winget / §58 publication remain explicitly
+  user-gated (§58 note below); this phase only prepares the docs
+  those channels need.
+- **19e — Amortyx live integration E2E (task #86). — DONE
+  (2026-10-04).** V1 chat surface validated end-to-end through the
+  deployed router on this host. Two fixes landed to make the path
+  work: Amortyx `38daffa9` (`feat/forward-client-response-format`)
+  forwards the client's `response_format` to the provider wire
+  (released routers drop it at three ingress layers, so every
+  strict-schema decision request died as a 502-relayed
+  `schema.unsupported_generation_field`), and the OC chat envelope
+  now carries an honest zeroed `usage` object (OpenAI-shaped clients
+  decode it unconditionally; pinned in `http_e2e`). Validation:
+  dual-arm parity (content identical direct vs router, 5/5 fresh
+  bodies), 12-way burst (12/12, single distinct content),
+  abstention pass-through, and the full breaker lifecycle with
+  unique bodies (5 failures → open → 30 s → half-open → 3 successes
+  → closed; provider restart does not reset it). Full record +
+  findings F-1..F-4 in `docs/INTEGRATION_AMORTYX.md` §13. Both code
+  gaps found by the validation were fixed, deployed, and re-verified
+  the same day: request-side `response_format` ingress (Amortyx
+  `38daffa9`) and response-side extension passthrough (`d182a126` —
+  through-router responses now carry
+  `opencodifier: {outcome, calibrated_confidence}`). F-3 (exact-match
+  cache serves 200s during outages — vary bodies in drills) and F-4
+  (doc drift, fixed) recorded; F-2 (intermittent silent 404s during
+  restart churn, proven not-the-router) remains open as
+  environmental.
+
+Acceptance: every INTEGRATIONS.md claim mechanically checkable (route
+exists in `routes.rs`, tool registered in `opencodifier-mcp`, flag in
+`args.rs`); no aspirational endpoint anywhere; D29 respected in every
+example.
+
+## Phase 20 — coverage restoration: the escalation core (opened 2026-10-06)
+
+The 2026-10-04 audit found workspace line coverage at 79.25% while the
+CI floor is 98.5 — an apparent contradiction with 206 engine unit tests
+plus every integration suite passing. Before writing a single test, the
+two rival explanations (real test debt vs. measurement artifact on this
+host) were separated by experiment:
+
+- **Discriminator**: a throwaway worktree at the 2026-09-29 coverage
+  baseline commit (bfd6488), measured with this host's exact toolchain:
+  **98.13% lines / 97.90% functions / 98.26% regions** — matching
+  `docs/COVERAGE.md`'s recorded baseline. The measurement environment is
+  exonerated.
+- **Verdict: the debt is real.** The B5/B6/Kai/Julia expansion added
+  8,404 lines after the baseline (`git diff --stat bfd6488..HEAD`);
+  current measurements: workspace **89.28% on the lcov `DA` basis**
+  (14,507/16,249 — the lane's own basis, measured 2026-10-06) and
+  **79.25% lines** on the text basis (3,955/19,061 missed), 77.41%
+  functions, 80.59% regions; engine crate **70.06%** (2,558/8,545);
+  model crate 90.20% (256/2,611). Zero ignored tests — this is absent
+  tests, not skipped ones.
+- **Concentration**: executor.rs 980 missed lines (49.95%), ladder.rs
+  424 (42.47%), classifier.rs 294 (59.00%), engine.rs 251 (52.19%),
+  narrowing.rs 184 (50.54%), lexical.rs 169 (64.79%), handle.rs 155
+  (53.73%) — precisely the escalation surfaces B5/B6 grew. The mature
+  paths never regressed: rules.rs 99.82%, relational.rs 98.95%,
+  cache.rs 98.14%, rerank.rs 96.80%.
+- **Live consequence**: the GitForge coverage lane (`--floor 98.5`) has
+  been red since the expansion landed (e.g. run d1ab46f7 on ab2b3a4).
+  The failure was invisible in practice: GitForge's jobs-level API
+  returns `[]` for finished runs, so there is no job-level truth to
+  read, and the GitHub mirror is not a failure signal by policy.
+
+- **20a — floor policy (DECISIONS.md D36). — DONE (2026-10-06).**
+  Floor ratcheted 98.5 → **89.0** (measured DA basis 89.28%) in the
+  `.gitforge.yml` coverage lane; the lane is green again and further
+  decay is structurally impossible — the floor rises with each landed
+  tranche back to 98.5. Rationale (D36): a permanently-red lane makes
+  every future red dismissible; a green ratchet converts coverage into
+  a monotonic ledger. Rejected alternative: closing ~2.5k lines of
+  core tests before anything else, which leaves the lane red for weeks
+  and blocks every other signal.
+- **2026-10-07 census — the basis moved under Phase 20.** Measured
+  inside the pinned image (`opencodifier-ci-rust:2`, rustc 1.90.0),
+  twice (warm + cold target dir, identical to the line): workspace
+  **98.03 % on the lane's own `DA` basis (17,433/17,783; 350 lines
+  never executed)**. The local rustc 1.99.0 emits a finer-grained
+  mapping on the same tree — 1,512 extra never-hit records, 8.35
+  points lower — and that local mapping produced every number in the
+  preamble above: executor.rs is 36/973 `DA`-missed in-image (96.30 %),
+  not 980 lines dark. The expansion-era "escalation core debt" was
+  substantially a measurement artifact; the genuine residual is 350
+  lines, classified into six groups in the regenerated
+  `docs/COVERAGE.md`. En route the census found the tree had silently
+  stopped compiling under the pinned 1.90 (`itemgen/sample.rs`
+  `rng.pick` inference break — fixed; no local gate watches the pinned
+  toolchain). Floor ratcheted 89.0 → **97.5**. All tranche targets
+  below are re-based on the in-image residual.
+- **20b — executor.rs tranche** (36 in-image missed): escalation-walk
+  guards precluded by construction and deadline/cancellation arms.
+  Reachable fraction first; construction-precluded arms document
+  their guards.
+- **20c — itemgen crate tranche** (81 in-image missed, the largest
+  crate residual) — **DONE (2026-10-08).** Two new test files close
+  the reachable fraction: `tests/sample_arms.rs` drives the sampler's
+  public decision points with hand-built `Sampled` values —
+  `corrupt_to_pair`'s three refusals (non-chain family, no dependent
+  edge, degraded child) and its twin-ballot relabeling (gold promoted,
+  old gold → HealthyPeer, unanchored symptom → StandaloneFailure,
+  ballot egress), the family-code pool round-tripping `from_code`
+  (incl. `sb` joining by explicit selection, not the default
+  rotation), `down_word`'s pool containment, `verify_score_item`'s
+  round-trip mismatch, and `lexical_probe`'s unbuildable-ballot
+  refusals. `tests/bin_runs.rs` covers the two binary `main()`s —
+  invisible to library tests — via `CARGO_BIN_EXE_*` spawn runs: the
+  happy run's artifacts and every summary line, the unknown-family-code
+  refusal, and the loud write-failure path (`/dev/full` accepts create
+  and fails every write, proving the corpus never ships partial), plus
+  a `corpus-merge` smoke asserting the file matches the manifest's
+  `rows_out` contract. Residual census lines here are the saturated-
+  guard / retry-exhaustion arms that need a faulting suite and the
+  `#[cfg(test)]` message lines — measured again at the batch-HEAD
+  census. Folded in from 20e's reachable pool: `opencodifier-ffi`
+  gains its first in-crate test module (the panic guard's three
+  payload classes — `&str`, `String`, non-string — each landing as
+  `ffi.panic`, the `Boundary` code/message/error-json contract, and
+  the opaque handle's content-free `Debug`), and `opencodifier-model`'s
+  Julia stub tokenizer pins its unknown-word refusal. 20e's other
+  census lines are floors, not tests: `--llama`'s `with_rungs`
+  assembly is behind the non-default `llamacpp` feature (unreached by
+  the in-image measurement by construction), `macjev`'s `expecting`
+  is `Visitor` trait contract, the schema `Serialization` `map_err`
+  arms sit behind infallible-by-construction serializations, and the
+  registry capture arm is the deliberate first-run bootstrap that
+  writes the fixture it then requires.
+- **20d — model crate tranche** (57 in-image missed): backend
+  transport-error arms (`kai`/`llamacpp`/`julia`/`embedding`) against
+  in-process fault seams.
+- **20e — schema + interface tranche** (47 + 42 in-image missed):
+  adapter refusal arms and http/ffi/cli error arms.
+- **20f — wasm + ffi reachable fraction** (33 + 14 in-image missed):
+  the JsValue-boundary class stays with the Node smoke test; only the
+  host-reachable halves count toward the floor.
+- **20g — restore the floor (amended: terminate at the reachable
+  ceiling)** — **DONE (2026-10-08)**. Doc half (2026-10-07):
+  `docs/COVERAGE.md` regenerated from the in-image measurement CI
+  uses, residual classified in six waiver groups; floor at 97.5 with
+  0.53 margin under the measured 98.03. The remaining 0.47 points
+  (~84 lines) are exactly tranches 20b–20f's reachable fraction.
+  **First test tranche DONE (2026-10-08):** the §15.6 item-2 CLI shell
+  (`cli/ladder.rs`, 67/67 unexecuted — the largest single residual the
+  census named) is now driven end-to-end by eight integration tests
+  (fit + round-trip load through `--ladder`, reserved ids, malformed
+  row naming the line, non-probability refusal, empty evidence /
+  missing file, unwritable output, base-policy carry + both base
+  decode arms). In-image re-census: **98.32 %** (18 085 / 18 394);
+  cli residual 78 → 12; 0.18 points from the 98.5 floor.
+  **Second test tranche DONE (2026-10-08):** four itemgen tests (the
+  twin-guard collision arm driven two-phase against its own twin
+  corpus, the detached-side scan's iterate edge via a redrawing
+  seed, `fact_mentions` over every fact kind, the `count_statuses`
+  skip) plus the non-UTF-8 evidence boundary as a ninth
+  `ladder fit-boolean` integration test. Empirical probes proved the
+  verification-rejection arms (lib 181-184/224-226) and the
+  ballot-fill loop (sample 566-572) cannot fire, so they joined the
+  defensive classes instead of gaining unreachable tests; the cli
+  `runtime.rs` 7 were confirmed feature-gated (`--llama` with_rungs
+  assembly behind non-default `llamacpp`). Census: **98.38 %**
+  (18 177 / 18 476); residual 309 → 299; 0.12 points from 98.5.
+  **Third tranche / pool exhaustion DONE (2026-10-08):** the one
+  genuinely reachable line the closing pass found — macjev's render
+  fall-through for a record without `request.questions` — is driven
+  by its own test; census **98.39 %** (18 187 / 18 485), residual
+  **298**. The line-by-line pass over groups 2–4 found everything
+  else class-infeasible (`#[non_exhaustive]` wildcards,
+  defensive-unreachable typed arms, wasm JsValue boundaries,
+  binary-entry mains, ffi contract guards — the full ledger in
+  COVERAGE.md), so **20g terminates at the reachable ceiling, not
+  98.5**: the D36 ratchet is retired (D36 update 2026-10-08), the
+  floor rests at 97.5 as the fixed constant, and the residual is the
+  scoped waiver ledger D36's revisit clause specified.
+- **20h — CI observability — DONE (2026-10-07).** The lane's
+  `coverage_floor.py` prints `coverage_floor: <hit>/<found> lines hit
+  = NN.NN% (floor N%)` plus PASS/FAIL on both the pass and fail
+  paths (verified on real runs), so a red lane carries its own number
+  in the run log regardless of GitForge job-API access.
+
+Acceptance: coverage lane green at every push; the floor is the 97.5
+fixed constant with the measured value at 98.39 and every residual
+line in a named infeasible class (D36 ratchet retired 2026-10-08 —
+reaching 98.5 would require deleting honest defensive code);
+COVERAGE.md regenerated from the same measurement CI
+uses (done 2026-10-07, final census 2026-10-08); no test added solely
+to touch lines — each tranche names the behavior it pins.
+
+## Phase 21 — site WCAG 2.1 AAA + progressive enhancement (opened + fixes landed 2026-10-06)
+
+The marketing site (`site/`) was audited against WCAG 2.1 AAA with
+computed contrast ratios (sRGB relative luminance per pair, card
+backgrounds blended as the rgba composites they render as):
+
+- **Contrast**: 16 color pairs computed; exactly one failing token —
+  `--ink-faint` #6d8a81 at 5.23:1 on page bg / 4.92:1 on cards (7.0
+  required for normal text). Replaced with #88aca3 (7.92 / 7.45) in
+  `styles.css` `:root` and the `src/tw.css` `@theme`, tw.css rebuilt.
+- **Keyboard focus**: `:focus-visible` outline (2px teal, offset)
+  added — previously interactive elements had no visible focus
+  indicator.
+- **No-JS contract**: previously `.reveal { opacity: 0 }` hid content
+  permanently without JavaScript and hero counters showed a misleading
+  literal "0". Now: `<html class="no-js">` → `js` swap is the first
+  thing site.js does; reveal styles are gated on `html.js`; counters
+  ship their final values in the HTML and are zeroed only when JS runs
+  with motion allowed; `<noscript>` summaries inside the chart card
+  and ladder section carry the key numbers.
+- **Dead tab fixed**: the third chart tab shipped
+  `data-metric="size"` with no matching key in `CHART` (keys: acc /
+  lat / cost) — clicking it threw and left a stale chart. It is now
+  `cost` ("Cost per 1M"), matching the measured data that existed for
+  it all along.
+- **Tab ARIA**: roving `tabindex`, Arrow/Home/End navigation,
+  `aria-controls` on every tab, `role="tabpanel"` + dynamic
+  `aria-labelledby` on the panel (APG pattern).
+- **Links**: Hugging Face org (huggingface.co/TaskWizerAI) added to
+  the footer. X and Discord are deliberately still absent — handles
+  not supplied; the site renders nothing for them rather than
+  placeholder links.
+
+Acceptance: live page re-verified at
+`https://opencodifier.pages.dev` after deploy; contrast math recomputed
+for any future token change; X/Discord links land only with real
+handles.
+
+## Phase 22 — docs freshness sweep (opened 2026-10-06)
+
+The expansion changed the tree faster than the maps describing it:
+
+- `docs/PROJECT_STRUCTURE.md` — verify crate/module inventory matches
+  the tree (kai, julia, llamacpp, fixtures under `src/`).
+- `README.md` — feature list, quickstart output, and crate table vs.
+  the shipped CLI/HTTP surface.
+- `docs/SPEC_COVERAGE.md` — re-walk §-item claims against the current
+  routes/tools (same discipline as the 2026-09-30 refresh).
+- `docs/COVERAGE.md` — regenerated from the in-image census, twice:
+  2026-10-07 (98.03 % DA, the basis CI measures) and again 2026-10-08
+  at the 20g ceiling (98.39 %, 298-line residual, D36 ratchet retired);
+  no banner, no stale pre-expansion numbers.
+- `docs/BENCHMARKS.md` / `results/REPORT.md` cross-links — one number
+  per surface, sources resolve.
+
+Acceptance: every doc claim mechanically checkable against the tree;
+no doc quotes a number whose producing artifact is missing.
+
+**Done (2026-10-08).** Every list claim re-derived from its producing
+source in the same session: the nine `/v1` routes against
+`routes.rs:107-115`, the six `codify_*` tools against the MCP crate,
+the CLI surface against `args.rs` (which surfaced the missing
+`ladder fit-boolean`), the cargo features against the workspace
+manifests (which surfaced the phantom `kai`/`julia` features in two
+docs — the contracts ship unconditionally; only `llamacpp` and
+`tokenizers` gate anything), the quickstart by running it (exit 2,
+`verify`, top 0.5 — README's narrative holds; `fixtures/native/
+response.json` is a byte-locked wire-shape exemplar, not the
+quickstart capture), `just ci`/`just coverage` against the justfile,
+and every `BENCHMARKS.md` relative link against `results/`. Fixed:
+README (CLI list, feature claims, `just ci` description),
+SPEC_COVERAGE (header re-verification stamp, §16 itemgen, §27
+feature gating, §35 ladder CLI, §58 nine-leg matrix), and this
+section's COVERAGE.md bullet.
+
+## Phase 23 — v0.5.0 release cut (opened 2026-10-06; **done 2026-10-08**)
+
+`CHANGELOG.md` [Unreleased] already carries B5 (`LlamaDecisionClassifier`,
+D26) and B6 (cross-rung escalation, D27) — the release ships them plus
+D30–D35 and the Phase 21 site work.
+
+1. CHANGELOG [Unreleased] → `## [0.5.0]` with the real date.
+2. Version bumps across workspace manifests.
+3. `cargo build --release` + the release matrix at its named
+   verification levels (D24 — no foreign-arch execution claimed).
+4. `scripts/generate_release_notes.py` → notes; attestation generated.
+5. Git tag + GitForge release (platform of record).
+6. GitHub mirror release under the TaskWizer org (credential presence
+   checked by env-var name/length only — values never echoed).
+7. Site deploy to Cloudflare Pages if the release touches `site/`.
+8. Both remotes pushed; pipeline of record green at the release commit.
+
+**Shipped 2026-10-08.** All steps except (7) — no `site/` content in
+the release diff. The full 9-leg matrix was rebuilt in one worktree at
+`0fd6a154` so every attestation cites one tree (`cargo_tree_sha256`
+hashes absolute workspace paths; legs built in different trees never
+mix — the first-pass set was mixed-tree and was discarded). The android
+ELF came out byte-identical across the two trees, proving the NDK r28c
+re-fetch exact. Tag `v0.5.0` pushed to both forges; release live on
+GitHub with 19 assets (69.4 MB) and on GitForge; attestation set,
+`sha256sums.txt`, and `RELEASE_NOTES.md` verified line-for-line against
+the staged `dist/` tree.
+
+Acceptance: `git describe` matches the release; the pipeline of record
+is green on the release tag; release notes quote only measured numbers
+with sources.
+
+## Phase 24 — RESEARCH §15.6 enhancement program (opened 2026-10-07)
+
+The 2026-10-07 research sweep (`docs/RESEARCH.md` §15) produced a
+ranked 10-item program (§15.6). This phase implements it in units,
+each fully gated and committed. Method per unit: measure first,
+smallest change that could work, bit-identical unless the DECISIONS
+record says otherwise, criterion/suite validation, docs of record.
+
+- **24a — risk–coverage acceptance (item 1). — DONE (2026-10-07).**
+  `CalibrationFit` carries optional `aurc_before`/`aurc_after`/
+  `accuracy_at_coverage` (serde-defaulted; historical artifacts load
+  unchanged); the engine's load gate and the fitter's ship gate refuse
+  an artifact whose AURC worsens (D15 amendment: ECE and selective
+  prediction diverge, so neither alone gates); `fit_calibration.py`
+  measures and records both curves plus accuracy@50 %/80 % coverage.
+  For temperature scaling the gate is a witness (monotone rescaling
+  reorders nothing — `aurc_after == aurc_before` is the expected
+  reading); it becomes load-bearing with the first non-monotone
+  scheme. Shipped artifacts regenerated field-additively, verified
+  bit-identical per core field against HEAD; the two exact-refit
+  artifacts of record (`qwen3.5-2b-q4_k_m`, `fork_4b-d15-v1`) are not
+  regenerated — a margin refit would silently replace the better fit.
+  Evidence: `benchmarks/decision-model/results/CALIBRATION.md`
+  § Risk–coverage evidence.
+- **24b — fitted thresholds as ladder profiles (item 2). — DONE
+  (2026-10-08, `c5d2527`).** `ladder_fit.rs`: deterministic grid sweep
+  over candidate boundaries, F1 on the true class, ties toward the
+  smallest threshold; emits the `LadderProfile` document through the
+  real D25 loader (round-trip tested); the cli's `ladder fit-boolean`
+  writes it. Never hard-0.5 a Boolean: measured moves were F1
+  0.499 → 0.748 (UNFAIR-ToS) and 0.243 → 0.353 (GoEmotions).
+- **24c — explicit abstain candidate (item 3). — DONE (2026-10-08,
+  `c5d2527`).** `DecisionPolicy::abstain_candidate` marks a synthetic
+  never-chosen candidate; elicited abstention answers in the same
+  typed shape as acceptance; the trace discloses
+  `abstain_candidate`/`abstain_elicited`; absent-on-default
+  byte-identical.
+- **24d — label-set overlap preflight (item 4). — DONE (2026-10-08,
+  `d5f4733`).** `DecisionPolicy::max_label_overlap` — Jaccard over
+  candidate-id tokens, terminal abstention with `label_overlap*`
+  trace facts, default byte-identical.
+- **24e — reporting parity bundle (item 8). — DONE (2026-10-08).**
+  `runner/parity.py` (Brier/AUROC/reliability/p95–p99/tokens per rung
+  over frozen run JSONs); board.csv parity + billed-cost columns;
+  `docs/BENCHMARKS.md` parity table + dual cost rows; frozen-evidence
+  packaging with repro script (verified `sha256sum -c` clean).
+- **24f — corpus-prep caps + noise scoring (item 9, feeds #124). —
+  DONE (2026-10-08).** `runner/corpus_gates.py` — schema, teacher-noise
+  (top-prob floor), per-class/per-family ceilings on the file,
+  byte-exact label-fight majority; quarantine with manifest, never
+  silent delete. First measurement on merged-v3 train (655,806 rows):
+  81,740 low-confidence rows (12.5 %), 207,461 in the bottom margin
+  decile (31.6 %), zero schema/fight/cap hits at defaults — #124's
+  A/B pool is now a recorded threshold, not a judgment call
+  (TRAINING.md §11).
+- **24i — dynamic-instruction leg (item 10). — DONE (2026-10-08).**
+  `tests/dynamic_instructions.rs` pins the counter to the §15.4
+  MindStudio axis: per-request policy edits flip decisions with zero
+  retrain, the cache keeps edits from bleeding in either direction, a
+  ladder swap governs the gate and names its source on the trace, and
+  injected input text cannot edit the operator's policy.
+- **24g — §15.8 fold-ins. — DONE (2026-10-08).** (1) Exhaustive
+  small-K property tests: `crates/opencodifier-engine/tests/
+  small_k_exhaustive.rs` verifies the decision kernels by exhaustion
+  the way `AlphaDev` verified small sorts — every score-to-candidate
+  assignment for K = 2…6 (872 runs), every candidate presentation
+  order, the full boolean confidence grid from both script orders,
+  every score-level permutation with expected-value/`level_for`
+  consistency, and clip's hallucinated-key arithmetic for every
+  survivor permutation. The score arm pins the real contract the
+  exercise surfaced: the shipped level is `level_for(EV)`'s floor
+  bracket, not the argmax level, and the test mirrors the engine's
+  fp-sum order so the expectation is bit-identical. (2) Executor
+  redundant-guard pass: of the 36 in-image missed executor lines,
+  exactly one guard was provably implied and got deleted
+  (`distributional_ood`'s `max_entropy <= 0.0` arm — `k >= 2` already
+  pins `log2 k >= 1`); the rest are mandatory `#[non_exhaustive]`
+  arms, boundary-honesty guards behind cross-module validation
+  (MissingBackend behind engine assembly, Cycle behind graph
+  validation), now each carrying an in-place justification comment.
+  Two reachable arms gained tests: a rerank node skipping a starved
+  question (reporting `NoValidCandidate`, not an answer) and a rung
+  walk firing through the graph executor directly.
+- **24j — NLI verbalization verifier (item 6). — RUST TRANCHE
+  LANDED (2026-10-08); 231-split leg queued.** Sizing record:
+  `RESEARCH.md` §15.6.2 — substrate proven (`KaiOnnxBackend` shape),
+  cost = one kai-class tranche (backend + verbalizer + `Classifier`
+  impl into the existing verifier slot + parity fixtures + D14
+  manifest + feature-gated tests + 231-split leg). Probe receipts
+  (§15.6.2): raw-RNLI `nli-deberta-v3-small` rejected
+  (template-dominated, one verbalizer below chance); **arm of record
+  `MoritzLaurer/deberta-v3-base-zeroshot-v2.0`** — official in-repo
+  `onnx/model.onnx`, 2-class entailment read, p50 ~49 ms/pass @ 4
+  threads on a loaded host, both verbalizer templates above chance on
+  the internal slice. Landed: `opencodifier-runtime::nli`
+  (`NliOnnxBackend`, shared kai wire names), the feature-free
+  `opencodifier-model::nli` contract (verbalizer templates as a
+  cached lever, premise/hypothesis rendering, renormalization that
+  refuses zero mass, `NliVerifier: Classifier` with the template tag
+  in the model id per D6) behind the new `nli` cargo feature, and the
+  compute-host parity runner `nli-parity-rs` (live receipt: 10/10
+  frozen rows reproduced within 1e-4, end-to-end argmax matches).
+  Live ORT parity is runner-hosted, not a `cargo test` case — ORT
+  load-dynamic teardown segfaults the test harness at exit (kai and
+  julia ship their parity the same way). **UNIT COMPLETE (2026-10-08).**
+  231-split leg done (`runs/jevbench/nli-zeroshot-v1`, authors'
+  harness, `--arm nli`): accuracy **0.5325** / macro 0.4904, ECE 0.232,
+  Brier 0.648, p50 0.57 s @ 4 threads, 231/231 valid native
+  distributions, replay determinism 231/231 — above engine (0.3766) and
+  vtx (0.4113), below the 0.8B bridge (0.6494); the family split is
+  entailment-shaped near-ceiling (tool_selection 1.000, intent 0.875)
+  vs below-chance collapse on composition (multi_hop 0.111, trap 0.125).
+  D14 registration done (`results/models.manifest.json` graph/tokenizer/
+  config digests). Executor verdict recorded in REPORT.md: not a general
+  decider at 53%; the verify-band verifier role (entailment-shaped
+  classes only, confidence-gated) is designed but stays unwired pending
+  a rung-level decision — wiring it would put a 705 MB artifact on the
+  serving path for a band the ladder does not yet route to.
+- **24k — MLM-head single-pass arm (item 5). — REJECTED AT PROBE
+  (2026-10-08), unit closed without a tranche.** Same sizing record;
+  arm = `onnx-community/bert-base-uncased-ONNX` (MLM head in-graph,
+  verified live). The probe gate did its job: four template/scoring
+  variants all fail — score kind **0/15 vs chance 0.25** (its supposed
+  sweet spot), choice 0.15–0.25 vs chance 0.20 (12/20 items don't fit
+  512 with N masks), noul at chance — receipt in `RESEARCH.md`
+  §15.6.2. Same verdict class as the `nli-deberta-v3-small` rejection:
+  verbalizer-echo readout ≠ this decision surface, while the
+  entailment head (24j) on the same backbone class clears the gate.
+  The staged arm stays in the eval tree unregistered (never an arm of
+  record; no D14 entry).
+- **24l — Third-party 2B GGUF arms (task #125). — UNIT COMPLETE
+  (2026-10-08).** Two independently trained 2B decision models on the
+  authors' harness, each under its own authors' protocol, via one new
+  shared adapter family (`run_jevbench.py --arm gguf --gguf-family
+  {imajev,decider}`; letter-code readout, serial decode — batching
+  shifts Q4 probs). imajev-2b (mindchain Q4_K_M): the authors'
+  standard layout from `vision_decision/scoring.py`, the 255-code
+  codebook derived with the authors' algorithm and binding-verified
+  against the shipped `decision_readout.json` (codes AND token ids)
+  before scoring, shipped T=1.646, unknown-argmax scored incorrect per
+  the authors' JevBench rule with surviving masses renormalized —
+  **0.7359** / macro 0.7449, ECE 0.032, Brier 0.315, p50 3.83 s, 226
+  valid + 5 abstentions, replay 231/231. decider-2b-v11 (Mapika
+  Q4_K_M): vendored `decider.prompt.build()` + `decider.temperature`
+  (noul 1.624 / choice 1.164), score-as-one-choice-row (jev_native
+  convention; recorded divergence from the authors' isolated-level
+  protocol) — **0.7576** / macro 0.7632, ECE 0.058, Brier 0.332, p50
+  2.54 s, 231/231 valid, replay 231/231. Reads: decider +4.8 pp over
+  its 71.0 % board anchor, imajev 4–5 pp under its card record
+  (rotation+calibration pooling vs our single-pass) — both
+  protocol-shaped; the hard split is the 2B wall (0.53–0.58 vs the 4B
+  fork's 0.766); no dominance case over the fork at 2.28 s, so no
+  serving wiring — the rows are independent replication + calibration
+  receipts. D14: all artifact hashes in
+  `results/models.manifest.json`; raw evidence outside both repos.
+- Item 10 (dynamic-instruction leg) shipped as 24i above; items 5/6
+  carry their sizing in §15.6.2 and queue as 24j/24k.
+
+Acceptance: each landed unit carries its own tests + doc-of-record
+amendment; the ladder's empty-default byte-identity holds for every
+engine change (fleet equivalence on the committed graphs); no new
+placeholder anywhere.
+
+## Spec coverage map (audit, 2026-09-28; refreshed 2026-09-30)
 
 All 17 tracked phases are done; the §-by-§ check that every PLANNING
-section has a landing place lives in `docs/SPEC_COVERAGE.md`. Headline
-gaps it surfaces: the §36 HTTP surface is 3/9 endpoints, the §34
-recipe fleet partial (§33 skills shipped 2026-09-28 — `skills/` with all
-eight areas), §63 decision registry,
-§26/§53/§54 ML graph nodes (rerank/retrieve), §57 WASM, §58 distribution
-matrix, and the §15/§16 training path. The doc orders what remains by
-what needs the host quiet (cargo) vs what does not.
+section has a landing place lives in `docs/SPEC_COVERAGE.md`. The gaps
+the 2026-09-28 audit surfaced have since closed: §36 HTTP surface (18e),
+§34 recipe fleet + `recipe install` (18g), §63 decision registry (D20,
+18f), and the §26/§53/§54 ML graph nodes (18h) are done; §57 WASM shipped
+runtime-first (D23, 18j). The §58 build matrix is now recorded at its
+named verification levels (D24 status 2026-10-01: all five targets
+linked or run-tested; no foreign-arch execution claimed). What remains:
+**§58 publication** (windows link+smoke quiet-window; crates.io/Homebrew/
+winget await explicit user go), the **§15/§16 training path**, and
+**§60 Amortyx integration** (designs exist; implementation is its own
+promotion-gated effort).
+SPEC_COVERAGE's table was also corrected 2026-09-30 against `routes.rs`:
+no `/v1/systemone` HTTP route exists (the Jev shape is a library
+adapter), and §22 batch inference is done end to end.
 
 ## Integration design notes (designs, not phases)
 

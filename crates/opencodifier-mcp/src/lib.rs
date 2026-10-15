@@ -403,7 +403,10 @@ mod tests {
         assert_eq!(response["answers"].as_array().unwrap().len(), 1);
         assert_eq!(response["answers"][0]["type"], "choice");
         assert!(response["confidence"]["top_probability"].is_number());
-        assert!(!response["trace"]["entries"].as_array().unwrap().is_empty());
+        assert_ne!(
+            response["trace"]["entries"].as_array().unwrap(),
+            &Vec::<serde_json::Value>::new()
+        );
     }
 
     #[tokio::test]
@@ -553,8 +556,14 @@ mod tests {
         let explanation = call.structured_content.unwrap();
         let keys: Vec<&str> = explanation.as_object().unwrap().keys().map(String::as_str).collect();
         assert_eq!(keys, vec!["execution", "response"]);
-        assert!(!explanation["response"]["trace"]["entries"].as_array().unwrap().is_empty());
-        assert!(!explanation["execution"]["waves"].as_array().unwrap().is_empty());
+        assert_ne!(
+            explanation["response"]["trace"]["entries"].as_array().unwrap(),
+            &Vec::<serde_json::Value>::new()
+        );
+        assert_ne!(
+            explanation["execution"]["waves"].as_array().unwrap(),
+            &Vec::<serde_json::Value>::new()
+        );
         assert!(explanation["execution"]["cache_hit"].is_boolean());
         // No generated reasoning anywhere in the document: the explanation
         // is the pipeline's own record, byte for byte.

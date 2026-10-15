@@ -252,16 +252,16 @@ mod tests {
         let text = "The billing team depends heavily on catalog uptime. \
                     billing depends on. auth is flapping. north: healthy, flapping. \
                     x comes back online only. 1234";
-        assert!(extract(text).is_empty());
+        assert_eq!(extract(text), Vec::new());
     }
 
     #[test]
     fn rejects_names_that_are_not_names() {
         // Structural words match, but the "names" contain characters the
         // grammar forbids — no fact may be emitted.
-        assert!(extract("bill;ing depends on catalog.").is_empty());
-        assert!(extract("billing depends on cat alog.").is_empty());
-        assert!(extract("i'is is healthy.").is_empty());
+        assert_eq!(extract("bill;ing depends on catalog."), Vec::new());
+        assert_eq!(extract("billing depends on cat alog."), Vec::new());
+        assert_eq!(extract("i'is is healthy."), Vec::new());
     }
 
     #[test]
@@ -313,7 +313,7 @@ mod tests {
     fn long_tokens_are_prose_not_names() {
         let long = "a".repeat(MAX_NAME_LEN + 1);
         let short = "a".repeat(MAX_NAME_LEN);
-        assert!(extract(&format!("{long} depends on catalog.")).is_empty());
+        assert_eq!(extract(&format!("{long} depends on catalog.")), Vec::new());
         assert_eq!(
             extract(&format!("{short} depends on catalog.")).len(),
             1,

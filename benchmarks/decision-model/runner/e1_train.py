@@ -1,0 +1,1161 @@
+#!/usr/bin/env python3
+"""LoRA-train a decision head on verdict-slot SFT rows (E1, #88).
+
+Consumes `decision_sft_prep.py` rows (segmented macjev-render-v1
+renders) and teaches exactly the readout the serving path scores:
+loss lands only on the y=1 verdict segments (" yes"/" no" at the
+option slots); everything else — the state, the question, the option
+lines, the `` ->`` markers — is masked context. EOS is appended and
+supervised, so the model learns to stop after the last slot.
+
+v2 (r3 protocol, TRAINING.md §9.7 Phase A) — what changed from the
+r2 trainer and why:
+
+- **Windowed loss** (A1): the r2 log printed the cumulative epoch
+  mean at every step, which made the curve look plateaued while the
+  recent dynamics were invisible. The log now carries the mean over
+  the last ~100 micro-batches; the token-weighted cumulative mean
+  survives only in the manifest.
+- **Stratified val split** (A2): ~1 % of rows (capped) held out by
+  question type (the corpus families), scored every --val-every
+  steps as exact per-row token-mean losses — overall and per family,
+  plus token accuracy and mean entropy over supervised positions
+  (TRL/Axolotl log schema). Val selects; the pre-registered suite
+  gate judges.
+- **Checkpoint selection** (A3): the best-val adapter is saved to
+  ``adapter-best/`` alongside the final ``adapter/``; the manifest
+  records the best step and its val loss.
+- **Loud-skip truncated rows** (A4): rows exceeding --max-len are
+  dropped and counted (their verdict tokens would be truncated away
+  — r2 silently trained nothing on 86 of them, and an all-masked
+  micro-batch would have produced a NaN loss).
+- **Token-weighted metrics** (A4): logged/val losses weight each row
+  by its supervised-token count, so 2-slot and 6-slot rows compare
+  fairly. Gradient handling is unchanged (mean CE / accum) — only
+  the metrics are weighted.
+- **Shuffle before limit** (A5): --limit-rows samples a seeded
+  shuffle, not the file head (the corpus is family-grouped, so the
+  r2 pilot path was family-skewed).
+- **Feature cache** (A5): tokenized (ids, labels, families) cached
+  to ``<data>/.cache/`` keyed by data sha + max_len; pilots skip
+  re-tokenization. Cache invalidated wholesale when row counts do
+  not match the current split.
+- **Optimizer/library versions + peak memory** (A3): weight_decay/
+  betas/eps, torch/transformers/peft versions, and
+  ``torch.cuda.max_memory_allocated()`` land in the manifest — the
+  r2 manifest could not reproduce its own optimizer.
+- **Family weighting** (B5 knob): --family-weight ``noul=0.7``
+  scales each micro-batch loss by the mean family weight of its
+  rows; recorded in the manifest.
+- **Row weighting** (--row-weight-field): rows may carry a per-row
+  loss weight (the #124 quarantine A/B re-admits its pool at 0.05
+  through ``_train_weight``). The micro-batch loss scales by the mean
+  row weight; val loss stays unweighted so checkpoint selection and
+  cross-arm val comparison are unaffected. The cache key carries the
+  field name (fam3 split tag) — the same file read with and without
+  the flag cannot serve one cache.
+- **Torch RNG seeded** (--seed): seed now covers LoRA init and
+  dropout too, not just the data pipeline — the #124 inertness
+  smoke caught two identical-recipe runs diverging from step 20
+  because torch drew unseeded adapter weights in every process
+  (TRAINING.md §9.7.3). Runs before this fix keep their recorded
+  numbers; their seed=42 manifest claim covered the row order only.
+- **sdpa attention default** (A7, research-integrated): PyTorch SDPA
+  dispatches to the memory-efficient CUTLASS backend below Ampere
+  (V100) and flash on Ampere+; eager is available via --attn eager
+  and used automatically if the backend refuses. FlashAttention-2
+  itself is Ampere+ only — not a V100 option (research finding).
+- **Gradient checkpointing opt-out** (A7, research-integrated):
+  checkpointing costs ~20 % throughput and is an inherited default;
+  --no-grad-checkpoint turns it off where peak memory allows (the
+  manifest's peak-memory field is the evidence for the decision).
+- **pad to multiple of 8** (research-integrated): fp16 tensor-core
+  efficiency wants batch-seq dimensions that are multiples of 8.
+- **Bounded profiler** (A7): --profile-steps N wraps the first N
+  optimizer steps in ``torch.profiler`` and writes a chrome trace +
+  summary table under ``out/profile/``.
+
+v3 (iterate-B, TRAINING.md §9.7.1) — the val curve is now durable:
+
+- **val_history in the manifest** (A2 fix): every ``run_val`` call
+  appends ``{step, loss, tok_acc, entropy, per_family}`` to a list
+  persisted as ``manifest["val_history"]``. The r3 pilot ran the
+  gate on curves scraped from log files via a ``VAL_LINE`` regex —
+  when logs were absent, the pilot table silently lost the val
+  columns. The manifest is the record of record; the log line
+  remains for humans.
+
+v4 (--soft-labels, e1-softlabel-v1, TRAINING.md §10 / #143) — the
+teacher-distribution path:
+
+- **Gold-conditioned, teacher-supervised**: the text is byte-identical
+  to the hard rows (verdict tokens placed at the gold slot by
+  decision_sft_prep), so the ONLY variable vs a hard arm is the target
+  distribution. Verdict-token positions leave the hard-CE surface;
+  EOS keeps its CE (learn-to-stop must survive the soft switch).
+- **Listwise KL over slot margins**: at each slot position the loss
+  reads z_i = logit[yes] − logit[no] and minimizes
+  CE(teacher_p, softmax(z)) averaged over slots — exactly the quantity
+  the serving/eval readout scores (per-slot yes/no margin, softmax over
+  slots), so training and evaluation share one mechanism by
+  construction. The teacher distribution is a softmax over options, so
+  a coherent listwise target is the right form; per-slot binary
+  targets would not sum to a distribution.
+- **--teacher-temp** applies p ∝ p^(1/T) (renormalized) AFTER the
+  cache: raw facts are what gets cached and sha-pinned, so temperature
+  arms share one tokenization cache and the manifest records the temp
+  actually trained at.
+- Cache key gains ``-soft``: a soft run cannot serve a hard corpus's
+  cache or vice versa (the soft arrays only exist in soft caches).
+  Rows whose ``slot_probs`` field is missing, wrong-length, or <2
+  slots are loud-skipped and counted, never silently dropped.
+
+v5 (--resume / --ckpt-every) — resumability (TRAINING.md backlog #1;
+two 2026-10-12 v2-arm deaths with zero salvage were the cost of not
+having it):
+
+- **Optimizer-step boundaries are resume points.** Every
+  ``--ckpt-every`` optimizer steps (default 100) the trainer writes
+  ``resume-state.pt`` into the run dir: adapter weights, optimizer +
+  GradScaler state, step/epoch/next-batch position, best-checkpoint
+  dict + val_history, window/cumulative loss stats, and RNG states
+  (torch, all CUDA devices, python random). Saved to a tmp file then
+  ``os.replace``d, so a power death cannot leave a torn checkpoint.
+- **Refuses to resume into a different run.** The state carries the
+  data sha and a fingerprint of every training knob; ``--resume``
+  against a mismatched corpus/recipe exits non-zero instead of
+  silently continuing someone else's experiment.
+- **Determinism contract**: epoch orders are regenerated from the
+  seed via ``make_order``, the LR schedule reconstructs from the
+  restored step count, and the only sanctioned divergence vs an
+  uninterrupted run is dropout RNG position at the resume boundary —
+  the parity pilot (interrupted-vs-straight step losses within fp16
+  noise) is the acceptance gate before trusting a resume.
+- The manifest (v5) gains a ``resume`` field (null, or the resumed
+  step/epoch + ckpt interval) so an arm's provenance is explicit.
+
+torch/transformers/peft import lazily so the pure helpers (segment
+encoding, label masking, batching, stratified split) unit-test on
+machines without torch. Every knob is a CLI flag with the
+pre-registered default; a run records its full knob set + data sha
+in the output manifest.
+
+Usage:
+    python3 runner/e1_train.py \
+        --base Qwen/Qwen3.5-2B --data ~/oc-model-eval/corpora/e1-sft-v1 \
+        --out ~/oc-model-eval/runs/e1-a-qwen2b \
+        [--epochs 1] [--lr 1e-4] [--lora-r 16] [--batch 4] [--accum 4] \
+        [--max-len 2048] [--dtype fp16|bf16] [--limit-rows N] [--seed 42]
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import platform
+import random
+import sys
+import time
+from collections import Counter, deque
+from pathlib import Path
+
+# Suite-family tagging for the A2 gate criterion (TRAINING.md §9.7.1):
+# the val curve Phase-C needs is the relational *suite-family* curve,
+# but corpus rows carry qtype (choice/noul/score). The itemgen chain
+# sources are the relational family by construction — iterate-B raised
+# exactly these to hit the relational corpus-share target — so rows
+# from them are tagged `relational_compositional`; every other row
+# keeps its qtype tag. Derived from `source` at load time, so corpora
+# written before this rule are tagged without a re-prep.
+RELATIONAL_SOURCES = (
+    "itemgen/root-cause-chain",
+    "itemgen/root-cause-agreeing",
+    "itemgen/first-restored-chain",
+)
+
+
+def row_family(row: dict) -> str:
+    """Suite-family tag for one corpus row (see RELATIONAL_SOURCES)."""
+    source = str(row.get("source") or "")
+    if source.startswith(RELATIONAL_SOURCES):
+        return "relational_compositional"
+    return str(row.get("qtype"))
+
+
+def sha256_of(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def say(msg: str) -> None:
+    """Console line + flush (runner convention: lines are also tailed
+    from the .out file by the night chain)."""
+    sys.stdout.write(msg + "\n")
+    sys.stdout.flush()
+
+
+def encode_row(segments: list[dict], encode_fn, eos_id: int,
+               max_len: int) -> tuple[list[int], list[int]] | None:
+    """One row -> (input_ids, labels), or None if the row exceeds
+    max_len (loud-skipped by the caller: truncation would cut the
+    verdict tokens and the row would train on nothing). Each segment
+    is encoded separately (boundaries at ' ->'/verdict tokens are
+    stable token edges); context ids are masked to -100, verdict ids
+    supervise. EOS is appended and supervised."""
+    ids: list[int] = []
+    labels: list[int] = []
+    for seg in segments:
+        seg_ids = encode_fn(seg["t"])
+        ids.extend(seg_ids)
+        labels.extend(seg_ids if seg["y"] else [-100] * len(seg_ids))
+    ids.append(eos_id)
+    labels.append(eos_id)
+    if len(ids) > max_len:
+        return None
+    return ids, labels
+
+
+class PadCollate:
+    """Right-pad input_ids/labels to the batch max (rounded up to a
+    multiple of 8 — fp16 tensor-core tile width) with pad/eos-id and
+    -100 respectively; attention mask marks real tokens."""
+
+    def __init__(self, pad_id: int):
+        self.pad_id = pad_id
+
+    def __call__(self, batch: list[tuple[list[int], list[int]]]):
+        raw_max = max(len(ids) for ids, _ in batch)
+        max_len = ((raw_max + 7) // 8) * 8
+        input_ids, labels, attn = [], [], []
+        for ids, lab in batch:
+            pad = max_len - len(ids)
+            input_ids.append(ids + [self.pad_id] * pad)
+            labels.append(lab + [-100] * pad)
+            attn.append([1] * len(ids) + [0] * pad)
+        return input_ids, labels, attn
+
+
+def stratified_split(rows: list[dict], val_frac: float, val_cap: int,
+                     seed: int) -> tuple[list[int], list[int]]:
+    """Hold out a val slice stratified by question type (the corpus
+    families); returns (train_indices, val_indices) into `rows`.
+    Deterministic under `seed`. The suite is never a candidate — the
+    prep tool already excluded it."""
+    by_family: dict[str, list[int]] = {}
+    for i, r in enumerate(rows):
+        by_family.setdefault(row_family(r), []).append(i)
+    rng = random.Random(seed)
+    val: list[int] = []
+    for fam in sorted(by_family):
+        idx = by_family[fam][:]
+        rng.shuffle(idx)
+        take = max(1, int(round(len(idx) * val_frac)))
+        val.extend(idx[:take])
+    if len(val) > val_cap:
+        rng.shuffle(val)
+        val = val[:val_cap]
+    val_set = set(val)
+    train = [i for i in range(len(rows)) if i not in val_set]
+    return train, val
+
+
+def parse_family_weights(spec: str) -> dict[str, float]:
+    """Parse ``noul=0.7,score=1.0`` -> {"noul": 0.7, "score": 1.0}."""
+    out: dict[str, float] = {}
+    if not spec.strip():
+        return out
+    for part in spec.split(","):
+        k, _, v = part.partition("=")
+        out[k.strip()] = float(v)
+    return out
+
+
+def bucketed_order(lengths: list[int], seed: int, epoch: int,
+                   bucket: int) -> list[int]:
+    """Length-homogeneous batching (HF LengthGroupedSampler shape):
+    sort by length inside shuffled mega-batches so batches pad less;
+    bucket membership and within-bucket order reshuffle every epoch.
+    Length correlates with question family, so this is OFF by default
+    (--length-bucket enables it as the A7 experiment) — grouping with
+    high length variance is a documented eval-loss degradation risk."""
+    idx = list(range(len(lengths)))
+    random.Random(seed * 1000 + epoch).shuffle(idx)
+    chunks = [sorted(idx[start:start + bucket],
+                     key=lambda i: lengths[i])
+              for start in range(0, len(idx), bucket)]
+    # Shuffle the CHUNKS, never the flat concatenation: shuffling the
+    # flat list dissolves exactly the length grouping this function
+    # exists to create (found inert 2026-10-12 on t5500 — bucketed vs
+    # unbucketed b8 wall identical to the second).
+    random.Random(seed * 1000 + epoch + 1).shuffle(chunks)
+    return [i for chunk in chunks for i in chunk]
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--base", required=True)
+    ap.add_argument("--data", type=Path, required=True,
+                    help="decision_sft_prep output dir")
+    ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--epochs", type=float, default=1.0)
+    ap.add_argument("--lr", type=float, default=1e-4)
+    ap.add_argument("--lora-r", type=int, default=16)
+    ap.add_argument("--lora-alpha", type=int, default=32)
+    ap.add_argument("--lora-dropout", type=float, default=0.05)
+    ap.add_argument("--batch", type=int, default=4)
+    ap.add_argument("--accum", type=int, default=4)
+    ap.add_argument("--max-len", type=int, default=2048)
+    ap.add_argument("--dtype", choices=("fp16", "bf16"), default="fp16",
+                    help="fp16 = Volta (T5500 V100); bf16 = Ampere+")
+    ap.add_argument("--attn", choices=("sdpa", "eager"), default="sdpa",
+                    help="sdpa = flash backend on Ampere+, "
+                         "memory-efficient CUTLASS below (V100); the "
+                         "trainer falls back to eager with a logged "
+                         "warning if the backend refuses")
+    ap.add_argument("--no-grad-checkpoint", action="store_true",
+                    help="disable gradient checkpointing (faster, "
+                         "more activation memory; decide from the "
+                         "manifest's peak-memory field)")
+    ap.add_argument("--warmup", type=float, default=0.03)
+    ap.add_argument("--limit-rows", type=int, default=0,
+                    help="pilot/smoke: seeded shuffle THEN take N")
+    ap.add_argument("--val-frac", type=float, default=0.01,
+                    help="stratified val slice, per question type")
+    ap.add_argument("--val-cap", type=int, default=2000,
+                    help="max val rows overall")
+    ap.add_argument("--val-every", type=int, default=500,
+                    help="optimizer steps between val evals")
+    ap.add_argument("--family-weight", default="",
+                    help="per-family loss weights, noul=0.7,score=1.0")
+    ap.add_argument("--row-weight-field", default="",
+                    help="row field carrying a per-row training-loss "
+                         "weight (e.g. _train_weight): the micro-batch "
+                         "loss scales by the mean row weight, so a 0.05 "
+                         "field re-admits near-dup rows at 5%% strength "
+                         "(the #124 quarantine A/B). Val loss stays "
+                         "unweighted -- checkpoint selection and "
+                         "cross-arm val comparisons are unaffected. "
+                         "Empty = every row weighs 1.0 and the op-order "
+                         "of the loss is unchanged")
+    ap.add_argument("--length-bucket", action="store_true",
+                    help="length-homogeneous batching experiment")
+    ap.add_argument("--soft-labels", action="store_true",
+                    help="soft-label mode: rows carry slot_probs (the "
+                         "teacher distribution over option slots, from "
+                         "the teacher-scoring campaign). Loss = "
+                         "listwise CE(teacher, softmax over slot "
+                         "yes/no margins) + stop CE at EOS. Verdict "
+                         "tokens stay gold-placed in the text (one "
+                         "variable vs hard SFT) but leave the hard-CE "
+                         "surface. Requires build_softlabel_corpus "
+                         "rows")
+    ap.add_argument("--teacher-temp", type=float, default=1.0,
+                    help="soft mode: p ∝ p^(1/T) applied to slot "
+                         "probs after cache load (T>1 flattens, T<1 "
+                         "sharpens; 1.0 = facts as recorded). The "
+                         "cache stores raw facts, so temperature arms "
+                         "share one tokenization cache")
+    ap.add_argument("--stop-weight", type=float, default=1.0,
+                    help="soft mode: weight of the EOS stop CE added "
+                         "to the slot-margin CE (0 disables "
+                         "learn-to-stop supervision)")
+    ap.add_argument("--profile-steps", type=int, default=0,
+                    help="wrap the first N optimizer steps in "
+                         "torch.profiler")
+    ap.add_argument("--resume", type=Path, default=None,
+                    help="run dir containing resume-state.pt written "
+                         "by a dead run; continues it at the saved "
+                         "step (knob fingerprint + data sha must "
+                         "match, else exit)")
+    ap.add_argument("--ckpt-every", type=int, default=100,
+                    help="write resume-state.pt every N optimizer "
+                         "steps (torn exposure is bounded by this "
+                         "interval, not the run length)")
+    ap.add_argument("--seed", type=int, default=42)
+    args = ap.parse_args()
+
+    try:
+        import numpy as np
+        import torch
+        import torch.nn.functional as F
+        import peft
+        import transformers
+        from peft import (LoraConfig, get_peft_model,
+                          get_peft_model_state_dict,
+                          set_peft_model_state_dict)
+        from transformers import (AutoModelForCausalLM, AutoTokenizer,
+                                  get_cosine_schedule_with_warmup)
+    except ImportError as e:
+        sys.stderr.write(f"torch stack unavailable on this host: {e}\n")
+        return 1
+
+    # Seed torch's RNG, not just python's: --seed previously governed
+    # only the data pipeline (shuffle/split/bucketing via random.Random),
+    # while LoRA init and dropout drew from an unseeded torch RNG — so
+    # every process started from different adapter weights and
+    # bit-reproducibility was impossible (caught by the #124 inertness
+    # smoke: identical recipes diverged from step 20). With this,
+    # seed=42 means the whole run.
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
+
+    rows_path = args.data / "e1-sft-v1.rows.jsonl"
+    rows = [json.loads(line) for line in rows_path.open(encoding="utf-8")
+            if line.strip()]
+    data_sha = sha256_of(rows_path)
+    random.Random(args.seed).shuffle(rows)
+    if args.limit_rows:
+        rows = rows[:args.limit_rows]
+    train_idx, val_idx = stratified_split(
+        rows, args.val_frac, args.val_cap, args.seed)
+    fam_weights = parse_family_weights(args.family_weight)
+    fams_train = dict(Counter(str(rows[i].get("qtype"))
+                              for i in train_idx))
+    say(f"rows={len(rows)} train={len(train_idx)} val={len(val_idx)} "
+        f"families_train={fams_train}")
+
+    tok = AutoTokenizer.from_pretrained(args.base)
+    if tok.pad_token_id is None:
+        tok.pad_token = tok.eos_token
+    dtype = torch.float16 if args.dtype == "fp16" else torch.bfloat16
+    try:
+        model = AutoModelForCausalLM.from_pretrained(
+            args.base, dtype=dtype, attn_implementation=args.attn)
+    except (ValueError, RuntimeError) as e:
+        say(f"attn={args.attn} refused by backend ({e}); "
+            f"falling back to eager")
+        args.attn = "eager"
+        model = AutoModelForCausalLM.from_pretrained(
+            args.base, dtype=dtype, attn_implementation="eager")
+    model.config.use_cache = False
+    if not args.no_grad_checkpoint:
+        model.gradient_checkpointing_enable()
+        model.enable_input_require_grads()
+    lconf = LoraConfig(
+        r=args.lora_r, lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+        task_type="CAUSAL_LM")
+    model = get_peft_model(model, lconf)
+    if torch.cuda.is_available():
+        model = model.to("cuda")  # from_pretrained leaves weights on CPU
+    model.print_trainable_parameters()
+
+    eos_id = tok.eos_token_id
+    collate = PadCollate(tok.pad_token_id)
+
+    soft_mode = args.soft_labels
+    if soft_mode:
+        yes_ids = tok.encode(" yes", add_special_tokens=False)
+        no_ids = tok.encode(" no", add_special_tokens=False)
+        if len(yes_ids) != 1 or len(no_ids) != 1:
+            say(f"soft-labels: verdict tokens are not single tokens "
+                f"(yes={yes_ids} no={no_ids}) — slot margins undefined")
+            return 1
+        yes_id, no_id = yes_ids[0], no_ids[0]
+        say(f"soft-labels: slot margins over {{{yes_id}=yes, "
+            f"{no_id}=no}}, teacher_temp={args.teacher_temp:g}, "
+            f"stop CE stays on EOS")
+
+    # Supervised-position CE (train and val both): run the transformer
+    # trunk, gather only supervised positions, project just those
+    # through lm_head. Identical loss to passing labels (CE over
+    # non-ignored tokens, mean-reduced) but the logits tensor shrinks
+    # from B*S*V (~4.9 GiB at batch 4 x 2048 on this vocab) to
+    # n_supervised*V (megabytes). Without this the first backward OOMs
+    # a 16 GB card at max_len 2048 no matter the dtype/backend.
+    base_model = model.get_base_model()
+    trunk = getattr(base_model, "model", None)
+    head = getattr(base_model, "lm_head", None)
+    if trunk is None or head is None:
+        say("cannot resolve trunk/lm_head for supervised-position CE")
+        return 1
+
+    def sup_logits(t_ids, t_att, t_lab):
+        """(selected logits fp32, shifted targets, positions) for one
+        batch. The trunk's last_hidden_state is post-final-norm, so
+        lm_head(hidden) equals the model's own logits exactly."""
+        hidden = trunk(input_ids=t_ids,
+                       attention_mask=t_att).last_hidden_state
+        shift = t_lab[:, 1:]
+        mask = shift != -100
+        pos = mask.nonzero(as_tuple=True)
+        sel = head(hidden[:, :-1, :][pos[0], pos[1]]).float()
+        return sel, shift, pos
+
+    def soft_row_losses(sel, shift, pos, batch_soft):
+        """Per-row listwise CE(teacher_p, softmax over slot margins)
+        where margin_i = logit[yes] - logit[no] at slot i — the exact
+        distribution the serving/eval readout scores. z is assembled
+        row-major over the batch's verdict positions (pos is row-major
+        and verdict preserves that order), so the k-th prob of row r
+        pairs with the k-th verdict position of row r; the encode-side
+        length guard is what makes that pairing safe. Returns
+        (per-row CE tensor, batch row indices) or None when a batch
+        somehow carries no verdict positions."""
+        tgt = shift[pos]
+        verdict = (tgt == yes_id) | (tgt == no_id)
+        if not bool(verdict.any()):
+            return None
+        z = sel[verdict][:, yes_id] - sel[verdict][:, no_id]
+        losses: list[torch.Tensor] = []
+        ridx: list[int] = []
+        k = 0
+        for r, probs in enumerate(batch_soft):
+            n = len(probs)
+            if n == 0:
+                continue
+            logq = torch.log_softmax(z[k:k + n], dim=-1)
+            p_r = torch.tensor(probs, device=z.device, dtype=z.dtype)
+            losses.append(-(p_r * logq).sum())
+            ridx.append(r)
+            k += n
+        return torch.stack(losses), ridx
+
+    # Tokenize once, cache by (data sha, max_len, split knobs): pilots
+    # re-running on the same corpus+config skip the encode pass (A5).
+    # The split knobs MUST be in the key — the internal-consistency
+    # count check cannot detect a cache written under a different
+    # --limit-rows/--seed/--val-frac, and it would silently serve a
+    # stale split (seen in smoke v2d: fresh split 395/5, cache 395/4).
+    # Families travel with the feats so loud-skips cannot desync
+    # row<->family.
+    cache_dir = args.data / ".cache"
+    # fam3: split_tag carries the family-rule AND row-weight version —
+    # fams and per-row weights are cached alongside the feats, so a rule
+    # change must invalidate the cache or a re-run silently serves
+    # qtype-tagged families / stale weights. The field name is in the
+    # key: the same file read with and without --row-weight-field has
+    # different rws arrays.
+    split_tag = (f"l{args.limit_rows or 0}-s{args.seed}"
+                 f"-vf{args.val_frac:g}-vc{args.val_cap}"
+                 f"-rwf{args.row_weight_field or '0'}-fam3"
+                 + ("-soft" if args.soft_labels else ""))
+    cache_path = cache_dir / (f"e1-train-{data_sha[:12]}-"
+                              f"ml{args.max_len}-{split_tag}.npz")
+
+    def encode_all(split_rows: list[dict], tag: str):
+        feats: list[tuple[list[int], list[int]]] = []
+        fams: list[str] = []
+        rws: list[float] = []
+        soft_vals: list[list[float]] = []
+        skipped = 0
+        soft_bad = 0
+        for row in split_rows:
+            enc = encode_row(row["segments"], tok.encode, eos_id,
+                             args.max_len)
+            if enc is None:
+                skipped += 1
+                continue
+            # Soft mode: slot_probs must exist, match the y=1 segment
+            # count exactly, and carry >=2 slots — a mismatch would
+            # desync the KL targets from the slot positions, so the
+            # row is loud-skipped, never silently trained on.
+            if soft_mode:
+                probs = row.get("slot_probs") or []
+                n_slots = sum(1 for s in row["segments"] if s["y"])
+                if len(probs) != n_slots or n_slots < 2:
+                    soft_bad += 1
+                    continue
+                soft_vals.append([float(p) for p in probs])
+            feats.append(enc)
+            fams.append(row_family(row))
+            # Per-row loss weight: the field's value, else 1.0. Missing
+            # field in a field-named run means "unweighted", loudly 1.0
+            # — never an error, so mixed corpora stay expressible.
+            rws.append(float(row.get(args.row_weight_field, 1.0))
+                       if args.row_weight_field else 1.0)
+        say(f"{tag}: feats={len(feats)} loud_skipped_over_maxlen="
+            f"{skipped}"
+            + (f" soft_bad_slotprobs={soft_bad}" if soft_mode else ""))
+        return (feats, fams, rws, skipped, soft_vals, soft_bad)
+
+    if cache_path.exists():
+        z = np.load(cache_path, allow_pickle=False)
+        counts = json.loads(bytes(z["counts"]).decode())
+        offs = z["offsets"]
+        ids_flat = z["ids"]
+        lab_flat = z["labels"]
+        fams_all = [str(f) for f in z["fams"]]
+        n_feats = len(offs) - 1
+        if n_feats == counts["train_n"] + counts["val_n"] \
+                and n_feats > 0:
+            feats = [(ids_flat[offs[i]:offs[i + 1]].tolist(),
+                      lab_flat[offs[i]:offs[i + 1]].tolist())
+                     for i in range(n_feats)]
+            rws_all = [float(w) for w in z["rws"]]
+            train_feats = feats[:counts["train_n"]]
+            train_fams = fams_all[:counts["train_n"]]
+            train_rws = rws_all[:counts["train_n"]]
+            val_feats = feats[counts["train_n"]:]
+            val_fams = fams_all[counts["train_n"]:]
+            val_rws = rws_all[counts["train_n"]:]
+            skipped_train = counts["skipped_train"]
+            skipped_val = counts.get("skipped_val", 0)
+            soft_bad_train = counts.get("soft_bad_train", 0)
+            soft_bad_val = counts.get("soft_bad_val", 0)
+            if soft_mode:
+                soff = z["soft_offs"]
+                sflat = z["soft"]
+                soft_all = [sflat[soff[i]:soff[i + 1]].tolist()
+                            for i in range(n_feats)]
+                train_soft = soft_all[:counts["train_n"]]
+                val_soft = soft_all[counts["train_n"]:]
+            say(f"cache hit {cache_path.name} train={len(train_feats)} "
+                f"val={len(val_feats)}")
+        else:
+            say(f"cache stale {cache_path.name} (row-count mismatch) "
+                f"— re-encoding")
+            cache_path.unlink()
+            (train_feats, train_fams, train_rws, skipped_train,
+             train_soft, soft_bad_train) = \
+                encode_all([rows[i] for i in train_idx], "train")
+            (val_feats, val_fams, val_rws, skipped_val,
+             val_soft, soft_bad_val) = encode_all(
+                [rows[i] for i in val_idx], "val")
+    else:
+        (train_feats, train_fams, train_rws, skipped_train,
+         train_soft, soft_bad_train) = \
+            encode_all([rows[i] for i in train_idx], "train")
+        (val_feats, val_fams, val_rws, skipped_val,
+         val_soft, soft_bad_val) = encode_all(
+            [rows[i] for i in val_idx], "val")
+
+    if not cache_path.exists():
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        offs = [0]
+        for ids, _ in train_feats + val_feats:
+            offs.append(offs[-1] + len(ids))
+        counts = {"train_n": len(train_feats), "val_n": len(val_feats),
+                  "skipped_train": skipped_train,
+                  "skipped_val": skipped_val}
+        payload = dict(
+            ids=np.array([i for ids, _ in train_feats + val_feats
+                          for i in ids], dtype=np.int32),
+            labels=np.array([i for _, ls in train_feats + val_feats
+                             for i in ls], dtype=np.int32),
+            offsets=np.array(offs, dtype=np.int64),
+            fams=np.array(train_fams + val_fams),
+            rws=np.array(train_rws + val_rws, dtype=np.float64),
+            counts=np.frombuffer(json.dumps(counts).encode(),
+                                 dtype=np.uint8))
+        if soft_mode:
+            sflat: list[float] = []
+            soffs = [0]
+            for probs in train_soft + val_soft:
+                sflat.extend(probs)
+                soffs.append(len(sflat))
+            payload["soft"] = np.array(sflat, dtype=np.float64)
+            payload["soft_offs"] = np.array(soffs, dtype=np.int64)
+            counts["soft_bad_train"] = soft_bad_train
+            counts["soft_bad_val"] = soft_bad_val
+            payload["counts"] = np.frombuffer(
+                json.dumps(counts).encode(), dtype=np.uint8)
+        np.savez(cache_path, **payload)
+        say(f"cache written {cache_path.name}")
+
+    # Teacher temperature applies AFTER the cache: raw facts are what
+    # is cached and sha-pinned downstream, so temp arms share one
+    # tokenization cache and the manifest records the trained-at temp.
+    if soft_mode and args.teacher_temp != 1.0:
+        import math
+
+        def temp_scale(probs: list[float]) -> list[float]:
+            pmax = max(probs)
+            if pmax <= 0:
+                return probs
+            inv = 1.0 / args.teacher_temp
+            w = [0.0 if p <= 0 else
+                 math.exp(inv * (math.log(p) - math.log(pmax)))
+                 for p in probs]
+            total = sum(w)
+            return [x / total for x in w] if total > 0 else probs
+
+        train_soft = [temp_scale(p) for p in train_soft]
+        val_soft = [temp_scale(p) for p in val_soft]
+        say(f"teacher_temp={args.teacher_temp:g} applied "
+            f"post-cache (train rows {len(train_soft)})")
+
+    train_nonunit = sum(1 for w in train_rws if w != 1.0)
+    val_nonunit = sum(1 for w in val_rws if w != 1.0)
+
+    lengths = [len(ids) for ids, _ in train_feats]
+    val_order = sorted(range(len(val_feats)),
+                       key=lambda i: len(val_feats[i][0]))
+
+    def make_order(epoch: int) -> list[int]:
+        if args.length_bucket:
+            return bucketed_order(lengths, args.seed, epoch,
+                                  bucket=max(args.batch * args.accum * 32,
+                                             256))
+        idx = list(range(len(train_feats)))
+        random.Random(args.seed + 7 + epoch).shuffle(idx)
+        return idx
+
+    steps_per_epoch = max(1, len(train_feats) // (args.batch * args.accum))
+    total_steps = max(1, int(steps_per_epoch * args.epochs))
+    opt = torch.optim.AdamW(
+        [p for p in model.parameters() if p.requires_grad], lr=args.lr)
+    sched = get_cosine_schedule_with_warmup(
+        opt, int(total_steps * args.warmup), total_steps)
+    # fp16 (the Volta/T5500 plan) needs loss scaling — unscaled fp16
+    # gradients underflow to zero and the run trains nothing, silently.
+    scaler = torch.amp.GradScaler("cuda", enabled=(args.dtype == "fp16"))
+
+    args.out.mkdir(parents=True, exist_ok=True)
+    log_path = args.out / "train-log.txt"
+
+    def log(msg: str) -> None:
+        with log_path.open("a", encoding="utf-8") as fh:
+            fh.write(msg + "\n")
+        say(msg)
+
+    log(f"knobs: {json.dumps({**vars(args), 'data_sha': data_sha[:12]},
+                              default=str)}")
+
+    def run_val(step: int) -> tuple[float, dict, float, float]:
+        """Exact per-row val losses in ONE forward per batch,
+        attributed per row and per family. Hard mode: token-mean CE
+        over supervised positions, token accuracy, mean entropy.
+        Soft mode: per-row listwise slot CE (mean over rows) + stop
+        CE, slot-top1 agreement with the teacher, mean entropy of the
+        student's slot distribution. Returns ``(overall loss,
+        per-family losses, accuracy metric, mean entropy)``; logs the
+        per-family table."""
+        model.eval()
+        row_losses: list[tuple[int, int]] = []
+        n_correct = 0
+        n_sup = 0
+        ent_sum = 0.0
+        # Soft accumulators
+        slot_ce_sum = 0.0
+        stop_ce_sum = 0.0
+        n_stop_total = 0
+        agree_n = 0
+        if soft_mode:
+            with torch.no_grad():
+                for start in range(0, len(val_order), 8):
+                    batch_idx = val_order[start:start + 8]
+                    batch = [val_feats[i] for i in batch_idx]
+                    input_ids, labels, attn = collate(batch)
+                    t_ids = torch.tensor(input_ids,
+                                         device=model.device)
+                    t_lab = torch.tensor(labels, device=model.device)
+                    t_att = torch.tensor(attn, device=model.device)
+                    sel, shift, pos = sup_logits(t_ids, t_att, t_lab)
+                    if pos[0].numel() == 0:
+                        continue
+                    tgt = shift[pos]
+                    verdict = (tgt == yes_id) | (tgt == no_id)
+                    out = soft_row_losses(
+                        sel, shift, pos,
+                        [val_soft[i] for i in batch_idx])
+                    if out is None:
+                        continue
+                    rows_ce, _ = out
+                    z_all = sel[verdict][:, yes_id] \
+                        - sel[verdict][:, no_id]
+                    # per-row slot distribution entropy + agreement
+                    k = 0
+                    for r, probs in enumerate(
+                            [val_soft[i] for i in batch_idx]):
+                        n = len(probs)
+                        z_r = z_all[k:k + n]
+                        p_r = torch.tensor(probs,
+                                           device=z_all.device,
+                                           dtype=z_all.dtype)
+                        q = torch.softmax(z_r, dim=-1)
+                        ent_sum += float(
+                            -(q * q.clamp_min(1e-12).log()).sum())
+                        agree_n += int(int(q.argmax()) ==
+                                       int(p_r.argmax()))
+                        row_losses.append((float(rows_ce[r]), 1))
+                        k += n
+                    slot_ce_sum += float(rows_ce.sum())
+                    stop = ~verdict
+                    if bool(stop.any()):
+                        stop_ce_sum += float(F.cross_entropy(
+                            sel[stop], tgt[stop],
+                            reduction="sum"))
+                        n_stop_total += int(stop.sum())
+            model.train()
+            n_rows = max(1, len(row_losses))
+            slot_ce_mean = slot_ce_sum / n_rows
+            stop_ce_mean = stop_ce_sum / max(1, n_stop_total)
+            overall = slot_ce_mean + args.stop_weight * stop_ce_mean
+            fam_sum: Counter = Counter()
+            fam_tok: Counter = Counter()
+            for (s, c), i in zip(row_losses, val_order):
+                fam_sum[val_fams[i]] += s
+                fam_tok[val_fams[i]] += c
+            per_family = {f: round(fam_sum[f] / max(1, fam_tok[f]), 4)
+                          for f in sorted(fam_sum)}
+            slot_agree = agree_n / max(1, len(row_losses))
+            ent_mean = ent_sum / max(1, len(row_losses))
+            log(f"val step={step} loss={overall:.4f} "
+                f"slot_ce={slot_ce_mean:.4f} "
+                f"stop_ce={stop_ce_mean:.4f} "
+                f"slot_agree={slot_agree:.4f} "
+                f"entropy={ent_mean:.4f} "
+                f"per_family={json.dumps(per_family)} "
+                f"rows={len(row_losses)}")
+            return overall, per_family, slot_agree, ent_mean
+        with torch.no_grad():
+            for start in range(0, len(val_order), 8):
+                batch = [val_feats[i] for i in
+                         val_order[start:start + 8]]
+                input_ids, labels, attn = collate(batch)
+                t_ids = torch.tensor(input_ids, device=model.device)
+                t_lab = torch.tensor(labels, device=model.device)
+                t_att = torch.tensor(attn, device=model.device)
+                sel, shift, pos = sup_logits(t_ids, t_att, t_lab)
+                if pos[0].numel() == 0:
+                    continue
+                ce = F.cross_entropy(sel, shift[pos], reduction="none")
+                n_correct += int((sel.argmax(-1)
+                                  == shift[pos]).sum())
+                n_sup += int(sel.shape[0])
+                probs = torch.softmax(sel, dim=-1)
+                ent_sum += float(
+                    -(probs * probs.clamp_min(1e-12).log())
+                    .sum(-1).sum())
+                bs = t_lab.shape[0]
+                row_sum = torch.zeros(bs, device=ce.device) \
+                    .index_add_(0, pos[0], ce)
+                row_cnt = torch.zeros(bs, device=ce.device) \
+                    .index_add_(0, pos[0], torch.ones_like(ce))
+                for j in range(bs):
+                    if int(row_cnt[j]) > 0:
+                        row_losses.append(
+                            (float(row_sum[j]), int(row_cnt[j])))
+        model.train()
+        total = sum(s for s, _ in row_losses)
+        toks = sum(c for _, c in row_losses)
+        overall = total / max(1, toks)
+        fam_sum: Counter = Counter()
+        fam_tok: Counter = Counter()
+        for (s, c), i in zip(row_losses, val_order):
+            fam_sum[val_fams[i]] += s
+            fam_tok[val_fams[i]] += c
+        per_family = {f: round(fam_sum[f] / max(1, fam_tok[f]), 4)
+                      for f in sorted(fam_sum)}
+        tok_acc = n_correct / max(1, n_sup)
+        ent_mean = ent_sum / max(1, n_sup)
+        log(f"val step={step} loss={overall:.4f} "
+            f"tok_acc={tok_acc:.4f} "
+            f"entropy={ent_mean:.4f} "
+            f"per_family={json.dumps(per_family)} "
+            f"rows={len(row_losses)}")
+        return overall, per_family, tok_acc, ent_mean
+
+    best = {"step": -1, "val_loss": float("inf")}
+    val_history: list[dict] = []
+
+    def maybe_checkpoint(step: int) -> None:
+        val_loss, per_family, acc_metric, ent_mean = run_val(step)
+        acc_key = "slot_agree" if soft_mode else "tok_acc"
+        val_history.append({"step": step, "loss": round(val_loss, 4),
+                            acc_key: round(acc_metric, 4),
+                            "entropy": round(ent_mean, 4),
+                            "per_family": per_family})
+        if val_loss < best["val_loss"]:
+            best["step"] = step
+            best["val_loss"] = val_loss
+            model.save_pretrained(str(args.out / "adapter-best"))
+            log(f"best -> adapter-best/ (step={step} "
+                f"loss={val_loss:.4f})")
+
+    window: deque[float] = deque(maxlen=100)
+    cum_loss = 0.0
+    cum_tokens = 0
+    micro = 0
+    step = 0
+    last_gn = 0.0
+    t0 = time.time()
+
+    # ---- resumability (v5): optimizer-step boundaries are resume
+    # points; resume-state.pt is written atomically every
+    # --ckpt-every steps and after every val checkpoint ----
+    resume_fingerprint = {
+        "base": args.base, "data_sha": data_sha,
+        "epochs": args.epochs, "lr": args.lr,
+        "lora_r": args.lora_r, "lora_alpha": args.lora_alpha,
+        "lora_dropout": args.lora_dropout,
+        "batch": args.batch, "accum": args.accum,
+        "max_len": args.max_len, "dtype": args.dtype,
+        "attn": args.attn,
+        "grad_checkpoint": not args.no_grad_checkpoint,
+        "warmup": args.warmup, "limit_rows": args.limit_rows,
+        "val_frac": args.val_frac, "val_cap": args.val_cap,
+        "val_every": args.val_every,
+        "family_weight": args.family_weight,
+        "row_weight_field": args.row_weight_field,
+        "length_bucket": args.length_bucket,
+        "soft_labels": args.soft_labels,
+        "teacher_temp": args.teacher_temp,
+        "stop_weight": args.stop_weight, "seed": args.seed,
+        "train_rows": len(train_feats), "val_rows": len(val_feats),
+    }
+    resume_point: tuple[int, int] | None = None
+    resumed_from: dict | None = None
+
+    def capture_rng() -> dict:
+        state: dict = {"torch": torch.get_rng_state(),
+                       "python": random.getstate()}
+        if torch.cuda.is_available():
+            state["cuda"] = torch.cuda.get_rng_state_all()
+        return state
+
+    def restore_rng(state: dict) -> None:
+        torch.set_rng_state(state["torch"].cpu())
+        random.setstate(state["python"])
+        if "cuda" in state and torch.cuda.is_available():
+            torch.cuda.set_rng_state_all(
+                [s.cpu() for s in state["cuda"]])
+
+    def save_resume_state(cur_step: int, cur_epoch: int,
+                          next_start: int) -> None:
+        # atomic: tmp + os.replace, so a power death mid-write
+        # cannot leave a torn checkpoint behind
+        adapter = {k: v.detach().cpu() for k, v
+                   in get_peft_model_state_dict(model).items()}
+        tmp = args.out / "resume-state.pt.tmp"
+        torch.save({
+            "format": "opencodifier.e1-resume/1",
+            "fingerprint": resume_fingerprint,
+            "step": cur_step, "epoch": cur_epoch,
+            "next_start": next_start,
+            "adapter": adapter,
+            "opt": opt.state_dict(), "sched": sched.state_dict(),
+            "scaler": scaler.state_dict(),
+            "best": best, "val_history": val_history,
+            "window": list(window),
+            "cum_loss": cum_loss, "cum_tokens": cum_tokens,
+            "rng": capture_rng(),
+        }, tmp)
+        os.replace(tmp, args.out / "resume-state.pt")
+        log(f"resume-state -> step={cur_step} "
+            f"(epoch={cur_epoch} next_start={next_start})")
+
+    if args.resume is not None:
+        ckpt_path = args.resume / "resume-state.pt"
+        if not ckpt_path.is_file():
+            sys.stderr.write(
+                f"resume: no {ckpt_path} — a run dir only has one "
+                f"after --ckpt-every optimizer steps completed; "
+                f"refusing to guess\n")
+            raise SystemExit(1)
+        state = torch.load(ckpt_path, map_location="cpu",
+                           weights_only=False)
+        if state.get("fingerprint") != resume_fingerprint:
+            sys.stderr.write(
+                "resume: knob fingerprint / data sha mismatch — the "
+                "state belongs to a different run recipe; refusing "
+                "to continue it\n")
+            raise SystemExit(1)
+        set_peft_model_state_dict(model, state["adapter"])
+        opt.load_state_dict(state["opt"])
+        sched.load_state_dict(state["sched"])
+        scaler.load_state_dict(state["scaler"])
+        best = state["best"]
+        val_history = state["val_history"]
+        window.clear()
+        window.extend(state["window"])
+        cum_loss = state["cum_loss"]
+        cum_tokens = state["cum_tokens"]
+        restore_rng(state["rng"])
+        step = int(state["step"])
+        resume_point = (int(state["epoch"]), int(state["next_start"]))
+        resumed_from = {"step": step, "epoch": resume_point[0],
+                        "ckpt_every": args.ckpt_every,
+                        "format": state.get("format")}
+        log(f"resumed at step={step}/{total_steps} "
+            f"(epoch={resume_point[0]} "
+            f"next_start={resume_point[1]}); "
+            f"best={best['val_loss']:.4f}@{best['step']} "
+            f"val_points={len(val_history)}")
+        t0 = time.time()
+    model.train()
+    profiler = None
+    profile_left = 0
+    for epoch in range(int(args.epochs + 0.999)):
+        if step >= total_steps:
+            break
+        order = make_order(epoch)
+        ep_start = (resume_point[1]
+                    if resume_point and epoch == resume_point[0]
+                    else 0)
+        for start in range(ep_start, len(order), args.batch):
+            sel_idx = order[start:start + args.batch]
+            batch = [train_feats[i] for i in sel_idx]
+            input_ids, labels, attn = collate(batch)
+            t_ids = torch.tensor(input_ids, device=model.device)
+            t_lab = torch.tensor(labels, device=model.device)
+            t_att = torch.tensor(attn, device=model.device)
+            sel, shift, pos = sup_logits(t_ids, t_att, t_lab)
+            if pos[0].numel() == 0:
+                continue
+            if soft_mode:
+                out = soft_row_losses(sel, shift, pos,
+                                      [train_soft[i]
+                                       for i in sel_idx])
+                if out is None:
+                    continue
+                rows_ce, _ = out
+                tgt = shift[pos]
+                stop = ~((tgt == yes_id) | (tgt == no_id))
+                stop_ce = (
+                    F.cross_entropy(sel[stop], tgt[stop],
+                                    reduction="mean")
+                    if bool(stop.any())
+                    else torch.zeros((), device=sel.device))
+                raw = rows_ce.mean() + args.stop_weight * stop_ce
+            else:
+                raw = F.cross_entropy(sel, shift[pos],
+                                      reduction="mean")
+            fw = 1.0
+            if fam_weights:
+                fams = [train_fams[i] for i in sel_idx]
+                fw = sum(fam_weights.get(f, 1.0) for f in fams) \
+                    / max(1, len(fams))
+            rw = 1.0
+            if args.row_weight_field:
+                rw = sum(train_rws[i] for i in sel_idx) \
+                    / max(1, len(sel_idx))
+            loss = raw * fw * rw
+            scaler.scale(loss / args.accum).backward()
+            n_tok = sum(1 for _, ls in batch for l in ls if l != -100)
+            loss_f = float(raw.detach())
+            window.append(loss_f)
+            cum_loss += loss_f * n_tok
+            cum_tokens += n_tok
+            micro += 1
+            if micro % args.accum == 0:
+                scaler.unscale_(opt)
+                last_gn = float(torch.nn.utils.clip_grad_norm_(
+                    [p for p in model.parameters() if p.requires_grad],
+                    1.0))
+                scaler.step(opt)
+                scaler.update()
+                sched.step()
+                opt.zero_grad(set_to_none=True)
+                step += 1
+                if step % 20 == 0 or step == total_steps:
+                    log(f"step={step}/{total_steps} "
+                        f"win={sum(window) / max(1, len(window)):.4f} "
+                        f"cum={cum_loss / max(1, cum_tokens):.4f} "
+                        f"lr={sched.get_last_lr()[0]:.2e} "
+                        f"gn={last_gn:.2f} "
+                        f"tok/s={cum_tokens / (time.time() - t0):.0f}")
+                if args.profile_steps > 0 and step == 1:
+                    from torch.profiler import (ProfilerActivity,
+                                                profile)
+                    profiler = profile(
+                        activities=[ProfilerActivity.CPU,
+                                    ProfilerActivity.CUDA],
+                        record_shapes=True)
+                    profiler.__enter__()
+                    profile_left = args.profile_steps
+                if profiler is not None and profile_left > 0:
+                    profile_left -= 1
+                    if profile_left == 0:
+                        profiler.__exit__(None, None, None)
+                        prof_dir = args.out / "profile"
+                        prof_dir.mkdir(exist_ok=True)
+                        profiler.export_chrome_trace(
+                            str(prof_dir / "trace.json"))
+                        (prof_dir / "summary.txt").write_text(
+                            profiler.key_averages().table(
+                                sort_by="cuda_time_total",
+                                row_limit=25))
+                        log(f"profile -> {prof_dir}/ "
+                            f"({args.profile_steps} steps)")
+                        profiler = None
+                if args.val_every > 0 and step % args.val_every == 0:
+                    maybe_checkpoint(step)
+                if step % args.ckpt_every == 0:
+                    # after maybe_checkpoint so the state carries
+                    # this step's val point if one just fired
+                    save_resume_state(step, epoch, start + args.batch)
+                if step >= total_steps:
+                    break
+    if args.val_every > 0 and step % args.val_every != 0:
+        maybe_checkpoint(step)
+
+    model.save_pretrained(str(args.out / "adapter"))
+    tok.save_pretrained(str(args.out / "adapter"))
+    peak_mem = (int(torch.cuda.max_memory_allocated())
+                if torch.cuda.is_available() else 0)
+    manifest = {
+        "manifest_version": "opencodifier.e1-train/5",
+        "resume": resumed_from,
+        "ckpt_every": args.ckpt_every,
+        "loss_mode": ("soft-slot-kl+stop-ce" if soft_mode
+                      else "hard-verdict-ce"),
+        "base": args.base,
+        "data": {"path": str(rows_path), "sha256": data_sha,
+                 "rows": len(rows), "train": len(train_feats),
+                 "val": len(val_feats),
+                 "loud_skipped_over_maxlen_train": skipped_train,
+                 "loud_skipped_over_maxlen_val": skipped_val,
+                 "soft_bad_slotprobs_train": soft_bad_train,
+                 "soft_bad_slotprobs_val": soft_bad_val},
+        "row_weight": {"field": args.row_weight_field,
+                       "train_rows": len(train_rws),
+                       "train_nonunit": train_nonunit,
+                       "train_mean": round(sum(train_rws)
+                                           / max(1, len(train_rws)), 6),
+                       "val_nonunit": val_nonunit},
+        "knobs": {"epochs": args.epochs, "lr": args.lr,
+                  "lora_r": args.lora_r, "lora_alpha": args.lora_alpha,
+                  "lora_dropout": args.lora_dropout,
+                  "target_modules": ["q_proj", "k_proj", "v_proj",
+                                     "o_proj"],
+                  "batch": args.batch, "accum": args.accum,
+                  "max_len": args.max_len, "dtype": args.dtype,
+                  "attn": args.attn, "warmup": args.warmup,
+                  "seed": args.seed, "torch_seeded": True,
+                  "val_frac": args.val_frac,
+                  "val_cap": args.val_cap, "val_every": args.val_every,
+                  "family_weight": fam_weights,
+                  "length_bucket": args.length_bucket,
+                  "grad_checkpoint": not args.no_grad_checkpoint,
+                  "soft_labels": args.soft_labels,
+                  "teacher_temp": args.teacher_temp,
+                  "stop_weight": args.stop_weight},
+        "optimizer": {"name": "AdamW",
+                      "weight_decay": opt.defaults["weight_decay"],
+                      "betas": list(opt.defaults["betas"]),
+                      "eps": opt.defaults["eps"]},
+        "versions": {"python": platform.python_version(),
+                     "torch": torch.__version__,
+                     "transformers": transformers.__version__,
+                     "peft": peft.__version__},
+        "steps": step,
+        "final_loss_token_weighted": round(
+            cum_loss / max(1, cum_tokens), 4),
+        "tokens_per_second_wall": round(
+            cum_tokens / max(1e-9, time.time() - t0)),
+        "peak_memory_bytes": peak_mem,
+        "loss_surface": ("slot margins: listwise CE(teacher, softmax) "
+                         "+ EOS stop CE" if soft_mode
+                         else "verdict tokens only (y=1 segments + EOS)"),
+        "val_history": val_history,
+        "best_checkpoint": {"step": best["step"],
+                            "val_loss": round(best["val_loss"], 4)}
+        if best["step"] >= 0 else None,
+    }
+    (args.out / "train-manifest.json").write_text(
+        json.dumps(manifest, indent=1) + "\n")
+    log(f"manifest -> {args.out / 'train-manifest.json'}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -29,6 +29,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from resources import ResourceMonitor
+
 
 def post(url: str, payload: dict, timeout: float = 120.0) -> dict:
     req = urllib.request.Request(
@@ -85,9 +87,22 @@ def decide(port: int, suite: dict, it: dict) -> dict:
     resp = post(f"http://127.0.0.1:{port}/v1/decide", payload)
     wall_ms = (time.monotonic() - t0) * 1000.0
     ans = resp["answers"][0]
+    # The IR ships the full per-candidate distribution on every Choice
+    # answer; keep it (sorted desc) plus the top-2 margin so ladder-gate
+    # refits can fit on real margins instead of winner prob alone.
+    dist = sorted(
+        (
+            {"key": e["key"], "probability": float(e["probability"])}
+            for e in ans["distribution"]["entries"]
+        ),
+        key=lambda e: -e["probability"],
+    )
+    margin = dist[0]["probability"] - dist[1]["probability"] if len(dist) > 1 else 1.0
     return {
         "choice": ans["choice"],
         "prob": ans["confidence"],
+        "dist": dist,
+        "margin": margin,
         "outcome": resp.get("outcome"),
         "wall_ms": wall_ms,
     }
@@ -104,6 +119,8 @@ def run_once(port: int, suite: dict) -> list[dict]:
                 "answer": it["answer"],
                 "pred": r["choice"],
                 "prob": r["prob"],
+                "dist": r["dist"],
+                "margin": r["margin"],
                 "outcome": r["outcome"],
                 "wall_ms": r["wall_ms"],
             }
@@ -138,15 +155,41 @@ def main() -> int:
         "most this many estimated tokens (the A/B arm for PLANNING §45 "
         "focused extraction)",
     )
+    ap.add_argument("--ladder", type=Path, default=None, help="pass --ladder to `serve`")
+    ap.add_argument(
+        "--llama", default=None, help="pass --llama to `serve` (model rung URL)"
+    )
+    ap.add_argument(
+        "--llama-model-id",
+        default=None,
+        help="pass --llama-model-id to `serve` (required with --llama)",
+    )
+    ap.add_argument(
+        "--llama-timeout-ms",
+        type=int,
+        default=None,
+        help="pass --llama-timeout-ms to `serve`",
+    )
     args = ap.parse_args()
+
+    if args.llama is not None and args.llama_model_id is None:
+        ap.error("--llama requires --llama-model-id")
 
     suite = json.loads(args.suite.read_text())
     args.out.parent.mkdir(parents=True, exist_ok=True)
     cmd = [str(args.binary), "serve", "--bind", f"127.0.0.1:{args.port}"]
     if args.focus_budget is not None:
         cmd += ["--focus-budget", str(args.focus_budget)]
+    if args.ladder is not None:
+        cmd += ["--ladder", str(args.ladder)]
+    if args.llama is not None:
+        cmd += ["--llama", args.llama, "--llama-model-id", args.llama_model_id]
+        if args.llama_timeout_ms is not None:
+            cmd += ["--llama-timeout-ms", str(args.llama_timeout_ms)]
     with open(args.out.with_suffix(".server.log"), "wb") as log:
         proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
+    monitor = ResourceMonitor()
+    monitor.start()
     try:
         health = wait_health(args.port, proc)
         model_id = health["identity"]["model_id"]
@@ -158,6 +201,8 @@ def main() -> int:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+        monitor.stop()
+        resources = monitor.report()
 
     determinism = {
         "predictions_match": all(a["pred"] == b["pred"] for a, b in zip(rows, rows2)),
@@ -183,10 +228,14 @@ def main() -> int:
         # solver composes to `relational-v1|builtin-lexical-v1`), so the
         # run JSON can never mislabel the deciding stack.
         "arm": f"engine__{model_id}",
+        # Speed rows are only comparable within a host (the board mixes
+        # hosts across eras); stamp provenance so every run self-describes.
+        "config": {"host": socket.gethostname()},
         "model": {"name": f"{model_id} (no ML)"},
         "suite_sha256": hashlib.sha256(args.suite.read_bytes()).hexdigest(),
         "single": rows,
         "determinism": determinism,
+        "resources": resources,
         "metrics": {
             "accuracy": acc,
             "accuracy_by_class": by_class,

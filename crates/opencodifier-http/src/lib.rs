@@ -165,8 +165,18 @@ mod tests {
         Arc::new(EngineHandle::lexical(EngineConfig::with_default_pipeline().unwrap()).unwrap())
     }
 
+    /// Serializes the tests that touch the process-global SIGINT stream.
+    /// [`serve`]'s default shutdown registers on tokio's process-wide
+    /// signal driver, so the real `SIGINT` the interrupt test delivers to
+    /// the pid also ends any concurrently-running `serve` — a race the
+    /// liveness assertion only loses under load (2026-10-11 CI receipt,
+    /// run 94570ecd). The lock keeps that assertion inside its own
+    /// signal-free window without weakening either test.
+    static SIGNAL_TESTS: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     #[tokio::test]
     async fn serve_binds_loopback_and_stays_up() {
+        let _signal_free = SIGNAL_TESTS.lock().await;
         let config = ServerConfig::new("127.0.0.1:0".parse().unwrap()).unwrap();
         let task = tokio::spawn(serve(config, lexical_handle()));
 
@@ -204,6 +214,7 @@ mod tests {
     /// ends.
     #[tokio::test]
     async fn shutdown_signal_resolves_on_a_real_interrupt() {
+        let _exclusive = SIGNAL_TESTS.lock().await;
         let task = tokio::spawn(shutdown_signal());
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         assert!(!task.is_finished(), "shutdown_signal ended without an interrupt");
@@ -270,7 +281,15 @@ mod tests {
         let health = reqwest::get(format!("http://{addr}/v1/healthz")).await.unwrap();
         assert_eq!(health.status(), reqwest::StatusCode::OK);
 
-        shutdown_tx.send(()).expect("server task still running");
+        // A failed send means the receiver was dropped: the server task ended
+        // BEFORE the signal. Join it to surface the task's own outcome — a
+        // plain `.expect` here would misreport the failure mode as "still
+        // running" when the real defect is an early exit (e.g. an accept-loop
+        // error under load; seen once on the fleet, 2026-10-09).
+        if shutdown_tx.send(()).is_err() {
+            let outcome = tokio::time::timeout(std::time::Duration::from_secs(1), task).await;
+            panic!("server task ended before the shutdown signal: {outcome:?}");
+        }
         let served = tokio::time::timeout(std::time::Duration::from_secs(5), task).await;
         assert!(served.expect("shutdown deadline").unwrap().is_ok());
     }
