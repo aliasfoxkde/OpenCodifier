@@ -5,9 +5,11 @@
 //! with a stable code, plus the deterministic distribution reconstruction
 //! the lossy adapters (`OpenAI`, `Anthropic`, `Jev` choice answers) rely on.
 
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use serde_json::{Map, Value};
 
-use opencodifier_core::{Distribution, ScoreLevel};
+use opencodifier_core::{Distribution, ImageMediaType, ScoreLevel};
 
 use crate::error::{SchemaError, SchemaResult};
 
@@ -96,6 +98,38 @@ pub(crate) fn score_level(field: &str, label: String) -> SchemaResult<ScoreLevel
     ScoreLevel::new(label).map_err(|error| SchemaError::invalid_value(field, error.to_string()))
 }
 
+/// Parses a `data:<media-type>;base64,<payload>` URL into its media type
+/// and decoded bytes — the one image-URL grammar every image-carrying
+/// adapter accepts, so the wire dialects cannot drift apart. The bytes
+/// are held decoded (the IR's canonical re-encode happens at
+/// serialization), so two callers sending the same image under different
+/// base64 flavors cache-key identically.
+pub(crate) fn parse_image_data_url(
+    field: &str,
+    url: &str,
+) -> SchemaResult<(ImageMediaType, Vec<u8>)> {
+    let rest = url.strip_prefix("data:").ok_or_else(|| {
+        SchemaError::invalid_value(field, "image reference must be a `data:` URL")
+    })?;
+    let (media, payload) = rest.split_once(";base64,").ok_or_else(|| {
+        SchemaError::invalid_value(field, "image reference must carry `;base64,` encoded data")
+    })?;
+    let media_type = ImageMediaType::try_from(media).map_err(SchemaError::from)?;
+    let bytes = BASE64_STANDARD
+        .decode(payload.as_bytes())
+        .map_err(|_| SchemaError::invalid_value(field, "payload is not valid base64"))?;
+    Ok((media_type, bytes))
+}
+
+/// Decodes a bare base64 image payload (no data-URL wrapper — the media
+/// type arrives in its own wire field), mapping failure onto
+/// `schema.invalid_value` with the named field.
+pub(crate) fn decode_base64_image(field: &str, payload: &str) -> SchemaResult<Vec<u8>> {
+    BASE64_STANDARD
+        .decode(payload.as_bytes())
+        .map_err(|_| SchemaError::invalid_value(field, "payload is not valid base64"))
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -179,5 +213,54 @@ mod tests {
             score_level("levels", String::new()).unwrap_err().code(),
             "schema.invalid_value"
         );
+    }
+
+    #[test]
+    fn data_urls_parse_into_media_type_and_bytes() {
+        let (media, bytes) =
+            parse_image_data_url("input[].image_url", "data:image/png;base64,iVBORw0KGgo=")
+                .unwrap();
+        assert_eq!(media, ImageMediaType::Png);
+        assert_eq!(bytes, vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+
+        // Bare `jpeg` (no `image/` prefix) is the alias the IR accepts.
+        let (media, _) = parse_image_data_url("url", "data:jpeg;base64,/9j/4A==").unwrap();
+        assert_eq!(media, ImageMediaType::Jpeg);
+    }
+
+    #[test]
+    fn malformed_data_urls_are_typed_invalid_values() {
+        // Not a `data:` URL at all — a remote reference cannot be decided
+        // locally.
+        let error = parse_image_data_url("url", "https://example.test/x.png").unwrap_err();
+        assert_eq!(error.code(), "schema.invalid_value");
+        assert_eq!(
+            error.to_string(),
+            "invalid value for `url`: image reference must be a `data:` URL"
+        );
+
+        // No `;base64,` separator.
+        let error = parse_image_data_url("url", "data:image/png,image.png").unwrap_err();
+        assert_eq!(error.code(), "schema.invalid_value");
+        assert!(error.to_string().contains(";base64,"), "{error}");
+
+        // Unknown media type surfaces the IR's own typed error (its core
+        // code remaps to `schema.invalid_value` at this boundary).
+        let error = parse_image_data_url("url", "data:image/webp;base64,aGk=").unwrap_err();
+        assert_eq!(error.code(), "schema.invalid_value");
+        assert!(error.to_string().contains("image/webp"), "{error}");
+
+        // Payload that is not base64.
+        let error = parse_image_data_url("url", "data:image/png;base64,not base64!!").unwrap_err();
+        assert_eq!(error.code(), "schema.invalid_value");
+        assert!(error.to_string().contains("base64"), "{error}");
+    }
+
+    #[test]
+    fn bare_base64_payloads_decode_with_named_fields() {
+        assert_eq!(decode_base64_image("source.data", "aGk=").unwrap(), b"hi".to_vec());
+        let error = decode_base64_image("source.data", "!!!").unwrap_err();
+        assert_eq!(error.code(), "schema.invalid_value");
+        assert!(error.to_string().contains("source.data"), "{error}");
     }
 }

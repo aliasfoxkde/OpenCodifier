@@ -71,7 +71,7 @@ use opencodifier_core::{DecisionRequest, DecisionResponse, Limits, State};
 use crate::codec::{WireFormat, enforce_limits};
 use crate::error::{SchemaError, SchemaResult};
 use crate::openai::{OpenAi, answer_for, report_for};
-use crate::support::{as_object, required_object};
+use crate::support::{as_object, decode_base64_image, required_object, required_string};
 
 /// Name of the tool that carries the decision answers.
 const TOOL_NAME: &str = "opencodifier_decide";
@@ -119,15 +119,33 @@ impl WireFormat for Anthropic {
     }
 
     /// Projects a request onto the tool definition plus the user message
-    /// carrying the state text.
+    /// carrying the state text. An image-bearing state projects the
+    /// images as Anthropic base64 image blocks after the text block
+    /// (D38); a text-only state keeps the plain-string message form.
     fn encode_request(&self, request: &DecisionRequest) -> SchemaResult<Value> {
         let tool = self.tool_for(request)?;
         let facts: serde_json::Map<String, Value> =
             request.state().facts().map(|(key, value)| (key.clone(), json!(value))).collect();
+        let content = if request.state().has_images() {
+            let mut blocks = vec![json!({"type": "text", "text": request.state().text()})];
+            for image in request.state().images() {
+                // `json!(image)` serializes through the IR's canonical
+                // base64 re-encode, so the wire form is a function of the
+                // bytes, never of how they arrived.
+                let mut source = json!(image);
+                if let Some(map) = source.as_object_mut() {
+                    map.insert("type".to_owned(), json!("base64"));
+                }
+                blocks.push(json!({"type": "image", "source": source}));
+            }
+            Value::Array(blocks)
+        } else {
+            json!(request.state().text())
+        };
         Ok(json!({
             "tools": [tool],
             "tool_choice": {"type": "tool", "name": TOOL_NAME},
-            "messages": [{"role": "user", "content": request.state().text()}],
+            "messages": [{"role": "user", "content": content}],
             "facts": Value::Object(facts),
         }))
     }
@@ -135,10 +153,13 @@ impl WireFormat for Anthropic {
     /// Normalizes a wire request body produced by
     /// [`Anthropic::encode_request`], or a bare tool definition.
     fn decode_request(&self, payload: &Value, limits: &Limits) -> SchemaResult<DecisionRequest> {
-        let (schema, text, facts) = split_request(payload)?;
+        let (schema, text, images, facts) = split_request(payload)?;
         let questions = self.decode_input_schema(&schema, limits)?;
         enforce_limits(text.len(), questions.len(), limits)?;
         let mut state = State::from_text(text);
+        for image in images {
+            state = state.with_image(image);
+        }
         if let Some(facts) = facts {
             for (key, value) in &facts {
                 let fact: opencodifier_core::FactValue = serde_json::from_value(value.clone())
@@ -196,7 +217,7 @@ impl WireFormat for Anthropic {
     }
 }
 
-/// Splits a request body into `(input_schema, state text, facts)`.
+/// Splits a request body into `(input_schema, state text, images, facts)`.
 ///
 /// Accepts either the full body (`tools` + `messages`) or a bare tool
 /// definition; the bare form carries no state text, which decodes to an
@@ -204,7 +225,12 @@ impl WireFormat for Anthropic {
 #[allow(clippy::type_complexity)]
 fn split_request(
     payload: &Value,
-) -> SchemaResult<(Value, String, Option<serde_json::Map<String, Value>>)> {
+) -> SchemaResult<(
+    Value,
+    String,
+    Vec<opencodifier_core::ImageInput>,
+    Option<serde_json::Map<String, Value>>,
+)> {
     let body = as_object("payload", payload)?;
     let facts = match body.get("facts") {
         Some(Value::Null) | None => None,
@@ -218,22 +244,32 @@ fn split_request(
         })?;
         let tool = as_object("tools[]", tool)?;
         let schema = required_object(tool, "input_schema")?;
-        let text = match body.get("messages") {
+        let (text, images) = match body.get("messages") {
             Some(messages) => state_from_messages(messages)?,
-            None => String::new(),
+            None => (String::new(), Vec::new()),
         };
-        return Ok((Value::Object(schema.clone()), text, facts));
+        return Ok((Value::Object(schema.clone()), text, images, facts));
     }
     let schema = required_object(body, "input_schema")?;
-    Ok((Value::Object(schema.clone()), String::new(), facts))
+    Ok((Value::Object(schema.clone()), String::new(), Vec::new(), facts))
 }
 
-/// Reads the state text out of a `messages` array.
-fn state_from_messages(messages: &Value) -> SchemaResult<String> {
+/// Reads the state text and images out of a `messages` array (D38).
+///
+/// String content is the state text verbatim. Content-block arrays
+/// concatenate their `text` blocks in order and decode `image` blocks
+/// (base64 source) into IR images; any other block type (`tool_use`,
+/// `tool_result`, `thinking`, …) carries no decision semantics, so it is
+/// a typed refusal — silently dropping it would decide with less
+/// evidence than the caller sent.
+fn state_from_messages(
+    messages: &Value,
+) -> SchemaResult<(String, Vec<opencodifier_core::ImageInput>)> {
     let messages = messages
         .as_array()
         .ok_or_else(|| SchemaError::invalid_type("messages", "array", messages))?;
     let mut text = String::new();
+    let mut images = Vec::new();
     for message in messages {
         let message = as_object("messages[]", message)?;
         if message.get("role").and_then(Value::as_str) != Some("user") {
@@ -241,13 +277,58 @@ fn state_from_messages(messages: &Value) -> SchemaResult<String> {
         }
         match message.get("content") {
             Some(Value::String(content)) => text.push_str(content),
+            Some(Value::Array(blocks)) => {
+                for block in blocks {
+                    let block = as_object("messages[].content[]", block)?;
+                    match block.get("type").and_then(Value::as_str) {
+                        Some("text") => {
+                            let block_text = required_string(block, "text")?;
+                            text.push_str(&block_text);
+                        }
+                        Some("image") => {
+                            let source = required_object(block, "source")?;
+                            let kind = required_string(source, "type")?;
+                            if kind != "base64" {
+                                return Err(SchemaError::UnsupportedConstruct {
+                                    construct: "messages[].content[].source.type",
+                                    context: format!(
+                                        ": `{kind}` image sources carry no decision semantics; \
+                                         only base64 sources are accepted"
+                                    ),
+                                });
+                            }
+                            let media = required_string(source, "media_type")?;
+                            let media_type =
+                                opencodifier_core::ImageMediaType::try_from(media.as_str())
+                                    .map_err(SchemaError::from)?;
+                            let data = required_string(source, "data")?;
+                            let bytes =
+                                decode_base64_image("messages[].content[].source.data", &data)?;
+                            images.push(opencodifier_core::ImageInput::new(media_type, bytes));
+                        }
+                        other => {
+                            return Err(SchemaError::UnsupportedConstruct {
+                                construct: "messages[].content[].type",
+                                context: format!(
+                                    ": `{}` content blocks carry no decision semantics",
+                                    other.unwrap_or("(missing)")
+                                ),
+                            });
+                        }
+                    }
+                }
+            }
             Some(other) => {
-                return Err(SchemaError::invalid_type("messages[].content", "string", other));
+                return Err(SchemaError::invalid_type(
+                    "messages[].content",
+                    "string or content-block array",
+                    other,
+                ));
             }
             None => return Err(SchemaError::missing("messages[].content")),
         }
     }
-    Ok(text)
+    Ok((text, images))
 }
 
 /// Rewrites `{"const": x}` properties into `{"enum": [x]}` recursively.
@@ -373,7 +454,7 @@ mod tests {
     }
 
     #[test]
-    fn messages_supply_the_state_text_only() {
+    fn messages_supply_the_state_text_and_images() {
         let request = request();
         let mut body = Anthropic.encode_request(&request).unwrap();
         // Non-user turns are skipped; user turns are concatenated in order.
@@ -385,11 +466,34 @@ mod tests {
         let decoded = Anthropic.decode_request(&body, &Limits::default()).unwrap();
         assert_eq!(decoded.state().text(), "route this request");
 
-        // Structured user content is a typed error rather than prose guess.
+        // Text blocks concatenate; an image block decodes into the IR.
+        body["messages"] = json!([
+            {"role": "user", "content": [
+                {"type": "text", "text": "classify "},
+                {"type": "text", "text": "this"},
+                {"type": "image", "source": {
+                    "type": "base64", "media_type": "image/png", "data": "iVBORw0KGgo="
+                }},
+            ]},
+        ]);
+        let decoded = Anthropic.decode_request(&body, &Limits::default()).unwrap();
+        assert_eq!(decoded.state().text(), "classify this");
+        assert_eq!(decoded.state().image_count(), 1);
+        assert_eq!(
+            decoded.state().images()[0].media_type(),
+            opencodifier_core::ImageMediaType::Png
+        );
+        assert_eq!(
+            decoded.state().images()[0].data(),
+            &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        );
+
+        // A text block without its text is missing content, not a schema
+        // drift.
         body["messages"] = json!([{"role": "user", "content": [{"type": "text"}]}]);
         assert_eq!(
             Anthropic.decode_request(&body, &Limits::default()).unwrap_err().code(),
-            "schema.invalid_type"
+            "schema.missing_field"
         );
 
         // A user turn without content has no state to decode.
@@ -398,6 +502,85 @@ mod tests {
             Anthropic.decode_request(&body, &Limits::default()).unwrap_err().code(),
             "schema.missing_field"
         );
+    }
+
+    /// An image-bearing state projects the canonical base64 image blocks,
+    /// and the encoded form re-decodes to the same images.
+    #[test]
+    fn image_bearing_states_project_onto_base64_blocks() {
+        let plain = request();
+        let with_image = DecisionRequest::new(
+            plain.state().clone().with_image(opencodifier_core::ImageInput::new(
+                opencodifier_core::ImageMediaType::Jpeg,
+                vec![0xFF, 0xD8, 0xFF, 0xE0],
+            )),
+            plain.questions().to_vec(),
+            plain.policy().clone(),
+            plain.metadata().clone(),
+        )
+        .unwrap();
+
+        let body = Anthropic.encode_request(&with_image).unwrap();
+        let content = body["messages"][0]["content"].as_array().unwrap();
+        assert_eq!(content[0], json!({"type": "text", "text": "route this request"}));
+        assert_eq!(content[1]["type"], json!("image"));
+        assert_eq!(content[1]["source"]["type"], json!("base64"));
+        assert_eq!(content[1]["source"]["media_type"], json!("image/jpeg"));
+
+        let decoded = Anthropic.decode_request(&body, &Limits::default()).unwrap();
+        assert_eq!(decoded.state().images(), with_image.state().images());
+        // The re-encode is stable: canonical base64 in both directions.
+        assert_eq!(Anthropic.encode_request(&decoded).unwrap(), body);
+    }
+
+    /// Content blocks that carry no decision semantics are typed
+    /// refusals — never silently dropped evidence.
+    #[test]
+    fn non_decision_content_blocks_are_typed_refusals() {
+        let tool = Anthropic.tool_for(&request()).unwrap();
+        let body_for = |content: Value| json!({"tools": [tool.clone()], "messages": [{"role": "user", "content": content}]});
+
+        // A `tool_result` block is not prose and not evidence.
+        let body = body_for(json!([
+            {"type": "tool_result", "tool_use_id": "toolu_1", "content": "42"},
+        ]));
+        let error = Anthropic.decode_request(&body, &Limits::default()).unwrap_err();
+        assert_eq!(error.code(), "schema.unsupported_construct");
+        assert!(error.to_string().contains("tool_result"), "{error}");
+
+        // URL image sources (the `url` kind) are refused: the base64 kind
+        // is the one this adapter accepts.
+        let body = body_for(json!([
+            {"type": "image", "source": {"type": "url", "url": "https://example.test/x.png"}},
+        ]));
+        let error = Anthropic.decode_request(&body, &Limits::default()).unwrap_err();
+        assert_eq!(error.code(), "schema.unsupported_construct");
+        assert!(error.to_string().contains("base64"), "{error}");
+
+        // An unknown media type is the IR's own typed error.
+        let body = body_for(json!([
+            {"type": "image", "source": {
+                "type": "base64", "media_type": "image/webp", "data": "aGk="
+            }},
+        ]));
+        let error = Anthropic.decode_request(&body, &Limits::default()).unwrap_err();
+        assert_eq!(error.code(), "schema.invalid_value", "{error}");
+        assert!(error.to_string().contains("image/webp"), "{error}");
+
+        // Base64 that is not base64 is a typed invalid value naming the
+        // field.
+        let body = body_for(json!([
+            {"type": "image", "source": {
+                "type": "base64", "media_type": "image/png", "data": "not base64!!"
+            }},
+        ]));
+        let error = Anthropic.decode_request(&body, &Limits::default()).unwrap_err();
+        assert_eq!(error.code(), "schema.invalid_value");
+        assert!(error.to_string().contains("source.data"), "{error}");
+
+        // Non-string, non-array content is an invalid type.
+        let error = Anthropic.decode_request(&body_for(json!(42)), &Limits::default()).unwrap_err();
+        assert_eq!(error.code(), "schema.invalid_type");
     }
 
     #[test]

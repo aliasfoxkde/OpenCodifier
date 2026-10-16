@@ -22,8 +22,8 @@
 
 use opencodifier_core::{
     BooleanQuestion, Candidate, ChoiceQuestion, DecisionAnswer, DecisionMetrics, DecisionPolicy,
-    DecisionQuestion, DecisionRequest, DecisionResponse, DecisionTrace, Limits, QuestionId,
-    RequestMetadata, ScoreLevel, ScoreQuestion, State,
+    DecisionQuestion, DecisionRequest, DecisionResponse, DecisionTrace, ImageInput, ImageMediaType,
+    Limits, QuestionId, RequestMetadata, ScoreLevel, ScoreQuestion, State,
 };
 use opencodifier_schema::{Native, WireFormat, anthropic::Anthropic, jev::Jev, openai::OpenAi};
 use proptest::prelude::*;
@@ -125,6 +125,29 @@ fn request() -> impl Strategy<Value = DecisionRequest> {
     })
 }
 
+/// One attached image: a real media type over arbitrary (small) bytes.
+fn image() -> impl Strategy<Value = ImageInput> {
+    (
+        proptest::sample::select(vec![ImageMediaType::Png, ImageMediaType::Jpeg]),
+        proptest::collection::vec(any::<u8>(), 1..32),
+    )
+        .prop_map(|(media_type, data)| ImageInput::new(media_type, data))
+}
+
+fn image_request() -> impl Strategy<Value = DecisionRequest> {
+    (request(), proptest::collection::vec(image(), 1..=3)).prop_map(|(original, images)| {
+        let state =
+            images.into_iter().fold(original.state().clone(), opencodifier_core::State::with_image);
+        DecisionRequest::new(
+            state,
+            original.questions().to_vec(),
+            original.policy().clone(),
+            original.metadata().clone(),
+        )
+        .unwrap()
+    })
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(256))]
 
@@ -137,6 +160,52 @@ proptest! {
 
         let re_encoded = Native.encode_request(&decoded).unwrap();
         prop_assert_eq!(re_encoded, wire);
+    }
+
+    /// Images ride along: the identity projection covers the image list
+    /// exactly, and the canonical base64 re-encode is stable.
+    #[test]
+    fn prop_native_image_request_round_trips_exactly(original in image_request()) {
+        let wire = Native.encode_request(&original).unwrap();
+        let decoded = Native.decode_request(&wire, &Limits::default()).unwrap();
+        prop_assert_eq!(&decoded, &original);
+
+        let re_encoded = Native.encode_request(&decoded).unwrap();
+        prop_assert_eq!(re_encoded, wire);
+    }
+
+    /// OpenAI carries images as `data:` URL parts; the decoded image list
+    /// is exact and the canonical re-encode is byte-stable regardless of
+    /// the base64 flavor a caller used (the IR re-encodes canonically).
+    #[test]
+    fn prop_openai_image_request_round_trips(original in image_request()) {
+        let wire = OpenAi.encode_request(&original).unwrap();
+        let decoded = OpenAi.decode_request(&wire, &Limits::default()).unwrap();
+        prop_assert_eq!(decoded.state().text(), original.state().text());
+        prop_assert_eq!(decoded.state().images(), original.state().images());
+        prop_assert_eq!(sorted(decoded.questions()), sorted(original.questions()));
+
+        // The image parts re-encode byte-identically (attachment order);
+        // the schema section may reorder because decode returns questions
+        // in the schema's sorted-key order.
+        let re_encoded = OpenAi.encode_request(&decoded).unwrap();
+        prop_assert_eq!(&re_encoded["input"], &wire["input"]);
+    }
+
+    /// Anthropic carries images as base64 source blocks; same exactness
+    /// and re-encode stability as the OpenAI parts form.
+    #[test]
+    fn prop_anthropic_image_request_round_trips(original in image_request()) {
+        let wire = Anthropic.encode_request(&original).unwrap();
+        let decoded = Anthropic.decode_request(&wire, &Limits::default()).unwrap();
+        prop_assert_eq!(decoded.state().text(), original.state().text());
+        prop_assert_eq!(decoded.state().images(), original.state().images());
+        prop_assert_eq!(sorted(decoded.questions()), sorted(original.questions()));
+
+        // Same as the OpenAI property: the image blocks re-encode
+        // byte-identically; only the schema section can reorder.
+        let re_encoded = Anthropic.encode_request(&decoded).unwrap();
+        prop_assert_eq!(&re_encoded["messages"][0]["content"], &wire["messages"][0]["content"]);
     }
 
     /// Jev preserves the state text and every question through the

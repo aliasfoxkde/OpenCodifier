@@ -13,8 +13,8 @@ use std::sync::LazyLock;
 use opencodifier_core::{
     Candidate, CandidateId, ChoiceQuestion, ConfidenceReport, DecisionAnswer, DecisionMetrics,
     DecisionOutcome, DecisionPolicy, DecisionQuestion, DecisionRequest, DecisionResponse,
-    DecisionTrace, Distribution, Limits, QuestionId, RequestMetadata, ScoreLevel, ScoreQuestion,
-    State,
+    DecisionTrace, Distribution, ImageInput, ImageMediaType, Limits, QuestionId, RequestMetadata,
+    ScoreLevel, ScoreQuestion, State,
 };
 use opencodifier_schema::{Native, WireFormat, anthropic::Anthropic, jev::Jev, openai::OpenAi};
 use serde_json::{Value, json};
@@ -150,6 +150,53 @@ fn fixture_native_request_round_trips() {
 
     let encoded = Native.encode_request(&decoded).unwrap();
     assert_eq!(encoded, fixture_value("native/request.json"), "canonical bytes must be locked");
+
+    let round_tripped = Native.decode_request(&encoded, &LIMITS).unwrap();
+    assert_eq!(round_tripped, expected);
+}
+
+/// The request `native/request-images.json` describes: the canonical
+/// fixture with one image attached to the state.
+fn native_image_request() -> DecisionRequest {
+    let metadata = RequestMetadata {
+        request_id: Some("fixture-images-0001".to_owned()),
+        limits: Limits::default(),
+    };
+    DecisionRequest::new(
+        State::from_text("classify the attached chart").with_image(ImageInput::new(
+            ImageMediaType::Png,
+            vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
+        )),
+        vec![DecisionQuestion::Choice(
+            ChoiceQuestion::new(
+                "model",
+                "Which model should read this chart?",
+                vec![
+                    Candidate::new("local-qwen", "General vision").unwrap(),
+                    Candidate::new("local-glm", "Deep vision").unwrap(),
+                ],
+            )
+            .unwrap(),
+        )],
+        DecisionPolicy::default(),
+        metadata,
+    )
+    .unwrap()
+}
+
+#[test]
+fn fixture_native_request_images_round_trips() {
+    let expected = native_image_request();
+    let decoded: DecisionRequest =
+        serde_json::from_str(&fixture("native/request-images.json")).expect("fixture decodes");
+    assert_eq!(decoded, expected, "the image fixture must match the IR it claims to describe");
+
+    let encoded = Native.encode_request(&decoded).unwrap();
+    assert_eq!(
+        encoded,
+        fixture_value("native/request-images.json"),
+        "canonical image bytes must be locked"
+    );
 
     let round_tripped = Native.decode_request(&encoded, &LIMITS).unwrap();
     assert_eq!(round_tripped, expected);
@@ -295,6 +342,76 @@ fn fixture_anthropic_tool_boolean_round_trips() {
         panic!("expected a boolean answer");
     };
     assert!(!*value);
+}
+
+/// The request the image-bearing fixtures describe: one choice question
+/// and a state carrying the 8-byte PNG signature as its one image.
+fn image_request() -> DecisionRequest {
+    DecisionRequest::new(
+        State::from_text("classify the attached chart").with_image(ImageInput::new(
+            ImageMediaType::Png,
+            vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
+        )),
+        vec![DecisionQuestion::Choice(
+            ChoiceQuestion::new(
+                "model",
+                "Which model should read this chart?",
+                vec![
+                    Candidate::new("local-qwen", "General vision").unwrap(),
+                    Candidate::new("local-glm", "Deep vision").unwrap(),
+                ],
+            )
+            .unwrap(),
+        )],
+        DecisionPolicy::default(),
+        RequestMetadata::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn fixture_anthropic_messages_images_round_trips() {
+    let fixture = fixture_value("anthropic/messages-images.request.json");
+    let decoded = Anthropic.decode_request(&fixture, &LIMITS).unwrap();
+    assert_eq!(decoded.state().text(), "classify the attached chart");
+    assert_eq!(decoded.state().image_count(), 1);
+    assert_eq!(decoded.state().images()[0].media_type(), ImageMediaType::Png);
+    assert_eq!(
+        decoded.state().images()[0].data(),
+        &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    );
+    assert_eq!(decoded.questions(), image_request().questions());
+
+    // The image-block shape the encoder emits is byte-locked; the tool
+    // projection is locked separately by the `tool-*` fixtures.
+    let encoded = Anthropic.encode_request(&decoded).unwrap();
+    assert_eq!(
+        encoded["messages"][0]["content"], fixture["messages"][0]["content"],
+        "messages-images.request.json content blocks are byte-locked"
+    );
+}
+
+#[test]
+fn fixture_openai_input_images_round_trips() {
+    let fixture = fixture_value("openai/input-images.request.json");
+    let decoded = OpenAi.decode_request(&fixture, &LIMITS).unwrap();
+    assert_eq!(decoded.state().text(), "classify the attached chart");
+    assert_eq!(decoded.state().image_count(), 1);
+    assert_eq!(decoded.state().images()[0].media_type(), ImageMediaType::Png);
+    assert_eq!(
+        decoded.state().images()[0].data(),
+        &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+    );
+    assert_eq!(decoded.questions(), image_request().questions());
+
+    // The content-part shape the encoder emits is byte-locked; the
+    // `format` projection is locked separately by the `*.format.json`
+    // fixtures.
+    let encoded = OpenAi.encode_request(&decoded).unwrap();
+    assert_eq!(
+        encoded["input"], fixture["input"],
+        "input-images.request.json content parts are byte-locked"
+    );
 }
 
 #[test]
@@ -482,13 +599,17 @@ fn readme_names_every_fixture() {
     let readme = fixture("README.md");
     let mut on_disk: Vec<String> = Vec::new();
     for (format, files) in [
-        ("native", &["native/request.json", "native/response.json"][..]),
+        (
+            "native",
+            &["native/request.json", "native/request-images.json", "native/response.json"][..],
+        ),
         (
             "openai",
             &[
                 "openai/choice-enum.format.json",
                 "openai/score-bounded-integer.format.json",
                 "openai/boolean.format.json",
+                "openai/input-images.request.json",
             ][..],
         ),
         (
@@ -497,6 +618,7 @@ fn readme_names_every_fixture() {
                 "anthropic/tool-choice.tool.json",
                 "anthropic/tool-score.tool.json",
                 "anthropic/tool-boolean.tool.json",
+                "anthropic/messages-images.request.json",
             ][..],
         ),
         (
@@ -519,5 +641,5 @@ fn readme_names_every_fixture() {
             );
         }
     }
-    assert_eq!(on_disk.len(), 14, "every fixture file is catalogued");
+    assert_eq!(on_disk.len(), 17, "every fixture file is catalogued");
 }
