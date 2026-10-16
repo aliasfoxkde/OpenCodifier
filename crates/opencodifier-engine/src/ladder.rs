@@ -54,6 +54,33 @@ use crate::classifier::Classifier;
 use crate::error::{EngineError, EngineResult};
 use crate::graph::NodeKind;
 
+/// Which input modality a rung decides on (D38).
+///
+/// Every classifier receives the full [`State`](opencodifier_core::State);
+/// the modality declares what the rung is *built* to read. An `Image`
+/// rung is trained on image-bearing states (a vision encoder behind the
+/// text), so the escalation walk skips it — without error, and with a
+/// `rungs_skipped` trace fact — for text-only requests, and assembly
+/// plus validation refuse a request that carries images when no `Image`
+/// rung is configured (`engine.vision_required`). `Text` is the default:
+/// every rung built before D38 behaves byte-for-byte as before.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RungModality {
+    /// Text-only states; the default modality.
+    #[default]
+    Text,
+    /// Image-bearing states (vision encoder + text head).
+    Image,
+}
+
+impl RungModality {
+    /// `true` for [`RungModality::Image`].
+    #[must_use]
+    pub fn is_image(self) -> bool {
+        matches!(self, Self::Image)
+    }
+}
+
 /// One decider a question can escalate to: a classifier plus the
 /// optional per-rung calibration and gate policy that make its
 /// confidences and thresholds commensurable with the rest of the ladder
@@ -64,7 +91,8 @@ use crate::graph::NodeKind;
 /// only when the previous rung's gate did not accept. `calibration:
 /// None` applies the engine-level calibration to the rung's
 /// distributions; `policy: None` gates the rung with the deciding
-/// node's ladder-resolved policy.
+/// node's ladder-resolved policy; `modality: Text` (the default) runs
+/// on every state the walk reaches.
 #[derive(Debug)]
 pub struct Rung {
     /// The decider. Its `model_id()` rides the cache-key decoration, so
@@ -75,6 +103,10 @@ pub struct Rung {
     /// This rung's gate policy (`None`: the deciding node's resolved
     /// policy).
     pub policy: Option<DecisionPolicy>,
+    /// Which input modality this rung decides on (D38; `Text` by
+    /// default). Part of the rungs identity decoration: flipping a
+    /// rung's modality re-keys cached decisions.
+    pub modality: RungModality,
 }
 
 impl Rung {
@@ -82,7 +114,7 @@ impl Rung {
     /// calibration and the node's policy.
     #[must_use]
     pub fn new(classifier: Arc<dyn Classifier>) -> Self {
-        Self { classifier, calibration: None, policy: None }
+        Self { classifier, calibration: None, policy: None, modality: RungModality::Text }
     }
 
     /// Attaches a per-rung calibration (D15), consuming and returning
@@ -97,6 +129,14 @@ impl Rung {
     #[must_use]
     pub fn with_policy(mut self, policy: DecisionPolicy) -> Self {
         self.policy = Some(policy);
+        self
+    }
+
+    /// Sets the rung's input modality (D38), consuming and returning
+    /// `self`.
+    #[must_use]
+    pub fn with_modality(mut self, modality: RungModality) -> Self {
+        self.modality = modality;
         self
     }
 }

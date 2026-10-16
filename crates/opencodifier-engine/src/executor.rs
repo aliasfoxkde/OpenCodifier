@@ -1160,9 +1160,22 @@ impl<'a> Executor<'a> {
             // distribution.
             let mut live = decision;
             let mut chain: Vec<String> = Vec::new();
+            let mut skipped: Vec<&str> = Vec::new();
             for rung in self.fallbacks {
                 if live.report.outcome_for(policy) == DecisionOutcome::Accept {
                     break;
+                }
+                // An image-modality rung cannot read a text-only state
+                // (D38): skip it without error — skipping is routing,
+                // not abstention — and record the skip so the trace
+                // explains why the walk went past a rung. The check sits
+                // after the accept-break, so `rungs_skipped` names only
+                // rungs the walk actually reached. A text rung under an
+                // image-bearing state is the mirror case (C11): it still
+                // fires, reading the text it was built for.
+                if rung.modality.is_image() && !self.state.has_images() {
+                    skipped.push(rung.classifier.model_id());
+                    continue;
                 }
                 // A rung walk may not outrun the request's budget.
                 self.guard()?;
@@ -1243,10 +1256,7 @@ impl<'a> Executor<'a> {
             // names each rung's model, answer, and its own gate outcome,
             // so the trace explains routing without exposing any model
             // reasoning.
-            if !chain.is_empty() {
-                detail.push(("rungs_fired", FactValue::Integer(int(chain.len()))));
-                detail.push(("rung_chain", FactValue::Text(chain.join(" -> "))));
-            }
+            detail.extend(walk_facts(&chain, &skipped));
             entries.push(TraceEntry::new(id, detail));
             resolved.push((question_id.clone(), final_outcome, agreement));
         }
@@ -1854,6 +1864,24 @@ fn severity(outcome: DecisionOutcome) -> u8 {
         // conservative ranking until it is classified.
         _ => 5,
     }
+}
+
+/// The escalation-walk trace facts (D27/D38): the fired chain — each
+/// rung's model, answer, and its own gate outcome, so the trace explains
+/// routing without exposing any model reasoning — and the modality-skipped
+/// rungs. Both only when they actually happened, so an all-text walk over
+/// text rungs records nothing and the trace stays byte-identical to the
+/// pre-D38 engine.
+fn walk_facts(chain: &[String], skipped: &[&str]) -> Vec<(&'static str, FactValue)> {
+    let mut facts = Vec::new();
+    if !chain.is_empty() {
+        facts.push(("rungs_fired", FactValue::Integer(int(chain.len()))));
+        facts.push(("rung_chain", FactValue::Text(chain.join(" -> "))));
+    }
+    if !skipped.is_empty() {
+        facts.push(("rungs_skipped", FactValue::Text(skipped.join(" -> "))));
+    }
+    facts
 }
 
 /// The canonical name of an outcome, for traces.

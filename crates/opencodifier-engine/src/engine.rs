@@ -359,13 +359,18 @@ impl DecisionEngine {
         // list order — a swap, refit, or reorder re-keys mechanically.
         // A rung's policy has no version of its own; changing one is an
         // artifact change under D25's discipline (bump the ladder id).
+        // Modality rides the same decoration (D38): an `:image` suffix
+        // marks image-capable rungs, so flipping a rung's modality —
+        // which changes which requests the walk will run it on — re-keys
+        // mechanically too.
         if !fallbacks.is_empty() {
             let signature = fallbacks
                 .iter()
                 .map(|rung| {
                     format!(
-                        "{}@{}",
+                        "{}{}@{}",
                         rung.classifier.model_id(),
+                        if rung.modality.is_image() { ":image" } else { "" },
                         rung.calibration.as_ref().map_or(0, |calibration| calibration.version())
                     )
                 })
@@ -508,6 +513,17 @@ impl DecisionEngine {
                 nodes: self.config.graph.nodes().len(),
                 limit: limits.max_graph_nodes,
             });
+        }
+        // Image-bearing state with no image-capable rung is refused up
+        // front (D38): a text-only ladder answering an image request
+        // would decide with less evidence than the caller sent, and
+        // silently dropping the images is exactly the failure posture
+        // the engine refuses elsewhere (D21). Fires even on a zero-rung
+        // engine — images are never dropped on the floor; text-only
+        // requests never see this gate (images default to empty).
+        let images = request.state().image_count();
+        if images > 0 && !self.fallbacks.iter().any(|rung| rung.modality.is_image()) {
+            return Err(EngineError::VisionRequired { images });
         }
         Ok(())
     }
