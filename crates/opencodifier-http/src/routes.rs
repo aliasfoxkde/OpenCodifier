@@ -38,13 +38,13 @@ use crate::error::HttpError;
 
 /// Maximum accepted request body, in bytes.
 ///
-/// Matched to [`Limits::max_input_bytes`] (`1_048_576`) so the HTTP
-/// transport never accepts a body the IR would refuse anyway: oversized
-/// input is rejected at the socket boundary instead of being parsed,
-/// decoded, and only then refused. The unit test below pins the two
-/// values together, so a change to the limit cannot silently desynchronize
-/// them.
-pub const MAX_BODY_BYTES: usize = 1_048_576;
+/// Sized for images (D38): [`Limits::max_input_bytes`] of text plus the
+/// image ceilings ([`Limits::max_images`] × [`Limits::max_image_bytes`])
+/// re-encoded as base64 — 1 MiB + 4 × 2 MiB × 4⁄3 ≈ 11.7 MiB — so a body
+/// the IR would accept is never rejected at the socket, while anything
+/// larger is refused before parsing. The unit test below pins the value,
+/// so a change to the ceilings has to revisit this cap deliberately.
+pub const MAX_BODY_BYTES: usize = 12 * 1_048_576;
 
 /// The request header that selects the wire adapter (D30).
 ///
@@ -135,8 +135,12 @@ pub fn router(handle: Arc<EngineHandle>) -> Router {
 /// Free-form generation is refused with
 /// `schema.unsupported_generation_field`: a request without a
 /// `response_format`, with `response_format.type` other than
-/// `json_schema`, or with non-string message content asks the runtime to
-/// write prose, and the runtime decides instead of pretending.
+/// `json_schema`, or with message content that is neither a string nor
+/// text/`image_url` parts asks the runtime to write prose, and the runtime
+/// decides instead of pretending. Images in message content ride into the
+/// IR state (D38); whether the runtime can read them is the engine's
+/// vision gate, so an image the configured ladder has no rung for is a
+/// `400` (`engine.vision_required`), never a silently text-only decision.
 ///
 /// Abstention and every other typed outcome stay `200`; the
 /// `opencodifier` extension object carries the outcome and calibrated
@@ -151,14 +155,14 @@ async fn chat_completions(
     })?;
 
     let model = obj.get("model").and_then(Value::as_str).unwrap_or("opencodifier");
-    let state_text = state_from_messages(obj.get("messages"))?;
+    let input = state_from_messages(obj.get("messages"))?;
     let properties = decision_properties(obj.get("response_format"))?;
     let required = schema_required(obj.get("response_format"), &properties);
 
     let request: DecisionRequest = OpenAi
         .decode_request(
             &json!({
-                "input": state_text,
+                "input": input,
                 "format": { "strict": true, "schema": {
                     "properties": properties, "required": required,
                 } },
@@ -205,38 +209,88 @@ async fn chat_completions(
     })))
 }
 
-/// Flattens chat messages into the state text the IR decides over.
+/// Flattens chat messages into the `input` the `OpenAi` adapter decodes.
 ///
-/// System and user contents join in message order; assistant turns are
-/// skipped (the runtime decides over the caller's state, not over a
-/// conversation to continue). Non-string content is refused: the IR's
-/// state is text, and silently dropping a multimodal part would decide
-/// over less than the caller sent.
-fn state_from_messages(messages: Option<&Value>) -> Result<String, HttpError> {
+/// System and user contents join in message order (assistant turns are
+/// skipped — the runtime decides over the caller's state, not over a
+/// conversation to continue). String contents join with a blank line and
+/// produce the plain-string `input` exactly as before D38. Content-block
+/// arrays concatenate their text and collect their `image_url` parts; with
+/// images present, `input` becomes the adapter's parts array — one
+/// `input_text` part then the images — so the single normalization grammar
+/// is the adapter's own, never a second pipeline here (D12). Any other
+/// content part is a refusal: silently dropping it would decide over less
+/// than the caller sent.
+fn state_from_messages(messages: Option<&Value>) -> Result<Value, HttpError> {
     let messages = messages
         .and_then(Value::as_array)
         .ok_or_else(|| HttpError::from(SchemaError::missing("messages")))?;
-    let mut parts: Vec<&str> = Vec::new();
+    let mut text: Vec<String> = Vec::new();
+    let mut images: Vec<Value> = Vec::new();
     for message in messages {
         let role = message.get("role").and_then(Value::as_str).unwrap_or("");
         if role != "system" && role != "user" {
             continue;
         }
-        let content = message.get("content").and_then(Value::as_str).ok_or_else(|| {
-            HttpError::from(SchemaError::invalid_value(
-                "messages[].content",
-                "only string content is supported; the runtime decides over text",
-            ))
-        })?;
-        parts.push(content);
+        match message.get("content") {
+            Some(Value::String(content)) => text.push(content.clone()),
+            Some(Value::Array(blocks)) => {
+                let mut chunk = String::new();
+                for block in blocks {
+                    let block = block.as_object().ok_or_else(|| {
+                        HttpError::from(SchemaError::invalid_value(
+                            "messages[].content[]",
+                            "content parts must be objects",
+                        ))
+                    })?;
+                    match block.get("type").and_then(Value::as_str) {
+                        Some("text") => {
+                            let part =
+                                block.get("text").and_then(Value::as_str).ok_or_else(|| {
+                                    HttpError::from(SchemaError::invalid_value(
+                                        "messages[].content[].text",
+                                        "text parts must carry string text",
+                                    ))
+                                })?;
+                            chunk.push_str(part);
+                        }
+                        Some("image_url") => images.push(Value::Object(block.clone())),
+                        other => {
+                            return Err(HttpError::from(SchemaError::invalid_value(
+                                "messages[].content[].type",
+                                format!(
+                                    "`{}` content parts carry no decision semantics; \
+                                     only text and image_url are supported",
+                                    other.unwrap_or("(missing)")
+                                ),
+                            )));
+                        }
+                    }
+                }
+                text.push(chunk);
+            }
+            _ => {
+                return Err(HttpError::from(SchemaError::invalid_value(
+                    "messages[].content",
+                    "only string content or text/image_url parts are supported; \
+                     the runtime decides over text and attached images",
+                )));
+            }
+        }
     }
-    if parts.is_empty() {
+    let joined = text.join("\n\n");
+    if joined.is_empty() && images.is_empty() {
         return Err(HttpError::from(SchemaError::invalid_value(
             "messages",
             "no system or user message content to decide over",
         )));
     }
-    Ok(parts.join("\n\n"))
+    if images.is_empty() {
+        return Ok(Value::String(joined));
+    }
+    let mut parts = vec![json!({ "type": "input_text", "text": joined })];
+    parts.extend(images);
+    Ok(Value::Array(parts))
 }
 
 /// Extracts the strict-mode schema map a decision needs from
@@ -612,7 +666,7 @@ mod tests {
 
     use super::*;
     use opencodifier_core::{
-        BooleanQuestion, Candidate, ChoiceQuestion, DecisionPolicy, DecisionQuestion,
+        BooleanQuestion, Candidate, ChoiceQuestion, DecisionPolicy, DecisionQuestion, Limits,
         RequestMetadata, ScoreLevel, ScoreQuestion, State,
     };
 
@@ -677,8 +731,108 @@ mod tests {
     }
 
     #[test]
-    fn body_limit_matches_the_request_input_ceiling() {
-        assert_eq!(MAX_BODY_BYTES, 1_048_576);
+    fn body_limit_admits_the_ir_image_ceilings() {
+        // The widest legal body: 1 MiB of text plus four 2 MiB images
+        // base64-encoded (4/3) ≈ 11.7 MiB — inside the cap. A value this
+        // size must not be refused at the socket before the IR sees it.
+        let limits = Limits::default();
+        let widest = limits.max_input_bytes + limits.max_images * limits.max_image_bytes * 4 / 3;
+        assert!(widest <= MAX_BODY_BYTES, "widest legal body {widest} exceeds the cap");
+        assert_eq!(MAX_BODY_BYTES, 12 * 1_048_576);
+    }
+
+    /// Text-only chat messages keep the exact pre-D38 input: a plain
+    /// string, messages joined with a blank line.
+    #[test]
+    fn text_only_chat_messages_stay_a_plain_string() {
+        let messages = json!([
+            {"role": "system", "content": "be brief"},
+            {"role": "assistant", "content": "skipped"},
+            {"role": "user", "content": "route "},
+            {"role": "user", "content": "this request"},
+        ]);
+        let input = state_from_messages(Some(&messages)).unwrap();
+        assert_eq!(input, json!("be brief\n\nroute \n\nthis request"));
+    }
+
+    /// Image parts ride into the adapter's parts array, text first; the
+    /// adapter's own grammar does the decoding from there.
+    #[test]
+    fn image_parts_project_onto_the_adapter_input() {
+        let messages = json!([
+            {"role": "user", "content": [
+                {"type": "text", "text": "classify the chart"},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}},
+            ]},
+        ]);
+        let input = state_from_messages(Some(&messages)).unwrap();
+        let parts = input.as_array().unwrap();
+        assert_eq!(parts[0], json!({"type": "input_text", "text": "classify the chart"}));
+        assert_eq!(parts[1]["type"], json!("image_url"));
+        assert_eq!(parts[1]["image_url"]["url"], json!("data:image/png;base64,iVBORw0KGgo="));
+
+        // The projected input decodes through the adapter end to end.
+        let decoded = OpenAi
+            .decode_request(
+                &json!({ "input": input, "format": {"strict": true, "schema": {
+                    "type": "object",
+                    "properties": {"needs_tools": {"type": "boolean"}},
+                    "required": ["needs_tools"],
+                    "additionalProperties": false,
+                }}}),
+                &Limits::default(),
+            )
+            .unwrap();
+        assert_eq!(decoded.state().text(), "classify the chart");
+        assert_eq!(decoded.state().image_count(), 1);
+    }
+
+    /// Content the runtime cannot decide over — a non-string,
+    /// non-array part, or an unknown part type — is a typed refusal, never
+    /// silently dropped.
+    #[test]
+    fn undecidable_chat_content_is_refused() {
+        let number = json!([{"role": "user", "content": 42}]);
+        assert_eq!(state_from_messages(Some(&number)).unwrap_err().code(), "schema.invalid_value");
+
+        let audio = json!([{"role": "user", "content": [
+            {"type": "input_audio", "audio": "data:audio/wav;base64,aGk="},
+        ]}]);
+        assert_eq!(state_from_messages(Some(&audio)).unwrap_err().code(), "schema.invalid_value");
+
+        let empty = json!([{"role": "assistant", "content": "only assistant turns"}]);
+        assert_eq!(state_from_messages(Some(&empty)).unwrap_err().code(), "schema.invalid_value");
+    }
+
+    /// An image-bearing chat completion against the zero-ML engine (no
+    /// vision rung) is the engine's typed `engine.vision_required` refusal
+    /// as a 400 — the decision is refused, not silently made text-only.
+    #[tokio::test]
+    async fn an_image_chat_completion_without_a_vision_rung_is_a_400() {
+        let handle = zero_ml_engine();
+        let body = json!({
+            "model": "opencodifier",
+            "messages": [
+                {"role": "user", "content": [
+                    {"type": "text", "text": "classify the attached chart"},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo="}},
+                ]},
+            ],
+            "response_format": {"type": "json_schema", "json_schema": {"schema": {
+                "type": "object",
+                "properties": {"needs_tools": {"type": "boolean"}},
+                "required": ["needs_tools"],
+                "additionalProperties": false,
+            }}},
+        });
+        let error = chat_completions(
+            State(Arc::clone(&handle)),
+            Bytes::from(serde_json::to_vec(&body).unwrap()),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.code(), "engine.vision_required", "{error}");
+        assert_eq!(error.status(), axum::http::StatusCode::BAD_REQUEST);
     }
 
     #[test]
