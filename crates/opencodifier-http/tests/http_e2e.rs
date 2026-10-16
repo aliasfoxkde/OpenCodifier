@@ -776,16 +776,35 @@ async fn chat_completions_flattens_messages_and_refuses_undecidable_ones() {
         serde_json::from_str(body["choices"][0]["message"]["content"].as_str().unwrap()).unwrap();
     assert!(content["model"].is_string(), "content: {content}");
 
-    // Multimodal content is refused, never silently dropped: the IR's
-    // state is text, and dropping a part decides over less than was sent.
-    let multimodal = post_chat(
+    // Text parts decide exactly as string content does (D38): the parts
+    // array flattens into the state, and the decision is the same one the
+    // plain-string form above produced.
+    let text_parts = post_chat(
         &server,
         json!([{ "role": "user", "content": [{ "type": "text", "text": "refactor" }] }]),
         format.clone(),
     )
     .await;
-    assert_eq!(multimodal.status(), StatusCode::BAD_REQUEST);
-    let error: Value = multimodal.json().await.unwrap();
+    assert_eq!(text_parts.status(), StatusCode::OK);
+    let body: Value = text_parts.json().await.unwrap();
+    let content: Value =
+        serde_json::from_str(body["choices"][0]["message"]["content"].as_str().unwrap()).unwrap();
+    assert!(content["model"].is_string(), "content: {content}");
+
+    // A part with no decision semantics is refused, never silently
+    // dropped: deciding over less than the caller sent is the D21 posture
+    // the runtime refuses everywhere.
+    let audio = post_chat(
+        &server,
+        json!([{ "role": "user", "content": [
+            { "type": "text", "text": "refactor" },
+            { "type": "input_audio", "audio": "data:audio/wav;base64,aGk=" },
+        ] }]),
+        format.clone(),
+    )
+    .await;
+    assert_eq!(audio.status(), StatusCode::BAD_REQUEST);
+    let error: Value = audio.json().await.unwrap();
     assert_eq!(error_code(&error), "schema.invalid_value", "error: {error}");
 
     // No decidable state at all.

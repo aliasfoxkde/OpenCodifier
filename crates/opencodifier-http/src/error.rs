@@ -135,12 +135,17 @@ impl HttpError {
     /// The HTTP status this failure maps onto.
     ///
     /// Decode, normalization, and validation failures are `400` — bad
-    /// input, not a broken server. Only a genuine engine fault or a
-    /// server-side failure is `500`.
+    /// input, not a broken server — and so is
+    /// [`EngineError::VisionRequired`]: a request whose images no rung can
+    /// read is a caller mistake the client must fix, whatever engine code
+    /// it carries. Only a genuine engine fault or a server-side failure is
+    /// `500`.
     #[must_use]
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::Schema(_) | Self::Graph(_) => StatusCode::BAD_REQUEST,
+            Self::Schema(_) | Self::Graph(_) | Self::Engine(EngineError::VisionRequired { .. }) => {
+                StatusCode::BAD_REQUEST
+            }
             Self::Engine(_) | Self::RemoteBindForbidden(_) | Self::Bind { .. } | Self::Serve(_) => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
@@ -193,6 +198,15 @@ mod tests {
         let error = HttpError::Engine(EngineError::from(CoreError::EmptyQuestions));
         assert_eq!(error.code(), "ir.invalid");
         assert_eq!(error.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    /// A request whose images no rung can read is the caller's mistake
+    /// (D38), so the engine's code rides on a 400, not a 500.
+    #[test]
+    fn vision_required_is_a_400_with_the_engine_code() {
+        let error = HttpError::Engine(EngineError::VisionRequired { images: 1 });
+        assert_eq!(error.code(), "engine.vision_required");
+        assert_eq!(error.status(), StatusCode::BAD_REQUEST);
     }
 
     #[test]
