@@ -243,6 +243,22 @@ pub enum EngineError {
         /// What went wrong inside the backend.
         reason: String,
     },
+
+    /// A request carries image-bearing state but no configured rung can
+    /// decide on images (D38). Refused at validation — before any
+    /// classifier runs — because silently dropping the images would
+    /// decide with less evidence than the caller sent (the D21 posture,
+    /// applied to modality). `abstention is a successful outcome`, but
+    /// refusing an undecidable request up front is cheaper and clearer
+    /// than an answer that never looked at the evidence.
+    #[error(
+        "request carries {images} image(s) but no image-capable rung is configured; \
+         attach a vision rung or send a text-only state"
+    )]
+    VisionRequired {
+        /// How many images the request carried.
+        images: usize,
+    },
 }
 
 impl EngineError {
@@ -274,6 +290,7 @@ impl EngineError {
             Self::ClassifierFailed { .. } => "engine.classifier_failed",
             Self::MissingBackend { .. } => "engine.missing_backend",
             Self::BackendFailed { .. } => "engine.backend_failed",
+            Self::VisionRequired { .. } => "engine.vision_required",
             Self::Core(_) => "ir.invalid",
         }
     }
@@ -317,6 +334,7 @@ mod tests {
             EngineError::Serialization { reason: "r".into() },
             EngineError::NodeFailed { node: "n".into(), reason: "r".into() },
             EngineError::ClassifierFailed { model_id: "m".into(), reason: "r".into() },
+            EngineError::VisionRequired { images: 2 },
             EngineError::Core(CoreError::EmptyQuestions),
         ];
 
@@ -333,6 +351,12 @@ mod tests {
         assert_eq!(errors[18].code(), "calibration.invalid");
         assert_eq!(errors[21].code(), "engine.classifier_failed");
         assert_eq!(errors[21].to_string(), "classifier `m` failed: r");
+        assert_eq!(errors[22].code(), "engine.vision_required");
+        assert_eq!(
+            errors[22].to_string(),
+            "request carries 2 image(s) but no image-capable rung is configured; \
+             attach a vision rung or send a text-only state"
+        );
     }
 
     #[test]

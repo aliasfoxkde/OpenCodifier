@@ -22,7 +22,7 @@ use opencodifier_core::{
 };
 use opencodifier_engine::{
     Action, Classifier, Condition, DecisionEngine, DecisionGraph, EngineConfig, EngineError,
-    MockClassifier, NodeKind, Rule, Rung, SystemClock,
+    MockClassifier, NodeKind, Rule, Rung, RungModality, SystemClock,
 };
 
 /// The `outcome` fact of the threshold trace entry, if recorded.
@@ -517,7 +517,12 @@ fn a_rung_walk_reanswers_a_question_the_executor_gated() {
         Arc::new(SystemClock),
         primary,
         None,
-        vec![Rung { classifier: fallback, calibration: None, policy: None }],
+        vec![Rung {
+            classifier: fallback,
+            calibration: None,
+            policy: None,
+            modality: RungModality::Text,
+        }],
     )
     .unwrap();
 

@@ -150,7 +150,7 @@ pub use focus::{
 };
 pub use graph::{DecisionGraph, GraphDocument, NodeKind, NodeSpec};
 pub use handle::{EngineHandle, EngineHealth, MAX_BATCH};
-pub use ladder::{LadderPolicy, LadderProfile, Rung, RungCalibration};
+pub use ladder::{LadderPolicy, LadderProfile, Rung, RungCalibration, RungModality};
 pub use ladder_fit::{
     BooleanEvidence, BooleanThresholdFit, emit_boolean_profile, f1_at, fit_boolean_threshold,
 };
