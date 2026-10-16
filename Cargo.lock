@@ -1480,6 +1480,7 @@ dependencies = [
 name = "opencodifier-schema"
 version = "0.6.1"
 dependencies = [
+ "base64 0.22.1",
  "opencodifier-core",
  "proptest",
  "serde",

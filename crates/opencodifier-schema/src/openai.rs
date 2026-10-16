@@ -88,8 +88,8 @@ use opencodifier_core::{
 use crate::codec::{WireFormat, enforce_limits, enforce_unique_questions};
 use crate::error::{SchemaError, SchemaResult};
 use crate::support::{
-    as_object, as_string, certain_distribution, optional_string, required_array, required_object,
-    required_string, score_level, unit_interval,
+    as_object, as_string, certain_distribution, optional_string, parse_image_data_url,
+    required_array, required_object, required_string, score_level, unit_interval,
 };
 
 /// Whether two branches of an `anyOf` describe the same decision.
@@ -448,11 +448,30 @@ impl WireFormat for OpenAi {
     /// Projects a request onto the wire body `OpenCodifier` sends alongside a
     /// structured-outputs call: the strict `format` object (embed it as
     /// `response_format` in Chat Completions or `text.format` in the
-    /// Responses API), the state text, and the typed facts.
+    /// Responses API), the state text, and the typed facts. An
+    /// image-bearing state projects `input` as content parts — one
+    /// `input_text` part followed by one `input_image` part per image,
+    /// each a `data:` URL over the IR's canonical base64 (D38); a
+    /// text-only state keeps the plain-string form.
     fn encode_request(&self, request: &DecisionRequest) -> SchemaResult<Value> {
         let schema = self.schema_for(request)?;
         let facts: serde_json::Map<String, Value> =
             request.state().facts().map(|(key, value)| (key.clone(), json!(value))).collect();
+        let input = if request.state().has_images() {
+            let mut parts = vec![json!({"type": "input_text", "text": request.state().text()})];
+            for image in request.state().images() {
+                let raw = json!(image);
+                let url = format!(
+                    "data:{};base64,{}",
+                    raw["media_type"].as_str().unwrap_or_default(),
+                    raw["data"].as_str().unwrap_or_default()
+                );
+                parts.push(json!({"type": "input_image", "image_url": url}));
+            }
+            Value::Array(parts)
+        } else {
+            json!(request.state().text())
+        };
         Ok(json!({
             "format": {
                 "type": "json_schema",
@@ -460,19 +479,38 @@ impl WireFormat for OpenAi {
                 "strict": true,
                 "schema": schema,
             },
-            "input": request.state().text(),
+            "input": input,
             "facts": Value::Object(facts),
         }))
     }
 
     /// Normalizes a wire request body produced by [`OpenAi::encode_request`].
     ///
-    /// Unknown fields are ignored; the decoded request carries the default
-    /// policy and the caller's limits (see the module docs).
+    /// `input` accepts either the plain string form or an array of
+    /// content parts: `input_text`/`text` parts concatenate into the
+    /// state text and `input_image`/`image_url` parts decode into IR
+    /// images (D38); any other part type carries no decision semantics
+    /// and is a typed refusal. Unknown fields are ignored; the decoded
+    /// request carries the default policy and the caller's limits (see
+    /// the module docs).
     fn decode_request(&self, payload: &Value, limits: &Limits) -> SchemaResult<DecisionRequest> {
         let body = as_object("payload", payload)?;
-        let text = required_string(body, "input")?;
+        let (text, images) = match body.get("input") {
+            Some(Value::String(text)) => (text.clone(), Vec::new()),
+            Some(Value::Array(parts)) => state_from_parts(parts)?,
+            Some(other) => {
+                return Err(SchemaError::invalid_type(
+                    "input",
+                    "string or content-part array",
+                    other,
+                ));
+            }
+            None => return Err(SchemaError::missing("input")),
+        };
         let mut state = State::from_text(text);
+        for image in images {
+            state = state.with_image(image);
+        }
         if let Some(facts) = body.get("facts") {
             let facts = as_object("facts", facts)?;
             for (key, value) in facts {
@@ -483,9 +521,8 @@ impl WireFormat for OpenAi {
         }
         let format = required_object(body, "format")?;
         let schema = required_object(format, "schema")?;
-        let text = required_string(body, "input")?;
         let questions = self.decode_schema_map(schema, limits)?;
-        enforce_limits(text.len(), questions.len(), limits)?;
+        enforce_limits(state.text().len(), questions.len(), limits)?;
         DecisionRequest::new(state, questions, DecisionPolicy::default(), limits_metadata(limits))
             .map_err(SchemaError::from)
     }
@@ -570,6 +607,58 @@ impl WireFormat for OpenAi {
 /// Wraps caller limits into request metadata.
 fn limits_metadata(limits: &Limits) -> opencodifier_core::RequestMetadata {
     opencodifier_core::RequestMetadata { request_id: None, limits: limits.clone() }
+}
+
+/// Reads the state text and images out of an `input` content-part array
+/// (D38).
+///
+/// `input_text` (Responses API) and `text` (Chat Completions) parts
+/// concatenate into the state text; `input_image` and `image_url` parts
+/// decode their `data:` URL into an IR image, accepting the URL either
+/// as a plain string (Responses) or as `{"url": …}` (Chat). Any other
+/// part type carries no decision semantics, so it is a typed refusal —
+/// silently dropping it would decide with less evidence than the caller
+/// sent.
+fn state_from_parts(parts: &[Value]) -> SchemaResult<(String, Vec<opencodifier_core::ImageInput>)> {
+    let mut text = String::new();
+    let mut images = Vec::new();
+    for part in parts {
+        let part = as_object("input[]", part)?;
+        match part.get("type").and_then(Value::as_str) {
+            Some("input_text" | "text") => {
+                text.push_str(&required_string(part, "text")?);
+            }
+            Some("input_image" | "image_url") => {
+                let url = match part.get("image_url") {
+                    Some(Value::String(url)) => url.clone(),
+                    Some(value @ Value::Object(_)) => {
+                        let object = as_object("input[].image_url", value)?;
+                        required_string(object, "url")?
+                    }
+                    Some(other) => {
+                        return Err(SchemaError::invalid_type(
+                            "input[].image_url",
+                            "string or object",
+                            other,
+                        ));
+                    }
+                    None => return Err(SchemaError::missing("input[].image_url")),
+                };
+                let (media_type, bytes) = parse_image_data_url("input[].image_url", &url)?;
+                images.push(opencodifier_core::ImageInput::new(media_type, bytes));
+            }
+            other => {
+                return Err(SchemaError::UnsupportedConstruct {
+                    construct: "input[].type",
+                    context: format!(
+                        ": `{}` content parts carry no decision semantics",
+                        other.unwrap_or("(missing)")
+                    ),
+                });
+            }
+        }
+    }
+    Ok((text, images))
 }
 
 /// The question text, taken from `title` (a supported strict-mode keyword).
@@ -1492,5 +1581,144 @@ mod tests {
         let wire = OpenAi.encode_request(&request).unwrap();
         let decoded = OpenAi.decode_request(&wire, &Limits::default()).unwrap();
         assert_eq!(decoded.questions(), request.questions());
+    }
+
+    /// An image-bearing state projects `input` as content parts, and the
+    /// encoded form re-decodes to the same images.
+    #[test]
+    fn image_bearing_states_project_onto_input_parts() {
+        let plain = build_request(vec![choice()]);
+        let with_image = DecisionRequest::new(
+            plain.state().clone().with_image(opencodifier_core::ImageInput::new(
+                opencodifier_core::ImageMediaType::Jpeg,
+                vec![0xFF, 0xD8, 0xFF, 0xE0],
+            )),
+            plain.questions().to_vec(),
+            plain.policy().clone(),
+            plain.metadata().clone(),
+        )
+        .unwrap();
+
+        let body = OpenAi.encode_request(&with_image).unwrap();
+        let parts = body["input"].as_array().expect("image states project a parts array");
+        assert_eq!(parts[0], json!({"type": "input_text", "text": "route this request"}));
+        assert_eq!(parts[1]["type"], json!("input_image"));
+        let url = parts[1]["image_url"].as_str().unwrap();
+        assert!(url.starts_with("data:image/jpeg;base64,"), "{url}");
+        assert_eq!(&url["data:image/jpeg;base64,".len()..], "/9j/4A==", "canonical base64");
+
+        let decoded = OpenAi.decode_request(&body, &Limits::default()).unwrap();
+        assert_eq!(decoded.state().images(), with_image.state().images());
+        assert_eq!(OpenAi.encode_request(&decoded).unwrap(), body, "re-encode is stable");
+
+        // A text-only state keeps the plain-string form byte-identically.
+        let plain_body = OpenAi.encode_request(&plain).unwrap();
+        assert!(plain_body["input"].is_string());
+    }
+
+    /// Both vendor input dialects decode: the Responses part names and the
+    /// Chat Completions content-part names, with the image URL as a string
+    /// or as a `{"url": …}` object.
+    #[test]
+    fn chat_completions_part_shapes_are_accepted() {
+        let schema = OpenAi.schema_for(&build_request(vec![boolean()])).unwrap();
+        let decode = |input| {
+            let body = json!({
+                "format": {"type": "json_schema", "name": "opencodifier_decisions", "strict": true, "schema": schema},
+                "input": input,
+            });
+            OpenAi.decode_request(&body, &Limits::default())
+        };
+
+        // Chat Completions text/image names, image URL as an object.
+        let decoded = decode(json!([
+            {"type": "text", "text": "look "},
+            {"type": "image_url", "image_url": {
+                "url": "data:image/png;base64,iVBORw0KGgo="
+            }},
+        ]))
+        .unwrap();
+        assert_eq!(decoded.state().text(), "look ");
+        assert_eq!(decoded.state().image_count(), 1);
+
+        // Responses names, image URL as a plain string.
+        let decoded = decode(json!([
+            {"type": "input_text", "text": "look"},
+            {"type": "input_image", "image_url": "data:image/jpeg;base64,/9j/4A=="},
+        ]))
+        .unwrap();
+        assert_eq!(
+            decoded.state().images()[0].media_type(),
+            opencodifier_core::ImageMediaType::Jpeg
+        );
+    }
+
+    /// Malformed image parts and inputs are typed refusals.
+    #[test]
+    fn malformed_image_inputs_are_typed_refusals() {
+        let schema = OpenAi.schema_for(&build_request(vec![boolean()])).unwrap();
+        let decode = |input| {
+            let body = json!({
+                "format": {"type": "json_schema", "name": "opencodifier_decisions", "strict": true, "schema": schema},
+                "input": input,
+            });
+            OpenAi.decode_request(&body, &Limits::default())
+        };
+
+        // A part type with no decision semantics.
+        let error = decode(json!([
+            {"type": "input_audio", "audio": "data:audio/wav;base64,aGk="},
+        ]))
+        .unwrap_err();
+        assert_eq!(error.code(), "schema.unsupported_construct");
+        assert!(error.to_string().contains("input_audio"), "{error}");
+
+        // A remote URL is not decidable locally: only `data:` URLs carry
+        // the bytes.
+        let error = decode(json!([
+            {"type": "input_image", "image_url": "https://example.test/x.png"},
+        ]))
+        .unwrap_err();
+        assert_eq!(error.code(), "schema.invalid_value");
+        assert!(error.to_string().contains("data:"), "{error}");
+
+        // Payload that is not base64.
+        let error = decode(json!([
+            {"type": "input_image", "image_url": "data:image/png;base64,not base64!!"},
+        ]))
+        .unwrap_err();
+        assert_eq!(error.code(), "schema.invalid_value");
+
+        // Unknown media type.
+        let error = decode(json!([
+            {"type": "input_image", "image_url": "data:image/webp;base64,aGk="},
+        ]))
+        .unwrap_err();
+        assert_eq!(error.code(), "schema.invalid_value", "{error}");
+        assert!(error.to_string().contains("image/webp"), "{error}");
+
+        // `image_url` of the wrong shape entirely.
+        let error = decode(json!([{"type": "input_image", "image_url": 7}])).unwrap_err();
+        assert_eq!(error.code(), "schema.invalid_type");
+
+        let error = decode(json!([{"type": "input_image"}])).unwrap_err();
+        assert_eq!(error.code(), "schema.missing_field");
+
+        // A text part without its text.
+        let error = decode(json!([{"type": "input_text"}])).unwrap_err();
+        assert_eq!(error.code(), "schema.missing_field");
+
+        // `input` that is neither string nor array.
+        let error = decode(json!(42)).unwrap_err();
+        assert_eq!(error.code(), "schema.invalid_type");
+
+        // Missing `input` entirely.
+        let body = json!({
+            "format": {"type": "json_schema", "name": "opencodifier_decisions", "strict": true, "schema": schema},
+        });
+        assert_eq!(
+            OpenAi.decode_request(&body, &Limits::default()).unwrap_err().code(),
+            "schema.missing_field"
+        );
     }
 }

@@ -249,6 +249,36 @@ fn check_limits(request: &DecisionRequest, limits: &Limits) -> SchemaResult<()> 
             limits.max_retrieval_results,
         ));
     }
+    // Image ceilings (D38), mirroring the text checks: the actual images
+    // against the interface ceiling, then the request's declared ceilings
+    // against it (a request must not widen its own budget past what the
+    // interface allows).
+    if request.state().image_count() > limits.max_images {
+        return Err(SchemaError::limit(
+            "max_images",
+            request.state().image_count(),
+            limits.max_images,
+        ));
+    }
+    for image in request.state().images() {
+        if image.data().len() > limits.max_image_bytes {
+            return Err(SchemaError::limit(
+                "max_image_bytes",
+                image.data().len(),
+                limits.max_image_bytes,
+            ));
+        }
+    }
+    if payload_limits.max_images > limits.max_images {
+        return Err(SchemaError::limit("max_images", payload_limits.max_images, limits.max_images));
+    }
+    if payload_limits.max_image_bytes > limits.max_image_bytes {
+        return Err(SchemaError::limit(
+            "max_image_bytes",
+            payload_limits.max_image_bytes,
+            limits.max_image_bytes,
+        ));
+    }
     if payload_limits.max_execution_time > limits.max_execution_time {
         let actual = payload_limits.max_execution_time.as_secs();
         let max = limits.max_execution_time.as_secs();
@@ -269,7 +299,8 @@ mod tests {
     use opencodifier_core::{
         BooleanQuestion, Candidate, ChoiceQuestion, ConfidenceReport, DecisionAnswer,
         DecisionMetrics, DecisionOutcome, DecisionPolicy, DecisionQuestion, DecisionTrace,
-        Distribution, QuestionId, RequestMetadata, ScoreLevel, ScoreQuestion, State,
+        Distribution, ImageInput, ImageMediaType, QuestionId, RequestMetadata, ScoreLevel,
+        ScoreQuestion, State,
     };
 
     use serde_json::json;
@@ -473,6 +504,78 @@ mod tests {
         let error = Native.decode_response(&encoded, &request, &Limits::default()).unwrap_err();
         assert_eq!(error.code(), "schema.invalid_value");
         assert!(error.to_string().contains("level_extra"), "{error}");
+    }
+
+    /// The identity projection covers image-bearing states: the decoded
+    /// bytes come back exactly, and the canonical base64 re-encode is
+    /// stable.
+    #[test]
+    fn image_bearing_requests_round_trip_value_exactly() {
+        let request = DecisionRequest::new(
+            sample_request()
+                .state()
+                .clone()
+                .with_image(ImageInput::new(ImageMediaType::Png, vec![0x89, 0x50, 0x4E, 0x47])),
+            sample_request().questions().to_vec(),
+            sample_request().policy().clone(),
+            sample_request().metadata().clone(),
+        )
+        .unwrap();
+        let encoded = Native.encode_request(&request).unwrap();
+        assert_eq!(encoded["state"]["images"][0]["media_type"], json!("image/png"));
+
+        let decoded = Native.decode_request(&encoded, &Limits::default()).unwrap();
+        assert_eq!(decoded, request, "images survive the identity projection exactly");
+        assert_eq!(Native.encode_request(&decoded).unwrap(), encoded);
+    }
+
+    /// The caller's image ceilings are enforced before the IR constructor
+    /// runs, with the same `schema.limit_exceeded` shape as the text
+    /// checks.
+    #[test]
+    fn image_limits_are_enforced_against_the_caller() {
+        let image = ImageInput::new(ImageMediaType::Jpeg, vec![0xFF, 0xD8, 0xFF]);
+        let request = DecisionRequest::new(
+            State::from_text("classify").with_image(image.clone()).with_image(image),
+            sample_request().questions().to_vec(),
+            sample_request().policy().clone(),
+            RequestMetadata::default(),
+        )
+        .unwrap();
+        let encoded = Native.encode_request(&request).unwrap();
+
+        // Two attached images against a one-image caller ceiling.
+        let tight = Limits { max_images: 1, ..Limits::default() };
+        let error = Native.decode_request(&encoded, &tight).unwrap_err();
+        assert_eq!(error.code(), "schema.limit_exceeded");
+        assert!(matches!(error, SchemaError::LimitExceeded { limit: "max_images", .. }));
+
+        // One image larger than the caller's per-image ceiling.
+        let tight = Limits { max_image_bytes: 2, ..Limits::default() };
+        let error = Native.decode_request(&encoded, &tight).unwrap_err();
+        assert_eq!(error.code(), "schema.limit_exceeded");
+        assert!(matches!(error, SchemaError::LimitExceeded { limit: "max_image_bytes", .. }));
+    }
+
+    /// A payload may not declare image ceilings wider than the caller's,
+    /// mirroring every other declared limit.
+    #[test]
+    fn widened_declared_image_limits_are_rejected() {
+        let request = sample_request();
+        let mut encoded = Native.encode_request(&request).unwrap();
+        encoded.as_object_mut().unwrap()["metadata"]["limits"]["max_images"] =
+            json!(Limits::default().max_images + 1);
+        let error = Native.decode_request(&encoded, &Limits::default()).unwrap_err();
+        assert!(matches!(error, SchemaError::LimitExceeded { limit: "max_images", .. }), "{error}");
+
+        let mut encoded = Native.encode_request(&request).unwrap();
+        encoded.as_object_mut().unwrap()["metadata"]["limits"]["max_image_bytes"] =
+            json!(Limits::default().max_image_bytes + 1);
+        let error = Native.decode_request(&encoded, &Limits::default()).unwrap_err();
+        assert!(
+            matches!(error, SchemaError::LimitExceeded { limit: "max_image_bytes", .. }),
+            "{error}"
+        );
     }
 
     #[test]

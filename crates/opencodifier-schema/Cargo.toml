@@ -17,6 +17,9 @@ workspace = true
 opencodifier-core = { path = "../opencodifier-core", version = "0.6.0" }
 serde.workspace = true
 serde_json.workspace = true
+# Base64 for image payloads in the Anthropic/OpenAI adapters (D38). The
+# engine-side bytes are raw; only the wire dialects encode.
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
 # SHA-256 for definition identities (D20), the same primitive D6 uses
 # for cache keys.
 sha2.workspace = true

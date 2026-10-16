@@ -1,0 +1,46 @@
+{
+  "state": {
+    "text": "classify the attached chart",
+    "facts": {},
+    "images": [
+      {
+        "media_type": "image/png",
+        "data": "iVBORw0KGgo="
+      }
+    ]
+  },
+  "questions": [
+    {
+      "type": "choice",
+      "id": "model",
+      "text": "Which model should read this chart?",
+      "candidates": [
+        {
+          "id": "local-qwen",
+          "description": "General vision"
+        },
+        {
+          "id": "local-glm",
+          "description": "Deep vision"
+        }
+      ]
+    }
+  ],
+  "policy": {
+    "min_confidence": 0.8,
+    "verify_below": 0.65,
+    "abstain_below": 0.5,
+    "risk": "low"
+  },
+  "metadata": {
+    "request_id": "fixture-images-0001",
+    "limits": {
+      "max_input_bytes": 1048576,
+      "max_questions": 32,
+      "max_candidates": 256,
+      "max_graph_nodes": 128,
+      "max_execution_time": { "secs": 120, "nanos": 0 },
+      "max_retrieval_results": 64
+    }
+  }
+}

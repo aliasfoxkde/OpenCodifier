@@ -1,0 +1,30 @@
+{
+  "format": {
+    "type": "json_schema",
+    "name": "opencodifier_decisions",
+    "strict": true,
+    "schema": {
+      "type": "object",
+      "title": "opencodifier_decisions",
+      "description": "One field per decision question, answered in a single response.",
+      "properties": {
+        "model": {
+          "type": "string",
+          "title": "Which model should read this chart?",
+          "description": "opencodifier:descriptions=[\"General vision\",\"Deep vision\"]",
+          "enum": ["local-qwen", "local-glm"]
+        }
+      },
+      "required": ["model"],
+      "additionalProperties": false
+    }
+  },
+  "input": [
+    { "type": "input_text", "text": "classify the attached chart" },
+    {
+      "type": "input_image",
+      "image_url": "data:image/png;base64,iVBORw0KGgo="
+    }
+  ],
+  "facts": {}
+}

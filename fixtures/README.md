@@ -27,13 +27,16 @@ record of a projection decision.
 | Fixture | What it locks | Locking test |
 | --- | --- | --- |
 | `native/request.json` | Canonical request: state + fact, one question of each kind, policy and metadata. Identity projection — byte-exact both ways. | `fixture_native_request_round_trips` |
+| `native/request-images.json` | Canonical request whose state carries one image: the `images` list of `{media_type, data}` with the payload base64. Identity projection — byte-exact both ways. | `fixture_native_request_images_round_trips` |
 | `native/response.json` | Canonical response: choice/score/boolean answers with full distributions, `accept` outcome, confidence report, trace entry, metrics. | `fixture_native_response_round_trips` |
 | `openai/choice-enum.format.json` | Strict-mode `format` for a choice question: `enum` + `additionalProperties: false` + every field in `required`; candidate descriptions ride in the property `description` marker. | `fixture_openai_choice_enum_format_round_trips` |
 | `openai/score-bounded-integer.format.json` | Strict-mode `format` for a score question: bounded `integer` whose level order is carried by the `opencodifier:levels=` marker. | `fixture_openai_score_bounded_integer_format_round_trips` |
 | `openai/boolean.format.json` | Strict-mode `format` for a boolean question: `type: "boolean"`, no enum, no bounds. | `fixture_openai_boolean_format_round_trips` |
+| `openai/input-images.request.json` | Full request body whose `input` is a content-part array: one `input_text` part then one `input_image` part with a `data:` URL. Byte-locks the part shape the encoder emits (the `format` projection is locked by the three fixtures above). | `fixture_openai_input_images_round_trips` |
 | `anthropic/tool-choice.tool.json` | Anthropic tool definition with two choice properties; byte-locks the sorted property/`required` order the encoder emits. | `fixture_anthropic_tool_choice_round_trips` |
 | `anthropic/tool-score.tool.json` | Anthropic tool definition for a score question, same integer + level-marker mapping as OpenAI. | `fixture_anthropic_tool_score_round_trips` |
 | `anthropic/tool-boolean.tool.json` | Anthropic tool definition for a boolean question. | `fixture_anthropic_tool_boolean_round_trips` |
+| `anthropic/messages-images.request.json` | Full request body whose user message is a content-block array: one `text` block then one `image` block with a base64 `source`. Byte-locks the image-block shape the encoder emits (the tool projection is locked by the three fixtures above). | `fixture_anthropic_messages_images_round_trips` |
 | `jev/systemone-choice-request.json` | Jev request with a `choice` question: `criteria` label → description, plus the `model` fact that becomes state metadata. | `fixture_jev_systemone_choice_request_round_trips` |
 | `jev/systemone-choice-response.json` | Jev response whose `answers` map carries the chosen label only; `usage` is ignored rather than invented. | `fixture_jev_systemone_choice_response_round_trips` |
 | `jev/systemone-score-request.json` | Jev request with a `score` question whose `criteria` are deliberately **not** in sorted key order — document order is the level order. | `fixture_jev_systemone_score_request_round_trips` |
