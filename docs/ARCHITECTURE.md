@@ -10,13 +10,15 @@ defined against the code in [`GLOSSARY.md`](GLOSSARY.md).
 | Plane | Crates | Talks to |
 |-------|--------|----------|
 | Decision core | `opencodifier-core` | nothing (pure IR + math) |
-| Deterministic engine | `opencodifier-engine` | core, schema |
+| Deterministic engine | `opencodifier-engine` | core, runtime, schema |
 | Schema adapters | `opencodifier-schema` | core |
-| Inference runtime | `opencodifier-runtime` | core (+ `ort` behind one feature) |
+| Inference runtime | `opencodifier-runtime` | nothing (+ `ort` behind one feature) |
 | Decision model | `opencodifier-model` | engine, runtime, core |
-| Interfaces | `opencodifier-cli`, `-http`, `-mcp`, `-wasm`, `-ffi` | engine/model, schema |
+| Interfaces | `opencodifier-cli`, `-http`, `-mcp`, `-wasm`, `-ffi` | engine/model, schema, core (cli also: http, mcp) |
 
-The dependency arrows only ever point toward `core`. Nothing in the
+The dependency arrows only ever point toward `core`, never back up
+from it — lateral edges (engine → runtime/schema, cli → http/mcp) are
+library consumption, not layering violations. Nothing in the
 workspace depends on a concrete inference library except
 `opencodifier-runtime`, and only under its `onnx` feature.
 

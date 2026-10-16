@@ -92,8 +92,9 @@ policy (suite and benchmark floors before anything ships):
 - [`aliasfox/OpenCodifier-Decision-2B-v6full`](https://huggingface.co/aliasfox/OpenCodifier-Decision-2B-v6full)
   — the published gated weights: per-surface numbers, shipped per-kind
   calibration, withheld-corpus disclosure.
-- [The aliasfox org](https://huggingface.co/aliasfox) — home of all
-  OpenCodifier model releases.
+- [The aliasfox account](https://huggingface.co/aliasfox) — home of all
+  OpenCodifier model releases. (The [`TaskWizerAI`](https://huggingface.co/TaskWizerAI)
+  org exists but hosts no public models yet.)
 
 Weights are never downloaded automatically — not at build time, not at
 runtime. Access is explicit opt-in ([release policy](docs/RELEASE_POLICY.md)).

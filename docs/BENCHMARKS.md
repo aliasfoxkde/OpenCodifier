@@ -6,7 +6,7 @@ published numbers, on the axes where they actually compare. Written to
 stand alone — this page is the source for the repository table and any
 future website.
 
-**Record date: 2026-09-29.** Numbers are frozen to the artifacts pinned
+**Record date: 2026-10-13** (newest row; per-row dates below). Numbers are frozen to the artifacts pinned
 by `benchmarks/decision-model/results/models.manifest.json` (SHA-256 per
 model file); method documents are
 [`benchmarks/decision-model/README.md`](../benchmarks/decision-model/README.md)
