@@ -522,6 +522,11 @@ impl Default for DecisionPolicy {
 
 /// Per-request resource ceilings (PLANNING.md §67). Conservative by
 /// default; engines must enforce every field they can observe.
+///
+/// The image ceilings predate nothing: they were added with the image
+/// carrier. They default-and-skip on the wire (a payload that omits them
+/// means the defaults, and canonical serialization omits them at default
+/// values) so every text-only fixture and cache key stays byte-identical.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Limits {
     /// Maximum serialized input size accepted.
@@ -536,6 +541,44 @@ pub struct Limits {
     pub max_execution_time: Duration,
     /// Maximum results returned by a semantic retrieval stage.
     pub max_retrieval_results: usize,
+    /// Maximum size of one attached image, in decoded bytes. Sized with
+    /// the HTTP transport in mind: the default ceilings admit 1 MiB of
+    /// text plus four images ≈ 11.7 MiB of base64 on the wire, inside the
+    /// server's 12 MiB body cap.
+    #[serde(
+        default = "default_max_image_bytes",
+        skip_serializing_if = "max_image_bytes_is_default"
+    )]
+    pub max_image_bytes: usize,
+    /// Maximum images attached to one request's state.
+    #[serde(default = "default_max_images", skip_serializing_if = "max_images_is_default")]
+    pub max_images: usize,
+}
+
+/// The default [`Limits::max_image_bytes`]: 2 MiB decoded per image.
+pub const DEFAULT_MAX_IMAGE_BYTES: usize = 2_097_152;
+
+/// The default [`Limits::max_images`]: four attached images.
+pub const DEFAULT_MAX_IMAGES: usize = 4;
+
+fn default_max_image_bytes() -> usize {
+    DEFAULT_MAX_IMAGE_BYTES
+}
+
+fn default_max_images() -> usize {
+    DEFAULT_MAX_IMAGES
+}
+
+// serde's `skip_serializing_if` passes the field as `&T`, so the
+// reference here is forced by the API, not a style choice.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn max_image_bytes_is_default(bytes: &usize) -> bool {
+    *bytes == DEFAULT_MAX_IMAGE_BYTES
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn max_images_is_default(count: &usize) -> bool {
+    *count == DEFAULT_MAX_IMAGES
 }
 
 impl Default for Limits {
@@ -553,6 +596,8 @@ impl Default for Limits {
             // a request may declare anything at or under it, never above.
             max_execution_time: Duration::from_secs(120),
             max_retrieval_results: 64,
+            max_image_bytes: DEFAULT_MAX_IMAGE_BYTES,
+            max_images: DEFAULT_MAX_IMAGES,
         }
     }
 }
@@ -698,5 +743,29 @@ mod tests {
         assert_eq!(limits.max_questions, 32);
         assert_eq!(limits.max_candidates, 256);
         assert_eq!(limits.max_execution_time, Duration::from_secs(120));
+        assert_eq!(limits.max_image_bytes, DEFAULT_MAX_IMAGE_BYTES);
+        assert_eq!(limits.max_images, DEFAULT_MAX_IMAGES);
+    }
+
+    #[test]
+    fn image_limits_default_and_skip_on_the_wire() {
+        // Defaults are invisible in serialization: a pre-images payload
+        // decodes with the defaults and re-serializes byte-identically,
+        // so text-only fixtures and cache keys never move.
+        let limits: Limits =
+            serde_json::from_str(r#"{"max_input_bytes":64,"max_questions":1,"max_candidates":2,"max_graph_nodes":4,"max_execution_time":{"secs":1,"nanos":0},"max_retrieval_results":8}"#)
+                .expect("pre-images payload decodes");
+        assert_eq!(limits.max_image_bytes, DEFAULT_MAX_IMAGE_BYTES);
+        assert_eq!(limits.max_images, DEFAULT_MAX_IMAGES);
+        let json = serde_json::to_string(&limits).expect("serialize");
+        assert!(!json.contains("image"), "defaults must not serialize: {json}");
+
+        // Non-default ceilings serialize so a caller's raised limit is
+        // preserved verbatim across the wire.
+        let raised = Limits { max_image_bytes: 8, max_images: 2, ..Limits::default() };
+        let json = serde_json::to_string(&raised).expect("serialize");
+        let back: Limits = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, raised);
+        assert!(json.contains(r#""max_image_bytes":8"#) && json.contains(r#""max_images":2"#));
     }
 }

@@ -106,11 +106,14 @@ pub use answer::{DecisionAnswer, Distribution, DistributionEntry};
 pub use confidence::ConfidenceReport;
 pub use error::{CoreError, CoreResult};
 pub use ids::{CandidateId, NodeId, QuestionId};
-pub use policy::{AbstainCandidate, DecisionPolicy, Limits, OodMode, RequestMetadata, RiskLevel};
+pub use policy::{
+    AbstainCandidate, DEFAULT_MAX_IMAGE_BYTES, DEFAULT_MAX_IMAGES, DecisionPolicy, Limits, OodMode,
+    RequestMetadata, RiskLevel,
+};
 pub use question::{
     BooleanQuestion, Candidate, ChoiceQuestion, DecisionQuestion, ScoreLevel, ScoreQuestion,
 };
 pub use request::DecisionRequest;
 pub use response::{DecisionOutcome, DecisionResponse};
-pub use state::{FactValue, State};
+pub use state::{FactValue, ImageInput, ImageMediaType, MAX_ENCODED_IMAGE_BYTES, State};
 pub use trace::{DecisionMetrics, DecisionTrace, TraceEntry};

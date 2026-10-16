@@ -54,7 +54,11 @@ impl DecisionRequest {
     /// state text within
     /// [`Limits::max_input_bytes`](crate::policy::Limits::max_input_bytes),
     /// choice candidate sets within
-    /// [`Limits::max_candidates`](crate::policy::Limits::max_candidates).
+    /// [`Limits::max_candidates`](crate::policy::Limits::max_candidates),
+    /// and attached images within
+    /// [`Limits::max_images`](crate::policy::Limits::max_images) and
+    /// [`Limits::max_image_bytes`](crate::policy::Limits::max_image_bytes)
+    /// each.
     pub fn new(
         state: State,
         questions: Vec<DecisionQuestion>,
@@ -82,6 +86,20 @@ impl DecisionRequest {
                     limits.max_input_bytes
                 ),
             });
+        }
+        if state.image_count() > limits.max_images {
+            return Err(CoreError::TooManyImages {
+                count: state.image_count(),
+                limit: limits.max_images,
+            });
+        }
+        for image in state.images() {
+            if image.data().len() > limits.max_image_bytes {
+                return Err(CoreError::ImageTooLarge {
+                    bytes: image.data().len(),
+                    limit: limits.max_image_bytes,
+                });
+            }
         }
         for question in &questions {
             if let DecisionQuestion::Choice(choice) = question
@@ -128,6 +146,12 @@ mod tests {
     use super::*;
     use crate::policy::Limits;
     use crate::question::{BooleanQuestion, Candidate, ChoiceQuestion};
+    use crate::state::{ImageInput, ImageMediaType};
+
+    /// Small deterministic image of `bytes` decoded bytes.
+    fn image(media_type: ImageMediaType, bytes: usize) -> ImageInput {
+        ImageInput::new(media_type, vec![0xAB; bytes])
+    }
 
     fn sample_question() -> DecisionQuestion {
         DecisionQuestion::Choice(
@@ -197,6 +221,59 @@ mod tests {
             ),
             Err(CoreError::InvalidPolicy { .. })
         ));
+    }
+
+    #[test]
+    fn rejects_oversized_image() {
+        let metadata = RequestMetadata {
+            request_id: None,
+            limits: Limits { max_image_bytes: 8, ..Limits::default() },
+        };
+        let state = State::from_text("what is pictured").with_image(image(ImageMediaType::Png, 16));
+        assert!(matches!(
+            DecisionRequest::new(
+                state,
+                vec![sample_question()],
+                DecisionPolicy::default(),
+                metadata,
+            ),
+            Err(CoreError::ImageTooLarge { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_too_many_images() {
+        let metadata = RequestMetadata {
+            request_id: None,
+            limits: Limits { max_images: 1, ..Limits::default() },
+        };
+        let state = State::from_text("two pictures")
+            .with_image(image(ImageMediaType::Png, 4))
+            .with_image(image(ImageMediaType::Jpeg, 4));
+        assert!(matches!(
+            DecisionRequest::new(
+                state,
+                vec![sample_question()],
+                DecisionPolicy::default(),
+                metadata,
+            ),
+            Err(CoreError::TooManyImages { .. })
+        ));
+    }
+
+    #[test]
+    fn accepts_images_within_limits() {
+        let state = State::from_text("what is pictured")
+            .with_image(image(ImageMediaType::Png, 8))
+            .with_image(image(ImageMediaType::Jpeg, 8));
+        let request = DecisionRequest::new(
+            state,
+            vec![sample_question()],
+            DecisionPolicy::default(),
+            RequestMetadata::default(),
+        )
+        .expect("within default limits");
+        assert_eq!(request.state().image_count(), 2);
     }
 
     #[test]
