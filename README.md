@@ -40,9 +40,11 @@ implemented and tested:
   binary and the runtime's decisions become host-side tool calls. Stdio
   only, so the surface is local by construction.
 
-The live plan is [`docs/PLAN.md`](docs/PLAN.md) and the founding
-document is [`docs/PLANNING.md`](docs/PLANNING.md). Try it with the
-committed native fixture (choice + score + boolean in one request):
+The live plan is [`docs/PLAN.md`](docs/PLAN.md), the founding
+document is [`docs/PLANNING.md`](docs/PLANNING.md), and terminology is
+defined against the code in the [`glossary`](docs/GLOSSARY.md). Try it
+with the committed native fixture (choice + score + boolean in one
+request):
 
 ```bash
 cargo run -p opencodifier-cli -- decide --input fixtures/native/request.json

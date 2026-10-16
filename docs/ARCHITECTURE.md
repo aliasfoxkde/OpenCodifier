@@ -2,7 +2,8 @@
 
 How OpenCodifier is put together. Normative alongside PLANNING.md; this
 document wins where it is more current. Status markers: **done** = shipped
-in a committed phase, **contract** = frozen v1 surface.
+in a committed phase, **contract** = frozen v1 surface. Terminology is
+defined against the code in [`GLOSSARY.md`](GLOSSARY.md).
 
 ## 1. Planes
 
