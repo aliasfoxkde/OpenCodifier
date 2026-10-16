@@ -15,7 +15,7 @@ we do not document aspirational surfaces.
 
 ---
 
-## 1. The four surfaces at a glance
+## 1. The six surfaces at a glance
 
 | Surface | Shape | Best for |
 |---|---|---|
@@ -24,8 +24,9 @@ we do not document aspirational surfaces.
 | CLI (`opencodifier …`) | one-shot processes, `--format` selectable | scripts, cron, shell pipelines, format conversion |
 | Library (`opencodifier-*` crates) | in-process Rust, strict layering | embedding the engine in your own binary |
 | WASM (`opencodifier-wasm`) | the zero-ML decision runtime | browser and sandboxed hosts (D23) |
+| FFI (`opencodifier-ffi`) | C-ABI staticlib over the same wire module | non-Rust hosts (D24) |
 
-All four surfaces execute the **same engine** through the same
+All six surfaces execute the **same engine** through the same
 canonical IR: normalize → deterministic rules/filters → candidate
 narrowing → fast semantic scoring → (optional) decision model →
 confidence gate → accept / verify / abstain. A decision refused for low
@@ -40,13 +41,13 @@ outcome, not an error.
 
 ```bash
 opencodifier serve                 # binds 127.0.0.1:8177 by default
-opencodifier serve --addr 127.0.0.1:9200
+opencodifier serve --bind 127.0.0.1:9200
 ```
 
-The loopback bind is the default by policy (PLANNING §73); exposing a
-non-loopback address requires passing one explicitly — the runtime
-never opts itself into the network. `GET /v1/healthz` is the readiness
-probe.
+The loopback bind is the default by policy (PLANNING §73); a
+non-loopback `--bind` address is refused unless `--allow-remote` is
+also passed — the runtime never opts itself into the network.
+`GET /v1/healthz` is the readiness probe.
 
 ### 2.2 Routes (all shipped; verified against `opencodifier-http/src/routes.rs`)
 
@@ -247,11 +248,11 @@ under: an `opencodifier` entry in `backend-fixed/.claude/mcp.json`
 pointing at the release binary
 (`/nas/Temp/repos/OpenCodifier/target/release/opencodifier mcp serve
 --focus-budget 512` — absolute path to a foreign-repo binary is that
-manifest's established pattern), applied to the live registry with
-`python3 scripts/harnessctl.py repair` and proven with
-`harnessctl doctor`, which runs a real MCP initialize handshake
-against the configured command — the same discipline that caught the
-amortyx entry sitting registered-but-dead. A repo-local `/decide` skill
+manifest's established pattern), applied to the live user registry
+(`claude mcp add-json --scope user`) and proven with a real MCP
+initialize handshake against the configured command — the same
+discipline that caught the amortyx entry sitting registered-but-dead.
+A repo-local `/decide` skill
 (`.claude/skills/decide/`) exercises the HTTP surface with a real
 triage payload and is the worked example for agents that prefer the
 service over the tool.
@@ -309,10 +310,10 @@ vendored copy):
 | Crate | Gives you | Depends on |
 |---|---|---|
 | `opencodifier-core` | the canonical IR: validating constructors, stable `ir.*` error codes, typed decisions | nothing |
-| `opencodifier-engine` | `EngineHandle` — the full zero-ML stack (rules, narrowing, BM25, relational solver), exact-decision cache, ladder policy | core |
+| `opencodifier-engine` | `EngineHandle` — the full zero-ML stack (rules, narrowing, BM25, relational solver), exact-decision cache, ladder policy | core, runtime, schema |
 | `opencodifier-schema` | the wire adapters (native/openai/anthropic/jev) + the content-hashed Decision Registry (D20) | core |
-| `opencodifier-runtime` | `InferenceBackend`/`EmbeddingBackend` traits; ONNX behind the `onnx` feature | core |
-| `opencodifier-model` | the candidate-conditioned decision model (ONNX logits, all decision math in Rust f64) | core, runtime |
+| `opencodifier-runtime` | `InferenceBackend`/`EmbeddingBackend` traits; ONNX behind the `onnx` feature | nothing (leaf) |
+| `opencodifier-model` | the candidate-conditioned decision model (ONNX logits, all decision math in Rust f64) | core, engine, runtime |
 
 The layering is enforced, not advisory: `core` never depends on HTTP,
 async runtimes, or ML; heavyweight dependencies are confined to one

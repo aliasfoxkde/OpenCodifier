@@ -14,10 +14,10 @@ classes, never happy-path one-shots; dual-arm every claim (direct engine vs
 through-product); store findings as artifacts before the task closes;
 silence is a finding.
 
-**Status:** designed 2026-10-05, not executed. The campaign's evidence
-lands in `benchmarks/validation/results/VALIDATION.md` (committed) with raw
-runs out of tree; defect rows are filed into `docs/PLAN.md` before the task
-closes.
+**Status:** executed (classes B/C/F; campaign closed as #104). The
+campaign's evidence is `benchmarks/validation/results/VALIDATION.md`
+(committed) with raw runs out of tree; findings RV-001…RV-013 and defect
+rows are filed into `docs/PLAN.md`.
 
 ---
 
@@ -647,11 +647,11 @@ this document cannot express because the runtime emits nothing to gate on.
 
 ## 10. Open questions
 
-1. **No campaign task row exists in `docs/PLAN.md`.** Nothing in the plan
-   or the repo names task #104 or a real-world validation phase; this
-   document is the working spec until a row exists with its own acceptance
-   criteria. If that row's criteria differ from §3–§6, the row wins and
-   this document is amended, not the reverse.
+1. **No campaign task row exists in `docs/PLAN.md`.** The repo names the
+   campaign (#104, `docs/PROJECT_STRUCTURE.md` validation row) and this
+   document is its spec of record; no plan row with its own acceptance
+   criteria exists yet. If that row's criteria differ from §3–§6, the row
+   wins and this document is amended, not the reverse.
 2. **Stage timings in the trace** — add (trace_version bump, D8 record,
    wire-fixture churn) or keep stage evidence at the criterion layer? Not
    decided here (§9.3 row 1).

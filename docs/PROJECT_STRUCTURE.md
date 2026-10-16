@@ -37,7 +37,9 @@ opencodifier/
 │   ├── opencodifier-itemgen/   # D37 relational/contrastive item generator:
 │   │                           #   sample → render → solver-verify (binary `itemgen`;
 │   │                           #   corpus emission only, never a serving dependency)
-│   ├── opencodifier-runtime/   # InferenceBackend traits, mocks; `onnx` deferred by gate (done, D2)
+│   ├── opencodifier-runtime/   # InferenceBackend traits, mocks; `onnx` feature
+│   │                           #   (reinstated for the Kai-0.6B rung, #92, D2);
+│   │                           #   `runtime-onnx-dynamic` for dylib loading
 │   ├── opencodifier-model/     # decision serving contract + embedding classifier + manifests (done)
 │   │     src/decision.rs, embedding.rs, manifest.rs — serving contract
 │   │     src/kai.rs + kai/     — kai contract + committed fixtures
@@ -78,7 +80,7 @@ opencodifier/
 │   │                        #   rendering never touches an rng stream)
 │   ├── playground.html      # merged playground: maze demo + game library
 │   └── tests/               # node --test suites: board page, maze
-│                            #   core/shell/deep-link, SDK games (20 files)
+│                            #   core/shell/deep-link, SDK games (26 files)
 └── docs/                    # PLANNING.md (founding), PLAN.md (live plan), …
                              #   RELEASE_NOTES_TEMPLATE.md is the release-notes
                              #   skeleton; `just release-notes` fills its
@@ -87,14 +89,25 @@ opencodifier/
 
 ## Dependency direction (binding)
 
+Verified against each crate's `Cargo.toml` (2026-10-15):
+
 ```text
-cli ──► http ──┐
-               ├──► engine ──► core ◄── schema
-model ──► runtime ──► core
-        └────────► engine
-itemgen ──► engine ──► core   (itemgen also declares the direct core edge)
-(mcp/wasm, when they land, take the same engine-facade edge as cli/http)
+leaves:   core (nothing) · runtime (nothing project-internal)
+schema ──► core
+engine ──► core, runtime, schema
+model  ──► core, engine, runtime
+http   ──► core, engine, schema
+mcp    ──► core, engine, schema
+wasm   ──► core, engine, schema
+ffi    ──► core, engine, schema
+cli    ──► core, engine, http, mcp, model, schema
+itemgen ──► core, engine, corpus
 ```
+
+Every arrow points toward `core`, never back up from it. The lateral
+edges (engine → schema/runtime, cli → http/mcp/model) are deliberate:
+adapters and traits are libraries the engine and interfaces consume,
+not layers beneath them.
 
 `opencodifier-core` must never depend on HTTP, MCP, CLI, Tokio, or any ML
 runtime (PLANNING.md §39). Heavyweight dependencies are each confined to

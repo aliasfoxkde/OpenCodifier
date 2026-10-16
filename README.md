@@ -40,9 +40,11 @@ implemented and tested:
   binary and the runtime's decisions become host-side tool calls. Stdio
   only, so the surface is local by construction.
 
-The live plan is [`docs/PLAN.md`](docs/PLAN.md) and the founding
-document is [`docs/PLANNING.md`](docs/PLANNING.md). Try it with the
-committed native fixture (choice + score + boolean in one request):
+The live plan is [`docs/PLAN.md`](docs/PLAN.md), the founding
+document is [`docs/PLANNING.md`](docs/PLANNING.md), and terminology is
+defined against the code in the [`glossary`](docs/GLOSSARY.md). Try it
+with the committed native fixture (choice + score + boolean in one
+request):
 
 ```bash
 cargo run -p opencodifier-cli -- decide --input fixtures/native/request.json
@@ -90,8 +92,9 @@ policy (suite and benchmark floors before anything ships):
 - [`aliasfox/OpenCodifier-Decision-2B-v6full`](https://huggingface.co/aliasfox/OpenCodifier-Decision-2B-v6full)
   — the published gated weights: per-surface numbers, shipped per-kind
   calibration, withheld-corpus disclosure.
-- [The aliasfox org](https://huggingface.co/aliasfox) — home of all
-  OpenCodifier model releases.
+- [The aliasfox account](https://huggingface.co/aliasfox) — home of all
+  OpenCodifier model releases. (The [`TaskWizerAI`](https://huggingface.co/TaskWizerAI)
+  org exists but hosts no public models yet.)
 
 Weights are never downloaded automatically — not at build time, not at
 runtime. Access is explicit opt-in ([release policy](docs/RELEASE_POLICY.md)).

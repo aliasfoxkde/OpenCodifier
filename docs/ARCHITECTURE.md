@@ -2,20 +2,23 @@
 
 How OpenCodifier is put together. Normative alongside PLANNING.md; this
 document wins where it is more current. Status markers: **done** = shipped
-in a committed phase, **contract** = frozen v1 surface.
+in a committed phase, **contract** = frozen v1 surface. Terminology is
+defined against the code in [`GLOSSARY.md`](GLOSSARY.md).
 
 ## 1. Planes
 
 | Plane | Crates | Talks to |
 |-------|--------|----------|
 | Decision core | `opencodifier-core` | nothing (pure IR + math) |
-| Deterministic engine | `opencodifier-engine` | core, schema |
+| Deterministic engine | `opencodifier-engine` | core, runtime, schema |
 | Schema adapters | `opencodifier-schema` | core |
-| Inference runtime | `opencodifier-runtime` | core (+ `ort` behind one feature) |
+| Inference runtime | `opencodifier-runtime` | nothing (+ `ort` behind one feature) |
 | Decision model | `opencodifier-model` | engine, runtime, core |
-| Interfaces | `opencodifier-cli`, `-http`, `-mcp`, `-wasm`, `-ffi` | engine/model, schema |
+| Interfaces | `opencodifier-cli`, `-http`, `-mcp`, `-wasm`, `-ffi` | engine/model, schema, core (cli also: http, mcp) |
 
-The dependency arrows only ever point toward `core`. Nothing in the
+The dependency arrows only ever point toward `core`, never back up
+from it — lateral edges (engine → runtime/schema, cli → http/mcp) are
+library consumption, not layering violations. Nothing in the
 workspace depends on a concrete inference library except
 `opencodifier-runtime`, and only under its `onnx` feature.
 

@@ -19,7 +19,7 @@ shipped while the browser demo rides §58).
 | § | Section | Verdict | Evidence |
 |---|---|---|---|
 | 1 | Mission | done | the shipped ladder; `docs/ARCHITECTURE.md` |
-| 2 | Product Definition | done | all four interface crates; v0.2.0 released |
+| 2 | Product Definition | done | all five interface crates; v0.6.1 released |
 | 3 | Core Design Principle | done | cheapest-reliable-mechanism rungs, `opencodifier-engine/src/lib.rs` crate docs |
 | 4 | Terminology | done | IR naming matches the spec terms |
 | 5 | Canonical Decision Types | done | `Choice`/`Boolean`/`Score` in `opencodifier-core` (Score keeps distribution + EV) |
@@ -51,7 +51,7 @@ shipped while the browser demo rides §58).
 | 26 | Reranking | done | `Reranker` trait (`LexicalReranker`/`EmbeddingReranker`), the `rerank` node permutes never removes; trace discloses the order (D21, 18h) |
 | 27 | Model Runtime | done | `InferenceBackend`/`EmbeddingBackend`; `ort` behind the `onnx` feature (D2); llama.cpp loopback backend behind `llamacpp` (D26); kai/julia contracts ship unconditionally (the kai reference encoder is what rides the `tokenizers` feature) |
 | 28 | Why ONNX + Burn | done-as-decided | D2; Burn unexamined until ONNX fails a need |
-| 29 | WASM | done-runtime | `opencodifier-wasm` compiled for `wasm32-unknown-unknown`; `WasmEngine` (decide/validate/run/identity) proven in Node over the real artifact; model rung stays native (D23, 18j) |
+| 29 | WASM | done-runtime | `opencodifier-wasm` compiled for `wasm32-unknown-unknown`; `WasmEngine` (`decide`, `decide_batch`, `validate_graph`, `run_graph`, `identity`) proven in Node over the real artifact; model rung stays native (D23, 18j) |
 | 30 | Tokenization | partial | deterministic bytes-over-4 estimate (D2) everywhere a budget needs one; the model crate ships a fixture-scoped byte-level BPE encoder (kai) and deterministic id schemes (julia), while the general tokenizer deliberately stays with the upstream model directory (`tokenizers` feature) |
 
 ## Interfaces and delivery (§§31–39)
@@ -63,8 +63,8 @@ shipped while the browser demo rides §58).
 | 33 | Skills | done | `skills/` — README protocol + all eight §33 areas (routing, model-selection, tool-selection, tool-gating, context-pruning, escalation, verification, memory-selection) |
 | 34 | Built-in Recipes | done | the twelve §34 areas as runnable graphs + paired requests + captured responses under `recipes/`; `opencodifier recipe list` / `recipe install [--dest] [--force]` ship the fleet inside the binary (`include_str!`), installed bytes byte-identical to the committed copies (18g) |
 | 35 | CLI | done | `decide`/`graph validate`/`serve`/`models verify`/`mcp serve`/`ladder fit-boolean` (D25, RESEARCH §15.6 item 2)/`recipe list`/`recipe install`, D13 exit codes, `--focus-budget`, the `--ladder` profile flag, and the `--llama*` decision-rung flags (D26) |
-| 36 | HTTP API | done | nine `/v1` routes: `/v1/decide`, `/v1/batch`, `/v1/chat/completions` (strict-schema chat surface), `/v1/graph/validate`, `/v1/graph/run` (D19), `/v1/validate`, `/v1/models`, `/v1/capabilities`, `/v1/healthz`. There is no `/v1/systemone` HTTP route — the Jev wire shape is an `opencodifier-schema` library adapter, not an endpoint (an earlier version of this row claimed it as a sixth endpoint; corrected 2026-09-30 against `routes.rs`); contract tests + 30-check e2e suite (18e) |
-| 37 | Local Server | done | loopback default, explicit `--host` flag, gate-tested |
+| 36 | HTTP API | done | nine `/v1` routes: `/v1/decide`, `/v1/batch`, `/v1/chat/completions` (strict-schema chat surface), `/v1/graph/validate`, `/v1/graph/run` (D19), `/v1/validate`, `/v1/models`, `/v1/capabilities`, `/v1/healthz`. There is no `/v1/systemone` HTTP route — the Jev wire shape is an `opencodifier-schema` library adapter, not an endpoint (an earlier version of this row claimed it as a sixth endpoint; corrected 2026-09-30 against `routes.rs`); contract tests + 33-check e2e suite (18e) |
+| 37 | Local Server | done | loopback default, explicit `--bind` flag with the `--allow-remote` opt-in gate, gate-tested |
 | 38 | Privacy | done | no telemetry/cloud/accounts; explicit downloads; SHA-256 manifests (D14) |
 | 39 | Project Layout | done | `docs/PROJECT_STRUCTURE.md` matches the tree |
 
@@ -94,7 +94,7 @@ shipped while the browser demo rides §58).
 | 66 | Security | done | hostile-input rule, loopback gate, aegis gate in CI |
 | 67 | Resource Limits | done | `RequestMetadata.limits` enforced (input bytes/questions/candidates/graph nodes/time/retrieval) |
 | 68 | WASM Security | done-runtime | structural posture: no fs/net/telemetry/dynamic-native/storage in the dependency tree (enforced by a manifest test); hostile input → typed codes; platform seams declared (D23, 18j) |
-| 69 | V1 Acceptance Criteria | done | per-phase acceptance in `docs/PLAN.md`; v0.2.0 cut |
+| 69 | V1 Acceptance Criteria | done | per-phase acceptance in `docs/PLAN.md`; v0.6.1 current release |
 | 70 | V1 Performance Goals | done | D9 per-stage budgets, criterion-measured (D9 baseline committed 2026-10-01: bm25_index_build_256 3332 µs and bm25_score_all_256 1164 µs over their 1 ms budgets; all other measured rows in budget) |
 | 71 | V1.1 | planned | semantic cache, reranker, hybrid retrieval, multilingual, graph optimizer |
 | 72 | V2 | planned | adaptive graphs, online calibration, distributed cache, GPU batching |
