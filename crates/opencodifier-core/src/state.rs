@@ -3,6 +3,8 @@
 
 use std::collections::BTreeMap;
 
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, CoreResult};
@@ -117,6 +119,130 @@ impl std::fmt::Display for FactValue {
     }
 }
 
+/// The image media types the IR accepts.
+///
+/// The set is closed on purpose: adapters map wire media types onto these
+/// variants (or refuse them), and image preprocessing is implemented per
+/// variant — a new format means a new variant plus the decoder that
+/// justifies it, never a pass-through string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageMediaType {
+    /// PNG (RFC 2083).
+    Png,
+    /// JPEG (ITU-T T.81).
+    Jpeg,
+}
+
+impl ImageMediaType {
+    /// The canonical MIME string: `"image/png"` or `"image/jpeg"`.
+    ///
+    /// This is the string canonical serialization emits, so a state built
+    /// through any adapter cache-keys identically.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Png => "image/png",
+            Self::Jpeg => "image/jpeg",
+        }
+    }
+}
+
+impl std::fmt::Display for ImageMediaType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl TryFrom<&str> for ImageMediaType {
+    type Error = CoreError;
+
+    /// Accepts the canonical MIME strings plus the common file-extension
+    /// aliases (`png`, `jpg`, `jpeg`); everything else is a typed refusal.
+    fn try_from(value: &str) -> CoreResult<Self> {
+        match value {
+            "image/png" | "png" => Ok(Self::Png),
+            "image/jpeg" | "jpeg" | "jpg" => Ok(Self::Jpeg),
+            other => Err(CoreError::UnsupportedMediaType { media_type: other.to_owned() }),
+        }
+    }
+}
+
+/// One image attached to a [`State`].
+///
+/// Bytes are held decoded; the wire carries base64 in both directions.
+/// The IR decodes at its boundary and re-encodes canonically (STANDARD
+/// alphabet, padding) on the way out, so the exact-decision cache key is a
+/// function of the image bytes, never of the caller's base64 flavor.
+///
+/// Size enforcement is the caller's [`Limits`](crate::policy::Limits) at
+/// [`DecisionRequest::new`](crate::request::DecisionRequest::new), with
+/// one hostile-input exception: the wire ceiling
+/// [`MAX_ENCODED_IMAGE_BYTES`] applies at decode time because a payload
+/// that size would otherwise be allocated before any limit could see it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(try_from = "RawImageInput", into = "RawImageInput")]
+pub struct ImageInput {
+    media_type: ImageMediaType,
+    data: Vec<u8>,
+}
+
+/// Wire mirror for [`ImageInput`]: media type as its canonical MIME
+/// string, payload as canonical base64.
+#[derive(Debug, Deserialize, Serialize)]
+struct RawImageInput {
+    media_type: String,
+    data: String,
+}
+
+/// Wire ceiling on one encoded image payload, enforced where the bytes
+/// would otherwise be allocated (hostile-input bound; 16 MiB covers the
+/// default limits four times over plus base64 overhead).
+pub const MAX_ENCODED_IMAGE_BYTES: usize = 16 * 1024 * 1024;
+
+impl TryFrom<RawImageInput> for ImageInput {
+    type Error = CoreError;
+
+    fn try_from(raw: RawImageInput) -> CoreResult<Self> {
+        let media_type = ImageMediaType::try_from(raw.media_type.as_str())?;
+        if raw.data.len() > MAX_ENCODED_IMAGE_BYTES {
+            return Err(CoreError::ImageTooLarge {
+                bytes: raw.data.len(),
+                limit: MAX_ENCODED_IMAGE_BYTES,
+            });
+        }
+        let data = BASE64_STANDARD
+            .decode(raw.data.as_bytes())
+            .map_err(|error| CoreError::InvalidImage { reason: error.to_string() })?;
+        Ok(Self { media_type, data })
+    }
+}
+
+impl From<ImageInput> for RawImageInput {
+    fn from(image: ImageInput) -> Self {
+        Self {
+            media_type: image.media_type.as_str().to_owned(),
+            data: BASE64_STANDARD.encode(image.data),
+        }
+    }
+}
+
+impl ImageInput {
+    /// Constructs an image from a media type and decoded bytes.
+    pub fn new(media_type: ImageMediaType, data: Vec<u8>) -> Self {
+        Self { media_type, data }
+    }
+
+    /// The image's media type.
+    pub fn media_type(&self) -> ImageMediaType {
+        self.media_type
+    }
+
+    /// The image's decoded bytes.
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+}
+
 /// The input a decision is made against: raw text plus typed facts.
 ///
 /// Facts live in a `BTreeMap` so canonical serialization order — and
@@ -129,18 +255,35 @@ pub struct State {
     /// every text-only quickstart means.
     #[serde(default)]
     facts: BTreeMap<String, FactValue>,
+    /// Optional on the wire: omitted means no images, the shape every
+    /// text-only caller means. Images live outside `facts` so their bytes
+    /// can never masquerade as matchable metadata, and they stay exempt
+    /// from `max_input_bytes` (text budget) in favor of their own
+    /// `max_image_bytes` / `max_images` ceilings.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    images: Vec<ImageInput>,
 }
 
 impl State {
     /// Builds a state from raw unstructured text, with no facts.
     pub fn from_text(text: impl Into<String>) -> Self {
-        Self { text: text.into(), facts: BTreeMap::new() }
+        Self { text: text.into(), facts: BTreeMap::new(), images: Vec::new() }
     }
 
     /// Builder-style fact insertion, consuming and returning `self`.
     #[must_use]
     pub fn with_fact(mut self, key: impl Into<String>, value: FactValue) -> Self {
         self.facts.insert(key.into(), value);
+        self
+    }
+
+    /// Builder-style image attachment, consuming and returning `self`.
+    ///
+    /// Images are appended in call order; canonical serialization
+    /// preserves that order, so attach deterministically.
+    #[must_use]
+    pub fn with_image(mut self, image: ImageInput) -> Self {
+        self.images.push(image);
         self
     }
 
@@ -157,6 +300,21 @@ impl State {
     /// Iterates facts in canonical (sorted) key order.
     pub fn facts(&self) -> impl Iterator<Item = (&String, &FactValue)> {
         self.facts.iter()
+    }
+
+    /// The images attached to this state, in attachment order.
+    pub fn images(&self) -> &[ImageInput] {
+        &self.images
+    }
+
+    /// How many images are attached to this state.
+    pub fn image_count(&self) -> usize {
+        self.images.len()
+    }
+
+    /// `true` when the state carries at least one image.
+    pub fn has_images(&self) -> bool {
+        !self.images.is_empty()
     }
 }
 
@@ -176,6 +334,111 @@ mod tests {
             json,
             r#"{"text":"hello","facts":{"alpha":{"kind":"text","value":"x"},"zebra":{"kind":"integer","value":1}}}"#
         );
+    }
+
+    #[test]
+    fn imageless_state_serializes_byte_identically_to_the_text_only_shape() {
+        // The `images` field must stay invisible on the wire when empty —
+        // every committed fixture and cache key depends on it. The shape
+        // pinned here is the exact pre-images serialization (`facts` always
+        // serializes, even empty).
+        let state = State::from_text("hello");
+        let json = serde_json::to_string(&state).expect("serialize");
+        assert_eq!(json, r#"{"text":"hello","facts":{}}"#);
+    }
+
+    #[test]
+    fn image_media_type_accepts_canonical_and_alias_forms() {
+        assert_eq!(
+            ImageMediaType::try_from("image/png").expect("canonical png"),
+            ImageMediaType::Png
+        );
+        assert_eq!(ImageMediaType::try_from("jpg").expect("alias jpg"), ImageMediaType::Jpeg);
+        assert_eq!(ImageMediaType::Png.as_str(), "image/png");
+        assert_eq!(ImageMediaType::Jpeg.to_string(), "image/jpeg");
+    }
+
+    #[test]
+    fn image_media_type_refuses_unknown_types() {
+        let error = ImageMediaType::try_from("image/webp").expect_err("refused");
+        assert_eq!(error.code(), "ir.unsupported_media_type");
+        assert!(
+            matches!(error, CoreError::UnsupportedMediaType { media_type } if media_type == "image/webp")
+        );
+    }
+
+    #[test]
+    fn image_payload_decodes_base64_and_canonicalizes_on_the_wire() {
+        let image = ImageInput::new(ImageMediaType::Png, vec![0xFA, 0xCE, 0x01]);
+        let json = serde_json::to_string(&image).expect("serialize");
+        assert_eq!(json, r#"{"media_type":"image/png","data":"+s4B"}"#);
+        let back: ImageInput = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, image);
+    }
+
+    #[test]
+    fn image_payload_canonical_input_reencodes_identically() {
+        // Canonical padded input decodes and re-encodes byte-identically:
+        // cache keys depend on image bytes, never on the wire flavor (the
+        // non-canonical flavors are refused outright, see below).
+        let padded = r#"{"media_type":"image/jpeg","data":"/9j/4AAQ"}"#;
+        let image: ImageInput = serde_json::from_str(padded).expect("decode");
+        let re = serde_json::to_string(&image).expect("serialize");
+        assert_eq!(re, padded);
+        assert_eq!(image.data(), [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10]);
+    }
+
+    #[test]
+    fn image_payload_refuses_non_canonical_alphabets_and_padding() {
+        // URL-safe alphabet character (`-`) is not STANDARD base64.
+        let error = ImageInput::try_from(RawImageInput {
+            media_type: "image/png".to_owned(),
+            data: "a-bc".to_owned(),
+        })
+        .expect_err("refused");
+        assert_eq!(error.code(), "ir.invalid_image");
+        // Missing padding is likewise refused by the canonical engine.
+        let error = ImageInput::try_from(RawImageInput {
+            media_type: "image/png".to_owned(),
+            data: "QQ".to_owned(),
+        })
+        .expect_err("refused");
+        assert_eq!(error.code(), "ir.invalid_image");
+        // And the typed refusal survives the serde boundary as a message.
+        let error =
+            serde_json::from_str::<ImageInput>(r#"{"media_type":"image/png","data":"a-bc"}"#)
+                .expect_err("refused");
+        assert!(error.to_string().contains("invalid image payload"));
+    }
+
+    #[test]
+    fn image_payload_refuses_oversized_wire_input() {
+        let error = ImageInput::try_from(RawImageInput {
+            media_type: "image/png".to_owned(),
+            data: "A".repeat(MAX_ENCODED_IMAGE_BYTES + 1),
+        })
+        .expect_err("refused");
+        assert_eq!(error.code(), "ir.image_too_large");
+    }
+
+    #[test]
+    fn state_image_accessors_and_builder() {
+        let image = ImageInput::new(ImageMediaType::Jpeg, vec![1, 2, 3]);
+        let state = State::from_text("what is pictured").with_image(image.clone());
+        assert!(state.has_images());
+        assert_eq!(state.image_count(), 1);
+        assert_eq!(state.images(), [image].as_slice());
+        assert!(!State::from_text("plain").has_images());
+    }
+
+    #[test]
+    fn state_with_images_round_trips_through_json() {
+        let state = State::from_text("what is pictured")
+            .with_image(ImageInput::new(ImageMediaType::Png, vec![0xDE, 0xAD, 0xBE, 0xEF]));
+        let json = serde_json::to_string(&state).expect("serialize");
+        assert!(json.contains(r#""images":"#));
+        let back: State = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, state);
     }
 
     #[test]

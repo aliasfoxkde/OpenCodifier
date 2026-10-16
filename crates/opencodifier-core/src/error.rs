@@ -82,6 +82,42 @@ pub enum CoreError {
     /// A request carried no questions; deciding nothing is not a decision.
     #[error("request must contain at least one question")]
     EmptyQuestions,
+
+    /// An image carried a media type outside the IR's closed set
+    /// (`image/png`, `image/jpeg`).
+    #[error("unsupported image media type `{media_type}` (supported: image/png, image/jpeg)")]
+    UnsupportedMediaType {
+        /// The rejected media type string.
+        media_type: String,
+    },
+
+    /// An image payload was not valid base64, or not canonically encoded
+    /// (the IR canonicalizes at its boundary so cache keys are a function
+    /// of the bytes).
+    #[error("invalid image payload: {reason}")]
+    InvalidImage {
+        /// Why the payload was rejected.
+        reason: String,
+    },
+
+    /// An image exceeded the wire ceiling applied at the IR boundary
+    /// (hostile-input bound, independent of caller limits).
+    #[error("encoded image is {bytes} bytes, wire ceiling is {limit}")]
+    ImageTooLarge {
+        /// The image's size in bytes.
+        bytes: usize,
+        /// The ceiling that rejected it.
+        limit: usize,
+    },
+
+    /// A request carried more images than its limits allow.
+    #[error("request carries {count} images, limit is {limit}")]
+    TooManyImages {
+        /// The number of images supplied.
+        count: usize,
+        /// The ceiling that rejected it.
+        limit: usize,
+    },
 }
 
 impl CoreError {
@@ -107,6 +143,10 @@ impl CoreError {
             Self::InvalidProbability { .. } => "ir.invalid_probability",
             Self::DistributionNotNormalized { .. } => "ir.distribution_not_normalized",
             Self::EmptyQuestions => "ir.empty_questions",
+            Self::UnsupportedMediaType { .. } => "ir.unsupported_media_type",
+            Self::InvalidImage { .. } => "ir.invalid_image",
+            Self::ImageTooLarge { .. } => "ir.image_too_large",
+            Self::TooManyImages { .. } => "ir.too_many_images",
         }
     }
 }
