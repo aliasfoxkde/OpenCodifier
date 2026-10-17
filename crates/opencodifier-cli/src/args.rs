@@ -138,9 +138,39 @@ pub struct DecideArgs {
     #[command(flatten)]
     pub llama: LlamaRungArgs,
 
+    /// The vision decision rung the engine decides image-bearing states
+    /// with (`--help` on the flag for the contract).
+    #[command(flatten)]
+    pub vision: VisionRungArgs,
+
+    /// Attach an image (PNG or JPEG, detected from the magic bytes) to
+    /// the request's state. Repeatable; attachment order is canonical
+    /// order. An image with no `--vision-model-dir` rung is refused by
+    /// the engine itself (`engine.vision_required`), not silently
+    /// dropped.
+    #[arg(long, value_name = "PATH")]
+    pub image: Vec<PathBuf>,
+
     /// Exit 0 when the outcome is not decisive, instead of 2.
     #[arg(long)]
     pub abstain_is_success: bool,
+}
+
+/// The `SigLIP2` vision decision rung (DECISIONS.md D38): the
+/// image-modality rung the engine decides image-bearing states with
+/// when the text rungs do not accept.
+///
+/// The flag rides a `vision` feature build; without it
+/// `--vision-model-dir` is refused at assembly with
+/// `cli.vision_rung_unavailable` rather than silently ignored.
+#[derive(Debug, Default, Args)]
+pub struct VisionRungArgs {
+    /// Model directory holding the `SigLIP2` ONNX artifacts and their
+    /// manifest (both tower graphs plus the tokenizer and config JSON
+    /// files). Weights are never fetched and never committed (D14); the
+    /// directory is the operator's artifact.
+    #[arg(long, value_name = "PATH")]
+    pub vision_model_dir: Option<PathBuf>,
 }
 
 /// `opencodifier graph …`

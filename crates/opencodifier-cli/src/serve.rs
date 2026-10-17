@@ -66,7 +66,8 @@ fn assemble(args: &ServeArgs) -> Result<(SocketAddr, ServerConfig, EngineHandle)
         args.graph.as_deref(),
         args.focus_budget,
         args.ladder.as_deref(),
-        runtime::model_rung(&args.llama)?,
+        runtime::model_rung(&args.llama)?.as_ref(),
+        None,
     )?;
     let server = ServerConfig::with_remote(bind, args.allow_remote)
         .map_err(|error| CliError::input(error.code(), error.to_string()))?;

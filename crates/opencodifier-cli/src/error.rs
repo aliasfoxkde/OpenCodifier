@@ -68,6 +68,17 @@ pub const CODE_INVALID_LADDER: &str = "cli.invalid_ladder";
 /// arrived incoherent past argument parsing.
 pub const CODE_MODEL_RUNG_UNAVAILABLE: &str = "cli.model_rung_unavailable";
 
+/// Stable code reported when the `--vision-model-dir` vision rung cannot
+/// attach: the binary was built without the `vision` feature, or the
+/// directory's artifacts failed the manifest/geometry checks (D14 honest
+/// transport).
+pub const CODE_VISION_RUNG_UNAVAILABLE: &str = "cli.vision_rung_unavailable";
+
+/// Stable code reported when an `--image` file is neither PNG nor JPEG
+/// (by magic bytes): the IR's image media types are closed (state.rs) — a
+/// new format means a new variant plus the decoder that justifies it.
+pub const CODE_UNSUPPORTED_IMAGE: &str = "cli.unsupported_image";
+
 /// Stable code reported when `--bind` is not a valid socket address.
 pub const CODE_INVALID_BIND: &str = "cli.invalid_bind";
 

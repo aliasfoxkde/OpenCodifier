@@ -41,7 +41,7 @@ nli = ["dep:tokenizers", "opencodifier-runtime/onnx"]
 # opencodifier-runtime, which the towers ride). Weights are never
 # fetched at build time (D14) — the caller supplies a locally verified
 # model directory.
-vision = ["dep:image", "dep:tokenizers", "opencodifier-runtime/onnx"]
+vision = ["dep:image", "dep:tokenizers", "opencodifier-runtime/runtime-onnx-dynamic"]
 
 [dependencies]
 opencodifier-core = { path = "../opencodifier-core", version = "0.6.0" }

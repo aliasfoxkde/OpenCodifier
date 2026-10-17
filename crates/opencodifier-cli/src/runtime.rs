@@ -16,8 +16,13 @@ use opencodifier_engine::{
     RelationalSolver, Rung,
 };
 
+#[cfg(feature = "vision")]
+use opencodifier_engine::RungModality;
+
 use crate::args::LlamaRungArgs;
-use crate::error::{CODE_INVALID_LADDER, CODE_MODEL_RUNG_UNAVAILABLE, CliError};
+use crate::error::{
+    CODE_INVALID_LADDER, CODE_MODEL_RUNG_UNAVAILABLE, CODE_VISION_RUNG_UNAVAILABLE, CliError,
+};
 use crate::graph;
 
 /// The engine configuration behind the CLI's deciding surfaces: the
@@ -106,6 +111,57 @@ fn llama_default_timeout_ms() -> u64 {
     opencodifier_model::DEFAULT_TIMEOUT.as_millis().try_into().unwrap_or(u64::MAX)
 }
 
+/// The vision decision rung behind the `vision` feature: the
+/// `--vision-model-dir` directory's ONNX artifacts sessioned as the
+/// `SigLIP2` zero-shot readout (`opencodifier-model` track G), attached
+/// as an image-modality rung (D38) so the engine only reaches it — and
+/// only accepts it — for image-bearing states.
+///
+/// The head scale stays at the family default (`DEFAULT_LOGIT_SCALE`)
+/// until the calibration fit (track J) supplies the measured value
+/// through the calibration seam, not here.
+///
+/// # Errors
+///
+/// [`CliError::input`] with [`CODE_VISION_RUNG_UNAVAILABLE`] on a build
+/// without the feature, or when the directory's manifest, geometry, or
+/// digest checks refuse the artifacts (D14 honest transport).
+pub(crate) fn vision_rung(path: Option<&Path>) -> Result<Option<Rung>, CliError> {
+    let Some(path) = path else {
+        return Ok(None);
+    };
+    #[cfg(feature = "vision")]
+    {
+        let embedder =
+            opencodifier_model::OnnxSiglip2Embedder::from_dir(path).map_err(|error| {
+                CliError::input(
+                    CODE_VISION_RUNG_UNAVAILABLE,
+                    format!(
+                        "{}: {} (D14: verify the artifacts and fetch the weights yourself)",
+                        path.display(),
+                        error
+                    ),
+                )
+            })?;
+        let classifier = Arc::new(opencodifier_model::VisionClassifier::new(
+            Arc::new(embedder),
+            opencodifier_model::Siglip2Config::new(),
+            opencodifier_model::PromptTemplate::default(),
+        ));
+        Ok(Some(Rung::new(classifier).with_modality(RungModality::Image)))
+    }
+    #[cfg(not(feature = "vision"))]
+    {
+        let _ = path;
+        Err(CliError::input(
+            CODE_VISION_RUNG_UNAVAILABLE,
+            "the --vision-model-dir vision rung requires a build with `--features vision` \
+             (it adds the image and tokenizer dependencies; the default build stays \
+             dependency-identical)",
+        ))
+    }
+}
+
 /// The engine handle behind the CLI's deciding surfaces: the lexical
 /// stack as the primary rung, and — when `--llama` was given — the
 /// llama.cpp decision rung as the ordered escalation tail (D26/D27).
@@ -122,19 +178,24 @@ pub(crate) fn handle(
     graph_path: Option<&Path>,
     focus_budget: Option<usize>,
     ladder_path: Option<&Path>,
-    model_rung: Option<ModelRung>,
+    model_rung: Option<&ModelRung>,
+    vision_rung: Option<Rung>,
 ) -> Result<EngineHandle, CliError> {
     let (config, ladder) = engine_config(graph_path, focus_budget, ladder_path)?;
-    let Some(rung) = model_rung else {
+    let mut rungs = Vec::new();
+    if let Some(rung) = model_rung {
+        rungs.push(Rung::new(model_classifier(rung)?));
+    }
+    rungs.extend(vision_rung);
+    if rungs.is_empty() {
         return Ok(EngineHandle::lexical(config)?);
-    };
-    let classifier = model_classifier(&rung)?;
+    }
     Ok(EngineHandle::with_rungs(
         config,
         Arc::new(RelationalSolver::lexical()),
         None,
         ladder,
-        vec![Rung::new(classifier)],
+        rungs,
     )?)
 }
 
@@ -224,7 +285,7 @@ mod tests {
         let rung = model_rung(&llama_args(Some("http://127.0.0.1:8080"), Some("m"), None))
             .unwrap()
             .expect("flags were set");
-        let error = handle(None, None, None, Some(rung)).unwrap_err();
+        let error = handle(None, None, None, Some(rung).as_ref(), None).unwrap_err();
         assert_eq!(error.code(), CODE_MODEL_RUNG_UNAVAILABLE, "{error}");
     }
 
@@ -238,7 +299,7 @@ mod tests {
         ))
         .unwrap()
         .expect("flags were set");
-        let handle = handle(None, None, None, Some(rung)).unwrap();
+        let handle = handle(None, None, None, Some(rung).as_ref(), None).unwrap();
         let model_id = handle.identity().model_id;
         assert!(model_id.contains("rungs-v1@"), "{model_id}");
         assert!(model_id.contains("pd-fork|2b|tree-v2"), "{model_id}");
@@ -247,7 +308,30 @@ mod tests {
     #[cfg(feature = "llamacpp")]
     #[test]
     fn without_the_rung_the_handle_is_the_plain_lexical_posture() {
-        let handle = handle(None, None, None, None).unwrap();
+        let handle = handle(None, None, None, None, None).unwrap();
         assert!(!handle.identity().model_id.contains("rungs-v1"));
+    }
+
+    #[test]
+    fn no_vision_flag_means_no_vision_rung() {
+        assert!(vision_rung(None).unwrap().is_none());
+    }
+
+    #[cfg(not(feature = "vision"))]
+    #[test]
+    fn a_default_build_refuses_the_vision_rung() {
+        let error = vision_rung(Some(Path::new("nonexistent-dir"))).unwrap_err();
+        assert_eq!(error.code(), CODE_VISION_RUNG_UNAVAILABLE, "{error}");
+    }
+
+    #[cfg(feature = "vision")]
+    #[test]
+    fn a_missing_or_broken_model_directory_is_a_typed_refusal() {
+        // `from_dir` verifies the manifest before any ONNX backend is
+        // touched, so this stays a typed refusal even on hosts without a
+        // runtime dylib. Assembly over real artifacts is exercised by the
+        // track-I parity harness, never by synthesized bytes.
+        let error = vision_rung(Some(Path::new("nonexistent-dir"))).unwrap_err();
+        assert_eq!(error.code(), CODE_VISION_RUNG_UNAVAILABLE, "{error}");
     }
 }
