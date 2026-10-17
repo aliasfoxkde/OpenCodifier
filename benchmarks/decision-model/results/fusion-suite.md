@@ -38,7 +38,7 @@ Wiring them into the engine must go through the seams that already exist,
 without re-opening the IR:
 
 1. **Per-rung policy, not one policy.** `DecisionPolicy`
-   (`opencodifier-core/src/policy.rs`) is the gate type; the ladder needs
+   (`opencode-core/src/policy.rs`) is the gate type; the ladder needs
    one per rung because the rungs' confidence semantics differ (exact
    proofs are p = 1.0 by construction; the embedding rung has no
    calibrated probability at all — CALIBRATION finding 3; the model rung
@@ -83,7 +83,7 @@ without re-opening the IR:
 ## Wiring seam, verified in code (2026-09-30)
 
 - Policy enters the executor **per request**:
-  `Executor::resolve_threshold` (`crates/opencodifier-engine/src/
+  `Executor::resolve_threshold` (`crates/opencode-engine/src/
   executor.rs:924`) reads `self.request.policy()` and applies
   `ConfidenceReport::outcome_for` once per decided question;
   `escalation_warranted` (line 914) takes the same single policy.
@@ -137,7 +137,7 @@ correction to this document's own earlier claim:
   engine-configuration-level and composes alongside that knob; wiring
   the graph scalar to the gate is a separate, deliberate change.
 
-Surface: `opencodifier_engine::LadderPolicy` (`per_node` → `per_kind`
+Surface: `opencode_engine::LadderPolicy` (`per_node` → `per_kind`
 → request policy), `EngineConfig::with_ladder`,
 `EngineHandle::with_ladder`. Tests: `src/ladder.rs` (resolution order,
 identity validation) and `tests/ladder.rs` (empty-ladder byte

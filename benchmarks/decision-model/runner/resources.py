@@ -1,7 +1,7 @@
 """Per-arm resource accounting for the decision-model benchmark runners.
 
 A :class:`ResourceMonitor` samples ``/proc`` for the runner's process tree —
-spawned servers (llama-server, the opencodifier binary) are descendants of
+spawned servers (llama-server, the opencode binary) are descendants of
 the runner process, so one monitor rooted at ``os.getpid()`` covers the
 whole arm. Peak RSS comes from the kernel-maintained ``VmHWM`` (not from
 sampling), CPU seconds from ``utime + stime`` ticks, and IO bytes from

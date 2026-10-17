@@ -214,7 +214,7 @@
     if (S.engine || S.engineBusy) return Promise.resolve(S.engine);
     S.engineBusy = true;
     setEngineStatus("loading");
-    return import("./wasm/opencodifier_wasm.js")
+    return import("./wasm/opencode_wasm.js")
       .then((mod) => mod.default().then(() => mod))
       .then((mod) => {
         S.engine = new mod.WasmEngine();

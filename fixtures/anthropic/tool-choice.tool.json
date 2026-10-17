@@ -1,15 +1,15 @@
 {
-  "name": "opencodifier_decide",
+  "name": "opencode_decide",
   "description": "Answer every decision question exactly once, using the provided state.",
   "input_schema": {
     "type": "object",
-    "title": "opencodifier_decisions",
+    "title": "opencode_decisions",
     "description": "One field per decision question, answered in a single response.",
     "properties": {
       "engine": {
         "type": "string",
         "title": "Which storage engine holds the artifacts?",
-        "description": "opencodifier:descriptions=[\"embedded, zero ops\",\"operational overhead, remote access\"]",
+        "description": "opencode:descriptions=[\"embedded, zero ops\",\"operational overhead, remote access\"]",
         "enum": [
           "sqlite",
           "postgres"
@@ -18,7 +18,7 @@
       "model": {
         "type": "string",
         "title": "Which model should serve this request?",
-        "description": "opencodifier:descriptions=[\"General coding and reasoning\",\"Complex reasoning\"]",
+        "description": "opencode:descriptions=[\"General coding and reasoning\",\"Complex reasoning\"]",
         "enum": [
           "local-qwen",
           "local-glm"

@@ -180,7 +180,7 @@ open-jev-zefan-2b 64.5% on the public split) are Benchmark Heaven's own
 public-half measurements of author-published artifacts. Neither author
 self-ran their way onto the board.
 
-### 1.8 Eligibility verdict for OpenCodifier
+### 1.8 Eligibility verdict for OpenCode
 
 **Eligible — with four conditions.**
 

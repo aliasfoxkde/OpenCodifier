@@ -1,0 +1,25 @@
+[package]
+name = "opencode-core"
+description = "Canonical decision IR for OpenCode: typed decision questions, candidates, policies, calibrated confidence, and execution traces."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords = ["decision", "classifier", "inference", "routing"]
+categories = ["data-structures"]
+
+[lints]
+workspace = true
+
+[dependencies]
+# D11 note: base64 is the same dependency class as serde/sha2 — small, pure,
+# `alloc`-only (wasm-clean). It decodes image payloads at the IR boundary so
+# cache keys are a function of the bytes, not the caller's base64 flavor.
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json = "1"

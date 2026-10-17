@@ -1,11 +1,11 @@
 <!--
-Release-notes skeleton for one OpenCodifier release.
+Release-notes skeleton for one OpenCode release.
 
 Two kinds of slot live here, and they are not interchangeable:
 
 - The `@@`-delimited uppercase markers are mechanical: `just release-notes`
   fills them from the attestations under `dist/` (schema
-  `opencodifier.attestation/1`, produced by `scripts/generate_attestation.py`).
+  `opencode.attestation/1`, produced by `scripts/generate_attestation.py`).
   Digests are never hand-copied: if a value is not in an attestation, the
   tooling owes you that field, not your clipboard.
 - `<filled-by-human>` slots stay for the release engineer, because each one
@@ -17,7 +17,7 @@ Two kinds of slot live here, and they are not interchangeable:
 Render with `just release-notes` (writes `dist/RELEASE_NOTES.md`).
 -->
 
-# OpenCodifier @@TAG@@
+# OpenCode @@TAG@@
 
 Released @@DATE@@ from commit `@@COMMIT_SHORT@@` (full sha
 `@@COMMIT@@`, previous tag `@@PREVIOUS_TAG@@`).

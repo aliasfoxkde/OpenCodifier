@@ -11,20 +11,20 @@ Amortyx-side routing-plane anchors were re-verified at Amortyx HEAD
 
 PLANNING.md §60 states it and both trees independently restate it:
 
-> OpenCodifier makes semantic decisions. Amortyx makes
+> OpenCode makes semantic decisions. Amortyx makes
 > economic/operational decisions. Neither should absorb the other's
 > responsibilities.
 
 Concretely:
 
-- **OpenCodifier answers**: what kind of request is this, how complex is
+- **OpenCode answers**: what kind of request is this, how complex is
   it, what does it require (context, tools, freshness), and which
   eligible candidate fits — each as a typed decision with calibrated
   confidence, or an abstention.
 - **Amortyx answers**: price, latency targets, availability, quota,
   user policy, privacy lane, and which provider adapter actually
   dispatches.
-- OpenCodifier never prices, never sees provider keys, never owns the
+- OpenCode never prices, never sees provider keys, never owns the
   fallback chain. Amortyx never guesses semantics — when it needs a
   semantic judgment, it asks, and handles `abstain` by falling back to
   its current heuristic (see §4).
@@ -44,7 +44,7 @@ Amortyx's routing decisions are currently inline heuristics in
 
 These heuristics work and are cheap — but they are untyped, uncalibrated,
 and silent: a wrong complexity guess looks identical to a right one.
-Exactly the gap OpenCodifier's IR exists to close: same decisions, typed,
+Exactly the gap OpenCode's IR exists to close: same decisions, typed,
 with calibrated confidence, an execution trace, and an explicit
 abstention outcome.
 
@@ -66,7 +66,7 @@ abstention outcome.
 Each heuristic above becomes a named, versioned decision definition
 (PLANNING.md §63). The candidate list for model selection is dynamic —
 Amortyx computes eligibility (price, quota, privacy lane) and sends the
-surviving candidate ids; OpenCodifier ranks only among what Amortyx
+surviving candidate ids; OpenCode ranks only among what Amortyx
 already considers legal.
 
 | Decision id | Type | Question | Candidates / scale |
@@ -84,7 +84,7 @@ same gate values the engine's `DecisionPolicy` carries today.
 The state each decision reads is derived from the `NormalizedRequest`
 Amortyx already builds: message texts, lengths, tool definitions,
 attached context — never the raw provider payload with keys. Input is
-hostile by OpenCodifier's standing rule: request text can never modify
+hostile by OpenCode's standing rule: request text can never modify
 policy, thresholds, graphs, or paths, and the §45 focus extraction keeps
 long request bodies from dominating the decision input.
 
@@ -106,7 +106,7 @@ The contract that makes abstention safe:
 
 ## 5. Ladder and latency mapping (who may answer inline)
 
-OpenCodifier's cost ladder is also the latency budget, and Amortyx's
+OpenCode's cost ladder is also the latency budget, and Amortyx's
 lanes differ in what they can afford:
 
 | Lane | Budget | Allowed rungs |
@@ -122,8 +122,8 @@ Two properties make the hot path real rather than aspirational:
    concurrent duplicates are Amortyx's measured dominant savings class
    (its VALIDATION-REPORT: blended 27.8% of requests, 4,873 tok, 76×
    replay) — and identical `(state, question)` pairs are exact-decision
-   cache hits in OpenCodifier, microseconds. The requests Amortyx sees
-   most often are the ones OpenCodifier answers cheapest.
+   cache hits in OpenCode, microseconds. The requests Amortyx sees
+   most often are the ones OpenCode answers cheapest.
 2. **Escalation is confidence-gated** (§73): the expensive rung runs only
    when the cheap rungs abstain, and the reverse escalation added in
    Phase 16 re-decides on the full request view when a focused view
@@ -142,20 +142,20 @@ Process boundary, loopback only:
 amortyx-router (axum, tokio)
    │  POST http://127.0.0.1:<port>/v1/decide   (native schema)
    ▼
-opencodifier serve --focus-budget 512
+opencode serve --focus-budget 512
 ```
 
 - **Transport**: the native `/v1/decide` route
-  (`opencodifier-http/src/routes.rs`), one call per decision batch —
+  (`opencode-http/src/routes.rs`), one call per decision batch —
   the endpoint already accepts multi-question requests, so the five
   decisions of §3 that share a state travel together.
 - **Bind**: loopback by default per the standing serve rule; Amortyx and
-  OpenCodifier on the same host, or an explicitly-flagged socket where
+  OpenCode on the same host, or an explicitly-flagged socket where
   they are not. No provider credentials ever transit this path.
 - **Failure posture**: connection refused / timeout / 5xx ⇒ treat as
   abstention on every decision in the batch (§4). Amortyx's availability
   must never depend on the decision subsystem's availability.
-- **Alternative surface**: `opencodifier-mcp` exists for agent-hosted
+- **Alternative surface**: `opencode-mcp` exists for agent-hosted
   integrations, but a router calling out per request wants the HTTP
   path; MCP's stdio shape fits tool-style use, not an inline lane.
 - **Attribution**: outcomes land in the existing routing trail
@@ -166,7 +166,7 @@ opencodifier serve --focus-budget 512
 
 Amortyx already owns the instrument: `holdout.rs` allocates sessions
 sticky-armed by SHA-256 and the usage ledger carries the arm tag. The
-OpenCodifier shadow reuses exactly that allocation instead of inventing
+OpenCode shadow reuses exactly that allocation instead of inventing
 a parallel one:
 
 ```text
@@ -202,7 +202,7 @@ here. Its role in this design is narrow and read-only:
 - VIVERE corpus runs consume **shadow-ledger exports**, never live
   traffic. The corpus run is quota-shaped (flat subscription converts
   token savings into work-per-window), which is the same shape as
-  OpenCodifier's "tokens avoided" metric (§59) — the ledger's savings
+  OpenCode's "tokens avoided" metric (§59) — the ledger's savings
   rows and OC's decision rows join on request id.
 - Model-path experiments (e.g. VIVERE-side decision models evaluated on
   the corpus) run through the same benchmark harness contract as the
@@ -219,7 +219,7 @@ Optional, explicit, and versioned — never automatic:
 
 ```text
 shadow ledger ─► privacy filter ─► dedup ─► label extraction
-      ─► dataset (versioned, checksummed) ─► OpenCodifier training
+      ─► dataset (versioned, checksummed) ─► OpenCode training
       ─► Phase 13 benchmark harness ─► candidate deployment (D16 re-tier)
 ```
 
@@ -234,14 +234,14 @@ shadow ledger ─► privacy filter ─► dedup ─► label extraction
 
 ## 10. Non-goals
 
-- No OpenCodifier-in-Amortyx-process linkage: separate processes, loopback
+- No OpenCode-in-Amortyx-process linkage: separate processes, loopback
   HTTP, independent lifecycles (§6).
-- No provider keys, pricing tables, or quota state in OpenCodifier.
+- No provider keys, pricing tables, or quota state in OpenCode.
 - No decision graph that encodes economics: candidate *eligibility* is
   Amortyx's input; the decision ranks among eligible candidates only.
 - No automatic training from production (§9).
 - No shared holdout semantics drift: the holdout allocator remains
-  Amortyx's; OpenCodifier consumes arm tags, it never re-assigns arms.
+  Amortyx's; OpenCode consumes arm tags, it never re-assigns arms.
 
 ## 11. Risks
 
@@ -256,12 +256,12 @@ shadow ledger ─► privacy filter ─► dedup ─► label extraction
 ## 12. Shipped V1 (2026-10-03) — provider registration over the chat surface
 
 The first integration running on this host is the **zero-Amortyx-code
-path**: OpenCodifier registers in Amortyx's provider config, and the
+path**: OpenCode registers in Amortyx's provider config, and the
 semantic decision capability arrives as just another
 OpenAI-compatible provider.
 
-- **Runtime**: `opencodifier serve --focus-budget 512` as a systemd
-  `--user` unit (`opencodifier.service`), loopback `127.0.0.1:8177`,
+- **Runtime**: `opencode serve --focus-budget 512` as a systemd
+  `--user` unit (`opencode.service`), loopback `127.0.0.1:8177`,
   engine identity `relational-v1|builtin-lexical-v2|focused-v1@512`.
 - **Surface**: `POST /v1/chat/completions`
   ([INTEGRATIONS.md §2.5](INTEGRATIONS.md)) — the OpenAI-shaped
@@ -271,7 +271,7 @@ OpenAI-compatible provider.
 
   ```yaml
   # <amortyx config>.yaml → providers:
-  - name: opencodifier
+  - name: opencode
     provider_type: openai_compatible
     api_key_env: AMORTYX_OPENCODIFIER_API_KEY   # any non-empty value; OC does not check it
     base_url: "http://127.0.0.1:8177/v1"
@@ -287,7 +287,7 @@ OpenAI-compatible provider.
 
 - **Contract on the wire**: strict `json_schema` in, structured-output
   JSON in `choices[0].message.content` out, outcome + calibrated
-  confidence in the `opencodifier` extension object, abstention as
+  confidence in the `opencode` extension object, abstention as
   `200` with `outcome: "abstain"`. A request without a strict schema is
   refused `schema.unsupported_generation_field` — the runtime decides,
   it does not generate prose, and a chat-shaped refusal is still a
@@ -300,7 +300,7 @@ OpenAI-compatible provider.
   builds drop the client's `response_format` at three ingress layers
   (`ChatCompletionsRequest` deserialization, `into_normalized`
   metadata hoisting, `parse_inbound`), so the strict schema never
-  reaches OpenCodifier and every request is refused
+  reaches OpenCode and every request is refused
   `schema.unsupported_generation_field` (surfaced by the router as a
   502 relay). The request-side passthrough that fixes this is Amortyx
   commit `38daffa9` (branch `feat/forward-client-response-format`,
@@ -308,10 +308,10 @@ OpenAI-compatible provider.
   metadata passthrough into `request_overrides` and is re-flattened
   onto the provider wire; packed/batch requests are excluded so their
   own synthesized `response_format` demux contract is untouched.
-  Routers without this commit cannot front OpenCodifier's chat
+  Routers without this commit cannot front OpenCode's chat
   surface.
 - **Boundary preserved**: this registration does NOT make Amortyx route
-  user traffic to OpenCodifier as if it were an LLM. The provider is
+  user traffic to OpenCode as if it were an LLM. The provider is
   for decision-shaped requests (structured output, candidate lists in
   the schema); the economic routing plane stays Amortyx's (§1), and the
   routing-plane side-car of §6 remains the phase-2 path — native
@@ -325,7 +325,7 @@ OpenAI-compatible provider.
 Dual-arm against the live host: `POST :8177/v1/chat/completions`
 (direct) vs the same body through the Amortyx router
 `POST :8787/v1/chat/completions` (bearer auth), deterministic engine
-served by `opencodifier.service`.
+served by `opencode.service`.
 
 **Arms and results.**
 
@@ -341,14 +341,14 @@ served by `opencodifier.service`.
 - *Abstention pass-through*: the no-metadata color probe returns
   `200` through the router with the honest uniform-distribution
   content and `outcome: "abstain"` semantics preserved on the direct
-  arm; through-router responses strip the `opencodifier` extension
+  arm; through-router responses strip the `opencode` extension
   object (finding F-1).
 - *Circuit breaker, full lifecycle (unique bodies so the exact-match
   cache never masks it)*: with `failure_threshold: 5`,
   `recovery_timeout_ms: 30000` (default), `success_threshold: 3`:
   OC stopped → 5 real attempts fail (`502`, connection refused,
   ~30–60 ms each) → circuit opens → subsequent requests fast-fail
-  `502 "opencodifier: circuit open"` → OC restarted (breaker does NOT
+  `502 "opencode: circuit open"` → OC restarted (breaker does NOT
   reset on provider restart) → after the recovery timeout the next
   request is admitted half-open → 3 consecutive successes close the
   circuit → normal serving. Journal-correlated
@@ -356,7 +356,7 @@ served by `opencodifier.service`.
   success)`).
 - *Exact-match cache vs outage*: identical bodies are served `200`
   from the router's cache (`x-amortyx-provider: cache`) while
-  OpenCodifier is down. Correct cache semantics, operationally
+  OpenCode is down. Correct cache semantics, operationally
   surprising during outage drills — breaker tests must use unique
   bodies (finding F-3).
 
@@ -365,7 +365,7 @@ served by `opencodifier.service`.
 - **F-1 — response-side extension stripped. — RESOLVED (same day).**
   Observed: the router's OpenAI adapter decoded the provider envelope
   into `NormalizedResponse` and re-serialized, dropping the
-  `opencodifier` extension (`outcome`, `calibrated_confidence`);
+  `opencode` extension (`outcome`, `calibrated_confidence`);
   direct responses carried it. Fix: Amortyx `d182a126` —
   `NormalizedResponse` gains an extension bag (payload, never routing
   state: no effect on request identity, dedup, or cache identity; a
@@ -374,7 +374,7 @@ served by `opencodifier.service`.
   filtered against the OpenAI-standard set, and the live + cached
   chat projections re-emit the bag at the envelope top level.
   Deployed and re-verified on this host: through-router responses now
-  carry `opencodifier: {outcome, calibrated_confidence}`, including
+  carry `opencode: {outcome, calibrated_confidence}`, including
   the abstention envelope. Branch
   `feat/forward-client-response-format`: `38daffa9` request side,
   `d182a126` response side.
@@ -394,8 +394,8 @@ served by `opencodifier.service`.
   provider is down; breaker/failover drills must vary bodies
   per-request. Recorded here as an operational property, not a
   defect.
-- **F-4 — doc drift fixed in this change (OpenCodifier-side,
-  closed).** §12's example registered `opencodifier-decision`, which
+- **F-4 — doc drift fixed in this change (OpenCode-side,
+  closed).** §12's example registered `opencode-decision`, which
   no served engine id matches; corrected to the real id and the
   exact-match behavior documented.
 

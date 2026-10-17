@@ -68,7 +68,7 @@ FILLER_B = [
 ]
 
 
-# The engine's own stopword list (crates/opencodifier-engine/src/lexical.rs
+# The engine's own stopword list (crates/opencode-engine/src/lexical.rs
 # STOP_WORDS): BM25 never scores these tokens, so disjointness is asserted
 # over content words only. Kept verbatim; the A/B fails loudly if the two
 # ever drift (a colliding stopword would make distractors marginally less

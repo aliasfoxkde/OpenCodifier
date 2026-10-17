@@ -162,7 +162,7 @@ inferior — ECE here is a consistency check, and the fit objective is
 categorical NLL over the full board. The other four decoder arms keep
 margin-fit artifacts until their arms re-run with distribution
 emission (their refits reproduced the margin numbers identically).
-A schema gate now pins this in CI: `crates/opencodifier-engine/tests/
+A schema gate now pins this in CI: `crates/opencode-engine/tests/
 artifact_schema_check.rs` deserializes every artifact of record into
 `CalibrationArtifact` (`deny_unknown_fields`).
 

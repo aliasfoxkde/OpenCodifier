@@ -358,7 +358,7 @@ function getEngine() {
   if (!enginePromise) {
     /* the wasm-pack web glue exports the async initializer as DEFAULT
        (`__wbg_init as default`) — there is no named `init` */
-    enginePromise = import("./wasm/opencodifier_wasm.js").then((m) => m.default().then(() => new m.WasmEngine()));
+    enginePromise = import("./wasm/opencode_wasm.js").then((m) => m.default().then(() => new m.WasmEngine()));
   }
   return enginePromise;
 }

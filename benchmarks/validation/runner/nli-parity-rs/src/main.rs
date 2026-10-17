@@ -20,9 +20,9 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use opencodifier_model::NliScorer;
-use opencodifier_model::nli;
-use opencodifier_model::nli::serving::OnnxNliScorer;
+use opencode_model::NliScorer;
+use opencode_model::nli;
+use opencode_model::nli::serving::OnnxNliScorer;
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let Some(model_dir) = std::env::args_os().nth(1) else {

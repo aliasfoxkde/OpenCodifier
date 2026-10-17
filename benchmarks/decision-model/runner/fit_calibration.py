@@ -6,7 +6,7 @@ probabilities measured across the decision-model board are badly
 calibrated (ECE 0.048-0.626), so exposing them as confidence is a lie.
 This fitter fits one temperature per model from the suite's
 (winner_probability, correct) observations and emits validated JSON
-artifacts that `opencodifier-engine`'s `TemperatureCalibration` loads.
+artifacts that `opencode-engine`'s `TemperatureCalibration` loads.
 
 Method, and its one approximation. The runner records each item's winner
 probability and correctness, not the full answer distribution, so the

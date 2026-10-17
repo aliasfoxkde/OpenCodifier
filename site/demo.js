@@ -296,13 +296,13 @@
   function initEngine() {
     /* The glue exports its async initializer as the DEFAULT export
        (`__wbg_init as default`), not a named `init`. */
-    import("./wasm/opencodifier_wasm.js")
+    import("./wasm/opencode_wasm.js")
       .then(function (mod) { return mod.default().then(function () { return mod; }); })
       .then(function (mod) {
         engine = new mod.WasmEngine();
         identity = JSON.parse(engine.identity());
         engine.decide(JSON.stringify(PRESETS.proof.request)); /* warmup */
-        chips.engine.textContent = "Engine: opencodifier " + esc(identity.engine_semver) +
+        chips.engine.textContent = "Engine: opencode " + esc(identity.engine_semver) +
           " [" + esc(identity.model_id) + "]";
         chips.wasm.textContent = "WASM: running locally";
         chips.wasm.classList.add("chip-ok");
@@ -392,7 +392,7 @@
   const BD_LIMITS = LIMITS;
 
   const TryDecision = {
-    /* Mirror of NEGATORS in crates/opencodifier-engine/src/lexical.rs —
+    /* Mirror of NEGATORS in crates/opencode-engine/src/lexical.rs —
        the lexical boolean rung counts these tokens and flips polarity on
        an odd count. A test pins this list against the Rust source. */
     NEGATORS: ["not", "no", "never", "without", "cannot", "neither", "nor"],

@@ -25,8 +25,8 @@ closes.
 
 ### 1.1 What "real-world validation" means here
 
-OpenCodifier is a local-first decision runtime with three shipped
-interfaces over one engine (`opencodifier_engine::EngineHandle`): HTTP
+OpenCode is a local-first decision runtime with three shipped
+interfaces over one engine (`opencode_engine::EngineHandle`): HTTP
 (axum 0.8, loopback), MCP (rmcp 2.2, stdio), and the CLI. Everything
 measured so far about it is single-shot and serial: one request, one
 client, one process, one decision (`benchmarks/decision-model/` — 49 board
@@ -55,7 +55,7 @@ a benchmark row).
 | class | shape | primary question |
 |---|---|---|
 | **A. Agentic multi-turn loop** | 24 sessions × 50 turns; each turn's decision feeds the next turn's state; state grows monotonically | does the runtime hold up as a *loop component* — no drift, no unbounded growth, no cross-session bleed? |
-| **B. Concurrent burst / queue** | 8 / 32 / 128 concurrent clients against `opencodifier serve` | what does the HTTP tier do at saturation — latency, error discipline, memory, liveness? |
+| **B. Concurrent burst / queue** | 8 / 32 / 128 concurrent clients against `opencode serve` | what does the HTTP tier do at saturation — latency, error discipline, memory, liveness? |
 | **C. Long context** | states at 4k / 32k / 128k estimated tokens through every pipeline tier | where do the deterministic layers stop being cheap, where does focus extraction engage, and where would escalation fire? |
 
 ### 1.3 Evidence discipline (binding)
@@ -101,9 +101,9 @@ from code, is finding RV-000 (§9.3).
 ### 2.1 CLI surface (clap walk)
 
 ```bash
-cd /nas/Temp/repos/OpenCodifier   # fedora: ~/repos/OpenCodifier (§8.1)
-B=target/release/opencodifier
-cargo build --release -p opencodifier-cli
+cd /nas/Temp/repos/OpenCode   # fedora: ~/repos/OpenCode (§8.1)
+B=target/release/opencode
+cargo build --release -p opencode-cli
 $B --help            > /tmp/rv-surface-cli-root.txt
 $B decide --help     > /tmp/rv-surface-cli-decide.txt
 $B graph --help      > /tmp/rv-surface-cli-graph.txt
@@ -116,7 +116,7 @@ $B recipe list       > /tmp/rv-surface-cli-recipe-list.txt
 $B recipe install --help > /tmp/rv-surface-cli-recipe-install.txt
 ```
 
-Expected (from `crates/opencodifier-cli/src/args.rs`): seven leaf commands
+Expected (from `crates/opencode-cli/src/args.rs`): seven leaf commands
 (`decide`, `graph validate`, `serve`, `mcp serve`, `models verify`,
 `recipe list`, `recipe install`); `decide` flags `--input`, `--format
 native|openai|anthropic|jev`, `--policy`, `--trace`,
@@ -128,16 +128,16 @@ piped (the Phase 11 accessibility check, re-proven here).
 ### 2.2 HTTP surface (route table)
 
 ```bash
-grep -n '\.route(' crates/opencodifier-http/src/routes.rs
-grep -n 'MAX_BODY_BYTES\|FORMAT_HEADER' crates/opencodifier-http/src/routes.rs | head
+grep -n '\.route(' crates/opencode-http/src/routes.rs
+grep -n 'MAX_BODY_BYTES\|FORMAT_HEADER' crates/opencode-http/src/routes.rs | head
 ```
 
-Expected — the nine routes registered by `opencodifier_http::router`
+Expected — the nine routes registered by `opencode_http::router`
 (`routes.rs:105`):
 
 | method | path | notes |
 |---|---|---|
-| POST | `/v1/decide` | `x-opencodifier-format` selects the adapter (D30) |
+| POST | `/v1/decide` | `x-opencode-format` selects the adapter (D30) |
 | POST | `/v1/batch` | `MAX_BATCH = 16`, shared with MCP `codify_batch` |
 | POST | `/v1/graph/validate` | |
 | POST | `/v1/graph/run` | client graph, content-addressed identity (D19) |
@@ -155,7 +155,7 @@ library adapters), any engine-configuration route on `/v1` (D25).
 ### 2.3 MCP surface
 
 ```bash
-grep -n 'name = "codify_' crates/opencodifier-mcp/src/lib.rs
+grep -n 'name = "codify_' crates/opencode-mcp/src/lib.rs
 ```
 
 Expected: `codify_decide`, `codify_batch`, `codify_graph`,
@@ -235,7 +235,7 @@ and refuses on any mismatch).
   `verify`/`abstain`/`escalate`/`no_valid_candidate`).
 - the response `metrics` object, exactly its four wire fields:
   `cache_hit`, `candidates_in`, `candidates_out`, `verification_triggered`
-  (`crates/opencodifier-core/src/trace.rs`). Narrowing efficiency is
+  (`crates/opencode-core/src/trace.rs`). Narrowing efficiency is
   computed client-side as `candidates_out / candidates_in`
   (`DecisionMetrics::reduction_ratio` exists in Rust but is not on the
   wire).
@@ -377,7 +377,7 @@ recorded as a projection, never presented as a measurement).
 | injection | procedure | must hold |
 |---|---|---|
 | **F1 — model rung unavailable** | start `serve` with the llamacpp build + `--llama http://127.0.0.1:8094` and `--ladder ladders/fusion-v2.json`; drive class-A sessions; `kill -9` the llama-server mid-session; restart it 30 s later and continue | every in-flight request resolves (typed error or answer) within client timeout + 5 s — never a hang; `healthz` 200 within 1 s of the kill; the first request after restart succeeds; a request that failed mid-walk serves no cached decision on retry (the cache stores completed responses only) |
-| **F2 — malformed-input burst** | 8 malformed shapes × 10 requests, level-3 concurrency: wrong question discriminator, body > 1 MiB, unknown `x-opencodifier-format` value, non-JSON bytes, empty body, 5,000-deep nested JSON, `max_candidates: 300`, wrong `limits` types. (The original list of ten also had missing `state.facts` and duplicate JSON keys; burst-r1 showed both are accepted **by design** — `State.facts` is `#[serde(default)]` so omitted means "no typed facts", and serde resolves duplicate keys last-wins — so they were reclassified out of the malformed set rather than counted as defects.) | 100 % 4xx with a stable code; 0 × 5xx; 0 panics; server process unchanged; the post-burst control decision is identical to pre-burst (§4.4 for why raw bytes may differ) |
+| **F2 — malformed-input burst** | 8 malformed shapes × 10 requests, level-3 concurrency: wrong question discriminator, body > 1 MiB, unknown `x-opencode-format` value, non-JSON bytes, empty body, 5,000-deep nested JSON, `max_candidates: 300`, wrong `limits` types. (The original list of ten also had missing `state.facts` and duplicate JSON keys; burst-r1 showed both are accepted **by design** — `State.facts` is `#[serde(default)]` so omitted means "no typed facts", and serde resolves duplicate keys last-wins — so they were reclassified out of the malformed set rather than counted as defects.) | 100 % 4xx with a stable code; 0 × 5xx; 0 panics; server process unchanged; the post-burst control decision is identical to pre-burst (§4.4 for why raw bytes may differ) |
 | **F3 — deadline pressure (D32)** | (a) request declaring `max_execution_time: 121 s` → refused at the wire; (b) C-full request at 128k declaring the full 120 s → completes inside the ceiling; (c) C-escalate with the rung behind a delay proxy (`8095`, +60 s per call) → typed timeout error inside deadline + 5 s, server healthy after | D32: the ceiling is finite, validated at the wire, min-ed with the server config |
 | **F4 — verifier disagreement** | ladder `proofs-only-v1.json` on class A (forces non-proof questions down the verify path with no verifier configured) | outcome `verify` with `verifier: "none"` in the trace; never an error; counted, not failed |
 
@@ -399,11 +399,11 @@ overhead is the measurement.
 
 | arm | mechanism | what it isolates |
 |---|---|---|
-| **D0 — in-process engine** | `cargo bench -p opencodifier-engine --bench engine` (`decide_full_pipeline`, `decide_mock_classifier`, `normalize_native_decode`) | the engine alone, no transport — the D9 stage rows |
-| **D1 — in-process router** | `cargo bench -p opencodifier-http --bench http` (`decide_round_trip_4_candidates` drives `opencodifier_http::router` over an ephemeral loopback listener) | decode + encode + hyper, no process boundary |
-| **D2 — real socket** | `runner/run_engine.py`-style client against `opencodifier serve --bind 127.0.0.1:8092` | the deployment path |
-| **D3 — MCP stdio** | JSON-RPC over stdin/stdout to `opencodifier mcp serve` (`codify_decide`), the raw-frame pattern `scripts/e2e_validate.py` already uses | the third interface's framing cost |
-| **D4 — CLI** | `opencodifier decide --input <file> --trace` over a 120-item sample | per-invocation process cost, reported separately, never averaged into latency |
+| **D0 — in-process engine** | `cargo bench -p opencode-engine --bench engine` (`decide_full_pipeline`, `decide_mock_classifier`, `normalize_native_decode`) | the engine alone, no transport — the D9 stage rows |
+| **D1 — in-process router** | `cargo bench -p opencode-http --bench http` (`decide_round_trip_4_candidates` drives `opencode_http::router` over an ephemeral loopback listener) | decode + encode + hyper, no process boundary |
+| **D2 — real socket** | `runner/run_engine.py`-style client against `opencode serve --bind 127.0.0.1:8092` | the deployment path |
+| **D3 — MCP stdio** | JSON-RPC over stdin/stdout to `opencode mcp serve` (`codify_decide`), the raw-frame pattern `scripts/e2e_validate.py` already uses | the third interface's framing cost |
+| **D4 — CLI** | `opencode decide --input <file> --trace` over a 120-item sample | per-invocation process cost, reported separately, never averaged into latency |
 
 **Overhead = measured differences**, not assumptions: D1 − D0 is the
 "D9 HTTP overhead 2 ms" check; D2 − D1 is the process/socket cost; D3 − D2
@@ -429,7 +429,7 @@ already uses.
 | item | value |
 |---|---|
 | host | `fedora` (i5-13600K, 20 threads, CPU-only — no GPU) |
-| repo | `/home/mkinney/repos/OpenCodifier` (was 2 commits behind `main` at design time — sync first) |
+| repo | `/home/mkinney/repos/OpenCode` (was 2 commits behind `main` at design time — sync first) |
 | python | 3.14.6 |
 | scratch | `/home/mkinney/oc-model-eval` (runs, builds, models) |
 | ports in use | 8080 and 8091 both held by standing `llama-server` processes from the measurement chain. **The campaign block is 8092–8095**; 8080 is never used. |
@@ -441,25 +441,25 @@ Port allocation for the campaign: `8092` primary `serve`; `8093` second
 
 ```bash
 ssh fedora
-cd ~/repos/OpenCodifier
+cd ~/repos/OpenCode
 git fetch origin && git checkout main && git pull --ff-only
 git rev-parse HEAD                 # becomes the commit of record in every manifest
 export RUNS=$HOME/oc-model-eval/runs/realworld
 export TMPDIR=$HOME/oc-model-eval/tmp
 mkdir -p "$RUNS/binaries" "$TMPDIR"
-cargo build --release -p opencodifier-cli
-cp target/release/opencodifier "$RUNS/binaries/opencodifier-default"
-sha256sum "$RUNS/binaries/opencodifier-default" | tee "$RUNS/binaries/default.sha256"
-cargo build --release -p opencodifier-cli --features llamacpp   # C-escalate / F1 only
-cp target/release/opencodifier "$RUNS/binaries/opencodifier-llamacpp"
-sha256sum "$RUNS/binaries/opencodifier-llamacpp" | tee "$RUNS/binaries/llamacpp.sha256"
+cargo build --release -p opencode-cli
+cp target/release/opencode "$RUNS/binaries/opencode-default"
+sha256sum "$RUNS/binaries/opencode-default" | tee "$RUNS/binaries/default.sha256"
+cargo build --release -p opencode-cli --features llamacpp   # C-escalate / F1 only
+cp target/release/opencode "$RUNS/binaries/opencode-llamacpp"
+sha256sum "$RUNS/binaries/opencode-llamacpp" | tee "$RUNS/binaries/llamacpp.sha256"
 ```
 
 One build target, one binary: the feature build **overwrites**
-`target/release/opencodifier`, so each build is copied aside and digested
+`target/release/opencode`, so each build is copied aside and digested
 immediately — the default-build arms run against
-`$RUNS/binaries/opencodifier-default`, the C-escalate/F1 arms against
-`$RUNS/binaries/opencodifier-llamacpp`, and the run JSON's
+`$RUNS/binaries/opencode-default`, the C-escalate/F1 arms against
+`$RUNS/binaries/opencode-llamacpp`, and the run JSON's
 `binary_sha256` names which one actually served. The default build stays
 dependency-identical; the `llamacpp` build is a separate artifact used
 only by the arms that name it.
@@ -469,7 +469,7 @@ only by the arms that name it.
 ```bash
 port_free() { ! (exec 3<>/dev/tcp/127.0.0.1/$1) 2>/dev/null; }
 port_free 8092 || { echo "8092 held — pick another"; exit 1; }
-"$RUNS/binaries/opencodifier-default" serve --bind 127.0.0.1:8092 \
+"$RUNS/binaries/opencode-default" serve --bind 127.0.0.1:8092 \
     > "$RUNS/serve-8092.log" 2>&1 &
 curl -sf http://127.0.0.1:8092/v1/healthz   # gate: 200 before any traffic
 ```
@@ -528,19 +528,19 @@ python3 benchmarks/validation/runner/run_burst.py --port 8092 --clients 128 \
 
 # 5. Class C — one serve configuration per run, sequential, one port each
 python3 benchmarks/validation/runner/run_longctx.py \
-    --binary "$RUNS/binaries/opencodifier-default" --port 8092 --arm full \
+    --binary "$RUNS/binaries/opencode-default" --port 8092 --arm full \
     --suite benchmarks/validation/suite/longctx_tiers.json \
     --out "$RUNS/classC/C-full.json"
 python3 benchmarks/validation/runner/run_longctx.py \
-    --binary "$RUNS/binaries/opencodifier-default" --port 8093 --arm focus512 \
+    --binary "$RUNS/binaries/opencode-default" --port 8093 --arm focus512 \
     --suite benchmarks/validation/suite/longctx_tiers.json \
     --out "$RUNS/classC/C-f512.json"
 python3 benchmarks/validation/runner/run_longctx.py \
-    --binary "$RUNS/binaries/opencodifier-default" --port 8093 --arm focus4096 \
+    --binary "$RUNS/binaries/opencode-default" --port 8093 --arm focus4096 \
     --suite benchmarks/validation/suite/longctx_tiers.json \
     --out "$RUNS/classC/C-f4096.json"
 python3 benchmarks/validation/runner/run_longctx.py \
-    --binary "$RUNS/binaries/opencodifier-llamacpp" --port 8093 --arm escalate \
+    --binary "$RUNS/binaries/opencode-llamacpp" --port 8093 --arm escalate \
     --ladder ladders/fusion-v2.json --llama http://127.0.0.1:8094 \
     --llama-model-id pd-fork-38de7eb__qate2b-q4_0__tree-v2 \
     --suite benchmarks/validation/suite/longctx_tiers.json \
@@ -551,8 +551,8 @@ python3 benchmarks/validation/runner/run_inject.py --port 8092 --rung 8094 \
     --out "$RUNS/failure/"
 
 # 7. Dual-arm parity (D0/D1 via cargo, D2/D3/D4 via the runners)
-cargo bench -p opencodifier-engine --bench engine -- --save-baseline realworld-baseline
-cargo bench -p opencodifier-http    --bench http   -- --save-baseline realworld-baseline
+cargo bench -p opencode-engine --bench engine -- --save-baseline realworld-baseline
+cargo bench -p opencode-http    --bench http   -- --save-baseline realworld-baseline
 python3 benchmarks/validation/runner/run_mcp_arm.py --port 8092 \
     --out "$RUNS/dualarm/D3-mcp.json"
 
@@ -616,7 +616,7 @@ non-zero on any byte difference, the Phase 13 suite discipline.
 1. **No per-stage timings exist in the trace.** `TraceEntry` is
    `{node, detail}` and `DecisionMetrics` is
    `{candidates_in, candidates_out, cache_hit, verification_triggered}`
-   (`crates/opencodifier-core/src/trace.rs`). The deliverable's "per-stage
+   (`crates/opencode-core/src/trace.rs`). The deliverable's "per-stage
    stage timings from the deterministic trace" is not satisfiable as
    stated: stage evidence must come from the criterion benches (D0/D1) and
    client wall. Whether to add durations to the trace is a trace-contract

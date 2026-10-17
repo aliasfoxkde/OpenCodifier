@@ -23,8 +23,8 @@
 
 | # | Location | Pattern | Disposition |
 |---|---|---|---|
-| 1 | `crates/opencodifier-model/src/julia/fixtures/julia-reference-trimmed.json:412` | `credit-card-number-generic` + `credit-card-amex` | **ACCEPTED** — numerical logits array that happens to match Luhn patterns; fixture data, never networked |
-| 2 | `site/docs.html:338` | `git-credential-leak` | **ACCEPTED** — `git clone https://github.com/aliasfoxkde/OpenCodifier` in docs; unauthenticated public URL |
+| 1 | `crates/opencode-model/src/julia/fixtures/julia-reference-trimmed.json:412` | `credit-card-number-generic` + `credit-card-amex` | **ACCEPTED** — numerical logits array that happens to match Luhn patterns; fixture data, never networked |
+| 2 | `site/docs.html:338` | `git-credential-leak` | **ACCEPTED** — `git clone https://github.com/aliasfoxkde/OpenCode` in docs; unauthenticated public URL |
 | 3 | `site/index.html:356` | `git-credential-leak` | **ACCEPTED** — same as above |
 
 ---
@@ -33,12 +33,12 @@
 
 | # | Location | Pattern | Disposition |
 |---|---|---|---|
-| 4 | `crates/opencodifier-ffi/src/lib.rs:179,195,260,278` | `rust-unsafe-block` + `rust-unsafe-extern` | **ACCEPTED** — C-ABI FFI requires unsafe; audited, contained, documented |
-| 5 | `crates/opencodifier-ffi/include/ocffi.h:28` | `rust-unsafe-extern` | **ACCEPTED** — same as above |
-| 6 | `crates/opencodifier-http/src/lib.rs:281` | `healthcare-phi-plaintext-endpoint` | **ACCEPTED** — test hits `http://127.0.0.1/healthz`; loopback only |
-| 7 | `crates/opencodifier-schema/src/openai.rs:128` | `vue-template-injection` | **ACCEPTED** — string constant `DESCRIPTIONS_MARKER = "opencodifier:descriptions="`; not Vue |
-| 8 | `crates/opencodifier-engine/src/executor.rs:489` | `flask-sqlalchemy-raw-sql` | **ACCEPTED** — "sql" in comments describing the executor's purpose; not Flask |
-| 9 | `crates/opencodifier-core/src/request.rs:322` | `code-injection-request` | **ACCEPTED** — test comment "malicious code guidance" in a test payload comment |
+| 4 | `crates/opencode-ffi/src/lib.rs:179,195,260,278` | `rust-unsafe-block` + `rust-unsafe-extern` | **ACCEPTED** — C-ABI FFI requires unsafe; audited, contained, documented |
+| 5 | `crates/opencode-ffi/include/ocffi.h:28` | `rust-unsafe-extern` | **ACCEPTED** — same as above |
+| 6 | `crates/opencode-http/src/lib.rs:281` | `healthcare-phi-plaintext-endpoint` | **ACCEPTED** — test hits `http://127.0.0.1/healthz`; loopback only |
+| 7 | `crates/opencode-schema/src/openai.rs:128` | `vue-template-injection` | **ACCEPTED** — string constant `DESCRIPTIONS_MARKER = "opencode:descriptions="`; not Vue |
+| 8 | `crates/opencode-engine/src/executor.rs:489` | `flask-sqlalchemy-raw-sql` | **ACCEPTED** — "sql" in comments describing the executor's purpose; not Flask |
+| 9 | `crates/opencode-core/src/request.rs:322` | `code-injection-request` | **ACCEPTED** — test comment "malicious code guidance" in a test payload comment |
 | 10 | `site/demo.js:150,222,254,259,290,310,542` | `xss`, `stored-xss`, `angular-innerhtml-xss` | **ACCEPTED** — `esc()` HTML-encodes all user-supplied content before innerHTML |
 | 11 | `site/site.js:6,111,119,129,260,271,395,409,423,441` | `xss`, `stored-xss`, `angular-innerhtml-xss` | **ACCEPTED** — same esc() mitigation |
 | 12 | `site/maze.js:42`, `pong.js:391`, `tower.js:524`, etc. | `xss`, `stored-xss`, `angular-innerhtml-xss` | **ACCEPTED** — same esc() mitigation; game output uses engine-decided text |
@@ -52,7 +52,7 @@
 | Category | Count | Disposition |
 |---|---|---|
 | Financial IDs in JSON fixtures (credit-card-*, TFN, SSN, ABA, Aadhaar, SIN) | ~900 | **ACCEPTED** — fixture data; logits arrays; numerical test values |
-| `eval-usage` / `dangerous-execution` in `benchmarks/decision-model/runner/*.py` | 20 | **ACCEPTED** — separate benchmark project in `benchmarks/`; OpenCodifier does not execute these |
+| `eval-usage` / `dangerous-execution` in `benchmarks/decision-model/runner/*.py` | 20 | **ACCEPTED** — separate benchmark project in `benchmarks/`; OpenCode does not execute these |
 | `pii-output-marker` in site JS (62 occurrences) | 62 | **ACCEPTED** — UI label strings like "name", "date", "address" that Aegis misidentifies as PII fields |
 | `privileged-container` in docs | 4 | **ACCEPTED** — docs discussing container security; not actual container configs |
 | `ssrf-localhost` in docs | many | **ACCEPTED** — docs describe loopback URLs for local dev |

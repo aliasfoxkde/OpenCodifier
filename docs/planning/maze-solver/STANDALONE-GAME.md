@@ -79,7 +79,7 @@ verification is `simulate(trace) → score`. God-view runs are marked and
 excluded (the demo's `assisted` flag), timers are simulated inside the core,
 and the engine's rung trace doubles as a plausibility fingerprint.
 
-## 6. Engine hooks (the OpenCodifier tie-in, kept honest)
+## 6. Engine hooks (the OpenCode tie-in, kept honest)
 
 The demo's honesty line stays: the maze bot is a hand-written ladder; the
 WASM engine only breaks genuine equal-cost ties. The standalone game keeps

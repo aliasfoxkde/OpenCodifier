@@ -1,6 +1,6 @@
 # Architecture
 
-How OpenCodifier is put together. Normative alongside PLANNING.md; this
+How OpenCode is put together. Normative alongside PLANNING.md; this
 document wins where it is more current. Status markers: **done** = shipped
 in a committed phase, **contract** = frozen v1 surface.
 
@@ -8,16 +8,16 @@ in a committed phase, **contract** = frozen v1 surface.
 
 | Plane | Crates | Talks to |
 |-------|--------|----------|
-| Decision core | `opencodifier-core` | nothing (pure IR + math) |
-| Deterministic engine | `opencodifier-engine` | core, schema |
-| Schema adapters | `opencodifier-schema` | core |
-| Inference runtime | `opencodifier-runtime` | core (+ `ort` behind one feature) |
-| Decision model | `opencodifier-model` | engine, runtime, core |
-| Interfaces | `opencodifier-cli`, `-http`, `-mcp`, `-wasm`, `-ffi` | engine/model, schema |
+| Decision core | `opencode-core` | nothing (pure IR + math) |
+| Deterministic engine | `opencode-engine` | core, schema |
+| Schema adapters | `opencode-schema` | core |
+| Inference runtime | `opencode-runtime` | core (+ `ort` behind one feature) |
+| Decision model | `opencode-model` | engine, runtime, core |
+| Interfaces | `opencode-cli`, `-http`, `-mcp`, `-wasm`, `-ffi` | engine/model, schema |
 
 The dependency arrows only ever point toward `core`. Nothing in the
 workspace depends on a concrete inference library except
-`opencodifier-runtime`, and only under its `onnx` feature.
+`opencode-runtime`, and only under its `onnx` feature.
 
 ## 2. The decision pipeline
 
@@ -52,7 +52,7 @@ Stages 2–6 are skippable by configuration; 7–9 always run.
 
 ## 3. Frozen v1 contracts
 
-### 3.1 Canonical IR (`opencodifier-core`)
+### 3.1 Canonical IR (`opencode-core`)
 
 - `State` — text + `BTreeMap<String, FactValue>` (canonical order is part
   of the cache-key contract).
@@ -105,7 +105,7 @@ the engine stays single-threaded per request.
 
 ## 6. Schema adaptation
 
-`opencodifier-schema` is the only place wire formats are named. Native IR
+`opencode-schema` is the only place wire formats are named. Native IR
 is the truth; adapters are total functions in both directions with
 fixture-locked round-trips (Phase 2): native ⇄ OpenAI structured outputs,
 native ⇄ Anthropic tool schemas, native ⇄ Jev/System One (`state` /

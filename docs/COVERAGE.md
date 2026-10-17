@@ -2,7 +2,7 @@
 
 Headline, number of record: **98.39 % on the lcov `DA` basis
 (18 187 / 18 485 hit; 298 lines never executed), measured inside the
-pinned CI image `opencodifier-ci-rust:2` on the default-feature tree —
+pinned CI image `opencode-ci-rust:2` on the default-feature tree —
 the same basis the CI lane gates** (`cargo llvm-cov --workspace
 --lcov`, warm target dir). The day's earlier census read 97.96 %
 (18 019 / 18 394): the §15.6 engine additions (Boolean gate fit,

@@ -8,12 +8,12 @@
 # purpose wants. sha256 pinned at classC/jevstyle.sha256.
 set -u
 RUNS=$HOME/oc-model-eval/runs/realworld
-BIN=$RUNS/binaries/opencodifier-llamacpp
-SUITE=$HOME/repos/OpenCodifier/benchmarks/validation/suite/longctx_tiers.json
-RUNNER=$HOME/repos/OpenCodifier/benchmarks/validation/runner/run_longctx.py
+BIN=$RUNS/binaries/opencode-llamacpp
+SUITE=$HOME/repos/OpenCode/benchmarks/validation/suite/longctx_tiers.json
+RUNNER=$HOME/repos/OpenCode/benchmarks/validation/runner/run_longctx.py
 echo "=== escalate start $(date -Is) load=$(cut -d' ' -f1 /proc/loadavg) ==="
 python3 $RUNNER --binary $BIN --suite $SUITE --arm escalate --port 8093 \
-  --ladder $HOME/repos/OpenCodifier/ladders/fusion-v2.json \
+  --ladder $HOME/repos/OpenCode/ladders/fusion-v2.json \
   --llama http://127.0.0.1:8094 --llama-model-id jev-style-0.8b-decision-v3 \
   --out $RUNS/classC/C-escalate.json || echo "C-escalate rc=$?"
 echo "=== escalate end $(date -Is) ==="

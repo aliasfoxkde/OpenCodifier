@@ -1,0 +1,43 @@
+[package]
+name = "opencode-cli"
+description = "Command-line interface for the OpenCode decision runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[[bin]]
+name = "opencode"
+path = "src/main.rs"
+
+[dependencies]
+opencode-core = { path = "../opencode-core", version = "0.6.0" }
+opencode-engine = { path = "../opencode-engine", version = "0.6.0" }
+opencode-model = { path = "../opencode-model", version = "0.6.0" }
+opencode-schema = { path = "../opencode-schema", version = "0.6.0" }
+opencode-http = { path = "../opencode-http", version = "0.6.0" }
+opencode-mcp = { path = "../opencode-mcp", version = "0.6.0" }
+clap = { version = "4", features = ["derive"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+[features]
+# The llama.cpp decision rung (D26): pulls `ureq` into
+# `opencode-model`. Without it the default build is
+# dependency-identical and `--llama` is refused at runtime.
+llamacpp = ["opencode-model/llamacpp"]
+vision = ["opencode-model/vision"]
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+# Digests for the `models verify` fixtures: the tests pin real artifact
+# bytes with the same SHA-256 the manifest carries.
+sha2.workspace = true
+
+[lints]
+workspace = true
