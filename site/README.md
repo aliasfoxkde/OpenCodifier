@@ -1,4 +1,4 @@
-# OpenCodifier marketing site
+# OpenCode marketing site
 
 Static single-page site -- deploys make **zero external requests** (system fonts,
 inline SVG, committed CSS, no tracking). Every number on the page traces to a
@@ -19,7 +19,7 @@ After regenerating the results CSV, sync and redeploy:
 
 ```bash
 just site-board                     # cp results/board.csv -> site/board.csv
-wrangler pages deploy site --project-name=opencodifier
+wrangler pages deploy site --project-name=opencode
 ```
 
 The page must never hand-type a number: if a figure isn't in the CSV or the
@@ -27,14 +27,14 @@ docs of record, it doesn't ship.
 
 ## The playground (`try.html`) and API reference (`api.html`)
 
-`try.html` runs the real engine (`crates/opencodifier-wasm`, zero-ML stack)
+`try.html` runs the real engine (`crates/opencode-wasm`, zero-ML stack)
 compiled to WebAssembly, entirely in the visitor's tab. `site/wasm/` is a
 **build artifact, not source** -- it is gitignored and rebuilt before every
 deploy:
 
 ```bash
 just site-wasm                       # wasm-pack build --target web -> site/wasm
-wrangler pages deploy site --project-name=opencodifier
+wrangler pages deploy site --project-name=opencode
 ```
 
 The glue's async initializer is exported as the **default** export
@@ -47,7 +47,7 @@ its "run it" buttons hand a fixture to the playground via the
 ## Brand assets (`assets/`)
 
 `brand-mark.svg` is the canonical vector mark -- geometry extracted from
-`docs/images/OpenCodifier_Logo.svg` (paths `apg-1`/`apg-2`, the export's
+`docs/images/OpenCode_Logo.svg` (paths `apg-1`/`apg-2`, the export's
 nested transforms baked into two plain ones, off-canvas design-tool clutter
 dropped) with the brand gradient `#728ee4 -> #3a00ad`. The nav and the
 favicon use it; `favicon.svg` adds the dark rounded tile for legibility at
@@ -84,8 +84,8 @@ never load a CDN. `package-lock.json` is committed.
 ## Deploy (Cloudflare Pages)
 
 ```bash
-wrangler pages project create opencodifier --production-branch main   # once
-wrangler pages deploy site --project-name=opencodifier
+wrangler pages project create opencode --production-branch main   # once
+wrangler pages deploy site --project-name=opencode
 ```
 
 Direct-upload project; `site/` is the deploy directory. Auth comes from

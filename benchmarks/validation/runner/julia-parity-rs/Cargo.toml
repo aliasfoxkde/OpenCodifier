@@ -6,8 +6,8 @@ publish = false
 description = "Compute-host parity run: the Rust Julia-1 contract + ONNX transport against the real export (task #92)."
 
 [dependencies]
-opencodifier-model = { path = "../../../../crates/opencodifier-model" }
-opencodifier-runtime = { path = "../../../../crates/opencodifier-runtime", features = [
+opencode-model = { path = "../../../../crates/opencode-model" }
+opencode-runtime = { path = "../../../../crates/opencode-runtime", features = [
     "runtime-onnx-dynamic",
 ] }
 serde = { version = "1", features = ["derive"] }

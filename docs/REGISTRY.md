@@ -61,8 +61,8 @@ the decision depends on the request, not on which artifact produced it.
 ## Instantiation
 
 ```rust
-use opencodifier_schema::registry::{DecisionDefinition, Registry};
-use opencodifier_core::Candidate;
+use opencode_schema::registry::{DecisionDefinition, Registry};
+use opencode_core::Candidate;
 
 let document = serde_json::from_value(definition_json)?;
 let definition = DecisionDefinition::decode(&document)?;

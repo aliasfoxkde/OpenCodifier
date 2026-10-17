@@ -8,7 +8,7 @@ changing what it is.
 
 ## 1. The invariant: a deployment mode, not a product mode
 
-The hosted tier ships the identical `opencodifier serve` binary with the
+The hosted tier ships the identical `opencode serve` binary with the
 identical `/v1` surface (`POST /v1/decide`, `/v1/graph/validate`,
 `/v1/healthz` today; §36 names the fuller set). There is no hosted-only
 feature, no hosted-only API, no hosted-only model lane. Everything that
@@ -53,10 +53,10 @@ do hosted is a defect in this design.
 The Amortyx deployment shape, already operated: systemd service bound to
 `127.0.0.1`, nginx (or the control-center backend) terminating TLS and
 authenticating, CORS restricted, anonymous probes must `401`. Phase H0
-is exactly this for `opencodifier serve`:
+is exactly this for `opencode serve`:
 
 ```text
-caller ──TLS──► edge (auth: owner's token) ──loopback──► opencodifier serve
+caller ──TLS──► edge (auth: owner's token) ──loopback──► opencode serve
                                                         (127.0.0.1, no models or pinned models)
 ```
 

@@ -7,7 +7,7 @@ compute host (`fedora:~/oc-model-eval/runs/…`) and are never committed;
 every number here is traceable to one.
 
 Manifest: repo commit at run time `8caf34f` (release build,
-`target/release/opencodifier`); host fedora, 16 cores; serve on
+`target/release/opencode`); host fedora, 16 cores; serve on
 `127.0.0.1:8092` with default policy, no ladder, no model rung. Host
 load was hostile for every window tried (sibling agent sessions hold
 the 16-core floor at ~17–21 and spike to 30+; gate policy v2 =
@@ -99,7 +99,7 @@ above are recorded, one runner defect fixed and re-verified.
 
 The 24-session × 50-turn incident-triage plan (1,152 decisions + 48
 repeat probes per run), four runs against the campaign binary
-(`opencodifier-default`, sha256 `d09ecbba…`, repo rev `2d3f81f`, plan
+(`opencode-default`, sha256 `d09ecbba…`, repo rev `2d3f81f`, plan
 fixture sha256 `276327ac…` byte-identical across hosts). Load 28–29
 throughout. Each run is hermetic: the runner spawns its own serve, so
 cache state never leaks between runs.
@@ -162,9 +162,9 @@ Three tiers × 120 items at 4,096 / 32,768 / 131,072 estimated tokens
 suite sha256 `fe96c1d3…`) plus one 262,144-token probe item exercised as
 a raw-socket oversized-body probe. Four default-build arms (full state,
 `--focus-budget 512`, `--focus-budget 4096`, and a full replay of each)
-against `opencodifier-default` (sha256 `d09ecbba…`, the classes A/B
+against `opencode-default` (sha256 `d09ecbba…`, the classes A/B
 binary, repo rev `2d3f81f`), then the escalate arm against
-`opencodifier-llamacpp` (sha256 `1947aaf7…`) with the fusion-v2 ladder
+`opencode-llamacpp` (sha256 `1947aaf7…`) with the fusion-v2 ladder
 and a live llama.cpp decision rung. One serve configuration per run,
 sequential, fresh port each arm.
 

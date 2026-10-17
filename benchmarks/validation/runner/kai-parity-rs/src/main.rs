@@ -1,8 +1,8 @@
 //! Compute-host parity run for the Kai-0.6B ONNX rung (task #92).
 //!
 //! Closes the boundary D34 left open for Kai: the full Rust path —
-//! request text ([`opencodifier_model::KaiQuestion`]), the reference HF
-//! tokenizer, collate, the [`opencodifier_runtime::KaiOnnxBackend`]
+//! request text ([`opencode_model::KaiQuestion`]), the reference HF
+//! tokenizer, collate, the [`opencode_runtime::KaiOnnxBackend`]
 //! graph execution on the real quantized export, and the contract's own
 //! `probabilities` (softmax + fitted score bias) — against the
 //! export-baked `ref.json` distributions. The python checker
@@ -19,10 +19,10 @@
 use std::collections::BTreeMap;
 use std::process::ExitCode;
 
-use opencodifier_model::{
+use opencode_model::{
     HfTokenizer, KaiEncoding, KaiOption, KaiPayload, KaiQuestion, MAX_INPUT_TOKENS, score_batch,
 };
-use opencodifier_runtime::KaiOnnxBackend;
+use opencode_runtime::KaiOnnxBackend;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -83,13 +83,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 entry.id, case.question
             ))?;
             let kind = match case.kind.as_str() {
-                "choice" => opencodifier_model::KaiKind::Choice,
-                "noul" => opencodifier_model::KaiKind::Noul,
-                _ => opencodifier_model::KaiKind::Score,
+                "choice" => opencode_model::KaiKind::Choice,
+                "noul" => opencode_model::KaiKind::Noul,
+                _ => opencode_model::KaiKind::Score,
             };
             let instructions = KaiPayload::Text(spec.instructions.clone());
             let question = match kind {
-                opencodifier_model::KaiKind::Noul => {
+                opencode_model::KaiKind::Noul => {
                     KaiQuestion::noul(&case.question, state.clone(), instructions)
                 }
                 _ => {
@@ -102,7 +102,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                         .iter()
                         .enumerate()
                         .map(|(index, key)| {
-                            let description = if kind == opencodifier_model::KaiKind::Score {
+                            let description = if kind == opencode_model::KaiKind::Score {
                                 criteria.get(index).and_then(Value::as_str)
                             } else {
                                 criteria.get(key).and_then(Value::as_str)

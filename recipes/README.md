@@ -1,12 +1,12 @@
 # Recipes
 
-Runnable decision graphs for OpenCodifier. Each recipe is a JSON graph the
+Runnable decision graphs for OpenCode. Each recipe is a JSON graph the
 engine executes as-is — no scripting, no hidden nodes — paired with the
 request that exercises it and the response the runtime actually produced.
 Everything here was captured by running the recipes against the committed
 engine, not written by hand.
 
-All recipes use the zero-ML engine (`opencodifier serve` never loads a
+All recipes use the zero-ML engine (`opencode serve` never loads a
 model — the default stack is the relational solver over the lexical
 classifier), so every number is reproducible on any machine. The traces
 name the deciding stack by its composed model id
@@ -24,8 +24,8 @@ name the deciding stack by its composed model id
 ### The fleet (§34)
 
 The twelve decision areas of PLANNING.md §34, one runnable recipe each.
-These ship *inside the binary*: `opencodifier recipe list` prints this
-table and `opencodifier recipe install <name>` writes the same three
+These ship *inside the binary*: `opencode recipe list` prints this
+table and `opencode recipe install <name>` writes the same three
 files (byte-identical to the committed copies) into a directory of your
 project. Several abstain with the paired request — on the zero-ML
 default stack that is the honest, correct outcome, and it demonstrates
@@ -50,8 +50,8 @@ forced answer would.
 Installing and running one:
 
 ```bash
-opencodifier recipe install model-routing
-opencodifier serve --bind 127.0.0.1:8971 --graph recipes/model-routing/graph.json
+opencode recipe install model-routing
+opencode serve --bind 127.0.0.1:8971 --graph recipes/model-routing/graph.json
 curl -s -X POST http://127.0.0.1:8971/v1/decide -H 'Content-Type: application/json' \
   --data-binary @recipes/model-routing/request.json
 ```
@@ -68,15 +68,15 @@ response in [`expected/`](expected/).
 Validate the graph without running it:
 
 ```bash
-cargo run -p opencodifier-cli -- graph validate recipes/minimal-choice.json
+cargo run -p opencode-cli -- graph validate recipes/minimal-choice.json
 # ok: graph `recipes/minimal-choice.json` valid (version 1, 5 nodes, 5 waves)
 ```
 
 Serve it and post the paired request:
 
 ```bash
-cargo run -p opencodifier-cli -- serve --bind 127.0.0.1:8971 --graph recipes/minimal-choice.json
-# opencodifier-http listening on http://127.0.0.1:8971
+cargo run -p opencode-cli -- serve --bind 127.0.0.1:8971 --graph recipes/minimal-choice.json
+# opencode-http listening on http://127.0.0.1:8971
 
 curl -s -X POST http://127.0.0.1:8971/v1/decide \
   -H 'Content-Type: application/json' \
@@ -109,7 +109,7 @@ produces the same bytes.
 
 The registry recipe's *request* has the same rule with one step
 upstream: it is captured by
-`cargo test -p opencodifier-schema the_registry_recipe`, which
+`cargo test -p opencode-schema the_registry_recipe`, which
 instantiates the committed definition and refuses to pass until the
 file under [`registry/requests/`](registry/requests/) matches byte for
 byte.

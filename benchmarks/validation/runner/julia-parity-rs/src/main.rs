@@ -1,7 +1,7 @@
 //! Compute-host parity run for the Julia-1 ONNX rung (task #92).
 //!
-//! Runs the shipped Rust contract ([`opencodifier_model::JuliaEncoding`])
-//! and transport ([`opencodifier_runtime::JuliaOnnxBackend`]) against the
+//! Runs the shipped Rust contract ([`opencode_model::JuliaEncoding`])
+//! and transport ([`opencode_runtime::JuliaOnnxBackend`]) against the
 //! real export's weights and compares the logits with the frozen fixture
 //! (recorded from the upstream PyTorch model). The python parity
 //! (`julia1_parity.py`, 100/100 rows) proves the export matches
@@ -19,11 +19,11 @@
 use std::collections::BTreeMap;
 use std::process::ExitCode;
 
-use opencodifier_model::{
+use opencode_model::{
     BpeTokenizer, JULIA_FIXTURE_TOKENIZER, JuliaEncoding, JuliaKind, JuliaOption, JuliaQuestion,
     MAX_LENGTH,
 };
-use opencodifier_runtime::{InferenceBackend, JuliaOnnxBackend, LOGITS_OUTPUT};
+use opencode_runtime::{InferenceBackend, JuliaOnnxBackend, LOGITS_OUTPUT};
 
 const DEFAULT_MODEL: &str = "models/onnx/julia-1/model.onnx";
 const DEFAULT_FIXTURE: &str =
@@ -98,7 +98,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         encoding.validate()?;
 
-        let outputs: BTreeMap<String, opencodifier_runtime::DenseTensor> =
+        let outputs: BTreeMap<String, opencode_runtime::DenseTensor> =
             backend.infer(&encoding.to_tensors()?)?;
         let logits = &outputs[LOGITS_OUTPUT];
         if logits.data().len() != case.logits.len() {

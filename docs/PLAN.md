@@ -1,6 +1,6 @@
 # Execution Plan (live)
 
-The phased execution contract for reaching a usable OpenCodifier v0.1.
+The phased execution contract for reaching a usable OpenCode v0.1.
 PLANNING.md is the founding specification (§§1–80); this document is the
 **live, expanded** plan that turns it into ordered, verifiable phases and
 records honest status. Where the two disagree, this file and
@@ -41,16 +41,16 @@ Remaining risks tracked in §6 below.
 | Phase | Scope | Status |
 |-------|-------|--------|
 | 0 | Workspace scaffold, governance, CI configs | **done** (37b8b63) |
-| 1 | `opencodifier-core` canonical IR | **done** (4f8900c) |
-| 2 | `opencodifier-schema` adapters + fixtures | **done** (5952769) |
-| 3 | `opencodifier-engine` graphs + rules + caches | **done** (5952769) |
+| 1 | `opencode-core` canonical IR | **done** (4f8900c) |
+| 2 | `opencode-schema` adapters + fixtures | **done** (5952769) |
+| 3 | `opencode-engine` graphs + rules + caches | **done** (5952769) |
 | 4 | Engine narrowing (metadata + BM25) | **done** (5952769) |
 | 5 | Deterministic decision model + calibration interface | **done** (5952769) |
-| 6 | `opencodifier-runtime` trait + honest ONNX feasibility | **done** (5146c34) — gate measured: a FAIL / b FAIL / c PASS → `onnx` deferred (D2) |
-| 7 | `opencodifier-model` (candidate-conditioned scoring) | **done** (d3a5aa5) — `EmbeddingClassifier`, `ModelManifest`, serving contract; no weights in V1 |
-| 8 | `opencodifier-cli` | **done** — `decide`/`graph validate`/`serve`/`models verify`, D13 exit codes, 20 e2e tests |
-| 9 | `opencodifier-http` | **done** — axum **0.8** `/v1` (D12 amended), loopback gate, 26 tests incl. real-socket e2e |
-| 10 | `opencodifier-mcp` | **done** (2026-09-28) — rmcp **2.2.0** stdio server, §55 tool set, 9 client-driven e2e + 2 CLI stdio sessions (D17) |
+| 6 | `opencode-runtime` trait + honest ONNX feasibility | **done** (5146c34) — gate measured: a FAIL / b FAIL / c PASS → `onnx` deferred (D2) |
+| 7 | `opencode-model` (candidate-conditioned scoring) | **done** (d3a5aa5) — `EmbeddingClassifier`, `ModelManifest`, serving contract; no weights in V1 |
+| 8 | `opencode-cli` | **done** — `decide`/`graph validate`/`serve`/`models verify`, D13 exit codes, 20 e2e tests |
+| 9 | `opencode-http` | **done** — axum **0.8** `/v1` (D12 amended), loopback gate, 26 tests incl. real-socket e2e |
+| 10 | `opencode-mcp` | **done** (2026-09-28) — rmcp **2.2.0** stdio server, §55 tool set, 9 client-driven e2e + 2 CLI stdio sessions (D17) |
 | 11 | E2E recipes + docs book + examples | **done** (85cd2ec) — `recipes/` 3 runnable graphs + captured responses; docs set + accessibility checked |
 | 12 | Release engineering (tag, release, GitForge pipeline green) | **done** (49bc224) — tag v0.1.0; pipeline of record green through GitForge (fe4b0871); v0.1.1 CI hardening (3bad2bb, run 8e8401f0); v0.2.0 with Phases 10/13/14/15 (c1c8166, tag v0.2.0, run 0ebd7318; CI-toolchain clippy fix c09e39d after run aaa2eefa) |
 | 13 | Decision-model benchmark: pick the model | **done** — `benchmarks/decision-model/`, thirteen arms; Qwen3.8-4B-Distill reference pick, tiered alternatives (D16, amended ×2) |
@@ -68,7 +68,7 @@ Remaining risks tracked in §6 below.
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
-- `opencodifier-schema` crate: `native` (identity), `openai`
+- `opencode-schema` crate: `native` (identity), `openai`
   (strict structured outputs — enum / anyOf / minimum-maximum only;
   oneOf/const treated as unsupported), `anthropic` (tool input_schema),
   `jev` (System One: `state`/`model`/`questions`; score answer =
@@ -101,7 +101,7 @@ Remaining risks tracked in §6 below.
 ## Phase 6 — runtime abstraction + honest ONNX feasibility (done)
 
 - `InferenceBackend` / `EmbeddingBackend` traits in
-  `opencodifier-runtime`, sync (D5), `Debug + Send + Sync`, returning
+  `opencode-runtime`, sync (D5), `Debug + Send + Sync`, returning
   validated `f32` `DenseTensor`s — logits/vectors only (D7). Mock
   backends (scripted inference, deterministic FNV-1a embedder) keep the
   whole product runnable with zero ML.
@@ -125,7 +125,7 @@ Remaining risks tracked in §6 below.
 
 ## Phase 7 — model crate (done, this commit)
 
-- `opencodifier-model`: candidate-conditioned scoring over
+- `opencode-model`: candidate-conditioned scoring over
   `InferenceBackend` (`decision.rs`: named-tensor contract
   `context`/`candidates`/`logits`, shape-validated, never truncated;
   Rust-side softmax per D7) and embedding similarity classification
@@ -148,10 +148,10 @@ Remaining risks tracked in §6 below.
 
 ## Phases 8–9 — interfaces (done)
 
-- `opencodifier-engine::EngineHandle` — the one facade (D5 sync):
+- `opencode-engine::EngineHandle` — the one facade (D5 sync):
   `lexical` zero-ML constructor, `decide`/`decide_with_report`,
   `validate_graph`, `health`. No interface reimplements pipeline logic.
-- `opencodifier-cli` (D13): `decide`
+- `opencode-cli` (D13): `decide`
   (`--input`/`--format native|openai|anthropic|jev`/`--policy`/`--trace`/
   `--abstain-is-success`), `graph validate`, `serve`
   (`--bind 127.0.0.1:8177` default, `--allow-remote` gate,
@@ -162,7 +162,7 @@ Remaining risks tracked in §6 below.
   trust the table. Responses always canonical native JSON; `--trace`
   prints the CLI-owned execution-report projection (`RunReport` is not
   `Serialize`; recorded as a possible engine follow-up).
-- `opencodifier-http` (D12, **axum 0.8** — 0.9 does not exist; D2-style
+- `opencode-http` (D12, **axum 0.8** — 0.9 does not exist; D2-style
   pin correction recorded): `POST /v1/decide`,
   `POST /v1/graph/validate`, `GET /v1/healthz`; `{"error":{code,message}}`
   envelope with owning-crate codes; 400 input vs 500 engine faults;
@@ -227,7 +227,7 @@ Remaining risks tracked in §6 below.
 - **Harness-jobs finding (2026-09-25) — RESOLVED at the source:** the
   queue rejected this cwd outright (`submit_job` accepted only
   backend-fixed, GitForge, dsc, BigData, Amortyx*). Fixed in the
-  harness itself (backend-fixed `053264d`): `/nas/Temp/repos/OpenCodifier`
+  harness itself (backend-fixed `053264d`): `/nas/Temp/repos/OpenCode`
   is now an allowed root, with allowlist tests extended (the suite also
   had a stale assertion claiming `dsc` is refused after DSC_ROOT became
   an allowed root). The four profiles (`cargo-fmt`, `cargo-clippy`,
@@ -238,7 +238,7 @@ Remaining risks tracked in §6 below.
   implemented"; `PipelineQueries::create` had no API caller). Also
   discovered: GitForge's rename commit (acc45f49) missed the pipeline
   filename, so CI read `.gitforce.yml` while repositories (including
-  OpenCodifier) commit `.gitforge.yml`. Fixed in GitForge: the gateway
+  OpenCode) commit `.gitforge.yml`. Fixed in GitForge: the gateway
   now exposes `POST /api/pipelines` (validated registration with the
   single-active-version invariant), `POST /api/pipelines/{id}/runs`
   (revision-resolved hand-off to the CI orchestrator), and
@@ -277,7 +277,7 @@ Remaining risks tracked in §6 below.
   1.98.1) — CI never ran the pinned 1.90. The fix follows the GitForge
   house pattern (`dsc-ci-rust`): a committed image recipe
   (`infrastructure/docker/ci-rust.Dockerfile`, built by `just ci-image`,
-  runner-local tag `opencodifier-ci-rust:1`) bakes the toolchain
+  runner-local tag `opencode-ci-rust:1`) bakes the toolchain
   (`RUSTUP_TOOLCHAIN` — verified to override the rust-toolchain.toml
   file), rustfmt/clippy (absent from the stock rust image), cargo-deny
   0.20.2, cargo-audit 0.22.2, aegis at pinned rev `445cf4c` (the exact
@@ -311,7 +311,7 @@ Remaining risks tracked in §6 below.
   push-event endpoint (the same typed path webhooks use). Durable fix:
   merge PR #236 to main before the next platform release cut.
   Harness-jobs: the fmt profile ran green through the queue (first
-  OpenCodifier gate validated there); clippy/test/coverage remain
+  OpenCode gate validated there); clippy/test/coverage remain
   queue-blocked by box load — local `just ci` and the GitForge pipeline
   cover the same gates meanwhile.
 - cargo-deny + cargo-audit clean; aegis scan: 0 new findings vs
@@ -529,7 +529,7 @@ The benchmark proved raw winner probability is uncalibrated everywhere
 (ECE 0.048–0.626) and the executor's OOD channel was dead. Both fixed,
 without changing behavior for engines that do not opt in:
 
-- **Calibration seam (`opencodifier-engine/src/calibration.rs`).**
+- **Calibration seam (`opencode-engine/src/calibration.rs`).**
   `Calibration` trait (`calibrate(class, distribution) -> f64` +
   `version()`), `IdentityCalibration` (raw, version 0 — D15's
   "none"), and `TemperatureCalibration` loaded from a validated,
@@ -548,7 +548,7 @@ without changing behavior for engines that do not opt in:
   rung's fit is **degenerate** (NLL falls to its T→∞ limit): gte
   zero-shot scores are ordering evidence only — no artifact emitted,
   and its scores must never gate by raw probability.
-- **§19 uncertainty gates live (`opencodifier-core/src/policy.rs`).**
+- **§19 uncertainty gates live (`opencode-core/src/policy.rs`).**
   `DecisionPolicy` gains `entropy_ceiling` / `min_margin` /
   `ood_ceiling` (defaults disabled: ∞ / 0.0 / ∞), validated like the
   confidence gates; `uncertainty_gate_trips` demotes an
@@ -618,15 +618,15 @@ answers before it scores them:
   identity check updated; fmt/clippy/test/doc/deny/aegis green; engine
   arm re-measured, board at 49 runs.
 
-## Phase 10 — `opencodifier-mcp`: the Model Context Protocol surface (done, 2026-09-28)
+## Phase 10 — `opencode-mcp`: the Model Context Protocol surface (done, 2026-09-28)
 
 §31/§55: the runtime is driveable by MCP hosts as tools, over stdio, with
 no chain-of-thought anywhere. The crate is thin by the same rule the HTTP
-surface is thin: every tool normalizes through [`opencodifier_schema`] and
+surface is thin: every tool normalizes through [`opencode_schema`] and
 executes through [`EngineHandle`] — there is no MCP-specific pipeline to
 drift.
 
-- **The server (`OpenCodifierServer`).** rmcp 2.2.0 (D1's pin, honored
+- **The server (`OpenCodeServer`).** rmcp 2.2.0 (D1's pin, honored
   verbatim; the 3.x line is a major version and is not adopted — D17)
   with `#[tool_router]`/`#[tool]` over an `Arc<EngineHandle>`. The
   engine is sync (D5); a stdio session is strictly sequential, so tools
@@ -654,9 +654,9 @@ drift.
   `GraphDocument` and the HTTP surface's private mirror of it was
   deleted — one decode-and-validate path for both ingresses. The CLI's
   `--trace` projection moved into the engine as
-  `opencodifier_engine::report::execution_json`, so CLI and MCP project
+  `opencode_engine::report::execution_json`, so CLI and MCP project
   the run report through one function.
-- **CLI.** `opencodifier mcp serve [--graph PATH]` (clap v4, D13):
+- **CLI.** `opencode mcp serve [--graph PATH]` (clap v4, D13):
   assembles the same engine as `serve`, serves stdio until the client
   disconnects; session failure is exit 3 under `mcp.session_failed`.
 - **Accept (met):** 4 envelope unit tests + 10 server unit tests +
@@ -725,7 +725,7 @@ focused decision is weak.
   decisions without caller bookkeeping.
 - **Surface.** `FocusPolicy`/`FocusSummary`/`FocusView` +
   `engine::EngineConfig::with_focus`; `--focus-budget TOKENS` on
-  `opencodifier decide`/`serve`/`mcp serve` (one shared
+  `opencode decide`/`serve`/`mcp serve` (one shared
   `runtime::engine_config` assembly). Trace detail keys
   `focus_engaged/kept/total/tokens/escalated` appear only when a policy
   is configured; `RunReport::focus` counts (`decided/engaged/escalated`)
@@ -734,7 +734,7 @@ focused decision is weak.
   to their pre-focus form.
 - **Measured (long-suite A/B through the real binary).**
   `suite/suite_long.json` (derived, deterministic, ~3,681-token states)
-  run twice through `opencodifier serve` — full state vs
+  run twice through `opencode serve` — full state vs
   `--focus-budget 512`: **answer-identical on all 120 items**
   (0.683 blended, ECE 0.094, same per-class, determinism replay exact on
   both sides). 84/120 items extracted (views p50 **93 tokens**, ≤ 511,
@@ -753,7 +753,7 @@ focused decision is weak.
 ## Phase 17 — external anchor: JevBench public split (engine + bridge + vtx done)
 
 Every REPORT.md number so far is internal (our suite, our seeds). Phase 17
-measures OpenCodifier on a third-party suite with published rows for
+measures OpenCode on a third-party suite with published rows for
 comparable systems. Methodology of record:
 `benchmarks/decision-model/JEVBENCH.md` (dataset and harness verified
 against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
@@ -814,11 +814,11 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   single-arm ECE line was recomputed 2026-10-02). Live-ladder
   **wiring landed (2026-09-30, D25)**: `LadderPolicy` per-node/per-kind
   gate overrides resolved at the existing confidence gate
-  (`opencodifier-engine/src/ladder.rs`), identity-decorated cache keys,
+  (`opencode-engine/src/ladder.rs`), identity-decorated cache keys,
   byte-identical when empty; thresholds become config once per-domain
   calibration exists (opt-in ship posture). **Model rung wired
   (2026-10-05, D26/D27)**: `LlamaDecisionClassifier`
-  (`opencodifier-model`, `llamacpp` feature — ureq loopback client over
+  (`opencode-model`, `llamacpp` feature — ureq loopback client over
   the fork's `POST /v1/decision`, Rust-side softmax, no synthesized
   probability) + cross-rung escalation tail (`with_rungs`, fired only
   by the gate, `|rungs-v1@…` cache re-key) + CLI surfacing
@@ -827,7 +827,7 @@ against the official repo, `fstandhartinger/jevbench` @ `9ec6f15a`, MIT;
   model-rung; `ladders/README.md` "The model rung"; default build
   stays dependency-identical and refuses `--llama` with
   `cli.model_rung_unavailable`). **D26 acceptance MET (2026-10-05,
-  live run)**: locked suite through `opencodifier serve --ladder
+  live run)**: locked suite through `opencode serve --ladder
   ladders/fusion-v1.json --llama …` against the pd-fork `38de7eb`
   `llama-server` — blended **0.842 ≥ 0.80** at **117.2 ms mean ≤ 1 s**
   (p50 0.54 ms; 37/120 items escalate; replay bit-exact; board row
@@ -937,7 +937,7 @@ in between. Ordered so each step's output feeds the next.
   the MCP stdio handshake with the full tool list. Amended while
   building it: the shipped HTTP surface is exactly the three routes in
   `routes.rs` — `/v1/systemone` and Anthropic/OpenAI HTTP shapes do not
-  exist (those wire formats are `opencodifier-schema` library adapters,
+  exist (those wire formats are `opencode-schema` library adapters,
   covered by crate tests; §36 endpoints are 18e). The suite also
   caught two real facts: `policy` is a required request field, and the
   first run's leaked serve process silently served later runs from warm
@@ -962,7 +962,7 @@ in between. Ordered so each step's output feeds the next.
   seam noted in `codec.rs` becomes the format. Accept: format doc in
   `docs/`, round-trip tests, one recipe using it.
   Status: complete (D20). `DecisionDefinition`/`Registry` in
-  `opencodifier-schema/registry.rs`: content-hashed identity (labels are
+  `opencode-schema/registry.rs`: content-hashed identity (labels are
   not identity), validating decode through the wire types' own
   constructors, dynamic-vs-static candidate discipline, duplicate-id
   refusal. Format doc `docs/REGISTRY.md`; 8 unit tests including a
@@ -974,12 +974,12 @@ in between. Ordered so each step's output feeds the next.
   twelve §34 decision areas are runnable recipes under `recipes/` —
   graph + request + captured response each (5 verify, 7 abstain outcomes;
   abstention is the honest zero-ML posture, not a gap).
-  `opencodifier recipe list` names the fleet; `recipe install <name>
+  `opencode recipe list` names the fleet; `recipe install <name>
   [--dest DIR] [--force]` writes the three files into a project-local
   directory (default `./recipes`), refusing to clobber without `--force`
   (`cli.recipe_exists`) and refusing unknown names (`cli.unknown_recipe`).
   The fleet ships inside the binary via `include_str!`
-  (`crates/opencodifier-cli/src/recipes.rs`), so installed bytes are
+  (`crates/opencode-cli/src/recipes.rs`), so installed bytes are
   byte-identical to the committed copies — asserted by unit and
   integration tests and by the e2e suite. 18d's suite grew 21 → 30
   checks (list coverage, install byte-identity, overwrite guard, and
@@ -1031,10 +1031,10 @@ in between. Ordered so each step's output feeds the next.
   partials: `fork_4b-instr-decide-v1-local-aborted` (55/231).
 - **18j — Distribution + WASM (§57, §58, §68).** Own phases after the
   core is hard: cross-platform release matrix, Homebrew/winget/crates.io;
-  `opencodifier-wasm` with the §68 security posture. Accept: per §58/§57
+  `opencode-wasm` with the §68 security posture. Accept: per §58/§57
   rows in SPEC_COVERAGE flipping to done with evidence.
 - **18j (WASM half) — DONE (2026-09-29); distribution (§58) remains.**
-  D23 record first, then `crates/opencodifier-wasm`: `WasmEngine`
+  D23 record first, then `crates/opencode-wasm`: `WasmEngine`
   (`decide`/`validate_graph`/`run_graph`/`identity`) over
   `EngineHandle::lexical` — the base zero-ML posture in the browser —
   with typed JSON errors (`{"code","message"}`, same codes as HTTP) at
@@ -1052,8 +1052,8 @@ in between. Ordered so each step's output feeds the next.
 - **18j (§58 remainder) — builds recorded (D24 status 2026-10-02).**
   All five targets verified at their named level: linux-x86_64
   run-tested + e2e (platform of record), windows-x86_64-gnu **linked
-  2026-10-02** (`opencodifier.exe` PE32+ console x86-64 +
-  `opencodifier_wasm.dll` cdylib, zero warnings, 2m44s at -j4 beside
+  2026-10-02** (`opencode.exe` PE32+ console x86-64 +
+  `opencode_wasm.dll` cdylib, zero warnings, 2m44s at -j4 beside
   the measurement chain; smoke is structurally out of scope on this
   host — no wine, no Windows machine), and the overnight cross-build
   linked the remaining four —
@@ -1076,7 +1076,7 @@ in between. Ordered so each step's output feeds the next.
   `zig`) and the matrix never narrows silently; builds are `--locked`,
   staged to `dist/v<version>-<target>/` (gitignored), and attested. An
   **attestation generator** (`scripts/generate_attestation.py`, schema
-  `opencodifier.attestation/1`): sha256 + bytes + target + `file` magic
+  `opencode.attestation/1`): sha256 + bytes + target + `file` magic
   + git commit + tree state + rustc/cargo + `Cargo.lock` sha256 +
   workspace-tree sha256 + feature flags + build command + UTC timestamp,
   fixed key order re-checked after serialization, every digest computed
@@ -1141,7 +1141,7 @@ privileged stack.
   pipeline of record), and first-party integrations as examples
   (Amortyx → `docs/INTEGRATION_AMORTYX.md`).
 - **19a — wire-format selection over HTTP (gap, code). — DONE
-  (2026-10-02, D30).** The `x-opencodifier-format` request header
+  (2026-10-02, D30).** The `x-opencode-format` request header
   (`native` default | `openai` | `anthropic` | `jev`) on
   `/v1/decide`, `/v1/batch`, `/v1/validate`; decode and response
   projection symmetric per request, native error envelope everywhere,
@@ -1151,8 +1151,8 @@ privileged stack.
   unknown-format, batch, and validate tests in `routes.rs`.
 - **19b — Jev-ecosystem callers. — DECIDED (2026-10-02, D31): no
   dedicated route.** The `/v1/systemone` convention is NOT an
-  OpenCodifier route and stays unclaimed. D30's
-  `x-opencodifier-format: jev` header carries the whole capability
+  OpenCode route and stays unclaimed. D30's
+  `x-opencode-format: jev` header carries the whole capability
   (same adapter, same cache identity); a route would be a pure alias
   with zero new capability, and promoting a Jev convention to a
   top-level route would invert the identity doctrine (Jev
@@ -1201,14 +1201,14 @@ privileged stack.
   the same day: request-side `response_format` ingress (Amortyx
   `38daffa9`) and response-side extension passthrough (`d182a126` —
   through-router responses now carry
-  `opencodifier: {outcome, calibrated_confidence}`). F-3 (exact-match
+  `opencode: {outcome, calibrated_confidence}`). F-3 (exact-match
   cache serves 200s during outages — vary bodies in drills) and F-4
   (doc drift, fixed) recorded; F-2 (intermittent silent 404s during
   restart churn, proven not-the-router) remains open as
   environmental.
 
 Acceptance: every INTEGRATIONS.md claim mechanically checkable (route
-exists in `routes.rs`, tool registered in `opencodifier-mcp`, flag in
+exists in `routes.rs`, tool registered in `opencode-mcp`, flag in
 `args.rs`); no aspirational endpoint anywhere; D29 respected in every
 example.
 
@@ -1255,7 +1255,7 @@ host) were separated by experiment:
   core tests before anything else, which leaves the lane red for weeks
   and blocks every other signal.
 - **2026-10-07 census — the basis moved under Phase 20.** Measured
-  inside the pinned image (`opencodifier-ci-rust:2`, rustc 1.90.0),
+  inside the pinned image (`opencode-ci-rust:2`, rustc 1.90.0),
   twice (warm + cold target dir, identical to the line): workspace
   **98.03 % on the lane's own `DA` basis (17,433/17,783; 350 lines
   never executed)**. The local rustc 1.99.0 emits a finer-grained
@@ -1294,11 +1294,11 @@ host) were separated by experiment:
   `rows_out` contract. Residual census lines here are the saturated-
   guard / retry-exhaustion arms that need a faulting suite and the
   `#[cfg(test)]` message lines — measured again at the batch-HEAD
-  census. Folded in from 20e's reachable pool: `opencodifier-ffi`
+  census. Folded in from 20e's reachable pool: `opencode-ffi`
   gains its first in-crate test module (the panic guard's three
   payload classes — `&str`, `String`, non-string — each landing as
   `ffi.panic`, the `Boundary` code/message/error-json contract, and
-  the opaque handle's content-free `Debug`), and `opencodifier-model`'s
+  the opaque handle's content-free `Debug`), and `opencode-model`'s
   Julia stub tokenizer pins its unknown-word refusal. 20e's other
   census lines are floors, not tests: `--llama`'s `with_rungs`
   assembly is behind the non-default `llamacpp` feature (unreached by
@@ -1401,7 +1401,7 @@ backgrounds blended as the rgba composites they render as):
   placeholder links.
 
 Acceptance: live page re-verified at
-`https://opencodifier.pages.dev` after deploy; contrast math recomputed
+`https://opencode.pages.dev` after deploy; contrast math recomputed
 for any future token change; X/Discord links land only with real
 handles.
 
@@ -1536,7 +1536,7 @@ record says otherwise, criterion/suite validation, docs of record.
   ladder swap governs the gate and names its source on the trace, and
   injected input text cannot edit the operator's policy.
 - **24g — §15.8 fold-ins. — DONE (2026-10-08).** (1) Exhaustive
-  small-K property tests: `crates/opencodifier-engine/tests/
+  small-K property tests: `crates/opencode-engine/tests/
   small_k_exhaustive.rs` verifies the decision kernels by exhaustion
   the way `AlphaDev` verified small sorts — every score-to-candidate
   assignment for K = 2…6 (872 runs), every candidate presentation
@@ -1568,9 +1568,9 @@ record says otherwise, criterion/suite validation, docs of record.
   `MoritzLaurer/deberta-v3-base-zeroshot-v2.0`** — official in-repo
   `onnx/model.onnx`, 2-class entailment read, p50 ~49 ms/pass @ 4
   threads on a loaded host, both verbalizer templates above chance on
-  the internal slice. Landed: `opencodifier-runtime::nli`
+  the internal slice. Landed: `opencode-runtime::nli`
   (`NliOnnxBackend`, shared kai wire names), the feature-free
-  `opencodifier-model::nli` contract (verbalizer templates as a
+  `opencode-model::nli` contract (verbalizer templates as a
   cached lever, premise/hypothesis rendering, renormalization that
   refuses zero mass, `NliVerifier: Classifier` with the template tag
   in the model id per D6) behind the new `nli` cargo feature, and the

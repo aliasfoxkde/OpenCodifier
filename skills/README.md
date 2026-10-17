@@ -1,6 +1,6 @@
-# Skills — how an AI should use OpenCodifier
+# Skills — how an AI should use OpenCode
 
-Each skill in this directory describes **how to call OpenCodifier for one
+Each skill in this directory describes **how to call OpenCode for one
 class of decision** and how to act on the answer (PLANNING.md §33). A
 skill contains no decision logic of its own: the engine owns the rules,
 the ladder, the calibration, and the trace. What a skill owns is the
@@ -13,9 +13,9 @@ obligates you to do.
    `state` (the unstructured text plus optional `facts`), `questions`
    (`choice` with dynamic `candidates`, `boolean`, or `score` with
    `levels`), a `policy`, and `metadata.limits`. The same shape works
-   over the CLI (`opencodifier decide`) and MCP (`codify_*` tools).
+   over the CLI (`opencode decide`) and MCP (`codify_*` tools).
 2. **Deterministic constraints run first — supply them as candidates.**
-   Never ask OpenCodifier to choose among options you could have
+   Never ask OpenCode to choose among options you could have
    eliminated yourself; narrow the candidate list before the call
    (eligibility is your job, ranking is the engine's).
 3. **Read the outcome before the value.** Every answer carries

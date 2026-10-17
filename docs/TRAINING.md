@@ -62,7 +62,7 @@ with one real edge the community checkpoints don't have:
   runner already exists);
 - exportable as **the product's decision rung**: a decision-head model reads
   out in one forward pass and exports to ONNX — which is literally what
-  `opencodifier-model` + `opencodifier-runtime`'s `ort` feature consume.
+  `opencode-model` + `opencode-runtime`'s `ort` feature consume.
 
 ## 4. Can this host train it? (the arithmetic)
 
@@ -118,7 +118,7 @@ Calibration expectations: per-kind temperature after training, not before.
 |---|---|---|---|
 | E0 | `--lora` + `/v1/decision` probe on the benchmark fork (any matching small adapter) | minutes | adapter applies and tree-mode scores |
 | E1 | Corpus prep (v3 → decision-completion rows) + 0.8 B decision-head/LoRA training, 1–2 epochs | 1–2 CPU-days, nice'd | suite ≥ 0.68 **and** JevBench ≥ 0.6494 (i.e. beats base and the community checkpoint) |
-| E2 | Winner → ONNX export → `opencodifier-model` decision rung integration | 1 day | logits parity vs trainer (torch-to-the-digit rule), calibration fitted |
+| E2 | Winner → ONNX export → `opencode-model` decision rung integration | 1 day | logits parity vs trainer (torch-to-the-digit rule), calibration fitted |
 | E3 | Recipe → 2 B balanced tier, only if E1/E2 hold | 3–6 CPU-days | ≥ 0.75 suite at 2 B |
 
 Every run lands through the standard arm discipline: quiet host (load < 8),
@@ -255,7 +255,7 @@ Plan, in dependency order:
    (typed-decisions 1,200 / jev-distill 103,844 / suites 240), question
    kinds 2,040 choice / 105,644 noul / 2,400 score. Gates green: zero
    train↔suite state collisions, all 240 suite rows through untouched.
-   Manifest `opencodifier.distill-manifest/2` pins both SHA-256s
+   Manifest `opencode.distill-manifest/2` pins both SHA-256s
    (`merged-v2.jsonl` `cb6b42cb…2915`, quarantine `289e97c3…d0ee`)
    with the policy parameters. Cluster identity reconciled exactly with
    the dupreport: 12,971 = 4,014 uniform + 8,957 mixed;
@@ -357,7 +357,7 @@ Plan, in dependency order:
    **merged-v3 pinned (2026-10-06).** 173,452 records = merged-v2
    train (105,284) + recovered (28,937) + score (27,157) + choice
    (12,074), emitted by `runner/emit_merged_v3.py` (all four inputs,
-   manifest `opencodifier.distill-manifest/3`), SHA-256
+   manifest `opencode.distill-manifest/3`), SHA-256
    `7e86c550…847b4f` (compute host). Question mix: noul 134,581 /
    score 29,557 / choice 14,114 — non-relevance coverage 4.2 % →
    **25.2 %**. Gates all zero: recovered-contract violations 0,
@@ -385,7 +385,7 @@ described:
   gradients underflow to zero and the run trains nothing.
 - **Smoke run** (fedora, Qwen3.5-0.8B body, 400 rows, 1 epoch,
   bf16, ~2 min on GPU): loss 1.2002 → 0.7304 → 0.6321 over 50
-  steps, adapter + `opencodifier.e1-train/1` manifest written, data
+  steps, adapter + `opencode.e1-train/1` manifest written, data
   sha matches the pinned corpus.
 - **Eval hookup** (`runner/e1_eval.py`, commit 4f5c268, readout
   `oc-readout-v1`): render with verdicts absent, one forward pass,
@@ -418,7 +418,7 @@ comparator arm → gate check. Every number below is from the artifacts.
 - **Training** (`runs/e1-a-qwen08b-r2`): 178,012 rows, 11,125 steps,
   1 epoch, bf16 LoRA r16, final loss **0.0517** — plateaued (lr→0 by
   schedule, loss flat over the last ~200 steps). 86/178,012 rows
-  truncated at max_len. Manifest `opencodifier.e1-train/1`, data sha
+  truncated at max_len. Manifest `opencode.e1-train/1`, data sha
   matches the pinned corpus. The arm is trained, not undertrained.
 - **Gate eval** (`results/e1-readout-q08b-r2`, suite sha
   `9f0afaf6…`, 120/120 scored): **0.5667 vs the pre-registered 0.68
@@ -568,7 +568,7 @@ the node powers on, so powered-on time is pure training.
   implementations; property test renders a corpus sample through
   both and asserts equality.
   **Shipped (2026-10-07):**
-  `opencodifier_schema::macjev` (`macjev-render-v1`) is now the single
+  `opencode_schema::macjev` (`macjev-render-v1`) is now the single
   workspace-owned definition — order-preserving JSON DOM, python
   `strip()` whitespace class, python `json.dumps` object spacing,
   typed skips mirroring the prep's count buckets. Parity lane:
@@ -661,7 +661,7 @@ capacity knobs stay deferred until the volume lever saturates.
 **Iterate-B repo edits landed (2026-10-08).** Actions (1) and (2)
 are in the tree before any new arm runs:
 
-- **Trainer v3 (`opencodifier.e1-train/3`)**: every `run_val` call
+- **Trainer v3 (`opencode.e1-train/3`)**: every `run_val` call
   appends `{step, loss, tok_acc, entropy, per_family}` to
   `manifest["val_history"]` — the third gate criterion is now
   judgeable from the manifest alone. The `VAL_LINE` log-scrape
@@ -952,7 +952,7 @@ serve one cache. Flag empty ⇒ every row weighs 1.0 and the loss
 op-order is unchanged.
 
 **Build** (`build_quarantine_arm.py`, manifest version
-`opencodifier.e1-quarx-build/1`): gates input shas against the pinned
+`opencode.e1-quarx-build/1`): gates input shas against the pinned
 arm-A rows (4750dd8d…) and pool (289e97c3…); segments pool records with
 the SAME prep code (`decision_sft_prep`) and skip counters; excludes
 pool states colliding with any suite state in the parent corpus (the

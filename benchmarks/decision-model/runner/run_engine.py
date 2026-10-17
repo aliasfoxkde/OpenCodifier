@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the decision benchmark suite through OpenCodifier's own engine.
 
-Spawns `opencodifier serve` with the built-in default pipeline (lexical /
+Spawns `opencode serve` with the built-in default pipeline (lexical /
 BM25 candidate scoring — the cheapest reliable layers of the escalation
 ladder, no ML) and drives each suite item through `POST /v1/decide` as a
 canonical Choice question. This arm is the in-repo baseline: it measures
@@ -44,14 +44,14 @@ def wait_health(port: int, proc: subprocess.Popen, deadline_s: float = 60.0) -> 
     end = time.monotonic() + deadline_s
     while time.monotonic() < end:
         if proc.poll() is not None:
-            raise RuntimeError(f"opencodifier serve exited early with {proc.returncode}")
+            raise RuntimeError(f"opencode serve exited early with {proc.returncode}")
         try:
             with urllib.request.urlopen(f"http://127.0.0.1:{port}/v1/healthz", timeout=2) as r:
                 if r.status == 200:
                     return json.loads(r.read())
         except (urllib.error.URLError, ConnectionError, socket.timeout):
             time.sleep(0.2)
-    raise RuntimeError("opencodifier serve did not become healthy in time")
+    raise RuntimeError("opencode serve did not become healthy in time")
 
 
 def decide(port: int, suite: dict, it: dict) -> dict:

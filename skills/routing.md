@@ -4,7 +4,7 @@
 request to the right lane (PLANNING.md §74's example is this skill).
 
 Routing economics — price, latency targets, provider health, quota — are
-the router's job. OpenCodifier answers the *semantic* half:
+the router's job. OpenCode answers the *semantic* half:
 
 1. **Task class** — a `choice` question over your task taxonomy
    (e.g. `coding`, `retrieval`, `summarization`, `chat`).
@@ -28,7 +28,7 @@ the routing record. An abstained complexity question is a signal the
 state is insufficient to classify — route conservatively (your safest
 lane), do not guess from character counts.
 
-**Anti-patterns:** asking OpenCodifier *which provider to use* (that is
+**Anti-patterns:** asking OpenCode *which provider to use* (that is
 policy + eligibility, yours); feeding raw provider payloads with
 credentials as state; re-deciding per retry — a retry storm is a cache
 hit, not a new decision.

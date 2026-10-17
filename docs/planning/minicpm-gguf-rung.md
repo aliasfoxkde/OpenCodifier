@@ -160,7 +160,7 @@ post-D15 in-sample refit):
 - **Rung bar** (integration candidate): merged arm beats e1-e 0.6840
   at materially lower latency than the PyTorch path, with calibration
   fit passing the ECE gate.
-- **Publish bar** (anything attributed to OpenCodifier): existing
+- **Publish bar** (anything attributed to OpenCode): existing
   release gates — suite ≥ 0.68 AND JevBench ≥ 0.6494. Nothing here
   publishes without both legs.
 - **Reference to stay near**: 0.7792 fp32. Q8 within ~1 pt is a

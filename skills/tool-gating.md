@@ -11,7 +11,7 @@ blast radius of the tool:
   `risk: "high"` in the policy block.
 - Destructive tools: do not ask a model class to gate these at all —
   gate by deterministic rule (allowlist paths, explicit confirmation),
-  and use OpenCodifier only for the narrow "does this match the
+  and use OpenCode only for the narrow "does this match the
   allowed pattern" boolean.
 
 **Call shape:** `state` = the proposed call (command, path, arguments)

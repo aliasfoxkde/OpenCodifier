@@ -11,7 +11,7 @@ own harness. Two arms, one contract, fedora (CPU), 2026-10-05.
 |---|---|
 | Harness | authors' runner, `fstandhartinger/jevbench` @ `9ec6f15a` (MIT), serial, no-retry |
 | Dataset | public 231 (`dc3995d8…`), easy 48 / hard 111 / original 72 |
-| Engine | `opencodifier` @ `fa1f08a` — first run under the D32 contract (`max_execution_time` 120 s) |
+| Engine | `opencode` @ `fa1f08a` — first run under the D32 contract (`max_execution_time` 120 s) |
 | Ladders | `fusion-v2.json` (`36f3ab3e…`), `proofs-only-v1.json` (`01669dba…`) |
 | Rung | gemma-4-E2B-it-QAT-Q4_0 via llama.cpp `build-pd` (`:8091`, `--parallel 1`, `--decision-seqs 24`), shared by both arms |
 | Scoring | their summarize.py; not-ok → not correct; 422 = refusal not outage |
@@ -92,7 +92,7 @@ earned on their benchmark; the gap to the rung standalone decomposes as:
 ```
 # fedora, rung server first (pid-verified, port 8091):
 python3 runner/run_jevbench.py --arm engine \
-  --binary $HOME/oc-eval-repo/target/release/opencodifier \
+  --binary $HOME/oc-eval-repo/target/release/opencode \
   --ref $HOME/oc-model-eval/jevbench-ref \
   --tasks $HOME/oc-model-eval/jevbench-ref/datasets/public/{easy,hard,original}.jsonl \
   --out-dir $HOME/oc-model-eval/runs/jevbench/< proofs-only-fedora-v1 | fusion-v2-fedora-v2 > \

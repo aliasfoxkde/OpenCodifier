@@ -1,12 +1,12 @@
 ---
 name: decide
-description: Turn unstructured state into a typed, machine-actionable decision (choice, boolean, or score) with calibrated confidence via the local OpenCodifier runtime. Use when facing a classification or routing choice that should be decided deterministically — CI failure triage, flaky-vs-broken adjudication, candidate selection, escalation gating — instead of guessing or hand-writing heuristics.
+description: Turn unstructured state into a typed, machine-actionable decision (choice, boolean, or score) with calibrated confidence via the local OpenCode runtime. Use when facing a classification or routing choice that should be decided deterministically — CI failure triage, flaky-vs-broken adjudication, candidate selection, escalation gating — instead of guessing or hand-writing heuristics.
 ---
 
 Decide with the **local-first decision runtime** on `http://127.0.0.1:8177`
-(start it with `opencodifier serve` if `/v1/healthz` does not answer; the
+(start it with `opencode serve` if `/v1/healthz` does not answer; the
 equivalent MCP tools are `codify_decide` / `codify_explain` when the
-`opencodifier` MCP server is registered).
+`opencode` MCP server is registered).
 
 ## 1. Shape the request — structure is the fuel
 

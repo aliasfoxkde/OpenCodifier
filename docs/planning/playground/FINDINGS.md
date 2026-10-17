@@ -1,7 +1,7 @@
 # Playground — engine-wire findings (2026-10-08, Pong integration)
 
 All facts below were measured in Chromium 141 against the real
-`sdk/../wasm/opencodifier_wasm.js` module served from `site/` — not read
+`sdk/../wasm/opencode_wasm.js` module served from `site/` — not read
 from source and assumed. Repro pages: `http://127.0.0.1:8777/pong.html`.
 
 ## Wire contract (measured)
@@ -34,7 +34,7 @@ from source and assumed. Repro pages: `http://127.0.0.1:8777/pong.html`.
    tagged enum RawFactValue"). Games send `facts: {}` — text carries the
    context.
 4. **`import()` inside the SDK resolves against the SDK file's URL, not the
-   document's** — measured 404 at `/sdk/wasm/opencodifier_wasm.js` when the
+   document's** — measured 404 at `/sdk/wasm/opencode_wasm.js` when the
    base was `./wasm/`. A bare `"wasm/"` never resolves at all (module
    specifier rules). The bridge's default `../wasm/` is correct for pages
    at the site root: games should pass NO `importBase` until a page lives

@@ -1,5 +1,5 @@
-# opencodifier.pages.dev -- static site, permissive crawl
+# opencode.pages.dev -- static site, permissive crawl
 User-agent: *
 Allow: /
 
-Sitemap: https://opencodifier.pages.dev/sitemap.xml
+Sitemap: https://opencode.pages.dev/sitemap.xml

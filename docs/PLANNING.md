@@ -1,14 +1,14 @@
 Yes. I would tighten the definition substantially before handing it to an implementation agent.
 
-## What OpenCodifier actually is
+## What OpenCode actually is
 
 Your phrase **“ultra-fast, sophisticated and intelligent, deterministic-first decision tree classifier”** captures the intent, but *decision tree* is too narrow technically. It implies a conventional ML tree such as CART/Random Forest, whereas what we're actually designing is more powerful:
 
-> **OpenCodifier is a local-first decision runtime that combines deterministic rules, hierarchical decision graphs, lightweight NLP/semantic models, probabilistic classification, candidate narrowing, verification, caching, and calibrated confidence to turn unstructured input into small, machine-actionable decisions—without generating natural-language answers.**
+> **OpenCode is a local-first decision runtime that combines deterministic rules, hierarchical decision graphs, lightweight NLP/semantic models, probabilistic classification, candidate narrowing, verification, caching, and calibrated confidence to turn unstructured input into small, machine-actionable decisions—without generating natural-language answers.**
 
 Or, more product-oriented:
 
-> **OpenCodifier is an ultra-fast, deterministic-first AI decision engine. It progressively understands, filters, narrows, scores, verifies, and selects—using the cheapest reliable mechanism at each stage—so expensive generative AI only runs when necessary.**
+> **OpenCode is an ultra-fast, deterministic-first AI decision engine. It progressively understands, filters, narrows, scores, verifies, and selects—using the cheapest reliable mechanism at each stage—so expensive generative AI only runs when necessary.**
 
 That distinction is important.
 
@@ -76,13 +76,13 @@ The research reinforces this architecture. Jev itself is explicitly positioned a
 
 The open ecosystem has independently converged on several useful pieces: Laya uses non-autoregressive typed decisions; Von targets calibrated local decisions; `open-jev` demonstrates one-pass candidate scoring with a normal language model; and `jevlike`/related projects demonstrate candidate-conditioned scoring and learned decision heads. ([GitHub][2])
 
-So **OpenCodifier should not be "our Jev clone."** It should be the broader deterministic-first decision architecture that can implement Jev-like behavior as one mode.
+So **OpenCode should not be "our Jev clone."** It should be the broader deterministic-first decision architecture that can implement Jev-like behavior as one mode.
 
 ---
 
-# OpenCodifier V1 — Comprehensive Implementation Plan
+# OpenCode V1 — Comprehensive Implementation Plan
 
-# OpenCodifier V1
+# OpenCode V1
 
 ## Deterministic-First Local AI Decision Runtime
 
@@ -93,16 +93,16 @@ So **OpenCodifier should not be "our Jev clone."** It should be the broader dete
 **Primary inference target:** ONNX Runtime / ONNX models
 **Secondary/future runtime:** Burn
 **Primary integration:** Amortyx
-**Protocol compatibility:** OpenCodifier native + Jev/System One + OpenAI + Anthropic schemas
+**Protocol compatibility:** OpenCode native + Jev/System One + OpenAI + Anthropic schemas
 **Default behavior:** Local, offline, private, no telemetry
 
 ---
 
 # 1. Mission
 
-Build OpenCodifier as an open-source, local-first decision engine that transforms unstructured state into narrow, machine-actionable decisions.
+Build OpenCode as an open-source, local-first decision engine that transforms unstructured state into narrow, machine-actionable decisions.
 
-OpenCodifier must:
+OpenCode must:
 
 1. Prefer deterministic logic before ML inference.
 2. Narrow candidate sets before expensive semantic inference.
@@ -134,7 +134,7 @@ The project must optimize for:
 
 # 2. Product Definition
 
-OpenCodifier is NOT:
+OpenCode is NOT:
 
 * a chatbot
 * a generative LLM
@@ -145,7 +145,7 @@ OpenCodifier is NOT:
 * merely a decision tree
 * a replacement for GPT/Claude/etc.
 
-OpenCodifier IS:
+OpenCode IS:
 
 > A deterministic-first decision runtime that progressively reduces uncertainty and candidate space until it can make, verify, or safely defer a machine-readable decision.
 
@@ -191,7 +191,7 @@ Does this result require verification?
 
 # 3. Core Design Principle
 
-OpenCodifier must use the cheapest reliable mechanism first.
+OpenCode must use the cheapest reliable mechanism first.
 
 Preferred execution order:
 
@@ -210,7 +210,7 @@ Preferred execution order:
 
 Never invoke a more expensive layer if a previous layer can establish the decision with sufficient confidence.
 
-This is the central optimization principle of OpenCodifier.
+This is the central optimization principle of OpenCode.
 
 ---
 
@@ -427,7 +427,7 @@ They are adapters.
               Canonical OC IR
                       │
                       ▼
-             OpenCodifier Engine
+             OpenCode Engine
 ```
 
 OpenAI structured outputs and Anthropic tool schemas must be translated into the internal IR rather than executed directly. This keeps the core independent of vendor-specific semantics. OpenAI documents JSON Schema structured outputs, while Anthropic exposes JSON-schema-based `input_schema` for tools. Validate against the current vendor specifications during implementation rather than assuming all JSON Schema features are equivalent.
@@ -492,7 +492,7 @@ A free-form string:
 }
 ```
 
-must not become an OpenCodifier task.
+must not become an OpenCode task.
 
 Return:
 
@@ -506,7 +506,7 @@ The generative model remains responsible for prose.
 
 # 9. Decision Graph
 
-This is the heart of OpenCodifier.
+This is the heart of OpenCode.
 
 A graph consists of nodes.
 
@@ -666,7 +666,7 @@ Rules must execute before ML wherever possible.
 
 # 12. Candidate Narrowing
 
-This is one of OpenCodifier's major differentiators.
+This is one of OpenCode's major differentiators.
 
 Example:
 
@@ -738,7 +738,7 @@ class 1 / class 2 / class 3
 
 # 14. First ML Model
 
-Build the first OpenCodifier model as a small candidate-conditioned encoder.
+Build the first OpenCode model as a small candidate-conditioned encoder.
 
 Target characteristics:
 
@@ -814,7 +814,7 @@ Potential teacher sources:
 
 Use teacher LLMs only during dataset construction.
 
-The deployed OpenCodifier must not require those APIs.
+The deployed OpenCode must not require those APIs.
 
 ---
 
@@ -1034,7 +1034,7 @@ the engine must batch them.
 
 Jev explicitly emphasizes parallel evaluation; Laya likewise describes typed questions evaluated in a single forward pass. ([TypeSafe AI][1])
 
-OpenCodifier should make this automatic.
+OpenCode should make this automatic.
 
 ---
 
@@ -1104,7 +1104,7 @@ Rust `fastembed-rs` is a useful reference because it already provides local embe
 Architecture:
 
 ```text
-OpenCodifier Core
+OpenCode Core
        │
        └── optional semantic feature
              ├── embeddings
@@ -1201,7 +1201,7 @@ Future/parallel:
 Burn
 ```
 
-Do not hard-code OpenCodifier to ONNX APIs.
+Do not hard-code OpenCode to ONNX APIs.
 
 ---
 
@@ -1209,12 +1209,12 @@ Do not hard-code OpenCodifier to ONNX APIs.
 
 ONNX provides a portable model interchange layer.
 
-Burn is particularly interesting because its Rust ecosystem supports CPU/GPU/WebAssembly backends and ONNX import. Its current ONNX tooling can generate native Burn Rust code and target WebAssembly, CUDA and WebGPU, although operator coverage and portability must still be tested against the exact OpenCodifier model. ([GitHub][6])
+Burn is particularly interesting because its Rust ecosystem supports CPU/GPU/WebAssembly backends and ONNX import. Its current ONNX tooling can generate native Burn Rust code and target WebAssembly, CUDA and WebGPU, although operator coverage and portability must still be tested against the exact OpenCode model. ([GitHub][6])
 
 Recommended architecture:
 
 ```text
-OpenCodifier Model
+OpenCode Model
        │
        ├── ONNX artifact
        │
@@ -1278,7 +1278,7 @@ Use the official Rust `rmcp` SDK. The current SDK implements the stable MCP `202
 Command:
 
 ```bash
-opencodifier mcp serve
+opencode mcp serve
 ```
 
 Initial tools:
@@ -1313,7 +1313,7 @@ Do not expose chain-of-thought.
 
 # 32. MCP Tool Introspection
 
-OpenCodifier should eventually consume MCP tool schemas.
+OpenCode should eventually consume MCP tool schemas.
 
 Input:
 
@@ -1327,7 +1327,7 @@ candidate registry
 capability index
 ```
 
-Then OpenCodifier can decide:
+Then OpenCode can decide:
 
 ```text
 Which tool?
@@ -1358,7 +1358,7 @@ skills/
   memory-selection/
 ```
 
-A skill describes **how an AI should use OpenCodifier**.
+A skill describes **how an AI should use OpenCode**.
 
 It should not contain large amounts of duplicated decision logic.
 
@@ -1367,12 +1367,12 @@ Example:
 ```text
 When deciding which model to use:
 
-1. Send request to OpenCodifier.
+1. Send request to OpenCode.
 2. Provide candidate model capabilities.
 3. Apply deterministic constraints first.
 4. Inspect confidence.
 5. Verify low-confidence decisions.
-6. Escalate if OpenCodifier abstains.
+6. Escalate if OpenCode abstains.
 ```
 
 ---
@@ -1401,40 +1401,40 @@ code-review-risk
 Usage:
 
 ```bash
-opencodifier recipe install model-routing
+opencode recipe install model-routing
 ```
 
 This is essential for adoption.
 
 ---
 
-# 35. OpenCodifier CLI
+# 35. OpenCode CLI
 
 Commands:
 
 ```text
-opencodifier init
-opencodifier decide
-opencodifier batch
-opencodifier graph
-opencodifier graph validate
-opencodifier graph run
-opencodifier model list
-opencodifier model install
-opencodifier model remove
-opencodifier model inspect
-opencodifier recipe list
-opencodifier recipe install
-opencodifier benchmark
-opencodifier serve
-opencodifier mcp serve
-opencodifier doctor
+opencode init
+opencode decide
+opencode batch
+opencode graph
+opencode graph validate
+opencode graph run
+opencode model list
+opencode model install
+opencode model remove
+opencode model inspect
+opencode recipe list
+opencode recipe install
+opencode benchmark
+opencode serve
+opencode mcp serve
+opencode doctor
 ```
 
 Example:
 
 ```bash
-opencodifier decide \
+opencode decide \
   --schema model-routing.json \
   --state request.json
 ```
@@ -1486,7 +1486,7 @@ Compatibility:
 POST /v1/systemone
 ```
 
-The compatibility endpoint must emulate the supported Jev/System One schema, while the native `/v1/decide` API remains the canonical OpenCodifier API.
+The compatibility endpoint must emulate the supported Jev/System One schema, while the native `/v1/decide` API remains the canonical OpenCode API.
 
 ---
 
@@ -1495,7 +1495,7 @@ The compatibility endpoint must emulate the supported Jev/System One schema, whi
 Default:
 
 ```bash
-opencodifier serve
+opencode serve
 ```
 
 Must bind locally by default:
@@ -1509,7 +1509,7 @@ Do not expose network access unless explicitly requested.
 Example:
 
 ```bash
-opencodifier serve --host 0.0.0.0
+opencode serve --host 0.0.0.0
 ```
 
 must require an explicit flag.
@@ -1548,7 +1548,7 @@ license
 Use a Rust workspace:
 
 ```text
-opencodifier/
+opencode/
 
 ├── Cargo.toml
 ├── Cargo.lock
@@ -1559,15 +1559,15 @@ opencodifier/
 ├── CHANGELOG.md
 │
 ├── crates/
-│   ├── opencodifier-core/
-│   ├── opencodifier-schema/
-│   ├── opencodifier-engine/
-│   ├── opencodifier-runtime/
-│   ├── opencodifier-model/
-│   ├── opencodifier-http/
-│   ├── opencodifier-mcp/
-│   ├── opencodifier-cli/
-│   └── opencodifier-wasm/
+│   ├── opencode-core/
+│   ├── opencode-schema/
+│   ├── opencode-engine/
+│   ├── opencode-runtime/
+│   ├── opencode-model/
+│   ├── opencode-http/
+│   ├── opencode-mcp/
+│   ├── opencode-cli/
+│   └── opencode-wasm/
 │
 ├── adapters/
 │   ├── openai/
@@ -1676,7 +1676,7 @@ with no ML dependency.
 Implement adapters:
 
 ```text
-native OpenCodifier
+native OpenCode
 OpenAI
 Anthropic
 Jev
@@ -1806,7 +1806,7 @@ Implement first ONNX backend.
 
 Load a known small encoder/classifier.
 
-Do NOT train OpenCodifier yet.
+Do NOT train OpenCode yet.
 
 The first objective is proving:
 
@@ -1827,7 +1827,7 @@ real local NLP decision
 
 ---
 
-# 47. Phase 7 — OpenCodifier Decision Model
+# 47. Phase 7 — OpenCode Decision Model
 
 Build/train the first candidate-conditioned model.
 
@@ -2002,7 +2002,7 @@ candidate pruning
 early exit
 ```
 
-This is where OpenCodifier starts behaving like a **decision compiler**, rather than merely a classifier.
+This is where OpenCode starts behaving like a **decision compiler**, rather than merely a classifier.
 
 That is a useful conceptual direction for the name "Codifier":
 
@@ -2144,7 +2144,7 @@ documentation
 Build:
 
 ```text
-opencodifier-wasm
+opencode-wasm
 ```
 
 Support:
@@ -2163,7 +2163,7 @@ Browser demo:
 ```text
 drag/drop text
        ↓
-OpenCodifier WASM
+OpenCode WASM
        ↓
 local decision
 ```
@@ -2253,7 +2253,7 @@ The last metrics are especially important for Amortyx.
 
 # 60. Phase 20 — Amortyx Integration
 
-Amortyx should consume OpenCodifier as an external decision subsystem.
+Amortyx should consume OpenCode as an external decision subsystem.
 
 Architecture:
 
@@ -2261,7 +2261,7 @@ Architecture:
 Amortyx
    │
    ▼
-OpenCodifier
+OpenCode
    │
    ├── classify task
    ├── estimate complexity
@@ -2284,7 +2284,7 @@ Amortyx policy engine
 actual provider/model
 ```
 
-OpenCodifier makes semantic decisions.
+OpenCode makes semantic decisions.
 
 Amortyx makes economic/operational decisions.
 
@@ -2294,12 +2294,12 @@ Neither should absorb the other's responsibilities.
 
 # 61. Amortyx Shadow Mode
 
-Before OpenCodifier controls routing:
+Before OpenCode controls routing:
 
 ```text
 request
  ├── existing Amortyx route
- └── OpenCodifier shadow route
+ └── OpenCode shadow route
 ```
 
 Record:
@@ -2322,7 +2322,7 @@ Would OC have reduced latency?
 Would verification have been necessary?
 ```
 
-Only after sufficient evidence should OpenCodifier become an active routing component.
+Only after sufficient evidence should OpenCode become an active routing component.
 
 ---
 
@@ -2341,7 +2341,7 @@ label extraction
        ↓
 training dataset
        ↓
-OpenCodifier model
+OpenCode model
        ↓
 benchmark
        ↓
@@ -2354,7 +2354,7 @@ Use explicit dataset/version controls.
 
 ---
 
-# 63. OpenCodifier Decision Registry
+# 63. OpenCode Decision Registry
 
 Implement a registry concept.
 
@@ -2401,7 +2401,7 @@ Never allow a new graph/model/calibration artifact to accidentally reuse incompa
 
 # 65. Explainability
 
-OpenCodifier must never expose chain-of-thought.
+OpenCode must never expose chain-of-thought.
 
 Instead expose deterministic execution facts.
 
@@ -2503,7 +2503,7 @@ Use browser storage such as IndexedDB only through the WASM/web adapter.
 
 # 69. V1 Acceptance Criteria
 
-OpenCodifier V1 is complete when all of the following work:
+OpenCode V1 is complete when all of the following work:
 
 ### Core
 
@@ -2537,7 +2537,7 @@ OpenCodifier V1 is complete when all of the following work:
 
 * [ ] ONNX inference
 * [ ] local tokenizer
-* [ ] OpenCodifier model
+* [ ] OpenCode model
 * [ ] calibration
 * [ ] verifier
 
@@ -2821,7 +2821,7 @@ Final decision:
 local-glm
 ```
 
-OpenCodifier did not make the economic decision.
+OpenCode did not make the economic decision.
 
 It supplied the semantic decision information.
 
@@ -2929,7 +2929,7 @@ This becomes directly useful for the broader AI memory/context architecture.
 ```text
 Incoming task
     ↓
-OpenCodifier
+OpenCode
     ↓
 task family = GIS
     ↓
@@ -2985,7 +2985,7 @@ abstain
 larger LLM
 ```
 
-This is exactly the kind of token-saving architecture OpenCodifier should enable.
+This is exactly the kind of token-saving architecture OpenCode should enable.
 
 ---
 
@@ -2998,7 +2998,7 @@ The final AI stack should look like:
                               │
                               ▼
                     ┌───────────────────┐
-                    │   OpenCodifier    │
+                    │   OpenCode    │
                     │                   │
                     │ deterministic     │
                     │ decision graphs   │
@@ -3031,7 +3031,7 @@ The final AI stack should look like:
                 Models       APIs           APIs
 ```
 
-OpenCodifier becomes the **semantic decision plane**.
+OpenCode becomes the **semantic decision plane**.
 
 Amortyx becomes the **inference optimization/routing plane**.
 
@@ -3043,7 +3043,7 @@ That separation is the key architectural decision.
 
 # 80. The Core Thesis
 
-OpenCodifier should be built around one fundamental idea:
+OpenCode should be built around one fundamental idea:
 
 > **Don't ask a large generative model to make a decision that can be reduced to deterministic logic, classification, scoring, retrieval, or a narrowly constrained probabilistic decision.**
 
@@ -3093,9 +3093,9 @@ That is a much larger and more defensible project than simply implementing "an o
 
 ### One correction I would make to the original framing
 
-I would **not market OpenCodifier as a "decision tree classifier."** Keep that as an intuitive explanation, but the technical/product term should be **decision runtime**, **decision engine**, or **decision fabric**.
+I would **not market OpenCode as a "decision tree classifier."** Keep that as an intuitive explanation, but the technical/product term should be **decision runtime**, **decision engine**, or **decision fabric**.
 
-A literal decision tree is only one possible implementation. OpenCodifier's real architecture is a **deterministic-first decision DAG with progressively more expensive semantic operators**.
+A literal decision tree is only one possible implementation. OpenCode's real architecture is a **deterministic-first decision DAG with progressively more expensive semantic operators**.
 
 That distinction gives us room for:
 
@@ -3119,7 +3119,7 @@ without having to redesign the product later.
 
 And the research supports the specific technical direction: Jev validates typed probabilistic decisions and parallel evaluation; `open-jev` validates one-pass candidate scoring; Laya and Von demonstrate small/non-autoregressive local decision models; and the broader ecosystem already includes calibration, abstention, distillation, and tiny models. ([TypeSafe AI][1])
 
-**I would therefore create OpenCodifier as the independent greenfield project now, and make Amortyx its first deep integration rather than putting the technology inside Amortyx.**
+**I would therefore create OpenCode as the independent greenfield project now, and make Amortyx its first deep integration rather than putting the technology inside Amortyx.**
 
 [1]: https://typesafe.ai/blog/introducing-system-one-models-and-jev?utm_source=chatgpt.com "Introducing System One Models & Jev - TypeSafe AI Blog"
 [2]: https://github.com/NandhaKishorM/laya?utm_source=chatgpt.com "GitHub - NandhaKishorM/laya · GitHub"
