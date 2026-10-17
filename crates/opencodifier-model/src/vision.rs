@@ -565,11 +565,11 @@ mod tests {
         let probabilities = softmax(&scores);
         let e10 = f64::exp(10.0);
         let e0 = 1.0;
-        let em10 = f64::exp(-10.0);
-        let total = e10 + e0 + em10;
+        let neg10 = f64::exp(-10.0);
+        let total = e10 + e0 + neg10;
         assert!((probabilities[0] - e10 / total).abs() < 1e-12, "{probabilities:?}");
         assert!((probabilities[1] - e0 / total).abs() < 1e-12, "{probabilities:?}");
-        assert!((probabilities[2] - em10 / total).abs() < 1e-12, "{probabilities:?}");
+        assert!((probabilities[2] - neg10 / total).abs() < 1e-12, "{probabilities:?}");
         assert!((probabilities.iter().sum::<f64>() - 1.0).abs() < 1e-12);
     }
 
@@ -872,8 +872,7 @@ mod tests {
             ("Which chart is shown?\nrevenue over time".to_owned(), vec![1.0, 0.0, 0.0, 0.0]),
             ("Which chart is shown?\nheadcount by team".to_owned(), vec![0.0, 1.0, 0.0, 0.0]),
         ]));
-        use opencodifier_engine::ladder::Rung;
-        let vision_rung = Rung::new(Arc::new(classifier))
+        let vision_rung = opencodifier_engine::ladder::Rung::new(Arc::new(classifier))
             .with_modality(opencodifier_engine::ladder::RungModality::Image);
         let engine = opencodifier_engine::DecisionEngine::new_with_rungs(
             config,
