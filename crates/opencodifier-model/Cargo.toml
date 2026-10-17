@@ -33,12 +33,6 @@ tokenizers = ["dep:tokenizers"]
 # never fetched at build time (D14) — the caller supplies a locally
 # verified model directory.
 nli = ["dep:tokenizers", "opencodifier-runtime/onnx"]
-# The SigLIP2 zero-shot vision transport (track V, phase F): the
-# contract module always compiles; this feature pulls the image decoder,
-# the ONNX session, and the SigLIP2 preprocessing math. Weights are
-# never fetched at build time (D14); the caller supplies a locally
-# verified model directory whose config.json carries the logit_scale.
-vision = ["dep:image", "dep:ort", "opencodifier-runtime/onnx"]
 
 [dependencies]
 opencodifier-core = { path = "../opencodifier-core", version = "0.6.0" }
@@ -49,11 +43,6 @@ serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 ureq = { version = "2", default-features = false, features = ["json"], optional = true }
-# Image decoding and resizing for the SigLIP2 vision transport (track V,
-# phase F). Default-features=false keeps PNG/JPEG only; no webp, gif.
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"], optional = true }
-# ONNX Runtime for the SigLIP2 vision transport (track V, phase F).
-ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray", "api-21", "load-dynamic"], optional = true }
 # D11 heavyweight dep for this crate (task #92, 2026-10-05): the
 # reference encoder behind the `tokenizers` feature only. Pinned to the
 # 0.22 line — the same engine the upstream Kai tokenizer.json was built

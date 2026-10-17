@@ -78,6 +78,7 @@ pub mod julia;
 pub mod kai;
 pub mod mock;
 pub mod nli;
+pub mod siglip;
 pub mod tensor;
 
 pub use backend::{EmbeddingBackend, InferenceBackend};
@@ -93,6 +94,11 @@ pub use kai::{
 pub use mock::{MockEmbeddingBackend, MockInferenceBackend};
 #[cfg(feature = "onnx")]
 pub use nli::NliOnnxBackend;
+#[cfg(feature = "onnx")]
+pub use siglip::{
+    PIXEL_VALUES, POOLER_OUTPUT, Siglip2TextOnnxBackend, Siglip2VisionOnnxBackend, TEXT_GRAPH_FILE,
+    VISION_GRAPH_FILE,
+};
 pub use tensor::{DenseTensor, MAX_TENSOR_ELEMENTS};
 
 #[cfg(test)]

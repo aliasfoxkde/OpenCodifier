@@ -899,10 +899,3 @@ mod tests {
         );
     }
 }
-
-/// The ONNX transport for SigLIP2 (track V, phase F).
-///
-/// This module is behind `#[cfg(feature = "vision")]` and is only compiled
-/// when the `vision` feature is enabled.
-#[cfg(feature = "vision")]
-pub mod onnx;
