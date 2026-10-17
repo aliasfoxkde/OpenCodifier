@@ -420,6 +420,15 @@ impl Siglip2TextOnnxBackend {
             demands_attention_mask,
         })
     }
+
+    /// Whether the loaded graph demands an `attention_mask` input —
+    /// callers building tensor maps above this layer must know, because
+    /// a mask fed to a graph that never asked for one is an
+    /// unknown-feed error, not a suggestion.
+    #[must_use]
+    pub fn demands_attention_mask(&self) -> bool {
+        self.demands_attention_mask
+    }
 }
 
 #[cfg(feature = "onnx")]
