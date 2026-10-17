@@ -1,10 +1,10 @@
 {
   "type": "json_schema",
-  "name": "opencode_decisions",
+  "name": "opencodifier_decisions",
   "strict": true,
   "schema": {
     "type": "object",
-    "title": "opencode_decisions",
+    "title": "opencodifier_decisions",
     "description": "One field per decision question, answered in a single response.",
     "properties": {
       "needs_tools": {

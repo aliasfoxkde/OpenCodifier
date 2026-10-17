@@ -4,8 +4,8 @@
 
 **The division of labor (PLANNING.md §74):** you compute eligibility
 (price, privacy lane, context window, quota, availability) and send the
-survivors as `candidates`; OpenCode ranks them semantically against
-the request. OpenCode did not make the economic decision — it
+survivors as `candidates`; OpenCodifier ranks them semantically against
+the request. OpenCodifier did not make the economic decision — it
 supplied the semantic decision information.
 
 **Call shape:**

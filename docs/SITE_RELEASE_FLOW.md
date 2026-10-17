@@ -1,6 +1,6 @@
 # Site Release Flow (staging -> review -> production)
 
-The marketing site (`site/`, published at opencode.pages.dev) ships on a
+The marketing site (`site/`, published at opencodifier.pages.dev) ships on a
 review-gated loop. Nothing lands on production without a human looking at the
 exact bytes that will deploy. This document is the process of record.
 
@@ -53,16 +53,16 @@ Rules:
    ```
 
 3. **CI** runs the GitForge pipeline (`.gitforge.yml`). The current image
-   (`opencode-ci-rust:2`) carries no Node, so the site's JS test suite is
+   (`opencodifier-ci-rust:2`) carries no Node, so the site's JS test suite is
    not yet a CI lane -- it runs locally and in the improvement pass instead.
    Adding the lane requires a Node-bearing CI image first; do not fake it with
    a job that cannot run.
 
-4. **Cloudflare Pages** does NOT build branches: the `opencode` Pages
+4. **Cloudflare Pages** does NOT build branches: the `opencodifier` Pages
    project is direct-upload (no git integration), so pushes never deploy
    anything by themselves. Staging is the local review server
    (`http://localhost:8777`); for a shareable URL, deploy the branch
-   explicitly (`wrangler pages deploy site --project-name=opencode
+   explicitly (`wrangler pages deploy site --project-name=opencodifier
    --branch=<branch>` gives a preview URL) and review that.
 
 ## Review checklist (human, in a browser)
@@ -93,7 +93,7 @@ its own work.
    ```
    just site-wasm                        # rebuild site/wasm (build artifact)
    node --test site/tests/*.mjs          # site test lane
-   wrangler pages deploy site --project-name=opencode --branch=main
+   wrangler pages deploy site --project-name=opencodifier --branch=main
    ```
 
    Auth comes from `CLOUDFLARE_API_TOKEN` in the environment (already

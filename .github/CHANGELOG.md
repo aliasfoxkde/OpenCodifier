@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to OpenCode are documented here. The format
+All notable changes to OpenCodifier are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 project does not yet guarantee a stable public API — version `0.x`
 releases may break, and every breaking change is recorded in this file
@@ -22,7 +22,7 @@ passes the release gate and the first gated weights ship.
   with elicited abstain (`c5d2527`), and risk-coverage acceptance for
   calibration artifacts (`d9b86e9`) — a calibration artifact now earns
   deployment by its risk-coverage curve, not a single operating point.
-- `opencode-itemgen` — new crate: the relational/contrastive item
+- `opencodifier-itemgen` — new crate: the relational/contrastive item
   generator that builds suite items, extracted from ad-hoc scripts
   (`70a59af`).
 - Schema — shared byte-exact macjev renderer, one implementation for
@@ -65,7 +65,7 @@ passes the release gate and the first gated weights ship.
   E1-E closes the corpus-volume lever: confidence-gated volume ≠
   transfer; E1-E (0.8083 / 0.6840) remains the release candidate.
 - First gated weights published:
-  `aliasfox/OpenCode-Decision-2B-v6full` (per-surface numbers,
+  `aliasfox/OpenCodifier-Decision-2B-v6full` (per-surface numbers,
   shipped per-kind calibration, withheld-corpus disclosure).
 - Engineering levers measured: length-bucketing +31.3% replicates,
   b4-bucket sweet spot +44.4% (T2.3); causal_conv1d buys +29.2% tok/s
@@ -95,8 +95,8 @@ plus a nine-leg release matrix with per-target attestations.
   engine (12 new integration tests).
 - B5 — the model rung of the escalation ladder (`LlamaDecisionClassifier`,
   D26): the measured `POST /v1/decision` tree-mode contract of the
-  llama.cpp `parallel-decision` fork as an `opencode_engine::Classifier`
-  in `opencode-model`. The classifier itself is transport-agnostic and
+  llama.cpp `parallel-decision` fork as an `opencodifier_engine::Classifier`
+  in `opencodifier-model`. The classifier itself is transport-agnostic and
   always compiled; the loopback HTTP transport (`UreqTransport`, ureq,
   plain HTTP — the endpoint is loopback by the bind rule) sits behind the
   `llamacpp` feature. Honesty rules enforced in type: the fork's full
@@ -109,13 +109,13 @@ plus a nine-leg release matrix with per-target attestations.
   end-to-end escalation: default policy accepts a confident distribution,
   a 0.95 per-kind `LadderPolicy` sends it to `Verify` with the
   `policy_source` trace fact naming the model rung.
-- `opencode_engine::wire` — the transport-neutral native-schema
+- `opencodifier_engine::wire` — the transport-neutral native-schema
   boundary (§57, §68): `decide`, `decide_batch` (the `POST /v1/batch`
   envelope, `MAX_BATCH` ceiling, per-item `{"response"}`/`{"error"}`
   results), `validate_graph`, and `run_graph` (D19 throwaway-engine
   parity). Every embedding surface walks the same decode → decide →
   encode contract and reports the same stable codes.
-- `opencode-ffi` (D24) — the zero-ML runtime as a C-ABI static
+- `opencodifier-ffi` (D24) — the zero-ML runtime as a C-ABI static
   library over the wire module: ten `oc_*` entry points with a
   thread-local last error, panic and null-argument guards, stable
   `ffi.*` codes alongside `schema.*`/`engine.*`/`graph.*`, and a
@@ -136,7 +136,7 @@ plus a nine-leg release matrix with per-target attestations.
 
 ### Changed
 
-- `opencode-schema` is a regular dependency of the engine (was
+- `opencodifier-schema` is a regular dependency of the engine (was
   dev-only) so `wire` can decode at the boundary; layering stays
   acyclic (schema depends on core only — D11's default row). The WASM
   crate is slimmed to call the shared module; its 17 tests, including
@@ -161,7 +161,7 @@ are fixed, and the escalation ladder ships as configuration.
   measured justification for the B3 build-once work; every other row
   is in budget (cache hit 25 µs vs 2232 µs full pipeline).
 - Escalation-ladder wiring (PLANNING.md §24, D25):
-  `opencode_engine::LadderPolicy` — optional per-node then
+  `opencodifier_engine::LadderPolicy` — optional per-node then
   per-kind `DecisionPolicy` overrides resolved at the confidence gate
   the deciding node already uses, on `EngineConfig::with_ladder` /
   `EngineHandle::with_ladder`. An empty ladder is byte-identical to no
@@ -195,10 +195,10 @@ are fixed, and the escalation ladder ships as configuration.
   an embedding backend refuse such graphs at assembly
   (`engine.missing_backend`); safe mode refuses `retrieve`; the
   embedding backend rides engine identity and every cache key.
-  `opencode_engine::optimize` = dead-node elimination + pure-node
+  `opencodifier_engine::optimize` = dead-node elimination + pure-node
   CSE (cache/threshold/output excluded), proven answer-identical on all
   15 committed graphs.
-- WASM runtime (PLAN 18j, §57/§68, D23): `crates/opencode-wasm`
+- WASM runtime (PLAN 18j, §57/§68, D23): `crates/opencodifier-wasm`
   compiles the zero-ML stack for `wasm32-unknown-unknown`; `WasmEngine`
   (decide / validate_graph / run_graph / identity) answers native-schema
   JSON with typed error codes, proven in Node over the real artifact
@@ -277,7 +277,7 @@ are fixed, and the escalation ladder ships as configuration.
   record refits from the full board (reverse-softmax temperature,
   T 0.8426 → 0.9317, ECE 0.0621 → 0.0588) — the margin proxy
   over-sharpened on multi-way boards, as its own synthetic validation
-  predicted. `crates/opencode-engine/tests/artifact_schema_check.rs`
+  predicted. `crates/opencodifier-engine/tests/artifact_schema_check.rs`
   pins every artifact of record to the engine's `CalibrationArtifact`
   schema.
 - Vulkan device A/B (suite, Qwen3.5-2B Q4_K_M): the Vega 8 iGPU leg
@@ -495,11 +495,11 @@ relational solver that became the engine's default zero-ML stack
   distribution, and the fitter now refuses to ship any artifact whose
   fit does not improve ECE (the retired `builtin-lexical-v1` artifact
   was removed with the stack it described).
-- MCP surface (PLAN Phase 10): `opencode-mcp` — six decision tools
+- MCP surface (PLAN Phase 10): `opencodifier-mcp` — six decision tools
   (`codify_decide`, `codify_batch`, `codify_graph`, `codify_validate`,
   `codify_verify`, `codify_explain`) served over stdio with rmcp 2.2.0
   (D1's pin, honored; the 3.x major line is not adopted — D17), wired
-  as `opencode mcp serve`. Same engine as HTTP (`EngineHandle`),
+  as `opencodifier mcp serve`. Same engine as HTTP (`EngineHandle`),
   same error envelope and stable codes (one MCP-specific code:
   `mcp.batch_too_large`), same deterministic traces with no
   chain-of-thought; batch items are decided independently under a
@@ -522,7 +522,7 @@ relational solver that became the engine's default zero-ML stack
   with the MCP work: the engine's graph-document shim (`GraphDocument`)
   is now public and the HTTP surface's private mirror was deleted, and
   the execution-report JSON projection moved into the engine
-  (`opencode_engine::report`) so CLI `--trace` and MCP
+  (`opencodifier_engine::report`) so CLI `--trace` and MCP
   `codify_explain` cannot drift.
 - Aegis baseline regenerated at the release commit (2,370 entries;
   line-shift re-flags after the CI-clippy allow fix in c09e39d turned
@@ -534,7 +534,7 @@ relational solver that became the engine's default zero-ML stack
 ### Added
 
 - `infrastructure/docker/ci-rust.Dockerfile` + `just ci-image` — the
-  runner-local CI image (`opencode-ci-rust:1`) that bakes the
+  runner-local CI image (`opencodifier-ci-rust:1`) that bakes the
   pinned toolchain, rustfmt/clippy, cargo-deny, cargo-audit, aegis
   (rev-pinned), and a warm crate registry (PLAN Phase 12).
 
@@ -571,43 +571,43 @@ history.
   forbid, clippy all+pedantic with unwrap/expect/panic/todo denied),
   CI configs (`justfile`, `.gitforge.yml` — GitForge is the CI platform
   of record), founding docs.
-- **Phase 1 — `opencode-core`** (4f8900c, fb995cd): canonical
+- **Phase 1 — `opencodifier-core`** (4f8900c, fb995cd): canonical
   decision IR — validating constructors for Choice/Boolean/Score
   questions, distributions, confidence reports with outcome routing,
   stable `ir.*` error codes, `trace_version` on traces,
   `#[non_exhaustive]` public enums, IR validation on deserialize.
-- **Phase 2 — `opencode-schema`** (5952769): native / OpenAI /
+- **Phase 2 — `opencodifier-schema`** (5952769): native / OpenAI /
   Anthropic / Jev adapters normalizing wire formats into the IR;
   `schema.*` error codes; byte-locked fixtures under `fixtures/`;
   round-trip property tests.
-- **Phases 3–5 — `opencode-engine`** (5952769): DAG executor
+- **Phases 3–5 — `opencodifier-engine`** (5952769): DAG executor
   (topological waves, cycle-checked, bounded), deterministic rule
   engine, metadata + hand-written BM25 candidate narrowing, exact
   decision cache keyed by `CacheKeyBuilder` (SHA-256, D6) with
   model/calibration/graph versions folded in, calibration trait +
   identity calibration (D15), criterion benches for the D9 per-stage
   budgets, sync `Clock`/`Deadline`/`CancellationToken` (D5).
-- **Phase 6 — `opencode-runtime`** (5146c34): `InferenceBackend` /
+- **Phase 6 — `opencodifier-runtime`** (5146c34): `InferenceBackend` /
   `EmbeddingBackend` traits (sync, object-safe, logits-only per D7),
   validating `DenseTensor`, deterministic mock backends. The `onnx`
   feature was **deferred by a measured gate** (D2): ort rc.13 requires
   ONNX Runtime 1.27.x (unavailable here), Rust-vs-ORT softmax differs
   by up to 5 ULP, latency passes with ~100x headroom. Re-entry
   conditions recorded in D2.
-- **Phase 7 — `opencode-model`** (d3a5aa5): candidate-conditioned
+- **Phase 7 — `opencodifier-model`** (d3a5aa5): candidate-conditioned
   serving contract (named tensors `context`/`candidates`/`logits`,
   shape-validated, Rust-side softmax), `EmbeddingClassifier` turning
   any `EmbeddingBackend` into an engine `Classifier`, SHA-256
   `ModelManifest` + artifact verification (D14). No trained weights
   ship in V1; the engine is fully useful without them.
-- **Phases 8–9 — interfaces** (563ad3f): `opencode-engine::EngineHandle`
+- **Phases 8–9 — interfaces** (563ad3f): `opencodifier-engine::EngineHandle`
   (the shared facade: `lexical` zero-ML constructor, `decide`,
   `decide_with_report`, `validate_graph`, `health`);
-  `opencode-http` (axum **0.8** — the original D12 pin said "axum
+  `opencodifier-http` (axum **0.8** — the original D12 pin said "axum
   0.9", which does not exist; amended — `/v1` decide/graph-validate/
   healthz, owning-crate error codes, 1 MiB body cap, loopback-only
   bind with `allow_remote` opt-in, `spawn_blocking` off async workers,
-  abstention is 200); `opencode-cli` (D13: decide / graph validate
+  abstention is 200); `opencodifier-cli` (D13: decide / graph validate
   / serve / models verify; exit codes 0 accept / 1 input / 2
   policy-gate escalation / 3 internal, with clap's exit-2 normalized
   to 1). Real-socket e2e over both surfaces.
@@ -619,15 +619,15 @@ history.
 
 ### Changed
 
-- `opencode-http::serve_with_shutdown` — the graceful-shutdown
+- `opencodifier-http::serve_with_shutdown` — the graceful-shutdown
   future is now a parameter (the `serve` entry point keeps `Ctrl-C`),
   so embedders and tests can end the serve loop with their own signal
   (563ad3f; folded from Unreleased — this item shipped in 0.1.0 but
   was left unstaged there).
 
-[Unreleased]: https://github.com/aliasfoxkde/OpenCode/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/aliasfoxkde/OpenCode/releases/tag/v0.4.0
-[0.3.0]: https://github.com/aliasfoxkde/OpenCode/releases/tag/v0.3.0
-[0.2.0]: https://github.com/aliasfoxkde/OpenCode/releases/tag/v0.2.0
-[0.1.1]: https://github.com/aliasfoxkde/OpenCode/releases/tag/v0.1.1
-[0.1.0]: https://github.com/aliasfoxkde/OpenCode/releases/tag/v0.1.0
+[Unreleased]: https://github.com/aliasfoxkde/OpenCodifier/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.4.0
+[0.3.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.3.0
+[0.2.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.2.0
+[0.1.1]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.1.1
+[0.1.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.1.0

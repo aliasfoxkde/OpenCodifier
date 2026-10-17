@@ -6,8 +6,8 @@ publish = false
 description = "Compute-host parity run: the Rust Kai-0.6B contract + ONNX transport against the real quantized export (task #92)."
 
 [dependencies]
-opencode-model = { path = "../../../../crates/opencode-model", features = ["tokenizers"] }
-opencode-runtime = { path = "../../../../crates/opencode-runtime", features = [
+opencodifier-model = { path = "../../../../crates/opencodifier-model", features = ["tokenizers"] }
+opencodifier-runtime = { path = "../../../../crates/opencodifier-runtime", features = [
     "runtime-onnx-dynamic",
 ] }
 serde = { version = "1", features = ["derive"] }

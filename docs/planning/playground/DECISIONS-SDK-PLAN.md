@@ -9,7 +9,7 @@ SDK: `site/sdk/decisions-sdk.js` (global `DecisionsSDK`)
 
 ## 1. Vision
 
-The maze solver proved the pattern: a small, honest game where the OpenCode
+The maze solver proved the pattern: a small, honest game where the OpenCodifier
 engine's role is **visible, auditable, and never faked**. The playground turns
 that one-off into a **library** — racing, pong, pacman, life, a fighter, and a
 quiz — all built on one shared runtime, the **Decisions SDK** (plural: it is a
@@ -94,7 +94,7 @@ One IIFE, one global `DecisionsSDK`, DOM-free except the explicitly-marked
 ### 4.3 Engine bridge (the one sanctioned WASM call path)
 
     DecisionsSDK.engineBridge({ toggleEl, statusEl, importBase })
-      .ensure()        // lazy dynamic import of ./wasm/opencode_wasm.js
+      .ensure()        // lazy dynamic import of ./wasm/opencodifier_wasm.js
       .choose(request) // → { decision, confidence, trace } | null (any failure = null)
       .status          // 'off' | 'loading' | 'ready' | 'unavailable'
 

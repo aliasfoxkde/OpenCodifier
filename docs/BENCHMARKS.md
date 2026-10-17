@@ -1,6 +1,6 @@
-# Benchmarks — OpenCode vs the decision-model field
+# Benchmarks — OpenCodifier vs the decision-model field
 
-The complete measured comparison in one place: every OpenCode system
+The complete measured comparison in one place: every OpenCodifier system
 and model arm we have run, and every external decision-model row with
 published numbers, on the axes where they actually compare. Written to
 stand alone — this page is the source for the repository table and any
@@ -17,7 +17,7 @@ from the pinned inputs.
 
 ## The system being measured
 
-OpenCode is a local-first, deterministic-first **decision runtime**:
+OpenCodifier is a local-first, deterministic-first **decision runtime**:
 unstructured state in, typed decisions out — `Choice` (one candidate
 from a runtime-defined list), `Boolean` (with probability), `Score`
 (ordered levels with the full distribution and expected value). The
@@ -58,7 +58,7 @@ zero synthesized probabilities, full replay determinism.
 
 | system | n | accuracy | family-macro | ECE | Brier | auto@5% | p50 (client wall) | determinism |
 |---|---:|---:|---:|---:|---:|---:|---:|---|
-| OpenCode engine (relational solver over lexical, `/v1/decide`) | 231 | 0.3766 | 0.4011 | 0.402 | 0.890 | 0.000 (0/231) | **2.0 ms** | 231/231 |
+| OpenCodifier engine (relational solver over lexical, `/v1/decide`) | 231 | 0.3766 | 0.4011 | 0.402 | 0.890 | 0.000 (0/231) | **2.0 ms** | 231/231 |
 | **vtx: VTX-JEV-3** (20.5 MB 2-bit static table, vendor client) | 231 | 0.4113 | 0.4318 | 0.126 | 0.684 | 0.000 (0/231) | **7.9 ms** | 231/231 |
 | **nli: deberta-v3-base-zeroshot-v2.0** (705 MB fp32 ONNX cross-encoder, entailment renorm over options, 2026-10-08) | 231 | 0.5325 | 0.4904 | 0.232 | 0.648 | 0.013 (3/231) | 0.57 s | 231/231 (labels + probabilities) |
 | **gguf: imajev-2b Q4_K_M** (third-party 2B decision model, authors' standard prompt + shipped T=1.646 letter readout; unknown→abstain scored incorrect, 2026-10-08) | 231 | 0.7359 | 0.7449 | 0.032 | 0.315 | — | 3.83 s | 231/231 (labels + probabilities) |
@@ -272,7 +272,7 @@ the macro column above.
 | *fork: Qwen3.5-4B tree mode (our run — fedora anchor)* | *75.71* |
 | *Jev-Style-0.8B bridge (our run)* | *63.78* |
 | *VTX-JEV-3 (our run)* | *43.18* |
-| *OpenCode engine (our run)* | *40.11* |
+| *OpenCodifier engine (our run)* | *40.11* |
 
 ### Published rows — JevBench authors' board (plain accuracy)
 
@@ -542,7 +542,7 @@ loads as a `laya`-arch decision model but the context is pooling-only
 logits computation"); **Qyvos ships safetensors + a Python `julia`
 package, no GGUF**. Follow-up lanes, in preference order: Julia-1 via
 its official ONNX export (the natural `InferenceBackend` arm for
-`opencode-runtime`, parity cases included), a laya-GGUF endpoint
+`opencodifier-runtime`, parity cases included), a laya-GGUF endpoint
 lane, NeoHorse under a newer llama.cpp, and a `julia`-package adapter
 for Qyvos.
 
@@ -766,7 +766,7 @@ point.
 
 ¹⁴ D26 acceptance run (2026-10-05, fedora, live `llama-server`
 build-pd `38de7eb` + the real engine): the locked 120-item suite
-driven through `opencode serve --ladder ladders/fusion-v1.json
+driven through `opencodifier serve --ladder ladders/fusion-v1.json
 --llama ... --llama-model-id 'pd-fork-38de7eb|gemma4-e2b-it-qat-q4_0|tree-v2'`
 — the shipped B5 wire-through, not a post-hoc blend. **Criterion met**:
 blended 0.842 ≥ 0.80 at **117.2 ms mean** ≤ 1 s (p50 0.54 ms, p95
@@ -1133,8 +1133,8 @@ every row above: our machine, public harness, artifacts retained).
 Our arm is the **zero-ML engine** — the shipped default stack
 (`relational-v1|builtin-lexical-v2`, engine 0.4.0, no learned weights),
 served over `/v1/decide` with the Jev wire adapter
-(`x-opencode-format: jev`); the harness speaks the same System One
-question shape natively. Adapter: `bench/backends/opencode.py` in
+(`x-opencodifier-format: jev`); the harness speaks the same System One
+question shape natively. Adapter: `bench/backends/opencodifier.py` in
 our harness clone (candidate ids remapped `opt_N` for the IR's id
 charset; score levels keyed `"0".."n-1"` so the sorted-key decode keeps
 level order). 2026-10-06, single pass, no retries, no errors.
@@ -1244,12 +1244,12 @@ instrument that decides whether a rung earns traffic.
 
 | System | Acc | ECE | A_trust | Spd | Res | **Overall** | Vision |
 |---|---:|---:|---:|---:|---:|---:|---|
-| OpenCode engine (relational over lexical) | 0.683 | 0.094 | 0.589 | 0.97 | 1.00 | **80.7** | no |
+| OpenCodifier engine (relational over lexical) | 0.683 | 0.094 | 0.589 | 0.97 | 1.00 | **80.7** | no |
 | VTX-JEV-3 lf2 (static embedding) | 0.242 | 0.136 | 0.106 | 0.99 | 1.00 | **59.5** | no |
 | jebadiah-4b-v2 **Q3_K_S** | 0.792 | 0.087 | 0.705 | 0.15 | 0.50 | **48.7** | no |
 | Suite ladder (simulated fusion, F23) | 0.867 | — | —¹ | 0.28 | —¹ | **47.4**¹ | no |
-| OpenCode ladder v2 (measured, F28) | 0.933 | 0.092 | 0.841 | 0.40 | 0.41 | **60.0**¹ | no |
-| OpenCode ladder (measured, D26) | 0.842 | 0.098 | 0.744 | 0.48 | 0.41 | **58.1**¹ | no |
+| OpenCodifier ladder v2 (measured, F28) | 0.933 | 0.092 | 0.841 | 0.40 | 0.41 | **60.0**¹ | no |
+| OpenCodifier ladder (measured, D26) | 0.842 | 0.098 | 0.744 | 0.48 | 0.41 | **58.1**¹ | no |
 | jebadiah-4b-v2 Q8_0 | 0.800 | 0.051 | 0.749 | 0.14 | 0.34 | **46.5** | no |
 | Qwen3.5-4B UD-Q4_K_XL (tree readout) | 0.800 | 0.074 | 0.726 | 0.08 | 0.43 | **45.9** | no |
 | Winnow-E4B (letters, stock llama.cpp) | 0.842 | 0.109 | 0.733 | 0.17 | 0.23 | **43.8** | **yes** (mmproj BF16) |
@@ -1307,7 +1307,7 @@ calibration shipped in the artifact (measured ECE 0.0009, KL to its
 teacher ≈ 0.017). That recipe is the confirmation of this project's
 architecture, not a competitor to it: the decision rung is small,
 detachable, calibrated, and the backbone is untouched — exactly the
-`opencode-model` + `Calibration` seam design.
+`opencodifier-model` + `Calibration` seam design.
 
 **The honest gap.** On the shared axis (JevBench public 231,
 family-macro): JEV-27B 88.70 — our best row is now the 4B fork arm at
@@ -1322,7 +1322,7 @@ authors' own row at +0.9 pp; the fork delta is decision tuning plus
 the anchor's unresolved-vintage caveat above). The road there, in
 order of expected leverage: (1) a real candidate-conditioned
 decision rung trained on typed-distribution distillation (the
-`opencode-model` crate exists for exactly this; the corpus below is
+`opencodifier-model` crate exists for exactly this; the corpus below is
 Apache-2.0); (2) per-kind calibration fitted and versioned into the
 artifact (the D15 pipeline is built and measured); (3) confidence-gated
 escalation so the cheap rungs decide what they can and the trained rung
@@ -1388,7 +1388,7 @@ GPU, no server, Apache-2.0, no API.
 ```bash
 cd benchmarks/decision-model
 # Board B (any arm):
-python3 runner/run_engine.py  --binary target/release/opencode --out "$RUNS/engine__relational-v1.json"
+python3 runner/run_engine.py  --binary target/release/opencodifier --out "$RUNS/engine__relational-v1.json"
 python3 runner/run_vtx.py     --model-dir /path/to/vtx-jev-3       --out "$RUNS/vtx__VTX-JEV-3-lf2.json"
 python3 runner/summarize.py   --results-dir "$RUNS"
 # Board A (official harness):

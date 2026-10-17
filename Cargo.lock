@@ -1450,17 +1450,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
-name = "opencode-cli"
+name = "opencodifier-cli"
 version = "0.6.1"
 dependencies = [
  "assert_cmd",
  "clap",
- "opencode-core",
- "opencode-engine",
- "opencode-http",
- "opencode-mcp",
- "opencode-model",
- "opencode-schema",
+ "opencodifier-core",
+ "opencodifier-engine",
+ "opencodifier-http",
+ "opencodifier-mcp",
+ "opencodifier-model",
+ "opencodifier-schema",
  "predicates",
  "serde",
  "serde_json",
@@ -1469,7 +1469,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencode-core"
+name = "opencodifier-core"
 version = "0.6.1"
 dependencies = [
  "base64 0.22.1",
@@ -1479,13 +1479,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencode-engine"
+name = "opencodifier-engine"
 version = "0.6.1"
 dependencies = [
  "criterion",
- "opencode-core",
- "opencode-runtime",
- "opencode-schema",
+ "opencodifier-core",
+ "opencodifier-runtime",
+ "opencodifier-schema",
  "proptest",
  "serde",
  "serde_json",
@@ -1495,24 +1495,24 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencode-ffi"
+name = "opencodifier-ffi"
 version = "0.6.1"
 dependencies = [
- "opencode-core",
- "opencode-engine",
- "opencode-schema",
+ "opencodifier-core",
+ "opencodifier-engine",
+ "opencodifier-schema",
  "serde_json",
 ]
 
 [[package]]
-name = "opencode-http"
+name = "opencodifier-http"
 version = "0.6.1"
 dependencies = [
  "axum",
  "criterion",
- "opencode-core",
- "opencode-engine",
- "opencode-schema",
+ "opencodifier-core",
+ "opencodifier-engine",
+ "opencodifier-schema",
  "reqwest",
  "serde",
  "serde_json",
@@ -1521,23 +1521,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencode-itemgen"
+name = "opencodifier-itemgen"
 version = "0.6.1"
 dependencies = [
  "clap",
- "opencode-core",
- "opencode-engine",
+ "opencodifier-core",
+ "opencodifier-engine",
  "serde_json",
  "sha2",
 ]
 
 [[package]]
-name = "opencode-mcp"
+name = "opencodifier-mcp"
 version = "0.6.1"
 dependencies = [
- "opencode-core",
- "opencode-engine",
- "opencode-schema",
+ "opencodifier-core",
+ "opencodifier-engine",
+ "opencodifier-schema",
  "rmcp",
  "serde",
  "serde_json",
@@ -1546,13 +1546,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencode-model"
+name = "opencodifier-model"
 version = "0.6.1"
 dependencies = [
  "image",
- "opencode-core",
- "opencode-engine",
- "opencode-runtime",
+ "opencodifier-core",
+ "opencodifier-engine",
+ "opencodifier-runtime",
  "serde",
  "serde_json",
  "sha2",
@@ -1562,7 +1562,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencode-runtime"
+name = "opencodifier-runtime"
 version = "0.6.1"
 dependencies = [
  "ort",
@@ -1570,11 +1570,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencode-schema"
+name = "opencodifier-schema"
 version = "0.6.1"
 dependencies = [
  "base64 0.22.1",
- "opencode-core",
+ "opencodifier-core",
  "proptest",
  "serde",
  "serde_json",
@@ -1583,12 +1583,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencode-wasm"
+name = "opencodifier-wasm"
 version = "0.6.1"
 dependencies = [
- "opencode-core",
- "opencode-engine",
- "opencode-schema",
+ "opencodifier-core",
+ "opencodifier-engine",
+ "opencodifier-schema",
  "serde_json",
  "wasm-bindgen",
 ]

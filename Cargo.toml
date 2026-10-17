@@ -3,17 +3,17 @@ resolver = "2"
 # Members are added explicitly as phases land (PLANNING.md §39). The core
 # crate is deliberately dependency-minimal; interface crates join later.
 members = [
-    "crates/opencode-core",
-    "crates/opencode-schema",
-    "crates/opencode-engine",
-    "crates/opencode-runtime",
-    "crates/opencode-model",
-    "crates/opencode-http",
-    "crates/opencode-mcp",
-    "crates/opencode-cli",
-    "crates/opencode-wasm",
-    "crates/opencode-ffi",
-    "crates/opencode-itemgen",
+    "crates/opencodifier-core",
+    "crates/opencodifier-schema",
+    "crates/opencodifier-engine",
+    "crates/opencodifier-runtime",
+    "crates/opencodifier-model",
+    "crates/opencodifier-http",
+    "crates/opencodifier-mcp",
+    "crates/opencodifier-cli",
+    "crates/opencodifier-wasm",
+    "crates/opencodifier-ffi",
+    "crates/opencodifier-itemgen",
 ]
 
 [workspace.package]
@@ -23,8 +23,8 @@ edition = "2024"
 # in CI. Bumps are breaking changes and recorded in .github/CHANGELOG.md.
 rust-version = "1.90"
 license = "Apache-2.0"
-repository = "https://github.com/aliasfoxkde/OpenCode"
-authors = ["OpenCode contributors"]
+repository = "https://github.com/aliasfoxkde/OpenCodifier"
+authors = ["OpenCodifier contributors"]
 
 [workspace.lints.rust]
 # The engine is pure safe Rust; any unsafe block must be a reviewed,

@@ -14,7 +14,7 @@ latency, and run-twice determinism:
 
 | arm | runner | mechanism |
 |---|---|---|
-| `engine_builtin_lexical` | `run_engine.py` | OpenCode's own engine (`opencode serve`, builtin lexical pipeline) — the zero-ML baseline every model must beat to earn its latency |
+| `engine_builtin_lexical` | `run_engine.py` | OpenCodifier's own engine (`opencodifier serve`, builtin lexical pipeline) — the zero-ML baseline every model must beat to earn its latency |
 | `embedding_zero_shot` | `run_embed.py` | Cosine + softmax over an encoder — the "embedding similarity" layer of the ladder; backends: `onnx` (MiniLM / gte-ONNX in fp32, int8, and blockwise-int4 variants), `torch` (gte HF), `llamacpp` (GGUF embedding models via llama-server) |
 | `laya_decision` | `run_laya.py` | Laya-421M, a small purpose-trained decision model, same suite |
 | `static_embedding_decision` | `run_vtx.py` | VTX-JEV-3 through its vendor `JevClient`: a Model2Vec-class static table (255,753×256, 2-bit LF2 or FP32) with a position-gated attention pooler; each candidate encodes as `"<question> <description>"` and the model's own cosine softmax (scale 15) is the distribution. The pooler lives in the vendor client — plain Model2Vec loading does not reproduce this head |
@@ -66,14 +66,14 @@ RUNS=/nas/Temp/work/oc-model-eval/runs   # out-of-tree
 # 1. engine baseline (no ML, no models needed): the default stack is the
 #    relational solver over the lexical classifier; the run JSON's arm is
 #    the engine's live identity (e.g. relational-v1|builtin-lexical-v2)
-python3 runner/run_engine.py --binary target/release/opencode \
+python3 runner/run_engine.py --binary target/release/opencodifier \
     --out "$RUNS/engine__relational-v1.json"
 
 # 1b. long-context focused-extraction A/B (--focus-budget passes through
 #     to `serve`; the padded suite is generated, deterministic, and
 #     gitignored — see REPORT.md "Long-context A/B")
 python3 runner/make_long_suite.py
-python3 runner/run_engine.py --binary target/release/opencode \
+python3 runner/run_engine.py --binary target/release/opencodifier \
     --suite suite/suite_long.json --focus-budget 512 \
     --out "$RUNS/engine__lexical__long__focused.json"
 

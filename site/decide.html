@@ -26,15 +26,15 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta property="og:site_name" content="OpenCodifier">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://opencode.pages.dev/decide.html">
+<meta property="og:url" content="https://opencodifier.pages.dev/decide.html">
 <meta property="og:title" content="OpenCodifier — the Decide console">
 <meta property="og:description" content="Decide against the real WASM engine: accept at proof, verify under the gate, honest abstention, canonical refusals — every trace byte-checkable.">
-<meta property="og:image" content="https://opencode.pages.dev/assets/og-image.png">
+<meta property="og:image" content="https://opencodifier.pages.dev/assets/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The OpenCodifier mark — a hexagonal C around a code glyph — over the wordmark.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://opencode.pages.dev/assets/og-image.png">
+<meta name="twitter:image" content="https://opencodifier.pages.dev/assets/og-image.png">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="tw.css">
 <style>
@@ -113,7 +113,7 @@
 <nav class="nav">
   <a class="brand" href="index.html">
     <img src="assets/logo.svg" alt="" width="22" height="22">
-    opencode
+    opencodifier
   </a>
   <div class="nav-links">
     <a href="index.html">Home</a>
@@ -336,7 +336,7 @@
     <h3>What this is — and what it is not</h3>
     <ul>
       <li><strong>Real:</strong> the WASM module is built from this repo's
-        <code>opencode-wasm</code> crate — the identical IR, rule engine, narrowing, lexical
+        <code>opencodifier-wasm</code> crate — the identical IR, rule engine, narrowing, lexical
         scorer, cache, and calibration code the CLI and HTTP server run.</li>
       <li><strong>Real:</strong> the zero-ML stack only. Rungs 5–7 (embedding, decision model,
         verifier) need backends this tab deliberately does not ship; a graph that needs one
@@ -346,7 +346,7 @@
         but zero, the page is broken, and the chip will say so.</li>
     </ul>
     <p class="fineprint">Prefer a terminal? The same decisions from
-      <code>cargo run --bin opencode-cli -- decide</code>, or serve the HTTP API and hit
+      <code>cargo run --bin opencodifier-cli -- decide</code>, or serve the HTTP API and hit
       <a href="api.html">the documented endpoints</a>.</p>
   </div>
 </section>
@@ -356,7 +356,7 @@
   <footer class="footer">
   <div class="footer-grid">
     <div class="foot-about">
-      <div class="foot-brand">opencode</div>
+      <div class="foot-brand">opencodifier</div>
       <p>A local-first decision runtime: typed, machine-actionable decisions with calibrated
         confidence and honest abstention — on hardware you already own.</p>
       <p>Every figure on this site traces to a committed, deterministic benchmark run

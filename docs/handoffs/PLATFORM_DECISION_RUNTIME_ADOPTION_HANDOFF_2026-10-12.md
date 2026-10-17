@@ -1,6 +1,6 @@
 # Platform Decision Runtime Adoption Handoff — 2026-10-12
 
-**Status:** handoff document. This is a plan for adopting the OpenCode
+**Status:** handoff document. This is a plan for adopting the OpenCodifier
 decision runtime on the platform — **not** a claim that any integration is
 complete, and not a claim of test, build, or pipeline success. No build,
 test, scan, or CI command has been executed while writing it; the only
@@ -23,9 +23,9 @@ this revision; the probes were read-only, and they are the only commands
 executed while producing this document (the status statement above is
 scoped accordingly).
 
-**Worktree of record:** `/home/mkinney/worktrees/opencode-platform-adoption-20261012`
+**Worktree of record:** `/home/mkinney/worktrees/opencodifier-platform-adoption-20261012`
 (branch `docs/platform-adoption-20261012`, isolated worktree; upstream repo of
-record per `docs/PLAN.md` Phase 12: `/nas/Temp/repos/OpenCode`).
+record per `docs/PLAN.md` Phase 12: `/nas/Temp/repos/OpenCodifier`).
 
 **Authoritative sources used:** repository `CLAUDE.md` (no `AGENTS.md` exists
 in this tree), `README.md`, `SECURITY.md`, `docs/PLAN.md`, `docs/PLANNING.md`
@@ -37,7 +37,7 @@ in this tree), `README.md`, `SECURITY.md`, `docs/PLAN.md`, `docs/PLANNING.md`
 
 ## 1. Objective
 
-Adopt the OpenCode decision runtime as a working decision service on the
+Adopt the OpenCodifier decision runtime as a working decision service on the
 platform — through its existing public surfaces only — by (a) establishing a
 fresh, verified source/runtime/CI baseline, (b) freezing the API contract and
 selecting exactly one first consumer, (c) running an isolated canary, (d)
@@ -45,7 +45,7 @@ proving deterministic/fallback/abstention correctness, (e) wiring
 observability, (f) releasing and promoting only on evidence, and (g) keeping
 rollback available at every step.
 
-OpenCode is a local-first, deterministic-first **decision runtime**: it
+OpenCodifier is a local-first, deterministic-first **decision runtime**: it
 turns unstructured state into small typed decisions (choice / boolean / score)
 with calibrated confidence, an abstention outcome, and a deterministic
 execution trace. It is not a chatbot, not an LLM wrapper, and never writes
@@ -86,8 +86,8 @@ ledger.
 
 | Class | What it covers | Confidence | Rule for workers |
 |---|---|---|---|
-| **E1 — Code-graph verified** | Structural facts from the code graph of project `nas-Temp-repos-OpenCode`, indexed 2026-10-12 (8,982 nodes, 35,751 edges; Rust packages — all 11 workspace members per
-root `Cargo.toml`: `opencode-engine`, `-schema`, `-core`, `-model`,
+| **E1 — Code-graph verified** | Structural facts from the code graph of project `nas-Temp-repos-OpenCodifier`, indexed 2026-10-12 (8,982 nodes, 35,751 edges; Rust packages — all 11 workspace members per
+root `Cargo.toml`: `opencodifier-engine`, `-schema`, `-core`, `-model`,
 `-runtime`, `-cli`, `-http`, `-mcp`, `-wasm`, `-ffi`, `-itemgen`);
 re-confirmed by direct file reads on 2026-10-12 (anchors in §9.1) | High | Cite the anchor; re-verify only if the file changed |
 | **E2 — Documented historical claims** | Phase statuses and measurements recorded in repo docs (e.g. Phase 19 done 2026-10-04; Phase 20 measured 98.39 % on 2026-10-08; Phases 21/22 open; Phase 24 in progress) | Medium — these are records, not fresh observations | Treat as history until re-verified at baseline (Task A2/A3); never cite as current state without the re-check |
@@ -108,7 +108,7 @@ A4); Phase 24 research enhancement **in progress** (2026-10-07; items 1–4,
 ### 3.1 E3 record — read-only runtime probes, 2026-10-12 (supersedes the process-only state)
 
 **History (superseded; preserved for the record).** Earlier on 2026-10-12, a
-local process `opencode serve --bind 127.0.0.1:8177` was observed in the
+local process `opencodifier serve --bind 127.0.0.1:8177` was observed in the
 host process list, and at that time **`/v1/healthz` had not been probed** —
 the observation proved only that a binary had been started. That process-only
 state is now historical: the read-only probes below supersede it. It is kept
@@ -131,7 +131,7 @@ service mutation of any kind):**
 
 - PID 2467422, started 2026-10-11 21:35:11 (host local time);
   `/proc/2467422/exe` resolves to
-  `/nas/Temp/repos/OpenCode/target/release/opencode`; binary file
+  `/nas/Temp/repos/OpenCodifier/target/release/opencodifier`; binary file
   mtime 2026-10-06 13:18:40 (host local time).
 - Source of record at check time: HEAD `b890edb`, `Cargo.toml` workspace
   version **0.5.0**.
@@ -197,7 +197,7 @@ item in §3 with an E1-class observation from today.
   `cargo fmt --all -- --check`;
   `cargo clippy --workspace --all-targets -- -D warnings`;
   `cargo test --workspace`;
-  `cargo test -p opencode-model --features llamacpp,tokenizers`;
+  `cargo test -p opencodifier-model --features llamacpp,tokenizers`;
   `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps`;
   `cargo test --doc`;
   `cargo deny check`;
@@ -210,7 +210,7 @@ item in §3 with an E1-class observation from today.
   `just ci` transcript); the aegis JSON report saved out-of-tree.
 - **A3 — Runtime baseline.** Build the release binary and validate it as the
   repo does: `cargo build --release`, then
-  `python3 scripts/e2e_validate.py --binary <release-opencode> --port <port verified free>`
+  `python3 scripts/e2e_validate.py --binary <release-opencodifier> --port <port verified free>`
   (the CI lane uses port 8188; PLAN 18d/18e documents the check set). Probe
   `GET /v1/healthz`, `/v1/capabilities`, and `/v1/models` on a deliberately
   started instance and capture the bodies verbatim **with exact UTC
@@ -227,7 +227,7 @@ item in §3 with an E1-class observation from today.
   alongside the identity. The §3.1 drift instance fails this gate by
   definition; only a provenance-matched instance passes. Smoke the CLI
   contract:
-  `cargo run -p opencode-cli -- decide --input fixtures/native/request.json`
+  `cargo run -p opencodifier-cli -- decide --input fixtures/native/request.json`
   (documented in README; exit 2 / `verify` is the fixture's documented honest
   outcome, not a failure).
   Acceptance: e2e suite exits 0 with its full check count printed; healthz
@@ -241,9 +241,9 @@ item in §3 with an E1-class observation from today.
 - **A4 — Docs-freshness spot-check (feeds Phase B).** Reconcile the known
   discrepancies found while writing this handoff, each either fixed in the
   owning doc or recorded as an issue: (i) `INTEGRATIONS.md` §2.1 prints
-  `opencode serve --addr 127.0.0.1:9200` while D12/D13 and PLAN record
+  `opencodifier serve --addr 127.0.0.1:9200` while D12/D13 and PLAN record
   `serve` with default bind `127.0.0.1:8177` and a `--bind`-style flag — verify
-  against `crates/opencode-cli/src/args.rs` and fix the doc or the flag
+  against `crates/opencodifier-cli/src/args.rs` and fix the doc or the flag
   usage text; (ii) the Phase 22 status-table/body mismatch in `docs/PLAN.md`
   (§3, E2). This task is part of the already-open Phase 22 sweep.
   Acceptance: each item has a one-line disposition (fixed-at-commit or issue
@@ -255,18 +255,18 @@ item in §3 with an E1-class observation from today.
 - **B1 — Freeze the contract of record.** Produce a single contract sheet,
   mechanically checkable against the tree (the `INTEGRATIONS.md` honesty rule):
   the nine routes with methods from
-  `crates/opencode-http/src/routes.rs:105-118` (`/v1/decide`,
+  `crates/opencodifier-http/src/routes.rs:105-118` (`/v1/decide`,
   `/v1/batch`, `/v1/graph/validate`, `/v1/graph/run`, `/v1/validate`,
   `/v1/models`, `/v1/capabilities`, `/v1/healthz`, `/v1/chat/completions`),
   with the body limit applied at `routes.rs:116`
   (`DefaultBodyLimit::max(MAX_BODY_BYTES)`; documented as a 1 MiB socket cap,
   PLAN Phase 8–9); the six MCP tools (D17: `codify_decide`, `codify_batch`,
   `codify_graph`, `codify_validate`, `codify_verify`, `codify_explain`,
-  stdio-only); CLI subcommands/flags from `crates/opencode-cli/src/args.rs`
+  stdio-only); CLI subcommands/flags from `crates/opencodifier-cli/src/args.rs`
   including the model-rung pairing rule (`--llama` requires
-  `--llama-model-id`, `crates/opencode-cli/src/runtime.rs:86-100`,
+  `--llama-model-id`, `crates/opencodifier-cli/src/runtime.rs:86-100`,
   error `cli.model_rung_unavailable`); the D30 wire-format header
-  (`x-opencode-format: native|openai|anthropic|jev`, native default,
+  (`x-opencodifier-format: native|openai|anthropic|jev`, native default,
   unknown → 400 `schema.invalid_value`); the error envelope
   `{"error":{"code","message"}}` with `ir.*` / `schema.*` / `engine.*`
   namespaces; the six IR outcomes (`accept`, `verified`, `verify`, `abstain`,
@@ -294,7 +294,7 @@ item in §3 with an E1-class observation from today.
 - **C0 — Rollback readiness first.** Complete §6/§10 rollback preparation
   (Phase G tasks G1–G2) **before** the canary serves any consumer-shaped
   traffic.
-- **C1 — Isolation envelope.** Start a fresh `opencode serve` on loopback
+- **C1 — Isolation envelope.** Start a fresh `opencodifier serve` on loopback
   at a port verified free at start (record it); do not share state with the
   pre-existing 8177 process; defaults for body/batch/limits (see §6); add
   `--graph` / `--ladder` / `--focus-budget` only if the B2 brief demands them
@@ -414,7 +414,7 @@ item in §3 with an E1-class observation from today.
   `just release-preflight`, `just release-build <target>`,
   `just release-matrix`, `just release-checksums`, `just release-notes`
   (rendered from attestations over `docs/RELEASE_NOTES_TEMPLATE.md`;
-  `scripts/generate_attestation.py`, schema `opencode.attestation/1`),
+  `scripts/generate_attestation.py`, schema `opencodifier.attestation/1`),
   then `just release-verify`. All legs from **one tree** (the
   `cargo_tree_sha256` single-tree rule; the v0.5.0 mixed-tree first pass was
   discarded for exactly this — PLAN Phase 23). Foreign-arch targets carry
@@ -537,13 +537,13 @@ Plain language; each blocks exactly the tasks listed.
 
 ## 8. Architecture boundaries — explicit separation
 
-- **OpenCode** is an independent, deterministic-first decision runtime.
+- **OpenCodifier** is an independent, deterministic-first decision runtime.
   Its identity and its cheapest-first execution ladder (exact rule → cache →
   metadata filter → lexical → embedding → small classifier → decision model →
   verifier → external model) are the product (CLAUDE.md; README).
 - **Amortyx** remains separate middleware/router, out of scope for
   modification here. The boundary is doctrinal and recorded (PLANNING §60;
-  `INTEGRATION_AMORTYX.md` §1): OpenCode makes semantic decisions and
+  `INTEGRATION_AMORTYX.md` §1): OpenCodifier makes semantic decisions and
   never sees provider keys or prices; Amortyx makes economic/operational
   decisions and never guesses semantics; neither absorbs the other. First-party
   consumers get exactly the public surfaces third parties get (D29) — no
@@ -551,20 +551,20 @@ Plain language; each blocks exactly the tasks listed.
 - **VIVERE** is experimental and distinct: in the recorded design notes it
   appears only as a read-only ledger consumer with no production claims
   (`docs/PLAN.md` integration design notes). It has no role in this adoption.
-  Nothing here recommends coupling VIVERE, Amortyx, or OpenCode code, or
+  Nothing here recommends coupling VIVERE, Amortyx, or OpenCodifier code, or
   moving code between them — that requires an explicit decision record of its
   own.
 
 ## 9. Precise pointers for future workers
 
-### 9.1 Code-graph facts (E1; project `nas-Temp-repos-OpenCode`, indexed 2026-10-12; 8,982 nodes / 35,751 edges)
+### 9.1 Code-graph facts (E1; project `nas-Temp-repos-OpenCodifier`, indexed 2026-10-12; 8,982 nodes / 35,751 edges)
 
 - Rust packages — all 11 workspace members (root `Cargo.toml`):
-  `opencode-engine`, `opencode-schema`, `opencode-core`,
-  `opencode-model`, `opencode-runtime`, `opencode-cli`,
-  `opencode-http`, `opencode-mcp`, `opencode-wasm`,
-  `opencode-ffi`, `opencode-itemgen`.
-- HTTP router registration — `crates/opencode-http/src/routes.rs:105-118`
+  `opencodifier-engine`, `opencodifier-schema`, `opencodifier-core`,
+  `opencodifier-model`, `opencodifier-runtime`, `opencodifier-cli`,
+  `opencodifier-http`, `opencodifier-mcp`, `opencodifier-wasm`,
+  `opencodifier-ffi`, `opencodifier-itemgen`.
+- HTTP router registration — `crates/opencodifier-http/src/routes.rs:105-118`
   (`pub fn router`): `/v1/decide`, `/v1/batch`, `/v1/graph/validate`,
   `/v1/graph/run`, `/v1/validate`, `/v1/models`, `/v1/capabilities`,
   `/v1/healthz`, `/v1/chat/completions`; the body limit is applied in the same
@@ -573,14 +573,14 @@ Plain language; each blocks exactly the tasks listed.
   (`routes.rs:350-352`, `schema.limit_exceeded` above it) and moves the sync
   CPU work off the async workers via `spawn_blocking`
   (`routes.rs:357-364`).
-- Model-rung flag pairing — `crates/opencode-cli/src/runtime.rs:86-100`
+- Model-rung flag pairing — `crates/opencodifier-cli/src/runtime.rs:86-100`
   (`model_rung`): `--llama` without `--llama-model-id` is refused with
   `cli.model_rung_unavailable` (the model id discriminates decision cache
   keys, D6).
 - Engine identity ↔ crate version — code-graph confirmed (2026-10-12,
-  project `nas-Temp-repos-OpenCode`): `EngineIdentity.engine_semver` is
+  project `nas-Temp-repos-OpenCodifier`): `EngineIdentity.engine_semver` is
   "Bumped automatically from crate version" and uses
-  `env!("CARGO_PKG_VERSION")` (`crates/opencode-engine/src/cache.rs:66-88`).
+  `env!("CARGO_PKG_VERSION")` (`crates/opencodifier-engine/src/cache.rs:66-88`).
   Separately, the builtin `model_id` is the literal `builtin-lexical-v1`
   (`cache.rs:86`), overwritten by the live classifier's model id; classifier
   ids are literals/compositions (`classifier.rs:190`, `relational.rs:56`,
@@ -592,9 +592,9 @@ Plain language; each blocks exactly the tasks listed.
 ### 9.2 Files and modules (read before working; none edited by this handoff)
 
 `justfile` (gate + release + wasm recipes); `.gitforge.yml` (six lanes);
-`.aegis/baseline.json`; `rust-toolchain.toml`; `crates/opencode-cli/src/args.rs`
-(CLI surface); `crates/opencode-cli/src/runtime.rs`; `crates/opencode-http/src/routes.rs`;
-`crates/opencode-mcp/src/lib.rs` (six tools); `crates/opencode-engine/src/ladder.rs`
+`.aegis/baseline.json`; `rust-toolchain.toml`; `crates/opencodifier-cli/src/args.rs`
+(CLI surface); `crates/opencodifier-cli/src/runtime.rs`; `crates/opencodifier-http/src/routes.rs`;
+`crates/opencodifier-mcp/src/lib.rs` (six tools); `crates/opencodifier-engine/src/ladder.rs`
 and `ladder_fit.rs` (D25); `ladders/fusion-v1.json`, `ladders/fusion-v2.json`,
 `ladders/proofs-only-v1.json` (shipped profiles); `recipes/` (fleet + captured
 responses; fresh-process comparison rule in `recipes/README.md`);
@@ -614,16 +614,16 @@ test, scan, or CI command was run, and the service was never mutated.
 ```bash
 just ci                      # the eight-command local gate (= .gitforge.yml)
 cargo build --release
-python3 scripts/e2e_validate.py --binary <release-opencode> --port <free-port>
-cargo run -p opencode-cli -- decide --input fixtures/native/request.json
-cargo run -p opencode-cli -- graph validate <graph.json>
+python3 scripts/e2e_validate.py --binary <release-opencodifier> --port <free-port>
+cargo run -p opencodifier-cli -- decide --input fixtures/native/request.json
+cargo run -p opencodifier-cli -- graph validate <graph.json>
 just check-wasm              # wasm32 check + Node smoke (not part of just ci)
 just coverage                # line coverage (cargo llvm-cov)
 just release-preflight && just release-matrix && just release-verify
 curl -s http://127.0.0.1:<port>/v1/healthz
 ```
 
-`<release-opencode>` / `<free-port>` / `<graph.json>` are command
+`<release-opencodifier>` / `<free-port>` / `<graph.json>` are command
 parameters for the worker to fill from the actual build and environment —
 the port must be verified free at use.
 

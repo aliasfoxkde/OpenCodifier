@@ -1,9 +1,9 @@
 {
-  "name": "opencode_decide",
+  "name": "opencodifier_decide",
   "description": "Answer every decision question exactly once, using the provided state.",
   "input_schema": {
     "type": "object",
-    "title": "opencode_decisions",
+    "title": "opencodifier_decisions",
     "description": "One field per decision question, answered in a single response.",
     "properties": {
       "needs_tools": {

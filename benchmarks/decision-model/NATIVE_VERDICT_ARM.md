@@ -105,7 +105,7 @@ reconfigure — the fork's build tree already has it).
    suite, their interface vs our tree mode*. Whatever the number is, it
    lands in REPORT.md as the interface-sensitivity measurement.
 
-## What OpenCode buys from it
+## What OpenCodifier buys from it
 
 - **Interface sensitivity, quantified**: same weights, three interfaces
   (0.0 / 0.217 / native) — the cleanest evidence for the spec's claim that

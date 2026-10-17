@@ -10,7 +10,7 @@ harness verified against the official repo at commit
 
 Benchmark Heaven's benchmark for Jev-class typed decision models: state in,
 a typed answer with a probability for every option out. It is the closest
-public analogue to what OpenCode's engine does, and the only external
+public analogue to what OpenCodifier's engine does, and the only external
 suite with published rows for the exact model families we benchmark
 (Jev-Style, Laya, decider, Qwen3.5-4B decision servers) — which makes it the
 outside anchor our 120-item internal suite lacks.
@@ -78,9 +78,9 @@ point: zero scoring drift against every published row. Same decision pattern
 as the native verdict-slot arm (use the authors' shipped code, not a
 reimplementation). The harness is MIT; raw evidence lands outside both repos.
 
-## Mapping: JevBench item → OpenCode IR
+## Mapping: JevBench item → OpenCodifier IR
 
-| JevBench | OpenCode |
+| JevBench | OpenCodifier |
 |---|---|
 | `state` | `context` |
 | `question.instructions` | `question` |
@@ -108,7 +108,7 @@ channel, and the raw evidence records the exact rendered request.
    published context. Run through the native verdict-slot readout
    (`run_jev_native.py` mapped onto JevBench items), since that is the
    model's trained interface — the same one its published row used.
-2. **Engine arm (relational-v1 default stack)** — OpenCode `EngineHandle`
+2. **Engine arm (relational-v1 default stack)** — OpenCodifier `EngineHandle`
    on the same items via a local adapter (Choice/noul/score all exist in the
    IR). This is the row that matters: the deterministic ladder vs the
    Jev-class field, engine rung 0.683 on our suite, on external items now.
@@ -140,7 +140,7 @@ channel, and the raw evidence records the exact rendered request.
    state + instructions, hypothesis = `"<description>."`, entailment
    index read from `config.json` `id2label`, entailment masses
    renormalized over the option set — the same renormalization the
-   Rust serving contract (`opencode-model::nli`) ships. Known
+   Rust serving contract (`opencodifier-model::nli`) ships. Known
    honest divergence, recorded in each run manifest: the serving
    boolean path uses one-hypothesis complement (IR booleans carry only
    text), while this adapter verbalizes per-option from JevBench
@@ -343,7 +343,7 @@ judge_hard 0.529, probability 0.500, tradeoff 0.500, adversarial
 long_policy 0.105 — the mirror image of the engine's abstention-first
 profile on the same items.
 
-## What OpenCode buys
+## What OpenCodifier buys
 
 - **The external anchor.** Every number in REPORT.md so far is internal
   (our suite, our seeds). JevBench's 231 public items are the first

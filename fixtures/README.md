@@ -2,11 +2,11 @@
 
 Hand-written wire payloads that lock each adapter's on-the-wire shape
 (`PLANNING.md` §42, `DECISIONS.md` D10). Every file here is loaded by
-`crates/opencode-schema/tests/fixtures.rs`: the test named in the table
+`crates/opencodifier-schema/tests/fixtures.rs`: the test named in the table
 below decodes it, re-encodes it, and compares against the file, so a change
 to any wire shape fails a test named after the fixture it broke.
 
-Fixtures are inputs, not examples: they describe payloads OpenCode must
+Fixtures are inputs, not examples: they describe payloads OpenCodifier must
 accept (foreign formats) or produce (native), and each one is the reviewable
 record of a projection decision.
 
@@ -16,7 +16,7 @@ record of a projection decision.
   The Jev fixtures come in request/response pairs because that format has
   two distinct documents.
 - Foreign payloads deliberately carry extra vendor fields (`usage`, `model`,
-  `tool_choice`) that OpenCode ignores. `native` is the exception: it
+  `tool_choice`) that OpenCodifier ignores. `native` is the exception: it
   rejects unknown fields (`ARCHITECTURE.md` §7).
 - Names are `<format>/<what>.json`; the extension states the role the
   document plays (`.format.json` for an OpenAI structured-output `format`,
@@ -30,7 +30,7 @@ record of a projection decision.
 | `native/request-images.json` | Canonical request whose state carries one image: the `images` list of `{media_type, data}` with the payload base64. Identity projection — byte-exact both ways. | `fixture_native_request_images_round_trips` |
 | `native/response.json` | Canonical response: choice/score/boolean answers with full distributions, `accept` outcome, confidence report, trace entry, metrics. | `fixture_native_response_round_trips` |
 | `openai/choice-enum.format.json` | Strict-mode `format` for a choice question: `enum` + `additionalProperties: false` + every field in `required`; candidate descriptions ride in the property `description` marker. | `fixture_openai_choice_enum_format_round_trips` |
-| `openai/score-bounded-integer.format.json` | Strict-mode `format` for a score question: bounded `integer` whose level order is carried by the `opencode:levels=` marker. | `fixture_openai_score_bounded_integer_format_round_trips` |
+| `openai/score-bounded-integer.format.json` | Strict-mode `format` for a score question: bounded `integer` whose level order is carried by the `opencodifier:levels=` marker. | `fixture_openai_score_bounded_integer_format_round_trips` |
 | `openai/boolean.format.json` | Strict-mode `format` for a boolean question: `type: "boolean"`, no enum, no bounds. | `fixture_openai_boolean_format_round_trips` |
 | `openai/input-images.request.json` | Full request body whose `input` is a content-part array: one `input_text` part then one `input_image` part with a `data:` URL. Byte-locks the part shape the encoder emits (the `format` projection is locked by the three fixtures above). | `fixture_openai_input_images_round_trips` |
 | `anthropic/tool-choice.tool.json` | Anthropic tool definition with two choice properties; byte-locks the sorted property/`required` order the encoder emits. | `fixture_anthropic_tool_choice_round_trips` |
@@ -49,7 +49,7 @@ record of a projection decision.
 1. Add the file under the format's directory, following the naming rules
    above, and keep it minimal — one behaviour per fixture.
 2. Add a `fixture_<name>_round_trips` test to
-   `crates/opencode-schema/tests/fixtures.rs` that decodes, re-encodes,
+   `crates/opencodifier-schema/tests/fixtures.rs` that decodes, re-encodes,
    and asserts against the file.
 3. Add a row to this table. `readme_names_every_fixture` fails if a file on
    disk is missing from the table, or the table names a file that does not

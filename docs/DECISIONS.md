@@ -72,7 +72,7 @@ embeddings
   hf-hub/model download into a privacy-first local crate. Rejected.
 - tantivy → full search engine (index files, concurrency, git dep for a
   fix) for what is an in-memory top-k over ≤256 candidates. Rejected.
-- Instead: ~200 lines of hand-written BM25 (`opencode-engine`),
+- Instead: ~200 lines of hand-written BM25 (`opencodifier-engine`),
   property-tested against hand-computed IDF/tf values, and an
   `EmbeddingBackend` trait so embedding models are supplied by the
   runtime crate — nothing downloads at runtime, ever.
@@ -87,7 +87,7 @@ tests, no runtime contagion, trivial embedding in non-Tokio hosts.
 
 ## D6 — Single normative cache-key site
 
-`CacheKeyBuilder` in `opencode-engine` is the only code that
+`CacheKeyBuilder` in `opencodifier-engine` is the only code that
 computes a decision-cache key: SHA-256 (sha2 0.10) over length-prefixed
 fields — canonical request with sorted candidates, graph version, model
 id, calibration version, engine semver. Other crates reference
@@ -129,7 +129,7 @@ on. Replaced by per-stage budgets (below), measured with criterion
 | BM25 narrowing, 256 candidates | 1 ms |
 | Embedding scoring (supplied backend) | backend-declared |
 | Deterministic decision path end-to-end | 10 ms |
-| HTTP overhead added by `opencode-http` | 2 ms |
+| HTTP overhead added by `opencodifier-http` | 2 ms |
 
 ## D10 — Property testing: proptest + round-trip fixtures
 
@@ -144,14 +144,14 @@ re-ordering, candidate narrowing subset-safety. Fixtures under
 | Feature | Crate | Pulls in |
 |---------|-------|----------|
 | *(default)* | core, engine, schema | serde, thiserror, sha2 — nothing heavy |
-| `onnx` | opencode-runtime | ort rc.13 (D2) |
-| `runtime-onnx-dynamic` | opencode-runtime | ort `load-dynamic` |
-| `llamacpp` | opencode-model | ureq (HTTP client only, D26) |
-| `tokenizers` | opencode-model | `tokenizers` 0.22 + `fancy-regex` (Kai reference encoder, D33) |
-| `http` | opencode-http | axum 0.9, tokio |
-| `mcp` | opencode-mcp | rmcp 2.2 (D1) |
-| `cli` | opencode-cli | clap v4 |
-| `wasm` | opencode-wasm | wasm-bindgen, getrandom js |
+| `onnx` | opencodifier-runtime | ort rc.13 (D2) |
+| `runtime-onnx-dynamic` | opencodifier-runtime | ort `load-dynamic` |
+| `llamacpp` | opencodifier-model | ureq (HTTP client only, D26) |
+| `tokenizers` | opencodifier-model | `tokenizers` 0.22 + `fancy-regex` (Kai reference encoder, D33) |
+| `http` | opencodifier-http | axum 0.9, tokio |
+| `mcp` | opencodifier-mcp | rmcp 2.2 (D1) |
+| `cli` | opencodifier-cli | clap v4 |
+| `wasm` | opencodifier-wasm | wasm-bindgen, getrandom js |
 
 No crate may enable another crate's heavyweight feature transitively;
 the default build of the whole workspace stays ML-free and runtime-free.
@@ -422,7 +422,7 @@ Qwen2.5-3B runner-up at 0.675).*
 
 **Serving mechanism is NOT the decision.** The measurement went through
 llama.cpp's `/v1/decision`; the integration seam in this codebase remains
-the `opencode-runtime` `InferenceBackend` trait (D7, logits-only). The
+the `opencodifier-runtime` `InferenceBackend` trait (D7, logits-only). The
 ONNX re-entry gate is D2. Any backend that can produce candidate-conditioned
 logits is admissible; the pick names the weights, not the server.
 
@@ -451,7 +451,7 @@ logits is admissible; the pick names the weights, not the server.
 
 ## D17 — MCP surface: rmcp 2.2 stdio, six decision tools (2026-09-28)
 
-`opencode-mcp` (PLAN Phase 10, §31/§55) serves the runtime to MCP
+`opencodifier-mcp` (PLAN Phase 10, §31/§55) serves the runtime to MCP
 hosts over **stdio only** — the transport is the local process's
 stdin/stdout, so the local-first posture is structural: there is no
 socket to bind and nothing remote to refuse (unlike HTTP's loopback
@@ -483,7 +483,7 @@ gate, there is no flag that opens this surface outward).
 - **Shared surfaces, one definition each.** The engine's graph-document
   shim is public (`GraphDocument`) and HTTP's private mirror is deleted;
   the execution-report JSON projection lives in the engine
-  (`opencode_engine::report::execution_json`) and both the CLI's
+  (`opencodifier_engine::report::execution_json`) and both the CLI's
   `--trace` and MCP `codify_explain` call it.
 - **`codify_graph` exposes the active graph document** (via the new
   `EngineHandle::graph`): the identity decisions are cached under, node
@@ -606,7 +606,7 @@ which a runtime builds a real request. The registry is bookkeeping over
 artifacts; it is never a second decision path.
 
 - **One type, one crate.** `DecisionDefinition` lives in
-  `opencode-schema` (`registry.rs`) next to the wire adapters: the
+  `opencodifier-schema` (`registry.rs`) next to the wire adapters: the
   document is a wire format, and instantiation goes through the same
   core constructors (`ChoiceQuestion::new`, `DecisionPolicy`'s
   validating conversion) every other ingress uses — never a weaker
@@ -734,7 +734,7 @@ the passes whose "optimizations" would be guesses.
   for. Candidate pruning is not a graph transform at all — it is
   narrowing, and D21 already owns its disclosure rules. The optimizer
   that ships is small enough to prove.
-- **Surface.** `opencode_engine::optimize(graph) → DecisionGraph`
+- **Surface.** `opencodifier_engine::optimize(graph) → DecisionGraph`
   (pure, returns a fresh graph; `graph_version` is preserved — D6 keys
   on the author's version, and optimization must not silently change
   cache identity). Equivalence proofs: per-pass unit tests plus a
@@ -743,7 +743,7 @@ the passes whose "optimizations" would be guesses.
 
 ## D23 — The WASM boundary is the zero-ML decision runtime (2026-09-29)
 
-PLANNING §57 asks for `opencode-wasm` (CPU/SIMD/threads/WebGPU) with
+PLANNING §57 asks for `opencodifier-wasm` (CPU/SIMD/threads/WebGPU) with
 a browser demo; §68 fixes the security posture. V1.1 lands the boundary,
 not the model path:
 
@@ -804,11 +804,11 @@ is proven, and nothing ships a claim its evidence cannot carry:
   run-tested, e2e-proven (30/30) on this host; GitForge releases carry
   it today.
 - **windows-x86_64-gnu** — the full workspace (all ten crates incl.
-  `opencode-wasm`) compiles clean for
+  `opencodifier-wasm`) compiles clean for
   `x86_64-pc-windows-gnu` with the mingw linker present. **Linked
   (2026-10-02, 2m44s at -j4 alongside the measurement chain):**
-  `opencode.exe` (PE32+ console, x86-64) and
-  `opencode_wasm.dll` (cdylib), zero warnings. Verification level
+  `opencodifier.exe` (PE32+ console, x86-64) and
+  `opencodifier_wasm.dll` (cdylib), zero warnings. Verification level
   is link success + `file` PE magic + a stated not-executed-here
   caveat — and that is this host's terminal level for the target: no
   wine and no Windows machine exists here, so the smoke run is not
@@ -848,7 +848,7 @@ root) links all four remaining targets: `aarch64-unknown-linux-gnu`
 x86_64). Per this record, that is link + `file`-magic verification
 only — no foreign-arch execution is claimed (no qemu on the host; no
 macOS host exists here). `windows-x86_64-gnu` **joined the linked set
-2026-10-02** (`opencode.exe` PE32+ + `opencode_wasm.dll`,
+2026-10-02** (`opencodifier.exe` PE32+ + `opencodifier_wasm.dll`,
 `file`-magic verified, not executed — no wine/Windows on this host, so
 smoke stays structurally out of scope here, not merely quiet-window
 pending). What remains open in the matrix is unchanged: registry
@@ -864,7 +864,7 @@ missing tool's name when a leg lacks its toolchain):
   linked by `cargo-zigbuild`; verification level: link + `file` magic
   (no Android host or emulator here; execution is structurally out of
   scope, same rule as darwin).
-- **ios-aarch64** (`aarch64-apple-ios`) — **the `opencode-ffi`
+- **ios-aarch64** (`aarch64-apple-ios`) — **the `opencodifier-ffi`
   staticlib, not a CLI binary**: with no Apple SDK on this host no
   linked Mach-O image can be produced or codesigned, and pretending
   otherwise would be the "compiles = supported" lie this record bans.
@@ -874,15 +874,15 @@ missing tool's name when a leg lacks its toolchain):
   SDK.
 - **wasm32-unknown-unknown** — formalized from "pkg/ rides the
   release" to a versioned dual-glue bundle
-  (`opencode-<v>-wasm32-unknown-unknown.tar.gz`: `pkg-web/` +
+  (`opencodifier-<v>-wasm32-unknown-unknown.tar.gz`: `pkg-web/` +
   `pkg-nodejs/` from `wasm-pack --release`), gzip-magic attested.
 
 Supporting machinery, all in this commit: `scripts/generate_attestation.py`
 grew per-target artifact contracts (container + arch + static/member
 probes for PE32+, Mach-O, `ar`, and gzip — an unmapped target refuses to
 attest rather than shipping unverified); `just release-checksums` writes
-`dist/sha256sums.txt`; `opencode-ffi` is the new staticlib crate
-(C-ABI JSON boundary over `opencode_engine::wire`, the same module
+`dist/sha256sums.txt`; `opencodifier-ffi` is the new staticlib crate
+(C-ABI JSON boundary over `opencodifier_engine::wire`, the same module
 the WASM binding calls — one wire contract, every transport).
 
 ## D25 — The escalation ladder is engine-internal per-node policy, never IR (2026-09-30)
@@ -898,7 +898,7 @@ all of them. The wiring decision:
 
 - **`LadderPolicy` composes the existing gate type; the IR does not
   move.** Engine config gains optional per-node / per-kind
-  `DecisionPolicy` overrides (`opencode-engine/src/ladder.rs`),
+  `DecisionPolicy` overrides (`opencodifier-engine/src/ladder.rs`),
   resolved at the existing confidence gate: `per_node[id]` →
   `per_kind[kind]` → request policy. No wire change, no schema change —
   `pub(crate)`-level plumbing only (`QuestionDecision::decided_by`
@@ -999,8 +999,8 @@ threshold 0.86). The boundary is policy, not code:
   `boolean_threshold` whenever a boundary is configured, and
   `boolean_flipped = true` when it overruled the argmax. Absent
   otherwise — no hidden thresholds, no noise on unconfigured runs.
-- **The offline fitter is `opencode ladder fit-boolean`.**
-  `opencode-engine/src/ladder_fit.rs` sweeps `0.50..=0.99` in
+- **The offline fitter is `opencodifier ladder fit-boolean`.**
+  `opencodifier-engine/src/ladder_fit.rs` sweeps `0.50..=0.99` in
   0.01 steps, scores F1 on the true class, breaks ties toward the
   smallest threshold, and emits the profile document (`id` +
   `per_kind.boolean`) composed over a base policy. `id` empty or
@@ -1065,7 +1065,7 @@ decision:
   verdict-slot logprobs out. Forcing one shape onto the other would
   fabricate tensors and re-create the F10 interface mismatch this
   board spent a phase correcting. `LlamaDecisionClassifier`
-  implements `opencode_engine::Classifier` (decide →
+  implements `opencodifier_engine::Classifier` (decide →
   `Distribution`) and assembles through `EngineHandle::new` /
   `with_ladder` as decider or verifier — zero engine changes, the
   same seam every other rung uses.
@@ -1075,7 +1075,7 @@ decision:
   seam before any gate reads it. Server-reported probabilities are
   never exposed raw.
 - **One crate, one feature, one new dependency.** The client lives in
-  `opencode-model` behind a `llamacpp` feature; the HTTP client
+  `opencodifier-model` behind a `llamacpp` feature; the HTTP client
   is `ureq` (sync, `default-features = false`, `json` only) — blocking
   matches the engine's sync core (D5), and a leaf crate gains no async
   runtime. Plain HTTP, deliberately: the endpoint is loopback by the
@@ -1210,7 +1210,7 @@ has been receiving the wrong signal. The decision:
 
 ## D29 — First-party integrations are adapters over the public surfaces, never a privileged stack (2026-10-02)
 
-User directive (2026-10-02): OpenCode will integrate with Amortyx
+User directive (2026-10-02): OpenCodifier will integrate with Amortyx
 and the other in-house services "for full stack and compatibility …
 but we don't want to force people to use one stack, workflow, pipeline,
 or another."
@@ -1226,11 +1226,11 @@ or another."
 - **First-party consumers are examples, not requirements.** The
   default posture stays exactly what PLANNING.md §1 states:
   fully local, offline, no accounts. Installing Amortyx, the harness,
-  or any sibling service is never a prerequisite for any OpenCode
-  capability, and no OpenCode capability may detect or prefer a
+  or any sibling service is never a prerequisite for any OpenCodifier
+  capability, and no OpenCodifier capability may detect or prefer a
   first-party consumer.
 - **Each side keeps its own responsibilities** (INTEGRATION_AMORTYX.md
-  §1, unchanged): OpenCode makes semantic decisions; Amortyx makes
+  §1, unchanged): OpenCodifier makes semantic decisions; Amortyx makes
   economic/operational ones; neither absorbs the other. The Jev
   adapter doctrine generalizes: compatibility with any ecosystem —
   Jev/System-One, Fastino-style `systemone` callers, OpenAI or
@@ -1253,7 +1253,7 @@ through the CLI `--format` flag and as library types; every HTTP route
 decoded through `Native`. Adopters with existing OpenAI-, Anthropic-,
 or Jev-shaped tooling had to shell out to the CLI to be understood.
 
-- **Selection is the `x-opencode-format` request header**, valued
+- **Selection is the `x-opencodifier-format` request header**, valued
   with the adapters' own stable `name()`s (`native` | `openai` |
   `anthropic` | `jev`). Not an envelope field: a drop-in OpenAI or
   Anthropic client posts *its own* body shape and cannot be asked to
@@ -1297,13 +1297,13 @@ Phase 19b, closing the question D30 left open. The Jev/System-One
 ecosystem (and Fastino's GLiDE demo) convention is a
 `/v1/systemone` path. Does a route by that name earn its place?
 
-- **No.** D30's `x-opencode-format: jev` header already carries the
+- **No.** D30's `x-opencodifier-format: jev` header already carries the
   entire capability: the same adapter, the same decode/encode
   symmetry, the same cache identity. A `/v1/systemone` route would be
   a byte-for-byte alias of `POST /v1/decide` with the header
   pre-set — new surface, zero new capability, a second URL to document,
   version, and keep honest.
-- **Identity doctrine (CLAUDE.md) is the tiebreaker**: OpenCode is
+- **Identity doctrine (CLAUDE.md) is the tiebreaker**: OpenCodifier is
   not a Jev clone — Jev/System-One compatibility is one adapter mode,
   not the identity. Promoting a Jev convention to a top-level route
   inverts that: it advertises the adapter mode as the product's shape.
@@ -1316,7 +1316,7 @@ ecosystem (and Fastino's GLiDE demo) convention is a
   separate cache namespace. Until a named consumer exists, the route
   stays unshipped and `/v1/systemone` stays unclaimed.
 - **Jev-shaped callers are served today**: `POST /v1/decide` with
-  `x-opencode-format: jev` (HTTP), `opencode decide --format
+  `x-opencodifier-format: jev` (HTTP), `opencodifier decide --format
   jev` (CLI), `Jev` adapter in-process (library). This is documented as
   the integration path in `INTEGRATIONS.md` §2.4, not a workaround.
 
@@ -1345,16 +1345,16 @@ ecosystem (and Fastino's GLiDE demo) convention is a
   ceiling, the ceiling moves again — to the measured tail, not to a
   round number.
 
-## D33 — The Kai-0.6B-ONNX decision rung: contract in `opencode-model`, transport behind the reinstated `onnx` feature (2026-10-05)
+## D33 — The Kai-0.6B-ONNX decision rung: contract in `opencodifier-model`, transport behind the reinstated `onnx` feature (2026-10-05)
 
 - **What shipped**: the Kai-0.6B-ONNX rung (task #92) as two pieces.
-  `opencode-model::kai` is the *contract* — exact prompt rendering
+  `opencodifier-model::kai` is the *contract* — exact prompt rendering
   (`decision2-segmented-options-global-query-v1`), tokenization, pointer
   computation with in-pipeline assertions, the fitted 5-level score
   bias, and `f64` softmax. It is **feature-free** and verified against a
   frozen, trimmed upstream parity fixture
   (`kai/fixtures/kai-reference-trimmed.json`, 3 of the 11 recorded
-  cases, with provenance). `opencode-runtime::kai::KaiOnnxBackend`
+  cases, with provenance). `opencodifier-runtime::kai::KaiOnnxBackend`
   is the *transport*: the four named graph inputs, integral-valued `f32`
   index tensors, and raw logits — no softmax (D7), no calibration.
 - **`onnx` is reinstated under the D2 pin, not re-decided.** D2's pin is
@@ -1382,7 +1382,7 @@ ecosystem (and Fastino's GLiDE demo) convention is a
   (§6.5's model), a different model. (3) **temperature is 1 for every
   kind** — there is no per-kind temperature table; the only fitted
   correction is the 5-level score bias.
-- **`tokenizers` is a new heavyweight dep for `opencode-model`,
+- **`tokenizers` is a new heavyweight dep for `opencodifier-model`,
   feature-gated.** The reference HF encoder only loads behind it
   (`0.22` line, `fancy-regex` backend — pure Rust, no C dependency).
   The feature-free path carries a built-in byte-level BPE oracle over
@@ -1397,13 +1397,13 @@ ecosystem (and Fastino's GLiDE demo) convention is a
 ## D34 — The Julia-1 ONNX decision rung: a five-input graph, a Metaspace fixture closure, and the first Rust-side execution on real weights (2026-10-05)
 
 - **What shipped**: the second ONNX rung (task #92), beside D33's Kai.
-  `opencode-model::julia` is the contract — upstream
+  `opencodifier-model::julia` is the contract — upstream
   `julia.data.sequence` packing (`PROMPT_VERSION =
   "julia-data-sequence-v1"`), marker computation (the option's `<mask>`
   *start* index — the opposite pointer convention from Kai's last-token
   `answer_pos`), `f64` softmax, and **no fitted bias table** (upstream
   publishes none; inventing calibration is forbidden). 
-  `opencode-runtime::julia::JuliaOnnxBackend` is the transport,
+  `opencodifier-runtime::julia::JuliaOnnxBackend` is the transport,
   feature-gated behind the same reinstated `onnx` (D33/D2).
 - **The graph has five inputs, not four.** Introspecting the real
   export (`onnxruntime` `get_inputs()`) shows `input_ids`,
@@ -1555,7 +1555,7 @@ ecosystem (and Fastino's GLiDE demo) convention is a
 - **Update (2026-10-07) — ratchet re-based on the pinned image.** The
   89.28 % measurement this decision ratcheted from came from a local
   rustc whose coverage mapping is finer-grained than the CI image's;
-  inside `opencode-ci-rust:2` the same tree measures **98.03 %
+  inside `opencodifier-ci-rust:2` the same tree measures **98.03 %
   DA** (17,433/17,783, two independent runs agreeing to the line;
   350-line residual classified in `docs/COVERAGE.md`, where the
   "escalation core debt" reading above is corrected — executor.rs is
@@ -1592,7 +1592,7 @@ ecosystem (and Fastino's GLiDE demo) convention is a
   alone cannot fix that; the wrong-answer slots need provable
   exclusions.
 - **Decision**: relational/contrastive corpus items are generated by
-  the new `opencode-itemgen` crate, which samples symbolic fact
+  the new `opencodifier-itemgen` crate, which samples symbolic fact
   graphs, renders them through the engine's own extraction grammar,
   and verifies each item against [`RelationalSolver`] — the same
   zero-ML stack the serving rung decides with. An item ships only

@@ -1,8 +1,8 @@
-# OpenCode Decision Engine — WASM / Client-Side Runtime
+# OpenCodifier Decision Engine — WASM / Client-Side Runtime
 
 ## Objective
 
-Extend OpenCode so that the **deterministic Decision Engine itself** can compile to WebAssembly and execute entirely inside a browser without requiring:
+Extend OpenCodifier so that the **deterministic Decision Engine itself** can compile to WebAssembly and execute entirely inside a browser without requiring:
 
 - a Cloudflare Worker
 - a Cloudflare Pages Function
@@ -19,7 +19,7 @@ The new WASM target must be a **thin adapter around the existing engine**, not a
 The resulting architecture should allow:
 
 ```text
-                    OpenCode Engine
+                    OpenCodifier Engine
                            │
              ┌─────────────┼─────────────┐
              │             │             │
@@ -44,18 +44,18 @@ First inspect the repository rather than assuming the architecture.
 
 Repository:
 
-`https://github.com/aliasfoxkde/OpenCode`
+`https://github.com/aliasfoxkde/OpenCodifier`
 
 Current project characteristics include:
 
-- `opencode-core`
-- `opencode-schema`
-- `opencode-engine`
-- `opencode-runtime`
-- `opencode-model`
-- `opencode-cli`
-- `opencode-http`
-- `opencode-mcp`
+- `opencodifier-core`
+- `opencodifier-schema`
+- `opencodifier-engine`
+- `opencodifier-runtime`
+- `opencodifier-model`
+- `opencodifier-cli`
+- `opencodifier-http`
+- `opencodifier-mcp`
 
 The current engine exposes `EngineHandle` as the primary engine facade.
 
@@ -101,7 +101,7 @@ with duplicated decision logic.
 Instead:
 
 ```text
-                 opencode-engine
+                 opencodifier-engine
                          │
                   EngineHandle
                          │
@@ -146,8 +146,8 @@ Cloudflare Pages
 │   └── ...
 │
 ├── wasm/
-│   ├── opencode_wasm.js
-│   ├── opencode_wasm_bg.wasm
+│   ├── opencodifier_wasm.js
+│   ├── opencodifier_wasm_bg.wasm
 │   └── ...
 │
 └── graphs/
@@ -172,7 +172,7 @@ execute locally
 return decision
 ```
 
-There should be no request to an OpenCode backend merely to perform a deterministic decision.
+There should be no request to an OpenCodifier backend merely to perform a deterministic decision.
 
 ---
 
@@ -184,7 +184,7 @@ Preferred structure:
 
 ```text
 crates/
-    opencode-wasm/
+    opencodifier-wasm/
         Cargo.toml
         src/
             lib.rs
@@ -195,9 +195,9 @@ If repository conventions suggest a different location, preserve the same concep
 The WASM crate should depend on:
 
 ```text
-opencode-core
-opencode-schema
-opencode-engine
+opencodifier-core
+opencodifier-schema
+opencodifier-engine
 ```
 
 and only the minimum additional WASM binding/serialization dependencies required.
@@ -226,7 +226,7 @@ WASM
 
 # 5. Keep the Engine WASM-Friendly
 
-Audit `opencode-engine` and its transitive dependencies for WASM incompatibilities.
+Audit `opencodifier-engine` and its transitive dependencies for WASM incompatibilities.
 
 The engine must not require:
 
@@ -259,7 +259,7 @@ Do NOT expose the entire internal Rust object graph to JavaScript.
 Prefer a small stable interface such as:
 
 ```text
-OpenCode
+OpenCodifier
 ```
 
 or:
@@ -279,7 +279,7 @@ decide_batch(...)
 health()
 ```
 
-The exact names should follow existing OpenCode terminology.
+The exact names should follow existing OpenCodifier terminology.
 
 The most important operation is:
 
@@ -295,7 +295,7 @@ Example:
 const result = engine.decide(request);
 ```
 
-The WASM layer converts this into canonical OpenCode IR and calls the same `EngineHandle::decide(...)` used elsewhere.
+The WASM layer converts this into canonical OpenCodifier IR and calls the same `EngineHandle::decide(...)` used elsewhere.
 
 ---
 
@@ -444,7 +444,7 @@ Add a batch operation where practical:
 decide_batch(requests)
 ```
 
-This is especially important because OpenCode is intended to operate at extremely low latency.
+This is especially important because OpenCodifier is intended to operate at extremely low latency.
 
 A browser application should be able to avoid repeated WASM boundary crossings:
 
@@ -499,7 +499,7 @@ Main Thread
 Web Worker
     │
     ▼
-OpenCode WASM
+OpenCodifier WASM
     │
     ▼
 EngineHandle
@@ -541,7 +541,7 @@ function decide(input) {
 Preferred:
 
 ```javascript
-const engine = await OpenCode.create();
+const engine = await OpenCodifier.create();
 
 engine.decide(a);
 engine.decide(b);
@@ -614,7 +614,7 @@ No external service.
 
 No analytics dependency.
 
-The browser implementation should preserve OpenCode's existing local/offline/private design commitment.
+The browser implementation should preserve OpenCodifier's existing local/offline/private design commitment.
 
 ---
 
@@ -689,7 +689,7 @@ Produce a browser-consumable package.
 Prefer a generated package along the lines of:
 
 ```text
-@opencode/wasm
+@opencodifier/wasm
 ```
 
 or an appropriate repository-specific name.
@@ -697,7 +697,7 @@ or an appropriate repository-specific name.
 The generated interface should support:
 
 ```javascript
-import init, { DecisionEngine } from "@opencode/wasm";
+import init, { DecisionEngine } from "@opencodifier/wasm";
 
 await init();
 
@@ -846,7 +846,7 @@ Prefer isolating platform-specific functionality at crate boundaries.
 
 Add a minimal static browser demonstration.
 
-Do not redesign the existing OpenCode website.
+Do not redesign the existing OpenCodifier website.
 
 Create a small developer/demo surface that demonstrates:
 
@@ -1050,7 +1050,7 @@ WASM must never panic for normal malformed user input.
 
 Convert errors into stable machine-readable errors.
 
-Preserve existing OpenCode error codes.
+Preserve existing OpenCodifier error codes.
 
 For example:
 
@@ -1141,7 +1141,7 @@ service worker
    ↓
 cache WASM + graphs
    ↓
-offline OpenCode
+offline OpenCodifier
 ```
 
 The PWA should be an application-layer enhancement.
@@ -1282,7 +1282,7 @@ Preserve that separation.
 The WASM V1 target should demonstrate:
 
 ```text
-OpenCode
+OpenCodifier
 =
 deterministic decision engine
 +
@@ -1303,7 +1303,7 @@ Avoid:
 - browser database requirements
 - UI dependencies in the engine
 - React dependencies in Rust
-- frontend logic inside `opencode-engine`
+- frontend logic inside `opencodifier-engine`
 
 The WASM crate is an adapter.
 
@@ -1317,23 +1317,23 @@ Target architecture:
 
 ```text
 crates/
-├── opencode-core
+├── opencodifier-core
 │
-├── opencode-schema
+├── opencodifier-schema
 │
-├── opencode-engine
+├── opencodifier-engine
 │
-├── opencode-runtime
+├── opencodifier-runtime
 │
-├── opencode-model
+├── opencodifier-model
 │
-├── opencode-cli
+├── opencodifier-cli
 │
-├── opencode-http
+├── opencodifier-http
 │
-├── opencode-mcp
+├── opencodifier-mcp
 │
-└── opencode-wasm
+└── opencodifier-wasm
 ```
 
 Dependency graph:
@@ -1364,7 +1364,7 @@ Do not force this structure if repository inspection reveals a better existing b
 The JavaScript API should feel approximately like:
 
 ```javascript
-import init, { DecisionEngine } from "@opencode/wasm";
+import init, { DecisionEngine } from "@opencodifier/wasm";
 
 await init();
 
@@ -1398,7 +1398,7 @@ The exact API should follow the native API and canonical IR rather than inventin
 The browser-facing application should eventually be able to do:
 
 ```javascript
-const worker = new Worker("/opencode-worker.js", {
+const worker = new Worker("/opencodifier-worker.js", {
     type: "module"
 });
 
@@ -1451,7 +1451,7 @@ Implement only:
 - telemetry
 - persistent browser database
 - full PWA implementation
-- redesign of the OpenCode site
+- redesign of the OpenCodifier site
 - replacing the existing HTTP API
 
 ---
@@ -1572,10 +1572,10 @@ Do not claim performance numbers that were not measured.
 
 # 44. Final Architectural Principle
 
-The finished OpenCode should be able to exist as:
+The finished OpenCodifier should be able to exist as:
 
 ```text
-                   OpenCode
+                   OpenCodifier
                         │
                 Deterministic Engine
                         │
@@ -1598,8 +1598,8 @@ It is not a cloud function.
 
 It is simply:
 
-> **The OpenCode Decision Engine compiled into a small, portable browser-executable module.**
+> **The OpenCodifier Decision Engine compiled into a small, portable browser-executable module.**
 
-The ideal result is that `opencode.pages.dev` can ship the engine as static assets, the browser downloads it once, and all deterministic decisions thereafter happen locally on the user's machine with no OpenCode compute infrastructure involved.
+The ideal result is that `opencodifier.pages.dev` can ship the engine as static assets, the browser downloads it once, and all deterministic decisions thereafter happen locally on the user's machine with no OpenCodifier compute infrastructure involved.
 
-This should reinforce OpenCode's existing design commitments of deterministic-first execution, local/offline/private operation, and useful zero-ML decision making rather than changing those commitments.
+This should reinforce OpenCodifier's existing design commitments of deterministic-first execution, local/offline/private operation, and useful zero-ML decision making rather than changing those commitments.

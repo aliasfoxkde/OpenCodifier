@@ -26,15 +26,15 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta property="og:site_name" content="OpenCodifier">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://opencode.pages.dev/docs.html">
+<meta property="og:url" content="https://opencodifier.pages.dev/docs.html">
 <meta property="og:title" content="OpenCodifier — documentation">
 <meta property="og:description" content="The OpenCodifier deep dive: the canonical decision IR field by field, question types, calibrated confidence and the gate, the seven-rung escalation ladder, graph mode, the browser SDK, and the self-hosted binary.">
-<meta property="og:image" content="https://opencode.pages.dev/assets/og-image.png">
+<meta property="og:image" content="https://opencodifier.pages.dev/assets/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The OpenCodifier mark — a hexagonal C around a code glyph — over the wordmark.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://opencode.pages.dev/assets/og-image.png">
+<meta name="twitter:image" content="https://opencodifier.pages.dev/assets/og-image.png">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="tw.css">
 <style>
@@ -181,7 +181,7 @@
 <nav class="nav">
   <a class="brand" href="index.html">
     <img src="assets/logo.svg" alt="" width="22" height="22">
-    opencode
+    opencodifier
   </a>
   <div class="nav-links">
     <a href="index.html">Home</a>
@@ -336,8 +336,8 @@
     Build the binary, serve it on loopback, and decide something:
   </p>
   <pre class="pg-pre" role="img" aria-label="Build, serve, and decide in three commands"><code>git clone https://github.com/aliasfoxkde/OpenCodifier
-cd OpenCodifier &amp;&amp; cargo build --release -p opencode-cli
-./target/release/opencode serve        # 127.0.0.1:8177, loopback only
+cd OpenCodifier &amp;&amp; cargo build --release -p opencodifier-cli
+./target/release/opencodifier serve        # 127.0.0.1:8177, loopback only
 
 curl -s http://127.0.0.1:8177/v1/decide \
   -H 'content-type: application/json' \
@@ -351,7 +351,7 @@ curl -s http://127.0.0.1:8177/v1/decide \
   </p>
   <p class="body-text">
     No server? The same request from the terminal:
-    <code>opencode decide --input request.json</code>. No install at all?
+    <code>opencodifier decide --input request.json</code>. No install at all?
     The <a href="decide.html">Decide console</a> runs the identical engine compiled to WASM, in
     your tab, with no network.
   </p>
@@ -601,7 +601,7 @@ curl -s http://127.0.0.1:8177/v1/decide \
       normalization entry; a graph run records one entry per node it executed.</dd>
   </dl>
   <p class="fineprint">The response is always the canonical native JSON projection — the CLI's
-    <code>--format</code> flag and the HTTP <code>x-opencode-format</code> header choose how
+    <code>--format</code> flag and the HTTP <code>x-opencodifier-format</code> header choose how
     requests come <em>in</em>, never how answers go out.</p>
 </section>
 
@@ -629,7 +629,7 @@ curl -s http://127.0.0.1:8177/v1/decide \
     argmax over <code>{true, false}</code> unless the policy sets
     <code>boolean_threshold</code>, in which case it is
     <code>p_true ≥ threshold</code> — a fitted boundary from labeled evidence
-    (<code>opencode ladder fit-boolean</code> emits one), never a hard-coded 0.5.
+    (<code>opencodifier ladder fit-boolean</code> emits one), never a hard-coded 0.5.
   </p>
   <p class="body-text">
     <strong>Criteria are composed into the question text.</strong> There is no separate criteria
@@ -1017,7 +1017,7 @@ bridge.meters.snapshot();               // { "engine.ms": {avg, worst, count, la
 
   <h3 class="docs-h3">Deciding from a page</h3>
   <pre class="pg-pre" role="img" aria-label="Direct WASM engine usage"><code>&lt;script type="module"&gt;
-  import init, { WasmEngine } from "./wasm/opencode_wasm.js";
+  import init, { WasmEngine } from "./wasm/opencodifier_wasm.js";
   await init();                        // resolves ./wasm/*_bg.wasm beside the JS
   const engine = new WasmEngine();
   const decision = JSON.parse(engine.decide(JSON.stringify(request)));
@@ -1037,19 +1037,19 @@ bridge.meters.snapshot();               // { "engine.ms": {avg, worst, count, la
   <div class="kicker">Self-hosting</div>
   <h2>One binary. Loopback by default. No config file.</h2>
   <p class="lede">
-    Everything ships in <code>opencode-cli</code>: the decision engine, the wire adapters,
+    Everything ships in <code>opencodifier-cli</code>: the decision engine, the wire adapters,
     the HTTP server, the MCP server, and the model/ladder tooling. The base binary is useful
     with zero models installed.
   </p>
 
-  <pre class="pg-pre" role="img" aria-label="Build and install commands"><code>cargo build --release -p opencode-cli        # or:
-cargo install --locked --path crates/opencode-cli
+  <pre class="pg-pre" role="img" aria-label="Build and install commands"><code>cargo build --release -p opencodifier-cli        # or:
+cargo install --locked --path crates/opencodifier-cli
 
-opencode serve                               # 127.0.0.1:8177
-opencode decide --input request.json         # one decision, native format
-opencode graph validate graph.json           # verdict, no execution
-opencode mcp serve                           # six tools over stdio
-opencode recipe list                         # built-in graphs + fixtures</code></pre>
+opencodifier serve                               # 127.0.0.1:8177
+opencodifier decide --input request.json         # one decision, native format
+opencodifier graph validate graph.json           # verdict, no execution
+opencodifier mcp serve                           # six tools over stdio
+opencodifier recipe list                         # built-in graphs + fixtures</code></pre>
 
   <h3 class="docs-h3">Subcommands</h3>
   <div class="table-wrap">
@@ -1088,7 +1088,7 @@ opencode recipe list                         # built-in graphs + fixtures</code>
     produced, <code>1</code> input error, <code>2</code> the runtime answered but not decisively
     (abstain, escalate, verify, no valid candidate) unless
     <code>--abstain-is-success</code> is passed, <code>3</code> internal error. Diagnostics go
-    to stderr as <code>opencode: &lt;code&gt; &lt;message&gt;</code> with the same stable
+    to stderr as <code>opencodifier: &lt;code&gt; &lt;message&gt;</code> with the same stable
     codes the HTTP API reports — so a pipeline can branch on a refusal without parsing prose.
   </p>
 
@@ -1129,7 +1129,7 @@ opencode recipe list                         # built-in graphs + fixtures</code>
     short version for a service:
   </p>
   <pre class="pg-pre" role="img" aria-label="Minimal systemd unit"><code>[Service]
-ExecStart=%h/.local/bin/opencode serve
+ExecStart=%h/.local/bin/opencodifier serve
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=yes
@@ -1268,7 +1268,7 @@ PrivateTmp=yes</code></pre>
 <footer class="footer">
   <div class="footer-grid">
     <div class="foot-about">
-      <div class="foot-brand">opencode</div>
+      <div class="foot-brand">opencodifier</div>
       <p>This page explains the machine that <a href="api.html">api.html</a> documents. Both are
         checked against the crate sources: where a rung needs a backend a build does not ship,
         the page names the refusal; where a number exists, it traces to a committed run. The

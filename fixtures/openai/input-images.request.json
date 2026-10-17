@@ -1,17 +1,17 @@
 {
   "format": {
     "type": "json_schema",
-    "name": "opencode_decisions",
+    "name": "opencodifier_decisions",
     "strict": true,
     "schema": {
       "type": "object",
-      "title": "opencode_decisions",
+      "title": "opencodifier_decisions",
       "description": "One field per decision question, answered in a single response.",
       "properties": {
         "model": {
           "type": "string",
           "title": "Which model should read this chart?",
-          "description": "opencode:descriptions=[\"General vision\",\"Deep vision\"]",
+          "description": "opencodifier:descriptions=[\"General vision\",\"Deep vision\"]",
           "enum": ["local-qwen", "local-glm"]
         }
       },

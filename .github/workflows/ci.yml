@@ -53,7 +53,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --release
-      - run: python3 scripts/e2e_validate.py --binary target/release/opencode --port 8188
+      - run: python3 scripts/e2e_validate.py --binary target/release/opencodifier --port 8188
 
   supply-chain:
     runs-on: ubuntu-latest

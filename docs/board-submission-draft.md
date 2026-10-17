@@ -34,7 +34,7 @@ alongside the workspace acceptable? — prep §6 Q1).
 
 ## Draft issue body (#190 shape)
 
-> **Title:** `[bench request]: opencode-engine (<posture>) — runnable
+> **Title:** `[bench request]: opencodifier-engine (<posture>) — runnable
 > offline CPU bundle, native probabilities`
 >
 > This is an offline artifact submission. Please download the pinned
@@ -42,7 +42,7 @@ alongside the workspace acceptable? — prep §6 Q1).
 > author-hosted endpoint or API credential is required. We request the
 > maintainer-controlled v1.5 evaluation, including its sealed portion.
 >
-> - **System**: OpenCode decision runtime — deterministic
+> - **System**: OpenCodifier decision runtime — deterministic
 >   rule/relational engine (<posture> posture: **OPERATOR** —
 >   proofs-posture vs fusion-v2 vs engine-only, prep §6 Q3).
 > - **Weights**: none for the engine posture (CPU-only, no model

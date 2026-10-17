@@ -28,15 +28,15 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta property="og:site_name" content="OpenCodifier">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://opencode.pages.dev/">
+<meta property="og:url" content="https://opencodifier.pages.dev/">
 <meta property="og:title" content="OpenCodifier — decisions, not paragraphs">
 <meta property="og:description" content="Local-first decision runtime. Typed decisions with calibrated confidence, on hardware you already own. No API keys. No cloud.">
-<meta property="og:image" content="https://opencode.pages.dev/assets/og-image.png">
+<meta property="og:image" content="https://opencodifier.pages.dev/assets/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="The OpenCodifier mark — a hexagonal C around a code glyph — over the wordmark.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://opencode.pages.dev/assets/og-image.png">
+<meta name="twitter:image" content="https://opencodifier.pages.dev/assets/og-image.png">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="tw.css">
 </head>
@@ -48,7 +48,7 @@
 <nav class="nav">
   <a class="brand" href="#top">
     <img src="assets/logo.svg" alt="" width="22" height="22">
-    opencode
+    opencodifier
   </a>
   <div class="nav-links">
     <a href="index.html">Home</a>
@@ -355,8 +355,8 @@
       <p class="fineprint">The whole toolchain is Rust 1.90+ with cargo. One build, one command:</p>
       <pre class="codeblock"><code>git clone https://github.com/aliasfoxkde/OpenCodifier
 cd OpenCodifier
-cargo build --release -p opencode-cli
-./target/release/opencode serve</code></pre>
+cargo build --release -p opencodifier-cli
+./target/release/opencodifier serve</code></pre>
       <p>The runtime is now on <code>127.0.0.1:8177</code> — loopback-only unless you explicitly say
         otherwise. Prove it, then decide something:</p>
       <pre class="codeblock"><code>curl -s http://127.0.0.1:8177/v1/healthz
@@ -364,7 +364,7 @@ curl -s http://127.0.0.1:8177/v1/decide \
   -H 'content-type: application/json' \
   -d @fixtures/native/request.json</code></pre>
       <p class="fineprint">Prefer a one-command install into <code>~/.cargo/bin</code>?
-        <code>cargo install --locked --path crates/opencode-cli</code> — then <code>opencode</code>
+        <code>cargo install --locked --path crates/opencodifier-cli</code> — then <code>opencodifier</code>
         is on your PATH. The committed fixture above is a real request (choice + score + boolean);
         the response carries full distributions, calibrated confidence, and the execution trace.</p>
     </div>
@@ -373,15 +373,15 @@ curl -s http://127.0.0.1:8177/v1/decide \
       <h3>2 · Keep it running — systemd daemon</h3>
       <p>One user service, survives reboots, restarts on crash:</p>
       <pre class="codeblock"><code>mkdir -p ~/.local/bin ~/.config/systemd/user
-cp target/release/opencode ~/.local/bin/
+cp target/release/opencodifier ~/.local/bin/
 
-cat &gt; ~/.config/systemd/user/opencode.service &lt;&lt;'EOF'
+cat &gt; ~/.config/systemd/user/opencodifier.service &lt;&lt;'EOF'
 [Unit]
 Description=OpenCodifier decision runtime
 After=network-online.target
 
 [Service]
-ExecStart=%h/.local/bin/opencode serve
+ExecStart=%h/.local/bin/opencodifier serve
 Restart=on-failure
 RestartSec=2
 NoNewPrivileges=yes
@@ -392,9 +392,9 @@ WantedBy=default.target
 EOF
 
 systemctl --user daemon-reload
-systemctl --user enable --now opencode
-systemctl --user status opencode</code></pre>
-      <p class="fineprint">Logs: <code>journalctl --user -u opencode -f</code>. The service binds
+systemctl --user enable --now opencodifier
+systemctl --user status opencodifier</code></pre>
+      <p class="fineprint">Logs: <code>journalctl --user -u opencodifier -f</code>. The service binds
         <code>127.0.0.1:8177</code> — expose it beyond loopback only deliberately
         (<code>serve --bind 0.0.0.0:8177</code>) and behind a firewall; the local-first default is
         the product, not a limitation.</p>
@@ -404,12 +404,12 @@ systemctl --user status opencode</code></pre>
       <h3>3 · Embed it in your own site — WASM</h3>
       <p>The deterministic stack compiles to WebAssembly: decisions run client-side, offline, in
         your visitor's browser. Build the bundle once:</p>
-      <pre class="codeblock"><code>wasm-pack build crates/opencode-wasm \
+      <pre class="codeblock"><code>wasm-pack build crates/opencodifier-wasm \
   --target web --out-dir ../site/wasm \
-  --out-name opencode_wasm</code></pre>
+  --out-name opencodifier_wasm</code></pre>
       <p>Then wire it into any page:</p>
       <pre class="codeblock"><code>&lt;script type="module"&gt;
-  import init, { WasmEngine } from "./wasm/opencode_wasm.js";
+  import init, { WasmEngine } from "./wasm/opencodifier_wasm.js";
   await init();   // resolves ./wasm/*_bg.wasm beside the JS
   const engine = new WasmEngine();
   const out = JSON.parse(engine.decide(JSON.stringify(request)));
@@ -423,7 +423,7 @@ systemctl --user status opencode</code></pre>
     <div class="card reveal">
       <h3>4 · Pre-built binaries</h3>
       <p>Every release target is built by the pipeline with an attestation and a sha256 beside the
-        artifact (<code>opencode-&lt;version&gt;-&lt;target&gt;</code> +
+        artifact (<code>opencodifier-&lt;version&gt;-&lt;target&gt;</code> +
         <code>.attestation.json</code>). The matrix covers Linux (x86_64 gnu + musl static,
         aarch64), macOS (x86_64 + aarch64), Windows (x86_64), Android, iOS, and WASM. The
         v0.5.0 cut publishes them all in one place:</p>
@@ -440,7 +440,7 @@ systemctl --user status opencode</code></pre>
       <ul class="checks">
         <li><strong>HTTP /v1 API</strong> — localhost by default; exposure to the network is an explicit flag, never a default.</li>
         <li><strong>MCP server</strong> — plug decisions into agent toolchains as a native tool.</li>
-        <li><strong>CLI</strong> — <code>opencode decide</code> for scripts and pipelines.</li>
+        <li><strong>CLI</strong> — <code>opencodifier decide</code> for scripts and pipelines.</li>
         <li><strong>WASM</strong> — the core compiles for the browser; the deterministic stack runs client-side.</li>
         <li><strong>Useful with zero models.</strong> The base binary decides with rules, filters and lexical
           scoring — no ML artifacts required. Add the model rung only if your workload earns it.</li>
@@ -480,7 +480,7 @@ systemctl --user status opencode</code></pre>
         <li>Sub-10&nbsp;ms at the cheap rungs; the model pays only for the hard tail</li>
         <li>Same canonical decision IR as the WASM module and the CLI</li>
       </ul>
-      <a class="btn cloud-cta" href="mailto:api-waitlist@opencode.dev?subject=Hosted%20API%20waitlist">Join the waitlist</a>
+      <a class="btn cloud-cta" href="mailto:api-waitlist@opencodifier.dev?subject=Hosted%20API%20waitlist">Join the waitlist</a>
       <p class="fineprint">The waitlist is an email, not a form — signup flows land when the hosted
       endpoint ships. Self-hosting stays free and Apache-2.0 either way.</p>
     </div>
@@ -832,7 +832,7 @@ systemctl --user status opencode</code></pre>
 <footer class="footer">
   <div class="footer-grid">
     <div class="foot-about">
-      <div class="foot-brand">opencode</div>
+      <div class="foot-brand">opencodifier</div>
       <p>A local-first decision runtime: typed, machine-actionable decisions with calibrated
         confidence and honest abstention — on hardware you already own.</p>
       <p>Every figure on this site traces to a committed, deterministic benchmark run

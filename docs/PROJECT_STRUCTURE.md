@@ -6,7 +6,7 @@ PLANNING.md §39; crates marked *(planned)* do not exist yet.
 ## Workspace layout
 
 ```text
-opencode/
+opencodifier/
 ├── Cargo.toml               # workspace: shared lints, deps, release profile
 ├── rust-toolchain.toml      # local dev channel (stable)
 ├── rustfmt.toml             # stable-only settings
@@ -22,34 +22,34 @@ opencode/
 ├── scripts/                 # single-purpose validation + release tooling
 │   ├── e2e_validate.py          # release-binary e2e over the real wire (PLAN 18d)
 │   ├── coverage_floor.py        # lcov DA-basis floor assertion (CI coverage lane)
-│   ├── generate_attestation.py  # verified per-artifact build attestation (schema opencode.attestation/1)
+│   ├── generate_attestation.py  # verified per-artifact build attestation (schema opencodifier.attestation/1)
 │   └── generate_release_notes.py# renders notes from attestations + docs/RELEASE_NOTES_TEMPLATE.md
 │
 ├── dist/                    # release staging (gitignored): matrix artifacts,
 │                            # attestations, rendered notes (`just release-matrix`)
 │
 ├── crates/
-│   ├── opencode-core/      # canonical decision IR (done)
-│   ├── opencode-schema/    # native/OpenAI/Anthropic/Jev adapters (done)
-│   ├── opencode-engine/    # DAG executor, rules, caches, narrowing, BM25,
+│   ├── opencodifier-core/      # canonical decision IR (done)
+│   ├── opencodifier-schema/    # native/OpenAI/Anthropic/Jev adapters (done)
+│   ├── opencodifier-engine/    # DAG executor, rules, caches, narrowing, BM25,
 │   │                           #   relational solver, ladder + calibration seams (done)
 │   │                           #   facts.rs = the extraction grammar itemgen renders against
-│   ├── opencode-itemgen/   # D37 relational/contrastive item generator:
+│   ├── opencodifier-itemgen/   # D37 relational/contrastive item generator:
 │   │                           #   sample → render → solver-verify (binary `itemgen`;
 │   │                           #   corpus emission only, never a serving dependency)
-│   ├── opencode-runtime/   # InferenceBackend traits, mocks; `onnx` deferred by gate (done, D2)
-│   ├── opencode-model/     # decision serving contract + embedding classifier + manifests (done)
+│   ├── opencodifier-runtime/   # InferenceBackend traits, mocks; `onnx` deferred by gate (done, D2)
+│   ├── opencodifier-model/     # decision serving contract + embedding classifier + manifests (done)
 │   │     src/decision.rs, embedding.rs, manifest.rs — serving contract
 │   │     src/kai.rs + kai/     — kai contract + committed fixtures
 │   │     src/julia.rs + julia/ — julia contract + committed fixtures
 │   │     src/nli.rs + nli/     — NLI verbalization verifier contract + fixture (PLAN 24j, `nli` feature serves it)
 │   │     src/render.rs         — shared answer-key/question-text rendering (llamacpp + nli)
 │   │     src/llamacpp.rs       — llama.cpp loopback backend (D26, `llamacpp` feature)
-│   ├── opencode-http/      # axum 0.8 /v1 API (done)
-│   ├── opencode-cli/       # clap CLI binary `opencode` (done)
-│   ├── opencode-mcp/       # rmcp 2.2 stdio server, six codify_* tools (done)
-│   ├── opencode-wasm/      # wasm32 binding: WasmEngine over the zero-ML stack (done; D23)
-│   └── opencode-ffi/       # C-ABI staticlib over the same wire module (done; D24)
+│   ├── opencodifier-http/      # axum 0.8 /v1 API (done)
+│   ├── opencodifier-cli/       # clap CLI binary `opencodifier` (done)
+│   ├── opencodifier-mcp/       # rmcp 2.2 stdio server, six codify_* tools (done)
+│   ├── opencodifier-wasm/      # wasm32 binding: WasmEngine over the zero-ML stack (done; D23)
+│   └── opencodifier-ffi/       # C-ABI staticlib over the same wire module (done; D24)
 │
 ├── fixtures/                # wire-format fixtures per adapter (done, byte-locked)
 ├── recipes/                 # runnable decision graphs + captured responses (done)
@@ -96,7 +96,7 @@ itemgen ──► engine ──► core   (itemgen also declares the direct core
 (mcp/wasm, when they land, take the same engine-facade edge as cli/http)
 ```
 
-`opencode-core` must never depend on HTTP, MCP, CLI, Tokio, or any ML
+`opencodifier-core` must never depend on HTTP, MCP, CLI, Tokio, or any ML
 runtime (PLANNING.md §39). Heavyweight dependencies are each confined to
 exactly one crate — see `docs/DECISIONS.md` (feature-flag matrix).
 
@@ -109,7 +109,7 @@ exactly one crate — see `docs/DECISIONS.md` (feature-flag matrix).
   clippy::float_cmp`), integration tests in `tests/`, property tests with
   `proptest`, benchmarks in `benches/` (`criterion`, `harness = false`).
 - Errors: one error enum per crate, `thiserror`-derived, with a stable
-  `code()` string (see `crates/opencode-core/src/error.rs` for the
+  `code()` string (see `crates/opencodifier-core/src/error.rs` for the
   pattern). `anyhow` is banned from public APIs.
 - Every public item is rustdoc-documented; `missing_docs` + CI
   `-D warnings` make that enforceable.

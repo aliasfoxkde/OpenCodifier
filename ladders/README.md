@@ -1,7 +1,7 @@
 # Ladder profiles
 
 Named `LadderProfile` documents (see
-`crates/opencode-engine/src/ladder.rs`): per-node-kind confidence
+`crates/opencodifier-engine/src/ladder.rs`): per-node-kind confidence
 gates and per-rung calibration artifacts that the engine consults at the
 existing gate instead of the request's own policy. Loading one is how an
 escalation ladder ships — data, not code, validated before an engine is
@@ -13,8 +13,8 @@ byte-identically to a single-policy engine.
 Both `decide` and `serve` (and `mcp serve`) accept `--ladder <PATH>`:
 
 ```bash
-opencode serve --ladder ladders/fusion-v1.json
-opencode decide --ladder ladders/proofs-only-v1.json -i request.json
+opencodifier serve --ladder ladders/fusion-v1.json
+opencodifier decide --ladder ladders/proofs-only-v1.json -i request.json
 ```
 
 A non-empty profile decorates the cache identity with
@@ -29,7 +29,7 @@ The escalation tail is a running llama-server serving the
 D26), attached with `--llama`:
 
 ```bash
-opencode serve --ladder ladders/fusion-v1.json \
+opencodifier serve --ladder ladders/fusion-v1.json \
     --llama http://127.0.0.1:8080 \
     --llama-model-id 'pd-fork-ad129b0|qwen3.5-2b-q4_k_m|tree-v2'
 ```

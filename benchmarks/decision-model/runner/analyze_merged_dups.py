@@ -8,7 +8,7 @@ corpus carry, where does it live (source, question-kind), and what does
 the kind imbalance look like (148k relevance-noul vs ~2k choice/score
 questions is the gap the VIVERE extraction lane would fill).
 
-Records are `opencode.distill-record/1`: `request.state` +
+Records are `opencodifier.distill-record/1`: `request.state` +
 `request.questions` {name: {type, instructions, criteria}} + `target`.
 The training unit is the (state, question) pair, so kinds are counted
 per question; duplication is measured on canonicalized state text.

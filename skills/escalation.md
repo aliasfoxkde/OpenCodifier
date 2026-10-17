@@ -1,6 +1,6 @@
 # Skill: escalation
 
-**Decision area:** what to do when OpenCode cannot decide — the
+**Decision area:** what to do when OpenCodifier cannot decide — the
 `abstain` handling protocol (PLANNING.md §78 is the worked example).
 
 An abstention is a successful outcome that says: *at this policy, with

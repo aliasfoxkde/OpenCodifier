@@ -1,15 +1,15 @@
 {
-  "name": "opencode_decide",
+  "name": "opencodifier_decide",
   "description": "Answer every decision question exactly once, using the provided state.",
   "input_schema": {
     "type": "object",
-    "title": "opencode_decisions",
+    "title": "opencodifier_decisions",
     "description": "One field per decision question, answered in a single response.",
     "properties": {
       "difficulty": {
         "type": "integer",
         "title": "How difficult is this request?",
-        "description": "opencode:levels=[\"trivial\",\"easy\",\"moderate\",\"difficult\",\"expert\"]",
+        "description": "opencodifier:levels=[\"trivial\",\"easy\",\"moderate\",\"difficult\",\"expert\"]",
         "minimum": 0,
         "maximum": 4
       }

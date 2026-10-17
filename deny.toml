@@ -30,7 +30,7 @@ yanked = "deny"
 # is re-reviewed at each release cut. An ignore without all three is a
 # hole, not a decision.
 ignore = [
-  { id = "RUSTSEC-2024-0436", reason = "paste is archived/unmaintained, not vulnerable; transitive via tokenizers 0.22 (opencode-model ONNX transport, Kai-0.6B rung, 8caf34f). No paste-free tokenizers release exists (upstream suggests pastey). Re-check on every tokenizers bump and at each release: drop the ignore the day tokenizers drops paste." },
+  { id = "RUSTSEC-2024-0436", reason = "paste is archived/unmaintained, not vulnerable; transitive via tokenizers 0.22 (opencodifier-model ONNX transport, Kai-0.6B rung, 8caf34f). No paste-free tokenizers release exists (upstream suggests pastey). Re-check on every tokenizers bump and at each release: drop the ignore the day tokenizers drops paste." },
 ]
 
 [bans]

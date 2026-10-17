@@ -1,6 +1,6 @@
-Yes. I think **games are actually one of the best demonstrations for OpenCode**, because they make the value of a fast deterministic decision engine immediately visible.
+Yes. I think **games are actually one of the best demonstrations for OpenCodifier**, because they make the value of a fast deterministic decision engine immediately visible.
 
-I looked at the current repository. The important distinction is that OpenCode is not simply a decision tree: it is explicitly designed to take structured/unstructured state, produce typed decisions, expose confidence/abstention, and escalate from cheap deterministic mechanisms toward more expensive mechanisms only when necessary. [GitHub](https://github.com/aliasfoxkde/OpenCode)
+I looked at the current repository. The important distinction is that OpenCodifier is not simply a decision tree: it is explicitly designed to take structured/unstructured state, produce typed decisions, expose confidence/abstention, and escalate from cheap deterministic mechanisms toward more expensive mechanisms only when necessary. [GitHub](https://github.com/aliasfoxkde/OpenCodifier)
 
 That opens up some much more interesting demos than "NPC chooses attack or flee."
 
@@ -30,7 +30,7 @@ Every creature continuously asks:
 
 > **"What should I do next?"**
 
-And OpenCode answers:
+And OpenCodifier answers:
 
 ```text
 EAT
@@ -70,7 +70,7 @@ Water nearby: NO
 Shelter nearby: YES
 ```
 
-OpenCode evaluates:
+OpenCodifier evaluates:
 
 ```text
 Eat       → 0.81
@@ -89,7 +89,7 @@ Then the world changes.
 
 The fun part is that you can **click any creature and watch its decision trace**.
 
-### Why this is excellent for OpenCode
+### Why this is excellent for OpenCodifier
 
 It demonstrates:
 
@@ -219,7 +219,7 @@ This gives you a nice demonstration of:
 
 **state → decision → action → changed state → new decision**
 
-That's essentially the fundamental OpenCode loop.
+That's essentially the fundamental OpenCodifier loop.
 
 ---
 
@@ -250,7 +250,7 @@ Your character has:
 - objective
 - inventory
 
-OpenCode decides which door is best.
+OpenCodifier decides which door is best.
 
 Then reveal the reasoning.
 
@@ -424,7 +424,7 @@ You could have:
 50,000 decisions/sec
 ```
 
-And OpenCode handles the individual decisions.
+And OpenCodifier handles the individual decisions.
 
 This would be a fantastic demonstration because **the complexity emerges from simple decisions**.
 
@@ -551,7 +551,7 @@ REASON: conflicting telemetry
 ACTION: escalate
 ```
 
-That's directly aligned with OpenCode's current design philosophy: **abstention is preferable to confidently making an unsupported decision.** [GitHub](https://github.com/aliasfoxkde/OpenCode)
+That's directly aligned with OpenCodifier's current design philosophy: **abstention is preferable to confidently making an unsupported decision.** [GitHub](https://github.com/aliasfoxkde/OpenCodifier)
 
 ---
 
@@ -585,7 +585,7 @@ Run 100,000 interactions.
 
 Then visualize the emergent results.
 
-This is particularly interesting because OpenCode isn't making a single decision in isolation.
+This is particularly interesting because OpenCodifier isn't making a single decision in isolation.
 
 It's making:
 
@@ -655,7 +655,7 @@ Instead, the behavior emerges from the decision system.
 
 # I'd actually build a 3-game demo suite
 
-Rather than committing to one game, I'd make **three tiny games sharing the same OpenCode runtime**.
+Rather than committing to one game, I'd make **three tiny games sharing the same OpenCodifier runtime**.
 
 ## Demo 1 — Decision
 
@@ -777,7 +777,7 @@ Latency: 7.4 μs
 
 This is much more convincing than a benchmark page.
 
-Your current README already exposes exactly the sort of things that make this possible: distribution, confidence reporting, and deterministic execution traces. [GitHub](https://github.com/aliasfoxkde/OpenCode)
+Your current README already exposes exactly the sort of things that make this possible: distribution, confidence reporting, and deterministic execution traces. [GitHub](https://github.com/aliasfoxkde/OpenCodifier)
 
 ---
 
@@ -790,7 +790,7 @@ I'd call it:
 The player sees essentially nothing except a small simulation.
 
 ```text
-           OpenCode
+           OpenCodifier
 
        1,000,000 DECISIONS
 
@@ -826,11 +826,11 @@ That gives you **both sides of the story**:
 
 **microsecond-level decision engine + human-understandable decisions.**
 
-And it fits OpenCode particularly well because the project is explicitly positioning itself as a lightweight decision substrate rather than another chatbot/LLM wrapper. [GitHub](https://github.com/aliasfoxkde/OpenCode)
+And it fits OpenCodifier particularly well because the project is explicitly positioning itself as a lightweight decision substrate rather than another chatbot/LLM wrapper. [GitHub](https://github.com/aliasfoxkde/OpenCodifier)
 
 ### My ranking
 
-| Game | Build difficulty | Demo value | OpenCode fit |
+| Game | Build difficulty | Demo value | OpenCodifier fit |
 |---|---:|---:|---:|
 | **MicroWorld / Survival** | Medium | ★★★★★ | ★★★★★ |
 | **Tower Defense** | Medium | ★★★★★ | ★★★★★ |
