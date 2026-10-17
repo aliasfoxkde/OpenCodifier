@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+(function () {
+  "use strict";
+  var mode = "system";
+  try {
+    var v = localStorage.getItem("oc-theme");
+    if (v === "light" || v === "dark" || v === "system") mode = v;
+  } catch (e) {}
+  var resolved = mode === "system"
+    ? (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")
+    : mode;
+  document.documentElement.setAttribute("data-theme", resolved);
+  document.documentElement.setAttribute("data-theme-mode", mode);
+})();
+</script>
+<title>OpenCodifier — Skewb: corner-twist decisions</title>
+<meta name="description" content="A Skewb simulator with corner-aware moves and a layer-by-layer solver. Every move is verified by simulation; ties go to the Decisions SDK engine.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="tw.css">
+</head>
+<body>
+<a class="skip-link" href="#skewb">Skip to the Skewb</a>
+<div class="bg-mesh" aria-hidden="true"></div>
+
+<nav class="nav">
+  <a class="brand" href="index.html">
+    <img src="assets/logo.svg" alt="" width="22" height="22"> opencodifier
+  </a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="benchmarks.html">Benchmarks</a>
+    <a href="playground.html" aria-current="page">Playground</a>
+    <a href="decide.html">Decide</a>
+    <a href="api.html">API</a>
+  </div>
+  <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Theme">
+    <svg class="tt-auto" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <svg class="tt-sun" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4.4" stroke="currentColor" stroke-width="2"/></svg>
+    <svg class="tt-moon" viewBox="0 0 24 24" fill="none"><path d="M20.2 14.5A8.3 8.3 0 0 1 9.5 3.8a8.3 8.3 0 1 0 10.7 10.7Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  </button>
+  <a class="btn btn-small" href="api.html">API docs</a>
+  <details class="nav-menu">
+    <summary aria-label="Open menu"><span></span><span></span><span></span></summary>
+    <div class="nav-menu-panel">
+      <a href="index.html">Home</a>
+      <a href="benchmarks.html">Benchmarks</a>
+      <a href="playground.html" aria-current="page">Playground</a>
+      <a href="decide.html">Decide</a>
+      <a href="api.html">API</a>
+    </div>
+  </details>
+</nav>
+
+<header class="hero hero-slim" id="top">
+  <h1>The <span class="grad">Skewb</span></h1>
+  <p class="hero-sub">
+    A corner-turning puzzle with four axes, eight corners, and six face centers.
+    Scramble it, make moves, and follow the layer-by-layer plan. Every move
+    is verified by simulation; ties go to the engine.
+  </p>
+</header>
+
+<main>
+<section id="skewb" class="section" data-toc-label="Skewb">
+  <div id="skb-root" aria-label="Skewb puzzle"></div>
+
+  <div class="grid-2 game-about">
+    <div class="card">
+      <h3>What decides what</h3>
+      <ul class="checks">
+        <li><strong>The method is a rule.</strong> Layer-by-layer: orient corners,
+          permute corners, orient edges. Every move is verified by simulation.</li>
+        <li><strong>Genuine ties are the setup moves.</strong> When two setups reach
+          the next phase equally, the engine picks one. A refusal falls back to
+          roster order without derailing the solve.</li>
+      </ul>
+    </div>
+    <div class="card card-honest">
+      <h3>Honest edges</h3>
+      <ul class="crosses">
+        <li>Turns are instant with a face flash — the state shown is exact.</li>
+        <li>The scoreboard is session-only; nothing leaves this tab.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="footer">
+  <div class="footer-grid">
+    <div class="foot-about">
+      <div class="foot-brand">opencodifier</div>
+      <p>A local-first decision runtime with calibrated confidence and honest abstention.</p>
+    </div>
+    <nav class="foot-col" aria-label="Site">
+      <a href="index.html">Home</a>
+      <a href="playground.html">Playground</a>
+      <a href="decide.html">Decide</a>
+      <a href="api.html">API docs</a>
+    </nav>
+  </div>
+  <p class="foot-links">Apache-2.0 · local-first · no telemetry</p>
+</footer>
+
+<script src="site-core.js"></script>
+<script src="toc.js"></script>
+<script src="sdk/decisions-sdk.js"></script>
+<script src="skewb-core.js"></script>
+<script src="skewb.js"></script>
+</body>
+</html>

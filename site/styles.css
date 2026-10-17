@@ -1722,7 +1722,7 @@ html[data-theme="light"] .lg-exit { border-color: #0a5a4f; }
 .cube3d-face:not(.inner) {
   border: 1px solid rgba(8, 10, 14, 0.55);
   box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.22);
-  transition: filter 0.16s ease, box-shadow 0.16s ease;
+  transition: filter 0.16s ease, box-shadow 0.16s ease, background 0.25s ease;
 }
 .cube3d-face.flash {
   filter: brightness(1.45) saturate(1.2);

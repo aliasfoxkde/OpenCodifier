@@ -637,6 +637,23 @@
     $("bd-add-cand").addEventListener("click", function () {
       $("bd-cands").appendChild(bdCandRow("", ""));
     });
+    /* Quick-start example cards above the form */
+    document.querySelectorAll(".bd-quick-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var preset = btn.getAttribute("data-preset");
+        var map = {
+          proof:   { id: "choice", ex: BD_EXAMPLES.choice },
+          lexical:  { id: "choice", ex: BD_EXAMPLES.choice },
+          hard:    { id: "yes-no", ex: BD_EXAMPLES["yes-no"] },
+          boolean: { id: "yes-no", ex: BD_EXAMPLES["yes-no"] },
+        };
+        var def = map[preset];
+        if (!def) return;
+        $("bd-category").value = def.id;
+        bdLoadExample(def.id, def.ex);
+        document.getElementById("bd-state").scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    });
     $("bd-view-form").addEventListener("click", function () {
       /* leaving JSON: populate the form only when the JSON matches its shape */
       if (!$("bd-jsonpane").hidden) {
