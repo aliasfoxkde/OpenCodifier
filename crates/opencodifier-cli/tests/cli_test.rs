@@ -941,6 +941,34 @@ fn serve_ends_cleanly_when_the_operator_interrupts_it() {
         panic!("serve never began accepting connections on {addr}");
     }
 
+    // A successful `connect` only proves the socket is bound — the kernel
+    // completes it against the listen backlog before the runtime has
+    // registered the ctrl-c handler. Under the instrumented coverage build
+    // that gap widens enough for an early SIGINT to hit default disposition
+    // (signal death, `code() == None`; CI runs 23d5e45f, e0c5b73f). Only
+    // interrupt once the server demonstrably answers requests.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    loop {
+        let answered = std::net::TcpStream::connect(addr).is_ok_and(|mut stream| {
+            use std::io::{Read, Write};
+            stream.set_read_timeout(Some(std::time::Duration::from_secs(2))).is_ok()
+                && write!(
+                    stream,
+                    "GET /v1/healthz HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n"
+                )
+                .is_ok()
+                && {
+                    let mut response = String::new();
+                    stream.read_to_string(&mut response).is_ok()
+                        && response.starts_with("HTTP/1.1 200")
+                }
+        });
+        if answered || std::time::Instant::now() >= deadline {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+
     let interrupted = std::process::Command::new("kill")
         .args(["-INT", &child.id().to_string()])
         .status()
