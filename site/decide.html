@@ -80,6 +80,21 @@
 }
 .bd-preset-chip:hover { color: var(--teal); border-color: var(--teal); }
 .bd-preset-chip.on { color: var(--teal); border-color: var(--teal); background: var(--tint-md); }
+.bd-adv-summary { cursor: pointer; font-weight: 600; font-size: 0.95rem; padding: 0.2rem 0; color: var(--ink-dim); }
+.bd-adv-summary:hover { color: var(--ink); }
+#bd-quickstart { margin-bottom: 1.2rem; }
+.bd-quick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.6rem; }
+.bd-quick-btn {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  padding: 0.75rem 0.9rem; border: 1px solid var(--line);
+  background: var(--card); border-radius: var(--radius);
+  cursor: pointer; text-align: left; width: 100%;
+  transition: border-color 0.15s, background 0.15s;
+}
+.bd-quick-btn:hover { border-color: var(--teal); background: var(--tint-sm); }
+.bd-quick-label { font-weight: 700; font-size: 0.88rem; color: var(--ink); }
+.bd-quick-desc { font-size: 0.76rem; color: var(--ink-dim); line-height: 1.4; }
+@media (max-width: 480px) { .bd-quick-grid { grid-template-columns: 1fr 1fr; } }
     .bd-graphcard { margin-top: 1.1rem; }
     .bd-graphcard h3 { margin: 0 0 0.75rem; font-size: 1rem; }
     .bd-graphcard .ctl + .ctl, .bd-graphcard .pg-actions { margin-top: 0.75rem; }
@@ -142,14 +157,12 @@
   <h1>The <span class="grad">Decide console</span></h1>
   <p class="hero-sub">
     The real engine, compiled to WASM, running in your tab — zero ML, zero
-    network, zero server. Send a request, read the decision, audit the trace.
+    network, zero server. Ask a question, pick candidates, read the decision.
   </p>
-  <dl class="chips" aria-label="Live runtime status">
+  <dl class="chips" aria-label="Live runtime status" style="margin-top:0.6rem">
     <div class="chip-item"><dt>Engine</dt><dd id="chip-engine">loading…</dd></div>
     <div class="chip-item"><dt>WASM</dt><dd id="chip-wasm">loading…</dd></div>
     <div class="chip-item"><dt>Network</dt><dd id="chip-network">measuring…</dd></div>
-    <div class="chip-item"><dt>Server</dt><dd>none — this page is static files</dd></div>
-    <div class="chip-item"><dt>LLM</dt><dd>none — zero-ML stack (rungs 1–4)</dd></div>
   </dl>
 </header>
 
@@ -157,12 +170,29 @@
 
 <section id="decide" class="section">
   <div class="kicker">Decide</div>
-  <h2>The full request → decision → trace loop</h2>
-  <p class="lede">
-    A request carries state, questions, and policy. The engine returns a decision per question
-    with a multi-dimensional confidence report, execution metrics, and a deterministic trace.
-    Refusals are rendered as the outcomes they are — the gate working, not an error.
-  </p>
+  <h2>Ask a question. Pick candidates. Read the decision.</h2>
+
+  <div id="bd-quickstart" aria-label="Try an example">
+    <p class="fineprint" style="margin:0 0 0.6rem;font-weight:600">Try an example:</p>
+    <div class="bd-quick-grid">
+      <button type="button" class="bd-quick-btn" data-preset="proof">
+        <span class="bd-quick-label">Accept case</span>
+        <span class="bd-quick-desc">Root-cause proof — accepts at confidence 1.0</span>
+      </button>
+      <button type="button" class="bd-quick-btn" data-preset="lexical">
+        <span class="bd-quick-label">Routing</span>
+        <span class="bd-quick-desc">Ticket routing — lexical match under the gate</span>
+      </button>
+      <button type="button" class="bd-quick-btn" data-preset="hard">
+        <span class="bd-quick-label">Abstain</span>
+        <span class="bd-quick-desc">No evidence — honest abstain below the gate</span>
+      </button>
+      <button type="button" class="bd-quick-btn" data-preset="boolean">
+        <span class="bd-quick-label">Boolean</span>
+        <span class="bd-quick-desc">Threshold question — yes or no with confidence</span>
+      </button>
+    </div>
+  </div>
 
   <div class="card bd-card" id="try-decision">
     <div class="bd-head">
@@ -232,69 +262,75 @@
     </div>
   </div>
 
-  <div class="pg-grid">
-    <div class="pg-inputs">
-      <div class="ctl">
-        <label for="preset-select">Request preset</label>
-        <select id="preset-select">
-          <option value="proof">Proof — relational root cause (accepts at 1.0)</option>
-          <option value="lexical">Lexical — ticket routing (winner under the gate → verify)</option>
-          <option value="hard">Hard — no evidence (honest abstain)</option>
-          <option value="boolean">Boolean — threshold question</option>
-          <option value="invalid">Invalid — zero candidates (canonical refusal)</option>
-        </select>
-      </div>
-      <div class="ctl">
-        <label for="req-editor">Request JSON</label>
-        <textarea id="req-editor" spellcheck="false" rows="16" aria-describedby="req-help"></textarea>
-        <p class="fineprint" id="req-help">Anything you type stays in this tab — there is no
-          server to send it to. Invalid JSON or invalid requests return the same canonical
-          error codes the HTTP API returns.</p>
-      </div>
-      <div class="pg-actions">
-        <button type="button" class="btn" id="act-decide" disabled>Decide</button>
-        <button type="button" class="btn btn-ghost" id="act-batch" disabled>Decide batch ×3</button>
-      </div>
-      <details class="bd-refusal" id="bd-refusal">
-        <summary>Refusal codes — every way this engine says no</summary>
-        <dl class="bd-refusal-list">
-          <dt><code>ir.empty_candidates</code></dt><dd>Request carried an empty candidates set — there is nothing to choose between.</dd>
-          <dt><code>schema.*</code></dt><dd>The request did not match the canonical IR schema — the family covers invalid_json, missing_field, invalid_type, invalid_value, limit_exceeded.</dd>
-          <dt><code>graph.cycle</code></dt><dd>The declarative DAG contains a cycle; run it after breaking the loop.</dd>
-          <dt><code>engine.missing_backend</code></dt><dd>Graph needs a rung 5–7 backend (embedding / model / verifier) this tab does not ship.</dd>
-          <dt><strong>below the gate</strong> (no code)</dt><dd>Not a refusal — when calibrated confidence lands under the gate the answer ships as an HTTP 200 abstain, not an error.</dd>
-        </dl>
-      </details>
-    </div>
-
-    <div class="pg-results">
-      <div class="pg-statusline">
-        <span id="pg-badge" class="pg-badge pg-abstain" role="status">loading</span>
-      </div>
-      <div id="pg-output" aria-live="polite">
-        <p>Booting the WASM engine…</p>
-      </div>
-      <div class="card bd-graphcard">
-        <h3>Graph mode — declarative DAG</h3>
+  <details class="card" id="bd-advanced" style="margin-top:1.4rem">
+    <summary class="bd-adv-summary">
+      Advanced — raw JSON editor, graph mode, refusal codes
+    </summary>
+    <div class="pg-grid" style="margin-top:1rem">
+      <div class="pg-inputs">
         <div class="ctl">
-          <label for="graph-select">Graph preset</label>
-          <select id="graph-select">
-            <option value="minimal">Minimal — normalize → choice → threshold → output</option>
-            <option value="cyclic">Invalid — cyclic (graph.cycle refusal)</option>
+          <label for="preset-select">Request preset</label>
+          <select id="preset-select">
+            <option value="proof">Proof — relational root cause (accepts at 1.0)</option>
+            <option value="lexical">Lexical — ticket routing (winner under the gate → verify)</option>
+            <option value="hard">Hard — no evidence (honest abstain)</option>
+            <option value="boolean">Boolean — threshold question</option>
+            <option value="invalid">Invalid — zero candidates (canonical refusal)</option>
           </select>
         </div>
         <div class="ctl">
-          <label for="graph-editor">Graph JSON (declarative DAG)</label>
-          <textarea id="graph-editor" spellcheck="false" rows="9"></textarea>
+          <label for="req-editor">Request JSON</label>
+          <textarea id="req-editor" spellcheck="false" rows="16" aria-describedby="req-help"></textarea>
+          <p class="fineprint" id="req-help">Anything you type stays in this tab — there is no
+            server to send it to. Invalid JSON or invalid requests return the same canonical
+            error codes the HTTP API returns.</p>
         </div>
         <div class="pg-actions">
-          <button type="button" class="btn btn-ghost" id="act-validate-graph" disabled>Validate graph</button>
-          <button type="button" class="btn btn-ghost" id="act-run-graph" disabled>Run graph</button>
+          <button type="button" class="btn" id="act-decide" disabled>Decide</button>
+          <button type="button" class="btn btn-ghost" id="act-batch" disabled>Decide batch ×3</button>
         </div>
-        <p class="fineprint">A graph chains steps — normalize, decide, gate, output — in one request.
-          Validation checks shape and acyclicity locally; running feeds it through the same WASM engine.</p>
+        <details class="bd-refusal" id="bd-refusal" style="margin-top:0.75rem">
+          <summary>Refusal codes — every way this engine says no</summary>
+          <dl class="bd-refusal-list">
+            <dt><code>ir.empty_candidates</code></dt><dd>Request carried an empty candidates set — there is nothing to choose between.</dd>
+            <dt><code>schema.*</code></dt><dd>The request did not match the canonical IR schema — the family covers invalid_json, missing_field, invalid_type, invalid_value, limit_exceeded.</dd>
+            <dt><code>graph.cycle</code></dt><dd>The declarative DAG contains a cycle; run it after breaking the loop.</dd>
+            <dt><code>engine.missing_backend</code></dt><dd>Graph needs a rung 5–7 backend (embedding / model / verifier) this tab does not ship.</dd>
+            <dt><strong>below the gate</strong> (no code)</dt><dd>Not a refusal — when calibrated confidence lands under the gate the answer ships as an HTTP 200 abstain, not an error.</dd>
+          </dl>
+        </details>
       </div>
-  </div>
+
+      <div class="pg-results">
+        <div class="pg-statusline">
+          <span id="pg-badge" class="pg-badge pg-abstain" role="status">loading</span>
+        </div>
+        <div id="pg-output" aria-live="polite">
+          <p>Booting the WASM engine…</p>
+        </div>
+        <div class="card bd-graphcard">
+          <h3>Graph mode — declarative DAG</h3>
+          <div class="ctl">
+            <label for="graph-select">Graph preset</label>
+            <select id="graph-select">
+              <option value="minimal">Minimal — normalize → choice → threshold → output</option>
+              <option value="cyclic">Invalid — cyclic (graph.cycle refusal)</option>
+            </select>
+          </div>
+          <div class="ctl">
+            <label for="graph-editor">Graph JSON (declarative DAG)</label>
+            <textarea id="graph-editor" spellcheck="false" rows="9"></textarea>
+          </div>
+          <div class="pg-actions">
+            <button type="button" class="btn btn-ghost" id="act-validate-graph" disabled>Validate graph</button>
+            <button type="button" class="btn btn-ghost" id="act-run-graph" disabled>Run graph</button>
+          </div>
+          <p class="fineprint">A graph chains steps — normalize, decide, gate, output — in one request.
+            Validation checks shape and acyclicity locally; running feeds it through the same WASM engine.</p>
+        </div>
+      </div>
+    </div>
+  </details>
 
   <div class="card card-honest pg-note">
     <h3>What this is — and what it is not</h3>
