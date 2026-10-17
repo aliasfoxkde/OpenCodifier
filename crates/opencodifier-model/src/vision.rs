@@ -34,8 +34,8 @@
 use std::sync::Arc;
 
 use opencodifier_core::{
-    BooleanQuestion, ChoiceQuestion, DecisionQuestion, Distribution, ImageInput,
-    ScoreQuestion, State,
+    BooleanQuestion, ChoiceQuestion, DecisionQuestion, Distribution, ImageInput, ScoreQuestion,
+    State,
 };
 use opencodifier_engine::error::{EngineError, EngineResult};
 use opencodifier_engine::{Classifier, negation_polarity, softmax};
