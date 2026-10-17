@@ -85,7 +85,7 @@ batched tails exceeded the old fixed limit.
 
 ### Arm types
 
-1. **engine** (`run_engine.py`) — OpenCode's own binary, builtin
+1. **engine** (`run_engine.py`) — OpenCodifier's own binary, builtin
    lexical pipeline, zero ML. The baseline every model must beat to earn
    its latency. Outcomes route (accept/verify/abstain) as part of the
    contract.
@@ -1114,16 +1114,16 @@ python3 runner/run_llama.py --llama-dir /path/to/llama.cpp \
     --out "$RUNS/llama__<model>.json"
 
 # other arms
-python3 runner/run_engine.py --binary target/release/opencode \
+python3 runner/run_engine.py --binary target/release/opencodifier \
     --out "$RUNS/engine__builtin-lexical.json"
 python3 runner/run_embed.py --model-dir /path/to/minilm --out "$RUNS/embed__minilm.json"
 python3 runner/run_laya.py --out "$RUNS/laya__en.json"
 
 # long-context focused-extraction A/B (§45); regenerate the suite first
 python3 runner/make_long_suite.py
-python3 runner/run_engine.py --binary target/release/opencode \
+python3 runner/run_engine.py --binary target/release/opencodifier \
     --suite suite/suite_long.json --out "$RUNS/engine__lexical__long__full.json"
-python3 runner/run_engine.py --binary target/release/opencode \
+python3 runner/run_engine.py --binary target/release/opencodifier \
     --suite suite/suite_long.json --focus-budget 512 \
     --out "$RUNS/engine__lexical__long__focused.json"
 
@@ -1597,7 +1597,7 @@ hash is a changed artifact and invalidates the row (D14).
   it; **Qyvos ships safetensors + a Python `julia` package (Bend-language
   router), no GGUF**. Follow-up lanes, in preference order: Julia-1 via
   its official ONNX export (parity cases + accuracy metrics included —
-  the natural `InferenceBackend` arm for `opencode-runtime`), a
+  the natural `InferenceBackend` arm for `opencodifier-runtime`), a
   laya-GGUF endpoint lane, NeoHorse under a newer llama.cpp, a
   `julia`-package adapter for Qyvos. Fleet note: an unrelated sibling
   CUDA llama-server (port 8080) shares fedora; it does not contend with
@@ -1822,7 +1822,7 @@ hash is a changed artifact and invalidates the row (D14).
     median latency on their GPUs), and **vllm-sr Decision-2.0-Kai-
     0.6B** (Qwen3-0.6B-Base backbone + `decision_head.safetensors`).
     This is the same shape as our candidate-conditioned
-    `opencode-model` rung — two independent validations of the
+    `opencodifier-model` rung — two independent validations of the
     design. Their training recipes read like our rules doc: Brier
     loss for calibration, RLCD with partial credit for adjacent
     ordinal choices (relevant to our score kind), and synthetic

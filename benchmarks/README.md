@@ -3,7 +3,7 @@
 Per DECISIONS.md D9: criterion measurements are kept per release as the
 regression baseline. Regression = p99 over budget on the reference
 machine class (4-core laptop). Everything below is **measured**
-(`cargo bench -p opencode-engine --bench engine`), not projected.
+(`cargo bench -p opencodifier-engine --bench engine`), not projected.
 
 Date: 2026-09-25 · Engine at commit `85cd2ec` (Phases 0–11 complete)
 
@@ -29,7 +29,7 @@ pipeline benchmark rather than in isolation; embedding scoring is
 ## Reproducing
 
 ```bash
-cargo bench -p opencode-engine --bench engine
+cargo bench -p opencodifier-engine --bench engine
 ```
 
 Criterion's own history (trend deltas) lives under

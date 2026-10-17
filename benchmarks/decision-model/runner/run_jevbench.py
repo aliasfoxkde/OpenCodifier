@@ -206,7 +206,7 @@ def render_slot_item(t) -> tuple[str, list[str], list[str]] | None:
 
 
 class EngineAdapter:
-    name = "opencode-engine"
+    name = "opencodifier-engine"
     price_input_per_m = 0.0
     price_output_per_m = 0.0
 

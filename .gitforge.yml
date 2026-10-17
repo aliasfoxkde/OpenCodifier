@@ -1,9 +1,9 @@
-# OpenCode CI — GitForge (primary CI/CD platform).
+# OpenCodifier CI — GitForge (primary CI/CD platform).
 #
 # GitHub Actions (.github/workflows/) is a mirror only; this file is the
 # pipeline of record. Quality gates mirror `just ci` exactly.
 #
-# All jobs run on the runner-local `opencode-ci-rust` image, which bakes
+# All jobs run on the runner-local `opencodifier-ci-rust` image, which bakes
 # the toolchain, rustfmt/clippy, cargo-deny, cargo-audit, aegis (pinned
 # rev), cargo-llvm-cov + llvm-tools (coverage lane), and a warm crate
 # registry. Tools are NOT installed at job runtime:
@@ -21,7 +21,7 @@
 # share the same workspace directory and concurrent cargo invocations will
 # corrupt each other's build locks — collapse this to a linear chain the
 # same day (the layout GitForge's own pipeline documents).
-name: opencode-ci
+name: opencodifier-ci
 version: "1.0"
 trigger_on:
   - push
@@ -31,7 +31,7 @@ environment:
   RUSTFLAGS: "-D warnings"
 jobs:
   - name: lint
-    image: opencode-ci-rust:2
+    image: opencodifier-ci-rust:2
     # 45m: 2026-10-08 receipts — run 857acb2e (f21cd8b) timed out at 20m
     # with the host at load ~30 (co-tenant storm; the same contention the
     # test job's 60m budget was sized for). fmt+clippy from a fresh clone
@@ -44,7 +44,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
   - name: test
-    image: opencode-ci-rust:2
+    image: opencodifier-ci-rust:2
     needs: [lint]
     # 60m: 2026-10-03 receipts — killed at 43m (old 20m budget, watchdog
     # reconcile) and again at 45m17s under the new budget, both in
@@ -80,7 +80,7 @@ jobs:
           export CARGO_BUILD_JOBS=4
           export CARGO_TARGET_DIR=/tmp/oc-test-target
           export RUSTFLAGS="-D warnings -C debuginfo=0"
-          cargo test -p opencode-model --features llamacpp,tokenizers
+          cargo test -p opencodifier-model --features llamacpp,tokenizers
       - name: Documentation tests
         run: |
           export CARGO_BUILD_JOBS=4
@@ -89,7 +89,7 @@ jobs:
           cargo test --doc
 
   - name: doc
-    image: opencode-ci-rust:2
+    image: opencodifier-ci-rust:2
     needs: [lint]
     # 30m: doc timed out at 15m in the same storm window (2026-10-03).
     timeout: 30m
@@ -100,7 +100,7 @@ jobs:
           cargo doc --workspace --no-deps
 
   - name: e2e
-    image: opencode-ci-rust:2
+    image: opencodifier-ci-rust:2
     needs: [test]
     timeout: 30m
     steps:
@@ -112,10 +112,10 @@ jobs:
           export CARGO_TARGET_DIR=/tmp/oc-e2e-target
           cargo build --release
       - name: End-to-end validation (serve + MCP, PLAN 18d)
-        run: python3 scripts/e2e_validate.py --binary /tmp/oc-e2e-target/release/opencode --port 8188
+        run: python3 scripts/e2e_validate.py --binary /tmp/oc-e2e-target/release/opencodifier --port 8188
 
   - name: supply-chain
-    image: opencode-ci-rust:2
+    image: opencodifier-ci-rust:2
     needs: [lint]
     timeout: 30m
     steps:
@@ -138,7 +138,7 @@ jobs:
   # wall time; it stays in the default graph because coverage regressions
   # are exactly the kind of failure that is silent everywhere else.
   - name: coverage
-    image: opencode-ci-rust:2
+    image: opencodifier-ci-rust:2
     needs: [lint]
     # 60m (was 45m): the -j 4 storm-fit above also applies here (same 4 GiB
     # container cap; the instrumented rebuild is the single longest phase).

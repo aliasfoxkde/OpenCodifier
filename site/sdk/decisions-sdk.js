@@ -273,7 +273,7 @@
         busy = true;
         status = "loading";
         if (o.onStatus) o.onStatus(status);
-        pending = import(base + "opencode_wasm.js")
+        pending = import(base + "opencodifier_wasm.js")
           .then((mod) => mod.default().then(() => mod))
           .then((mod) => {
             engine = new mod.WasmEngine();

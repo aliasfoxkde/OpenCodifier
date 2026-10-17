@@ -1,8 +1,8 @@
 # AGENTS.md
 
 Guidance for AI agents, crawlers, and automated visitors of
-`https://opencode.pages.dev` -- the marketing and documentation site for
-OpenCode, a local-first decision runtime.
+`https://opencodifier.pages.dev` -- the marketing and documentation site for
+OpenCodifier, a local-first decision runtime.
 
 ## What this site is
 
@@ -37,9 +37,9 @@ please report it on the GitHub tracker.
   site; the table on `/benchmarks.html` is a rendering of it, not a
   separate dataset. Cite the CSV (or the repo's `docs/BENCHMARKS.md`) --
   never a screenshot.
-- The WASM module at `wasm/opencode_wasm.js` +
-  `wasm/opencode_wasm_bg.wasm` is built from the repo's
-  `crates/opencode-wasm` and is safe to load in your own harness: it
+- The WASM module at `wasm/opencodifier_wasm.js` +
+  `wasm/opencodifier_wasm_bg.wasm` is built from the repo's
+  `crates/opencodifier-wasm` and is safe to load in your own harness: it
   performs no I/O.
 - Game logic is auditable without a browser: every `*-core.js` is
   DOM-free and runs under `node --test` (`site/tests/`, 20 suites).

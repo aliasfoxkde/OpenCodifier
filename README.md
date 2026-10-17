@@ -1,6 +1,6 @@
-# OpenCode
+# OpenCodifier
 
-An ultra-fast, deterministic-first, local AI **decision runtime**. OpenCode
+An ultra-fast, deterministic-first, local AI **decision runtime**. OpenCodifier
 turns unstructured state into small, machine-actionable decisions — choice,
 boolean, score — using the cheapest reliable mechanism at each stage, so
 expensive generative AI only runs when necessary.
@@ -9,7 +9,7 @@ It is not a chatbot, not an LLM wrapper, and not a decision-tree classifier:
 it is the decision *substrate* an AI system calls before invoking a large
 model. Jev/System One compatibility is one adapter mode, not the identity.
 
-**Live site & measured benchmark board:** [opencode.pages.dev](https://opencode.pages.dev)
+**Live site & measured benchmark board:** [opencodifier.pages.dev](https://opencodifier.pages.dev)
 — every number this project claims, one filterable table, no hand-typed figures.
 
 ## Status
@@ -21,7 +21,7 @@ cross-rung escalation), candidate-conditioned decision-model backends,
 backend traits, and the CLI, HTTP, MCP, and WASM interfaces are
 implemented and tested:
 
-- `opencode` CLI — `decide`, `graph validate`, `serve`,
+- `opencodifier` CLI — `decide`, `graph validate`, `serve`,
   `mcp serve`, `models verify`, `ladder fit-boolean`,
   `recipe list`, `recipe install`
   (see `--help` for the exit-code contract).
@@ -34,7 +34,7 @@ implemented and tested:
   llama.cpp loopback backend (D26) sits behind the `llamacpp` cargo
   feature, with cross-rung escalation (D27) for the verify/abstain
   bands.
-- MCP — `opencode mcp serve` exposes `codify_decide`,
+- MCP — `opencodifier mcp serve` exposes `codify_decide`,
   `codify_batch`, `codify_graph`, `codify_validate`, `codify_verify`,
   and `codify_explain` as tools over stdio: point any MCP host at the
   binary and the runtime's decisions become host-side tool calls. Stdio
@@ -45,7 +45,7 @@ document is [`docs/PLANNING.md`](docs/PLANNING.md). Try it with the
 committed native fixture (choice + score + boolean in one request):
 
 ```bash
-cargo run -p opencode-cli -- decide --input fixtures/native/request.json
+cargo run -p opencodifier-cli -- decide --input fixtures/native/request.json
 ```
 
 The response carries a full distribution per answer, a multi-dimensional
@@ -58,7 +58,7 @@ to print the execution report. Validate any decision graph without
 running it:
 
 ```bash
-cargo run -p opencode-cli -- graph validate <graph.json>
+cargo run -p opencodifier-cli -- graph validate <graph.json>
 ```
 
 Ready-to-run decision graphs — including the smallest graph that can
@@ -87,11 +87,11 @@ against.
 Decision-model weights publish to HuggingFace, gated on the release
 policy (suite and benchmark floors before anything ships):
 
-- [`aliasfox/OpenCode-Decision-2B-v6full`](https://huggingface.co/aliasfox/OpenCode-Decision-2B-v6full)
+- [`aliasfox/OpenCodifier-Decision-2B-v6full`](https://huggingface.co/aliasfox/OpenCodifier-Decision-2B-v6full)
   — the published gated weights: per-surface numbers, shipped per-kind
   calibration, withheld-corpus disclosure.
 - [The aliasfox org](https://huggingface.co/aliasfox) — home of all
-  OpenCode model releases.
+  OpenCodifier model releases.
 
 Weights are never downloaded automatically — not at build time, not at
 runtime. Access is explicit opt-in ([release policy](docs/RELEASE_POLICY.md)).
@@ -99,8 +99,8 @@ runtime. Access is explicit opt-in ([release policy](docs/RELEASE_POLICY.md)).
 ## Development
 
 ```bash
-git clone https://github.com/aliasfoxkde/OpenCode
-cd OpenCode
+git clone https://github.com/aliasfoxkde/OpenCodifier
+cd OpenCodifier
 just ci        # fmt + clippy (strict) + tests + doc + cargo-deny + aegis
 just coverage  # line coverage (cargo llvm-cov)
 ```

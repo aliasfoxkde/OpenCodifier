@@ -8,12 +8,12 @@
 
 ## Reporting a vulnerability
 
-OpenCode is designed to run fully local and offline, but it still parses
+OpenCodifier is designed to run fully local and offline, but it still parses
 hostile input: decision schemas, candidate descriptions, graph definitions,
 and model manifests (PLANNING.md §66).
 
 Please report vulnerabilities privately via GitHub
-[security advisories](https://github.com/aliasfoxkde/OpenCode/security/advisories/new)
+[security advisories](https://github.com/aliasfoxkde/OpenCodifier/security/advisories/new)
 rather than public issues. Include a minimal reproducer (input file +
 invocation) and the affected crate/version.
 
@@ -36,5 +36,5 @@ Contributors must preserve these properties; violations are security bugs:
    and must not panic on malformed input.
 4. **Model integrity.** Model downloads are explicit and verified against
    the SHA-256 in a signed manifest before use.
-5. **Local bind default.** `opencode serve` binds `127.0.0.1` unless the
+5. **Local bind default.** `opencodifier serve` binds `127.0.0.1` unless the
    operator passes an explicit non-local host flag.

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Active development, phase-by-phase — see **`docs/PLAN.md`** (live execution plan + phase status table) and **`docs/DECISIONS.md`** (binding decision records; they supersede anything contradictory in `docs/PLANNING.md`). Architecture overview: `docs/ARCHITECTURE.md`; layout: `docs/PROJECT_STRUCTURE.md`. The founding spec `docs/PLANNING.md` is the source of truth for intent (§§1–80). License: Apache-2.0.
 
-## What OpenCode Is
+## What OpenCodifier Is
 
 A local-first, deterministic-first **decision runtime** — not a chatbot, not an LLM wrapper, not a decision-tree classifier, and not a "Jev clone" (Jev/System One compatibility is one adapter mode, not the identity). It turns unstructured state into small, machine-actionable typed decisions:
 
@@ -22,12 +22,12 @@ Outputs are machine-readable decisions with calibrated confidence. Abstention is
 
 Rust workspace (edition 2024, MSRV 1.90), crates under `crates/`:
 
-- `opencode-core` — canonical decision IR (shipped): validating constructors, stable error codes (`ir.*`), `trace_version` on traces, `#[non_exhaustive]` public enums, outcome routing in `ConfidenceReport::outcome_for`
-- `opencode-engine` — DAG executor, rule engine, candidate narrowing (metadata + hand-written BM25), exact-decision cache with the single normative `CacheKeyBuilder` (SHA-256), relational solver (exact proofs over extracted facts; the default zero-ML stack via `EngineHandle::lexical`), `Calibration` seam, `LadderPolicy` per-node/per-kind gate overrides (D25; empty = byte-identical), sync with `Clock`/`Deadline` traits
-- `opencode-schema` — native / OpenAI / Anthropic / Jev adapters over the IR (wire formats live only here)
-- `opencode-runtime` — `InferenceBackend`/`EmbeddingBackend` traits; `ort` behind the `onnx` feature only
-- `opencode-model` — candidate-conditioned decision model: logits from ONNX, all decision math in Rust f64
-- `opencode-http`, `opencode-mcp`, `opencode-cli`, `opencode-wasm`, `opencode-ffi` — interfaces (axum 0.8 `/v1` [D12 amended], rmcp 2.2, clap v4, C-ABI staticlib [D24])
+- `opencodifier-core` — canonical decision IR (shipped): validating constructors, stable error codes (`ir.*`), `trace_version` on traces, `#[non_exhaustive]` public enums, outcome routing in `ConfidenceReport::outcome_for`
+- `opencodifier-engine` — DAG executor, rule engine, candidate narrowing (metadata + hand-written BM25), exact-decision cache with the single normative `CacheKeyBuilder` (SHA-256), relational solver (exact proofs over extracted facts; the default zero-ML stack via `EngineHandle::lexical`), `Calibration` seam, `LadderPolicy` per-node/per-kind gate overrides (D25; empty = byte-identical), sync with `Clock`/`Deadline` traits
+- `opencodifier-schema` — native / OpenAI / Anthropic / Jev adapters over the IR (wire formats live only here)
+- `opencodifier-runtime` — `InferenceBackend`/`EmbeddingBackend` traits; `ort` behind the `onnx` feature only
+- `opencodifier-model` — candidate-conditioned decision model: logits from ONNX, all decision math in Rust f64
+- `opencodifier-http`, `opencodifier-mcp`, `opencodifier-cli`, `opencodifier-wasm`, `opencodifier-ffi` — interfaces (axum 0.8 `/v1` [D12 amended], rmcp 2.2, clap v4, C-ABI staticlib [D24])
 
 Binding structural rules:
 
@@ -47,7 +47,7 @@ From PLANNING.md §73 — these are the point of the architecture:
 - Free-form generation fields in a schema → `unsupported_generation_field`; do not pretend to support prose generation.
 - Never expose chain-of-thought; explainability means a deterministic execution trace.
 - All cache keys include model/calibration/policy/graph versions so artifact updates invalidate cached decisions.
-- `opencode serve` binds `127.0.0.1` by default; `0.0.0.0` requires an explicit flag.
+- `opencodifier serve` binds `127.0.0.1` by default; `0.0.0.0` requires an explicit flag.
 - Treat all input as hostile; input text must never modify policy, thresholds, graph structure, or paths.
 - No placeholders/stubs/simulated data anywhere; example payloads belong in docs, not code.
 

@@ -63,7 +63,7 @@ CUDA) therefore runs the CPU EP, silently.
 
 Consequences:
 
-- The `opencode-model` rung cannot get GPU acceleration through
+- The `opencodifier-model` rung cannot get GPU acceleration through
   ORT+Vulkan; any claim otherwise would be fabricated.
 - The pragmatic fast model path on this host is the **llama.cpp Vulkan
   build of the decision fork** (measured 2.23× vs CPU in the Device A/B,
@@ -75,7 +75,7 @@ Consequences:
 - Community `onnx-vulkan-rs` exists; noted, not adopted (unaudited surface
   behind a security-sensitive seam).
 
-## 4. OpenCode-relevant repos / implementations to track
+## 4. OpenCodifier-relevant repos / implementations to track
 
 - `lawrence3699/jev-style` + chaoliangUNSW 0.8B/2B decision models — the
   Jev-class reference line; guard.py is the #40 blueprint,
@@ -102,7 +102,7 @@ and AWS blog posts, the strands-labs GitHub README). Central result:
 **the typed-decision IR is converging across the industry** — all four
 families speak state + typed question (`choice` / `noul`≈boolean /
 `score`) + per-option probabilities + calibrated confidence, with no
-generation. OpenCode's IR is not idiosyncratic; it is the emerging
+generation. OpenCodifier's IR is not idiosyncratic; it is the emerging
 wire shape of the class.
 
 ### 6.1 Contrastive-LM CLM-v0.1-8B (and czl GGUF export)
@@ -114,7 +114,7 @@ Sources: `huggingface.co/Contrastive-LM/CLM-v0.1-8B`,
   two small projection heads (state head, action head), trained with
   bidirectional InfoNCE. Training: ~60M Nemotron QA pairs, ~30M synthetic
   hard negatives, ~1M agentic trajectories. Apache-2.0 (weights and base).
-- **It is a System One model in OpenCode's exact sense**: "CLM only
+- **It is a System One model in OpenCodifier's exact sense**: "CLM only
   scores the candidates you give it, and its probabilities are relative
   to that set" — candidate-conditioned, no generation. Zero-shot claimed
   ~Jev parity on computer-use/gaming/tool-calling at up to 9× lower
@@ -208,7 +208,7 @@ Sources: `huggingface.co/Mattepiu/laya-onnx`,
   is a candidate design.
 - **ONNX artifact**: `laya.onnx` + `laya_int8.onnx` (421M, CPU-feasible,
   single forward pass) — the strongest ONNX-native model-rung candidate
-  found so far for `opencode-runtime`'s `InferenceBackend` (the
+  found so far for `opencodifier-runtime`'s `InferenceBackend` (the
   qwen3.5 hybrid measured ≥9× worse under ORT, F25; a ModernBERT-class
   bidirectional encoder is the ORT-friendly shape). Marker positions are
   runtime inputs (`marker_pos`, `marker_mask`, `qtype`), i.e. the
@@ -421,7 +421,7 @@ fleet (robots/simulation) — context only.
    competitors do; our D15 already requires it).
 5. **Watch** — CLM-35B "early October"; Strands v20+ iterations; the
    `contrastive-lm` head-training recipe (cheap per-task verifier
-   heads) as a candidate for OpenCode's own rung fine-tuning
+   heads) as a candidate for OpenCodifier's own rung fine-tuning
    story (TRAINING.md).
 
 ## 7. Hierarchical Reasoning Model and its text adaptations (2026-10-01 sweep)
@@ -450,7 +450,7 @@ arXiv:2506.21734), `huggingface.co/sinimiini/HRM-Text-1B-GGUF`,
 - Recurrent depth is the latency dial: `L_cycles` sets compute depth
   per question — a rung whose cost is a knob between "one lexical
   pass" and "an external model". If a small recurrent decision model
-  ever lands in `opencode-runtime`, its depth setting is exactly
+  ever lands in `opencodifier-runtime`, its depth setting is exactly
   the kind of per-rung cost/gate trade the ladder exists to govern.
 - Small-sample discipline: "accuracy variance of around ±2 points"
   across small-sample runs, and a documented late-stage-overfitting
@@ -670,7 +670,7 @@ certificate, no cardinality invariance, no rotation invariance.
 2. **New local-arm candidates above our best (0.667)**:
    strands-decider-2B-hobson-v19 — **0.723 on the same 231 split**,
    Brier 0.348, **ECE 0.050**, with an onnx-community export shipping
-   a conversion/parity harness (drops into `opencode-runtime`
+   a conversion/parity harness (drops into `opencodifier-runtime`
    behind `onnx`); jebadiah-4b-v2 (LoRA on Qwen3.5-4B-chat, same
    base + same verdict-slot readout as our fork — cleanest
    apples-to-apples against our recipe; per-type temperatures
@@ -1108,7 +1108,7 @@ output (big model checks every draft) for 1.6-1.8× speedup.
 
 Every technique that makes Strata work is a *decode-time* technique for a
 generating MoE — expert tiering, KV streaming/quantization, 8K-chunk
-prefill with PCIe overlap, MTP drafting. OpenCode emits one decision
+prefill with PCIe overlap, MTP drafting. OpenCodifier emits one decision
 per request from dense gemma-family readouts; none of those apply. What
 transfers is how they run and document the engine:
 
@@ -1149,7 +1149,7 @@ transfers is how they run and document the engine:
 - **Resource-arbitration semantics.** idle-unload / min-free-VRAM gate /
   `before_load` hook / explicit 503 "the GPU is in use by another
   program" / 409-while-busy on control endpoints / lazy load on first
-  request. Concrete small candidate for **opencode-http**: structured
+  request. Concrete small candidate for **opencodifier-http**: structured
   busy/backpressure codes (503 with machine-readable reason, 409 on
   control ops while a decision is in flight) instead of silent queueing.
 - Same refuse-loudly ethos elsewhere: rope scaling past the trained range
@@ -1159,7 +1159,7 @@ transfers is how they run and document the engine:
 ### §11.2 Dao-AILab/flash-attention — no integration path
 
 Exact (not approximate) fused attention kernels; the memory saving comes
-from never materializing the attention matrix (IO-aware tiling). OpenCode
+from never materializing the attention matrix (IO-aware tiling). OpenCodifier
 computes no attention anywhere: core/engine/schema are sync Rust, and the
 model rung delegates to llama.cpp/ONNX behind `InferenceBackend` (D11).
 flash-attention is a CUDA library; our base posture is CPU-only. If a GPU
@@ -1204,7 +1204,7 @@ with our r19 finding that capability is bought at training time (QAT Q4_0
    state sources (prompt cache, KV reuse, slots, batch composition)
    before accepting any backend-arm number as identity-replay-clean —
    Strata's #410 is the cautionary tale.
-3. **New small queue item — opencode-http backpressure codes:**
+3. **New small queue item — opencodifier-http backpressure codes:**
    structured 503 (busy, machine-readable reason) and 409-on-control-
    while-in-flight, mirroring the arbitration semantics above.
 4. **#88 evidence addendum:** Coder release (expert-pruned MoE, 91.3%
@@ -1527,7 +1527,7 @@ Consequences for the letters protocol:
 The `frontier-infra` org (non-profit, Texas) ships **Jebadiah** —
 "open System One decision model": typed questions (choice / noul
 [yes-no] / score), a probability per option from **one forward pass,
-nothing generated**. Same problem shape as OpenCode's IR and the
+nothing generated**. Same problem shape as OpenCodifier's IR and the
 D26 model rung; their v2 cards (2026-09-26..29) are the closest
 public replication of this program found to date.
 
@@ -1670,7 +1670,7 @@ three benchmark surfaces — all eight URLs fetched and read in full on
 2026-10-05 (none missing; the Hugging Face Space
 `benchmarkheaven/JevBench` renders as an app shell only, its data
 lives on the benchmarkheaven site). Trigger: the operator's question —
-can OpenCode officially top the public benchmarks on **all**
+can OpenCodifier officially top the public benchmarks on **all**
 metrics (accuracy, error rate, latency, speed, cost) without a large
 LLM underneath?
 
@@ -1894,7 +1894,7 @@ quantization). All Apache-2.0.
    (imajev `calibration.json`, JEV-27B §11's L-BFGS fits, our `Calibration`
    seam + D15). The Jev `POST /v1/systemone` wire shape (plus `images`,
    `unknown_probability`, `abstained`) is the contract third parties build
-   against — our `opencode-schema` Jev adapter already speaks it.
+   against — our `opencodifier-schema` Jev adapter already speaks it.
 2. **imajev-2B readout mechanics confirmed from the artifacts** (downloaded
    `decision_readout.json` + `calibration.json`): 255 option codes mapped to
    fixed token ids (A–Z = ids 32–57; AA–JT = single vocab tokens), readout =
@@ -2452,10 +2452,10 @@ latency risk is retired: the O(N) verify-band cost is ~0.2 s per
 4-candidate item at 4 threads on a loaded box.
 
 **Landing receipt (2026-10-08, Rust tranche):** the contract is in
-`opencode-model::nli` (feature-free; verbalizer templates explicit
+`opencodifier-model::nli` (feature-free; verbalizer templates explicit
 and cache-keyed, renormalization refuses zero mass, `NliVerifier`
 implements the engine `Classifier` with the template tag folded into
-the model id), the transport in `opencode_runtime::nli`
+the model id), the transport in `opencodifier_runtime::nli`
 (`NliOnnxBackend`, shared kai wire names), serving behind the `nli`
 cargo feature, and the live parity gate is the compute-host runner
 `nli-parity-rs` — measured: **10/10 frozen fixture rows reproduced
@@ -2584,7 +2584,7 @@ Honest applicability to this runtime, ranked:
    golf.
 
 Executed (2026-10-08, PLAN Phase 24g): the exhaustive small-K
-property tests landed as `crates/opencode-engine/tests/
+property tests landed as `crates/opencodifier-engine/tests/
 small_k_exhaustive.rs` (every assignment K = 2…6, every presentation
 order, the boolean grid, every score-level permutation); the executor
 redundant-guard pass found exactly one provably-implied guard
@@ -2744,7 +2744,7 @@ from 0.15B→2B on JevBench/suite legs) stays in scope for this repo and
 feeds the engine rung's product-fit question (smallest base that still
 clears the gate = fastest local decider). The general-LLM version
 (free-form knowledge distillation, general corpora, frontier teachers)
-is explicitly out of scope for OpenCode and would be its own
+is explicitly out of scope for OpenCodifier and would be its own
 program. No schedule commitment; revisit after T3.3's verdict, which
 measures whether label-quality data alone moves the knee.
 
@@ -2957,7 +2957,7 @@ today.
 3. *The Gaussian-regularizer trick (collapse control with one
    hyperparameter) does not transfer:* our SFT is supervised slot CE —
    no representation objective to collapse.
-4. *Named future hook:* if OpenCode ever grows a state-transition
+4. *Named future hook:* if OpenCodifier ever grows a state-transition
    decision surface (score candidate actions by predicted outcome over
    evolving state), a JEPA-style latent forward model is the cheap
    planner/verifier rung — prediction in latent space instead of
