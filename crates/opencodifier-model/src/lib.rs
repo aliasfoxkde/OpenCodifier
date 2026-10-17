@@ -129,6 +129,13 @@ pub use nli::{
 // prompt templates, the classifier, and the deterministic mock. The
 // ONNX transport joins behind the `vision` feature (track G).
 pub use vision::{
-    DEFAULT_LOGIT_SCALE, ImageTextEmbedder, MockImageTextEmbedder, PromptTemplate, Siglip2Config,
-    VisionClassifier, zero_shot_scores,
+    DEFAULT_LOGIT_SCALE, ImageTextEmbedder, MockImageTextEmbedder, PromptTemplate,
+    SIGLIP2_BASE_DIMS, SIGLIP2_BASE_IMAGE_SIZE, Siglip2Config, VisionClassifier,
+    config_from_dir_json, zero_shot_scores,
+};
+// The SigLIP2 serving transport (track V, phase G): preprocessing,
+// encoding, and the split-tower graphs, manifest-verified (D14).
+#[cfg(feature = "vision")]
+pub use vision::serve::{
+    CONFIG_FILE, IMAGE_MEAN, IMAGE_STD, MAX_TEXT_TOKENS, OnnxSiglip2Embedder, TOKENIZER_FILE,
 };

@@ -89,6 +89,92 @@ impl Default for Siglip2Config {
     }
 }
 
+/// The dimensionality the arm of record (`siglip2-base-patch16-256`)
+/// projects both towers to: the contract module's own fact, checked
+/// against every graph output the transport sees, so a wrong-geometry
+/// export fails typed instead of producing meaninglessly-shaped
+/// embeddings.
+pub const SIGLIP2_BASE_DIMS: usize = 768;
+
+/// The square resolution the arm of record covers: `config.json`'s
+/// `vision_config.image_size`, which the preprocessing resizes to.
+/// Also carried by the config constructor below.
+pub const SIGLIP2_BASE_IMAGE_SIZE: usize = 256;
+
+/// Narrows a validated-bounded u64 config value to `usize` for the
+/// tensor geometry path — the only conversion `config_from_dir_json`
+/// performs above its bounds checks.
+///
+/// # Errors
+///
+/// [`ModelError::ContractViolation`] on a target that cannot hold the
+/// value (only on 16-bit platforms — the checks above bound by 16384).
+fn narrow(value: u64, what: &str) -> Result<usize, ModelError> {
+    usize::try_from(value).map_err(|_| ModelError::ContractViolation {
+        reason: format!("config.json `{what}` value {value} does not fit usize"),
+    })
+}
+
+/// Reads a serving [`Siglip2Config`] plus the geometry facts an
+/// embedder needs out of the arm-of-record's `config.json`.
+///
+/// The document the published `SigLIP2` repositories ship nests the two
+/// towers, so both lookups are explicit: `vision_config.image_size`
+/// (the square the preprocessing must produce) and
+/// `text_config.hidden_size` (the width of every returned vector,
+/// defaulting to the base arm's [`SIGLIP2_BASE_DIMS`], with a
+/// smaller/foreign width refused).
+///
+/// The head scale stays at [`DEFAULT_LOGIT_SCALE`]: some published
+/// configs omit the learned scale; the calibration pass (track J)
+/// supplies the fitted value.
+///
+/// # Errors
+///
+/// [`ModelError::ContractViolation`] when the JSON is unparsable, the
+/// image size is missing or smaller than a single patch, or the
+/// hidden size is present but outside 1..=4096 — all are geometry the
+/// exact tower could never decide with anyway.
+pub fn config_from_dir_json(json: &str) -> Result<(Siglip2Config, usize, usize), ModelError> {
+    let document: serde_json::Value = serde_json::from_str(json).map_err(|error| {
+        ModelError::ContractViolation { reason: format!("config.json: {error}") }
+    })?;
+    let vision = document.get("vision_config").unwrap_or(&document);
+    let image_size =
+        vision.get("image_size").and_then(serde_json::Value::as_u64).ok_or_else(|| {
+            ModelError::ContractViolation {
+                reason: "config.json carries no integer `vision_config.image_size`".to_owned(),
+            }
+        })?;
+    if image_size == 0 {
+        return Err(ModelError::ContractViolation {
+            reason: "config.json image_size must be positive".to_owned(),
+        });
+    }
+    // Every published SigLIP2 arm is 32..=1024; anything above this
+    // bound is not an export this transport believes it can session.
+    if image_size > 16384 {
+        return Err(ModelError::ContractViolation {
+            reason: format!("config.json image_size {image_size} is above the 16384 binding"),
+        });
+    }
+    let dims = match document.get("text_config").and_then(|text| text.get("hidden_size")) {
+        Some(serde_json::Value::Number(number)) => {
+            let hidden = number.as_u64().ok_or_else(|| ModelError::ContractViolation {
+                reason: format!("config.json hidden_size {number} is not a positive integer"),
+            })?;
+            if hidden == 0 || hidden > 4096 {
+                return Err(ModelError::ContractViolation {
+                    reason: format!("config.json hidden_size {hidden} is outside 1..=4096"),
+                });
+            }
+            hidden
+        }
+        _ => SIGLIP2_BASE_DIMS as u64,
+    };
+    Ok((Siglip2Config::new(), narrow(image_size, "image_size")?, narrow(dims, "hidden_size")?))
+}
+
 /// How an answer's subject becomes the text an image is scored
 /// against. The template is a measured lever, not a style choice (the
 /// NLI probe moved its arm from below chance to usable by changing the
@@ -436,6 +522,12 @@ impl Classifier for VisionClassifier {
         &self.model_id
     }
 }
+
+/// The serving transport: preprocessing, encoding, and the ONNX
+/// split-tower graphs behind the [`ImageTextEmbedder`] seam. Compiled
+/// only under the `vision` feature (phase G).
+#[cfg(feature = "vision")]
+pub mod serve;
 
 /// A deterministic [`ImageTextEmbedder`] with no model file.
 ///
