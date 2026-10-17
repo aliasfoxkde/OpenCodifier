@@ -45,6 +45,11 @@
 //!   (no fitted bias for this model), feature-free and verified against
 //!   a frozen upstream parity fixture. The ONNX transport lives in
 //!   `opencodifier_runtime::julia`, behind the `onnx` feature.
+//! * The [`vision`] contract module — the `SigLIP2` zero-shot vision
+//!   rung (track V, phase E): the shared image/text embedding seam,
+//!   the normalized-dot head, the cached prompt templates, and the
+//!   `VisionClassifier`, all feature-free over a deterministic mock.
+//!   The ONNX transport joins behind the `vision` feature (track G).
 //!
 //! # Example
 //!
@@ -85,6 +90,7 @@ pub mod llamacpp;
 pub mod manifest;
 pub mod nli;
 pub mod render;
+pub mod vision;
 
 pub use decision::{CANDIDATES_INPUT, CONTEXT_INPUT, CandidateConditionedModel, LOGITS_OUTPUT};
 pub use embedding::EmbeddingClassifier;
@@ -117,4 +123,12 @@ pub use nli::serving::{OnnxNliScorer, verifier_from_dir};
 pub use nli::{
     ENTAIL_INDEX, NliScorer, NliVerifier, Verbalizer, entailment_distribution, hypotheses, premise,
     verify_fixture,
+};
+// The SigLIP2 zero-shot vision rung (track V, phase E). The
+// feature-free contract: the shared-space seam, the head math, the
+// prompt templates, the classifier, and the deterministic mock. The
+// ONNX transport joins behind the `vision` feature (track G).
+pub use vision::{
+    DEFAULT_LOGIT_SCALE, ImageTextEmbedder, MockImageTextEmbedder, PromptTemplate, Siglip2Config,
+    VisionClassifier, zero_shot_scores,
 };
