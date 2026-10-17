@@ -30,6 +30,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 # `opencodifier-model`. Without it the default build is
 # dependency-identical and `--llama` is refused at runtime.
 llamacpp = ["opencodifier-model/llamacpp"]
+vision = ["opencodifier-model/vision"]
 
 [dev-dependencies]
 assert_cmd = "2"

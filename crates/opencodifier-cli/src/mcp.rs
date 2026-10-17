@@ -41,8 +41,13 @@ fn serve(
     ladder_path: Option<&Path>,
     llama: &LlamaRungArgs,
 ) -> Result<(), CliError> {
-    let handle =
-        runtime::handle(graph_path, focus_budget, ladder_path, runtime::model_rung(llama)?)?;
+    let handle = runtime::handle(
+        graph_path,
+        focus_budget,
+        ladder_path,
+        runtime::model_rung(llama)?.as_ref(),
+        None,
+    )?;
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|error| CliError::engine(CODE_RUNTIME_FAILED, error.to_string()))?;
     runtime
