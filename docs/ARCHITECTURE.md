@@ -120,3 +120,34 @@ probability of yes).
 - Model artifacts are SHA-256-verified before load (`models/` is never
   committed).
 - Default posture is local: bind `127.0.0.1`, no outbound calls.
+
+## 8. Vision rung (track V)
+
+The `SigLIP2` zero-shot vision classifier decides image-bearing states:
+an image and a candidate list → calibrated probability distribution, no
+training data needed.
+
+**Image carrier** (`opencodifier-core`): `State` holds typed `ImageInput`
+(PNG/JPEG bytes); `state_from_messages` returns a parts array when images
+are present, a plain string when text-only (byte-identical to pre-D38
+behavior for text-only callers).
+
+**Ladder integration**: image-capable requests fire the vision rung only
+when configured in the pipeline; without it the engine returns
+`VisionRequired` and the HTTP adapter maps it to HTTP 400 with code
+`engine.vision_required`.
+
+**Dep architecture** (DECISIONS.md D38):
+- `opencodifier-runtime/siglip.rs` — split-tower ONNX graph runners
+  (`vision_model.onnx` + `text_model.onnx`), ort-free in the contract
+  module.
+- `opencodifier-model/vision/serve.rs` — preprocessing, prompt encoding,
+  zero-shot head, behind `vision` feature.
+- `opencodifier-model/vision.rs` — feature-free decision contract:
+  `ImageTextEmbedder` trait, `VisionClassifier`, prompt templates, softmax
+  head. No ML runtime dep, compiles in every build.
+
+**CLI** (`opencodifier-cli`): `--image <path>` attaches images;
+`--vision-model-dir <path>` points to a verified SigLIP2 model directory;
+without the rung the CLI refuses at assembly with `cli.vision_rung_unavailable`.
+
