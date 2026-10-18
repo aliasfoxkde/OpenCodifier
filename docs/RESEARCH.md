@@ -3568,3 +3568,116 @@ pattern does.
    different quantization sensitivity than the LLM weights. The pointer
    head should be kept at higher precision (Q8_0 minimum) while the
    torso can use aggressive quantization.
+
+## §22 — Strands Decider deep research (2026-10-18)
+
+Sources: strandsagents.com/blog/introducing-strands-decider/,
+github.com/strands-labs/strands-decider,
+HF model cards: strands-decider-2B-qwen3.5-v1-2610,
+strands-decider-E2B-gemma4-v1-2610, strands-decider-2B-hobson-v21
+
+### Arm of record: strands-decider-2B-hobson-v21
+
+**Architecture**: Qwen3.5-2B-Base torso; text-gen head replaced with ~1M-param
+pointer head scoring hidden-state at `<answer>` token vs option final tokens.
+Rank-16 LoRA on decoder; head runs FP32. Three-run model soup (seed ensembling
+at LoRA-update level, scores averaged across three heads).
+
+**Training**: 246,678 rows, v19 recipe + question paraphrases + teacher
+distillation (Qwen3.5-4B, filtered where teacher agreed with gold).
+Seed 5 of 6 selected (closest to six-seed mean across 5 metrics).
+3,738 steps, one epoch. ~11 hr on one RTX 3090; ~1h10m on 8×H100.
+
+**Benchmark numbers**: JevBench public: 176/231 (0.762), Brier 0.323, ECE 0.064.
+Held-out short tasks 0.650; BoardgameQA 0.821; ContractNLI 0.865; MuSiQue 0.882.
+
+### E2B-gemma4-v1-2610 (October 2026 release)
+
+**Architecture**: google/gemma-4-E2B-it base; LoRA rank 48 (not rank 16 like Qwen
+arms); 135,602 rows (123,339 from hobson-v21 + 12,263 code-task rows);
+teacher Qwen3.5-4B, filtered for teacher-gold agreement + proximity to v19
+outputs. Seed ensemble: three seeds × three heads averaged = "soup."
+4,109 steps, 8×H100 80GB per seed.
+
+**Benchmark numbers**: JevBench public: **180/231 (0.779)**, Brier 0.313, ECE 0.053.
+Internal held-out: short 0.652; boardgame 0.793; ContractNLI 0.856; HotpotQA 0.734;
+MuSiQue 0.913 (answerable) / 0.908 (unanswerable). Decision Index 0.2.1: 29.78.
+
+**Calibration**: One temperature per primitive (noul/choice/score), fitted on
+held-out short classification data. Temperature is per-primitive, not global.
+
+### Qwen3.5-2B v1 (earliest release)
+
+**Benchmark numbers**: Accuracy 180/231 (0.779), Brier 0.280, ECE 0.072.
+Easy/standard/hard: 1.000 / 0.931 / 0.586. Easy tasks: 100% solved.
+Code held-out: 0.836 on 1,996 tasks.
+
+### Key findings for OpenCodifier
+
+1. **Pointer head >> slot head.** The Strands project explicitly moved from
+   a fixed-slot head (learned per-option parameters) to the pointer head
+   (no per-option weights, no positional preference, no option-count limit).
+   OpenCodifier's decision model already uses a similar approach (readout head
+   over hidden states). Confirms the design direction.
+
+2. **Temperature per primitive is the right calibration granularity.** noul,
+   choice, score each get their own temperature. This maps directly to
+   OpenCodifier's `DecisionQuestion` variants. Should be adopted in the
+   calibration artifact schema.
+
+3. **Seed ensembling closes ~2pp on JevBench.** v21 (single seed) = 0.762;
+   v19 (3-seed soup) = 0.779. The 17-task swing is within the reported
+   σ=3.2 for 6-retrain variance, but the directional lift is consistent
+   with the strand's own selection criteria. OpenCodifier's E1-E used a
+   similar multi-seed averaging strategy.
+
+4. **Gemma-4 base extends the capability ceiling.** E2B (gemma-4-it)
+   scores 0.779 vs v21 (qwen3.5-2b) at 0.762 (+1.7pp) on the same
+   JevBench set. The 4B teacher is the likely driver (gemma-4-it → teacher
+   is gemma-4-27B, larger than Qwen3.5-4B).
+
+5. **Two decision-model families in the same HuggingFace org:**
+   - `strands-decider-2B-qwen3.5-v1-2610`: Qwen3.5-2B base, v1 recipe
+   - `strands-decider-2B-hobson-v21`: Qwen3.5-2B base, v21 recipe (paraphrases + distillation)
+   - `strands-decider-E2B-gemma4-v1-2610`: gemma-4-E2B base, latest
+   These are candidate arms for OpenCodifier's model rung. Both Qwen3.5-2B
+   arms are GGUF-quantizable (qwen3.5 GGUF exports exist). gemma-4-E2B is
+   newer but GGUF export may exist.
+
+6. **Vision support in Qwen arms.** The Qwen checkpoint supports base64 image
+   inputs when served with `--vision` (Transformers 5.18+, `vision` extra).
+   This is a separate vision tower (Qwen3.5-2B's native vision), not
+   SigLIP2. OpenCodifier's SigLIP2 rung and the Qwen native vision are
+   complementary: SigLIP2 is zero-shot (no fine-tuning, no training data),
+   Qwen native vision is fine-tuned. For OpenCodifier's ladder, SigLIP2
+   as the vision rung (D38) is correct; Qwen's native vision could be a
+   future candidate-conditioned model arm.
+
+7. **Calibration data matters more than model size for OOD.** The Gemma
+   model used "held-out short classification data" for temperature fitting.
+   OpenCodifier's VIVERE extraction program could generate calibration
+   signal for the decision model's OOD gate.
+
+### 1Cat-vLLM and Strata for T5500 V100 optimization
+
+Sources: github.com/1CatAI/1Cat-vLLM, github.com/Niko1221/Strata
+
+**1Cat-vLLM**: vLLM-based inference engine. The Strands Decider uses vLLM
+under the hood (their serve command). For T5500 V100 optimization: vLLM
+has V100 support but lacks TensorRT; custom CUDA kernels (e.g., FlashAttentionV2
+for V100's Volta arch) would help. Key insight: Strands uses vLLM's
+dynamic batching for multi-question requests (state encoded once, questions
+batched cheaply).
+
+**Strata**: Runs 125B-parameter Qwen3.8-Flash-Next using 24,576 MoE experts
+(10 active per token); experts on GPU/RAM/CPU/SSD hierarchy; 1.6–1.8×
+speedup from speculative validation. Not directly applicable to the 2B
+decision model but the expert-routing pattern is relevant for future
+larger-model arms.
+
+**T5500 V100 path forward**: For the 2B decision models, llama.cpp with
+V100 CUDA kernels (not vLLM) is the current path. The Strands project's
+11-hour RTX 3090 training time (≈8×H100) suggests the T5500's 2×V100
+could train in ~20-30 hours. Key optimization: use `-fa on` (FlashAttention)
+for prefill, -t 12 threads validated on 13600K (but V100 has different
+threading). Monitor for the PSU OCP issue per the T5500 power-cap regime.
