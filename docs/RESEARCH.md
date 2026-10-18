@@ -2963,3 +2963,608 @@ today.
    planner/verifier rung — prediction in latent space instead of
    generative rollout maps exactly onto the cheapest-reliable-layer
    principle (B6-adjacent, speculative, no current surface wants it).
+
+---
+
+## §21 — Strands Decider deep research + GSQ + 1Cat-vLLM + T5500 V100 optimization plan (2026-10-19)
+
+**Sources fetched 2026-10-19 (all fully read):**
+- `strandsagents.com/blog/introducing-strands-decider/` (full blog post)
+- `github.com/strands-labs/strands-decider` (README, docs/architecture.md,
+  evaluation/results.md, docs/vision.md, research/README.md, research/history.md,
+  docs/naming.md)
+- `huggingface.co/StrandsAgents/strands-decider-2B-qwen3.5-v1-2610`
+- `huggingface.co/StrandsAgents/strands-decider-2B-hobson-v21`
+- `huggingface.co/StrandsAgents/strands-decider-{E2B,E4B,12B,26B-A4B}-gemma4-v1-2610`
+- `huggingface.co/ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF` (1.37M downloads)
+- `huggingface.co/ISTA-DASLab/Qwen3.8-Flash-Next-GSQ-RCO-GGUF`
+- `github.com/IST-DASLab/GSQ` (README, 101 stars)
+- `github.com/1CatAI/1Cat-vLLM` (README, 1.3K stars)
+- `github.com/Kubenew/TurboQuant-v3` (README, 17 stars)
+- `arxiv.org/abs/2604.18556` (GSQ paper)
+- `arxiv.org/abs/2605.00649` (RCO paper)
+- `github.com/Niko1221/Strata` (README, 27.3K stars)
+- `huggingface.co/StrandsAgents` (org model listing)
+- `huggingface.co/unsloth/gemma-4-E4B-it-GGUF` (GGUF file sizes)
+- `huggingface.co/onnx-community/strands-decider-2B-hobson-v19-ONNX` (ONNX export)
+- `huggingface.co/fabricant451/strands-decider-2B-hobson-v19-GGUF` (GGUF export, 526 downloads)
+
+---
+
+### §21.1 Strands Decider — Full Architecture and Model Family (v1, Gemma 4 v1, v21, v19)
+
+**Architecture (the pointer head):**
+
+Take a pretrained decoder LLM torso, discard its language-modelling head, and
+score each option by comparing the hidden state at `<answer>` against the
+hidden state at each option's own last token. One forward pass, no decoding
+loop. The pointer head (~1M params, dim=256) holds no per-option parameters,
+so options are entirely prompt-defined. LoRA adapters (rank-16) on the torso
+projections; head runs in fp32. Score/noul/choice are the same masked softmax
+read back differently.
+
+**Critical: option order reshuffling.** Options are re-shuffled on every
+example, every epoch, with label remapping. Without this, the head quietly
+memorizes "slot 0 tends to be positive". Score questions are only reversed,
+never permuted (ordinal slots must stay ordered).
+
+**Confidence formulas:**
+- choice: `(N · p_max − 1) / (N − 1)` — normalized max-prob, range [0,1],
+  independent of N
+- score: `1 − σ/σ_max` — normalized standard deviation (max-prob would rank
+  bimodal above uniform when bimodal is worst for ordinals)
+- noul: no confidence field — probability IS the uncertainty
+
+**Routing convention (from Jev API):** ≥0.9 → act automatically;
+0.5–0.9 → confirm first; <0.5 → escalate to human.
+
+**Torso evolution:**
+- v7 and earlier: Qwen3-1.7B-Base, all full attention
+- v13–v19: Qwen3.5-2B-Base (1.9B), hybrid: 18 Gated DeltaNet layers
+  (linear/recurrent) + 6 full attention — enables shared-prefix cache
+  ("asking many questions is nearly free")
+- Gemma 4 models (Oct 2026): Gemma 4 family (E2B/E4B/12B/26B-A4B), drop
+  vision encoder, text-only, pointer head from v1
+
+**Loss function:**
+```
+L = CE(gold_label)                    // cross-entropy on gold
+  + 0.3 * KL(to frozen torso readout)  // keeps near pretraining
+  + 1.0 * KL(to frozen teacher)        // on multi-step rows only
+```
+Teacher: frozen Qwen3.5-4B or Gemma 4-31B-it; anchor: KL toward released
+v19 (weight 0.3), not toward the untrained base.
+
+**Soup of 3 seeds:** LoRA updates averaged exactly; readout heads averaged;
+calibrated post-hoc. A soup needs no choice between seeds.
+
+---
+
+### §21.2 Complete Model Family Benchmarks
+
+**Qwen3.5 Line:**
+
+| Model | JevBench | Brier | ECE | Latency (H100) | Memory |
+|---|---|---|---|---|---|
+| `strands-decider-2B-hobson-v19` | 167/231 | 0.342 | 0.052 | 115ms median | ~4GB bf16 |
+| `strands-decider-2B-hobson-v21` | 176/231 | 0.323 | 0.064 | ~115ms | ~4GB bf16 |
+| `strands-decider-2B-qwen3.5-v1-2610` ⭐ | 180/231 | 0.280 | 0.072 | ~50ms | ~4GB bf16 |
+
+**Gemma 4 Line (Oct 2026, same pointer head as v1):**
+
+| Model | JevBench | Brier | Decision Index | Memory | Latency (H100) |
+|---|---|---|---|---|---|
+| `strands-decider-E2B-gemma4-v1-2610` | 180 | 0.313 | 29.78 | ~9GB bf16 | 102ms |
+| `strands-decider-E4B-gemma4-v1-2610` | 187 | 0.243 | 39.42 | ~15GB bf16 | 139ms |
+| `strands-decider-12B-gemma4-v1-2610` | 200 | 0.173 | 47.14 | ~23GB bf16 | 136ms |
+| `strands-decider-26B-A4B-gemma4-v1-2610` | 207 | 0.162 | 48.69 | ~51GB bf16 | 245ms |
+
+**Decision Index** = balanced skill across task types. E4B (15GB) is the
+sweet spot: 39.42 vs 12B's 47.14 (19% gain for 3× compute). All four
+serve on CPU.
+
+**v1 data mix (246,678 rows, ~2× v21):** v21 rows minus restrictive
+datasets + 24,533 code-task rows + 96,638 public dataset rows + 22,168
+rule-application rows (Gemma 4-31B writes policies/cases; code computes
+gold; Claude filters agreement). Teacher: Gemma 4-31B-it where agrees with
+gold. Anchor: KL toward v19.
+
+**Vision (Qwen3.5 models only, `--vision` flag):**
+- Uses Qwen3.5's native vision tower (0.66 GB additional). No image-specific
+  training — text training transfers to vision.
+- v19 `--vision`: NaturalBench 0.784 acc, ECE 0.014 (better calibrated than
+  image-trained Mapika/decider-2b-vision at ECE 0.080)
+- v1: NaturalBench 0.776, POPE 0.872; falls to chance when image removed
+- **Critical:** v1 is more overconfident than v21 when image is absent
+  (POPE ECE +0.042). Check image presence before asking.
+- Gemma 4 models drop vision encoder → text only.
+
+**What actually moved JevBench (research/history.md):**
+- Torso size: Qwen3 1.7B → 4B = +0.043 (undetected for many versions
+  because internal held-out corpus was saturated on classification)
+- Pointer readout (vs slot head): +0.017
+- Multi-step documents distilled from teacher: +0.017
+- Generated workplace document questions: +0.009
+- Answer-adequacy judgements: +0.013 + major Brier improvement
+  (0.388→0.342, p<0.0001)
+
+**What did NOT move it:** data volume alone; instruction variants; generated
+rule-chaining; labeled question transforms; distillation on short
+classification; public rule-application data (ShARC, ConditionalQA);
+instruction-tuned torso.
+
+**Resolution limit (critical methodology):** At 231 tasks, McNemar cannot
+reach p<0.05 below ~+0.043 accuracy. Single-run differences under ~10
+tasks are unresolved, not negative. Internal held-out corpus ranked 4B torso
+BELOW 1.7B because it was saturated on classification. Six retrains of
+v17 gave σ=3.2 tasks. → **Benchmark externally. Treat <+0.04 as noise.**
+
+---
+
+### §21.3 GSQ — Gumbel-Softmax Quantization (arxiv:2604.18556)
+
+**ISTA-DASLab, ETH Zürich / TU Wien / Red Hat AI**
+
+**Paper:** *GSQ: Highly-Accurate Low-Precision Scalar Quantization for LLMs
+via Gumbel-Softmax Sampling* (preprint). GitHub: `IST-DASLab/GSQ`, 101 stars.
+
+**Core innovation:** A two-stage pipeline:
+1. **GPTQ initialization** — per-layer second-order Hessian from calibration
+   activations produces initial quantized weights + per-group scales
+2. **Gumbel-Softmax refinement** — logits over discrete weight values trained
+   with differentiable Gumbel-Softmax relaxation. Temperature and logit
+   scale annealed high→low over epochs so gradients flow through candidates
+   early and collapse onto a single grid value at the end. Custom autograd
+   op replays RNG state in backward pass for exact gradients through the
+   Gumbel sample.
+
+**Result:** symmetric, group-wise scalar format (INT-compatible), drops into
+existing INT inference kernels and GGUF K-Quant deployment stacks without
+changes.
+
+**Supported schemes:**
+
+| gsq_bits | Quantizer | Bits/weight | Codebook |
+|---|---|---|---|
+| 2 (default) | GumbelQuantizer2Bit | 2-bit | {-2,-1,0,+1} × scale |
+| >2 | GumbelQuantizerInt | n-bit | 5-level integer × scale |
+| "ternary" | GumbelQuantizerTernary | ~1.58-bit | {-1,0,+1} × scale |
+
+**Supported models:** Llama, Qwen3, Qwen3-MoE (128 experts), Qwen3.5/3.6,
+Qwen3.5/3.6-MoE, Gemma-4-35B, Kimi-K2/K2.5 (384 experts).
+
+**GPU requirement:** vLLM serving requires **Hopper (H100, sm_90) or Ampere
+(sm ≥ 80)**. On Ada (L40S, sm_89) vLLM has no Marlin kernel for
+compressed-tensors WNA16 fused MoE → Triton fallback crashes. T5500 V100
+is sm_70 — this is the blocker. **GSQ quantized models need to be
+converted to GGUF or served through a V100-compatible path (1Cat-vLLM).**
+
+**Serving:** `save_model.py` merges per-layer shards into a HuggingFace
+checkpoint with `compressed-tensors` config for vLLM auto-detection. Or:
+GGUF K-Quant export (llama.cpp / Ollama compatible).
+
+**Performance headline (vs FP16):**
+- Kimi-K2.5: 2-bit GSQ (4.5→2.13 bpp) preserves reasoning/coding/long-context
+  behaviour; beats base model on MATH500 and LiveCodeBench v6
+- Qwen3-8B GGUF K-Quant: Q2_K avg score 50.03→56.28 (GSQ refinement)
+- Llama-3.1-Instruct 70B at 2.13 bpp: **75.57** vs QTIP 77.25 / PV-Tuning
+  76.27 (vector methods) — within ~1.7 points of vector-quantized frontier
+  with scalar (INT-compatible) kernels
+
+---
+
+### §21.4 RCO — Rotated Calibration Optimization (arxiv:2605.00649)
+
+**Problem:** Assigning one of K options to each of N groups under a total
+cost budget — arises in mixed-precision quantization, non-uniform pruning,
+expert selection. The objective (model loss) depends on all assignments
+jointly; combinatorial solvers can only optimize proxy objectives.
+Evolutionary search evaluates actual loss but lacks gradients.
+
+**RCO solution:** Softmax relaxation for budget-constrained assignment.
+Trains per-layer mixed-precision assignments under a total bit-budget
+constraint using the same Gumbel-Softmax machinery as GSQ.
+
+**Applied to:** `Qwen3.8-27B-GSQ-RCO-GGUF` — GSQ weights + RCO layer-wise
+expert/precision allocation → mixed-precision GGUF files.
+
+**Download count:** 1.37M downloads. **Likes:** 2,260. The most downloaded
+GSQ model on HuggingFace.
+
+**File sizes (Qwen3.8-27B-GSQ-RCO-GGUF):**
+
+| Quantization | Size | With MTP |
+|---|---|---|
+| IQ2_XS | 7.84 GB | 8.17 GB |
+| IQ3_XXS | 9.40 GB | 9.73 GB |
+| IQ3_S | 10.96 GB | 11.29 GB |
+| Q2_0 (Qwen3.8-Flash-Next) | 35.04 GB (2-part) | — |
+
+**Also available:** IQ2_XS, IQ3_S, IQ3_XXS, Q2_0 variants of
+`Qwen3.8-Flash-Next-GSQ-RCO-GGUF` (~125B params MoE, 63GB+ files split
+across two shards).
+
+**Second arxiv cited in model card:** `2605.00649` — RCO. The key insight:
+not all layers need the same precision. RCO allocates precision bits across
+layers under a budget, finding the best accuracy/size tradeoff. This is
+exactly what the T5500 V100 optimization needs: fewer bits where the model
+is robust, more where it matters.
+
+---
+
+### §21.5 TurboQuant v3 — INT4 + AWQ + Protected Channels + SVD
+
+**GitHub:** `Kubenew/TurboQuant-v3`, 17 stars. MIT license.
+
+**Architecture:**
+```
+FP32 Weights → AWQ Scaling → Channel Analysis →
+  ├─ Identify Outliers (2%) → Protect FP16 Channels
+  ├─ INT4 Quantize (Group-wise)
+  └─ SVD Correction (optional Low-rank)
+→ Compressed Weights
+```
+
+**Key parameters:**
+- `group_size`: quantization group size (default 64)
+- `outlier_keep_ratio`: ratio of channels to keep in FP16 (default 0.02)
+- `rank`: SVD correction rank (0 to disable, default 8)
+- `activation_aware`: AWQ-style activation-aware scaling (default True)
+- `zero_point`: asymmetric quantization (default True)
+
+**Pipeline:**
+1. AWQ-style activation-aware weight quantization: compute channel
+   importance from calibration activations
+2. Identify outlier channels (default top 2%): keep in FP16, quantize
+   rest to INT4
+3. Group-wise INT4 quantization with per-group scales
+4. Optional SVD correction: low-rank residual to recover quantization error
+
+**HuggingFace integration:** `TurboQuantConfig` + `quantize_model()` +
+`save_quantized_model()` / `load_quantized_model()`.
+
+**CUDA kernels:** `setup_cuda.py` builds custom INT4 dequantization and
+fused matmul kernels. Requires CUDA Toolkit 11.0+.
+
+**Benchmarks (claimed):**
+- Llama-2-7B: 13.5GB → ~3.5GB (4× compression, MSE < 0.001)
+- Llama-2-13B: 26GB → ~6.5GB (4× compression)
+- Mistral-7B: 14.5GB → ~3.7GB (4× compression)
+
+**Relevance to T5500:** The outlier-protected channels approach (keeping
+2% of outlier-sensitive channels in FP16) is the same technique that
+makes NVFP4/E5M2 work on V100 — identify which weights are sensitive to
+aggressive quantization and protect them. TurboQuant's AWQ + protected
+channels pattern is directly applicable to serving Strands Decider Gemma 4
+models on V100.
+
+---
+
+### §21.6 1Cat-vLLM — V100 SM70 Optimization Stack (the T5500 path)
+
+**GitHub:** `1CatAI/1Cat-vLLM`, 1.3K stars. Fork of vLLM engineering for
+**Tesla V100 / SM70**.
+
+**Core goal:** "Make modern models actually run fast on V100." Not
+"start on V100" — fast on V100.
+
+**Current SM70 work includes:**
+- AWQ / W4A16
+- TurboMind SM70 kernels
+- **compressed-tensors** ← GSQ lands here
+- **FP8 E4M3 / E5M2 KV storage**
+- ModelOpt NVFP4
+- MXFP4
+- Standalone GGUF metadata, tokenizer and architecture adapters
+- **Original-block GGUF affine / codebook operators with capability-based
+  fallback** ← enables GGUF-native serving
+- Quark W4A16 INT4/UINT4
+- QPN8, QPN4, QPN2
+- Grouped MoE
+- Exact-shape decode GEMV
+- **QSA sparse Attention; FlashQLA / GDN**
+- **DFlash2 speculative decoding**
+
+**Flash-Next GSQ-RCO IQ3_S + FP16 MTP4 (merged, 2026-10):**
+
+| Workload | Full round | Measured decode |
+|---|---|---:|
+| C1: 8192 input / 256 output | **26.072 ms** | **92.267 tok/s** |
+| C4: 128 input / 1024 output per request | **52.059 ms** | **280.441 aggregate tok/s** |
+
+This is **a GSQ-RCO quantized model serving through 1Cat-vLLM on V100**.
+The path is real and merged.
+
+**Attention efficiency progression on V100:**
+- 17.92 → 47.1 → 60.8 → **71.1 TFLOP/s** (useful causal QK/PV compute)
+~3.4× improvement on the same hardware generation.
+
+**Speculative decoding on V100:**
+- 4× V100 16GB: Qwen3.8-27B-NVFP4 + DFlash2 = **260 tok/s**
+  (web prompt, 512 output, streaming)
+- 4× V100 32GB: 229 tok/s single-request (v1.5.1)
+- 4× V100 32GB: 445 tok/s aggregate C4 common decode window (v1.5.1)
+- Without DFlash2: 61 tok/s @ 128K decode
+
+**GSQ serving path through 1Cat-vLLM:**
+```
+GSQ quantized checkpoint (HF safetensors or GGUF)
+  → compressed-tensors format (1Cat-vLLM)
+  → vLLM engine on V100 SM70
+  → POST /v1/chat completions
+```
+
+Or GGUF-native:
+```
+GGUF file (ISTA-DASLab GSQ-RCO-GGUF)
+  → llama.cpp server (1Cat-vLLM GGUF adapter)
+  → OpenAI-compatible /v1/models
+```
+
+**TurboQuant SDPA continuation scratch (PR #779, open):** 1Cat-vLLM is
+actively integrating TurboQuant-style INT4 + AWQ + protected channels.
+Draft PR `#779` bound TurboQuant SDPA continuation scratch, retains numerical
+and model-quality gates. Status: draft, pending integration.
+
+---
+
+### §21.7 Strands Decider Export Landscape
+
+**Existing exports (all on HuggingFace):**
+
+| Export | Location | Downloads | Notes |
+|---|---|---|---|
+| **ONNX** | `onnx-community/strands-decider-2B-hobson-v19-ONNX` | 510 | `model_q4f16.onnx` (0.5MB) + 1.02GB data; `model_quantized.onnx` + 1.68GB data; tokenizer 19MB |
+| **GGUF** | `fabricant451/strands-decider-2B-hobson-v19-GGUF` | 526 | Community GGUF export; file sizes not yet catalogued |
+| **WebGPU** | `alxnahas/strands-decider-2b-webgpu` | — | Browser inference |
+| **Pruned** | `alxnahas/strands-decider-1B-v21-pruned` | — | 1B pruned variant |
+| **L4 retrain** | `tim-scrypted/strands-decider-2b-v19-l4-retrain` | — | L4-specific retrain |
+| **PII** | `vatsalmpatel/strands-decider-2B-pii-v1` | — | PII detection variant |
+
+**ONNX export details:**
+- `model_q4f16.onnx` — Q4 weight quantization, FP16 activations
+- `model_quantized.onnx` — more aggressive quantization
+- Both include `tokenizer.json` (19.1 MB) + `tokenizer_config.json`
+- The ONNX export has a full conversion harness:
+  `conversion/build_onnx.py`, `conversion/parity.py`, `conversion/fuse.py`
+  + `fixtures/reference.json` (validation requests)
+
+**GGUF Gemma 4 sizes (unsloth, for reference):**
+
+| Quant | Gemma-4-12B | Gemma-4-E4B |
+|---|---|---|
+| BF16 | 24GB | 14.02 GB |
+| Q8_0 | 15.3GB | 7.63 GB |
+| Q6_K | 13.2GB | 6.59 GB |
+| Q5_K_M | 10.2GB | 5.11 GB |
+| Q4_K_M | 9.3GB | 4.64 GB |
+| Q3_K_S | 7.2GB | 3.60 GB |
+| UD-Q2_K_XL | 7.0GB | 3.50 GB |
+
+**E4B at Q4_K_M = 4.64GB → fits in one V100 16GB with KV cache headroom.**
+
+**Key insight:** Strands Decider Gemma 4 models do NOT have vision encoders
+(the text decoder only). The Strands Gemma 4 GGUF would be pure text
+decision inference — smaller than the unsloth Gemma 4 GGUF (which includes
+the vision tower).
+
+---
+
+### §21.8 Quantization Format Comparison for V100 Serving
+
+| Format | Bits | Strands Gemma 4 E4B | Serving path | V100 viability |
+|---|---|---|---|---|
+| BF16 | 16 | ~14 GB | vLLM / transformers | No (VRAM) |
+| Q8_0 | 8 | ~7.6 GB | llama.cpp / vLLM | Partial (V100 16GB OK) |
+| Q6_K | ~6 | ~6.6 GB | llama.cpp | V100 16GB OK |
+| **Q4_K_M** | ~4.5 | **~4.6 GB** | llama.cpp / 1Cat-vLLM | **Best V100 fit** |
+| **Q3_K_S** | ~3.5 | **~3.6 GB** | llama.cpp | **Excellent** |
+| **UD-Q2_K_XL** | ~2.5 | **~3.5 GB** | llama.cpp / 1Cat-vLLM | **V100 optimal** |
+| **IQ2_XS** | ~2 | **~2–3 GB** | 1Cat-vLLM compressed-tensors | **Best quality/size** |
+| **IQ3_S (GSQ)** | ~3 | **~3–4 GB** | 1Cat-vLLM | **GSQ quality, V100 size** |
+
+**Recommended V100 serving stack for Strands Decider Gemma 4:**
+
+**Path A (llama.cpp, simplest):**
+```
+GGUF export of Strands-Decider-Gemma4-E4B
+  → llama.cpp server on V100
+  → OpenAI-compatible /v1/chat
+```
+
+**Path B (1Cat-vLLM, highest throughput):**
+```
+Strands-Decider-Gemma4-E4B safetensors
+  → GSQ quantize via IST-DASLab GSQ (H100/Hopper)
+  → compressed-tensors for 1Cat-vLLM
+  → V100 SM70 serving
+  → POST /v1/systemone (Strands protocol)
+```
+
+**Path C (GSQ-RCO pre-built):**
+```
+ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF
+  → llama.cpp server (GGUF native)
+  → Strands Decider protocol adapter
+  → Use as teacher/router in OpenCodifier cascade
+```
+
+**Path D (TurboQuant + 1Cat-vLLM, most aggressive):**
+```
+Strands-Decider-Gemma4-E4B
+  → TurboQuant v3 (INT4 + AWQ + protected FP16 channels)
+  → 1Cat-vLLM compressed-tensors
+  → V100 SM70 serving
+```
+
+---
+
+### §21.9 OpenCodifier Architecture Alignment
+
+**Direct parallels between Strands Decider and OpenCodifier:**
+
+| OpenCodifier Concept | Strands Decider Equivalent |
+|---|---|
+| `EngineHandle::lexical` (BM25/metadata narrowing) | Pointer head scoring — compares hidden states to score candidates |
+| `InferenceBackend` trait | Generic inference engine (ort, vLLM, transformers) |
+| `ConfidenceReport` (multi-dimensional: top-prob, margin, entropy, OOD) | Confidence formula (max-prob normalized, σ-based for scores) |
+| `LadderPolicy` per-node gate overrides | Confidence-based routing convention (≥0.9 act, 0.5–0.9 confirm, <0.5 escalate) |
+| Candidate-conditioned decision model | Pointer head — no per-candidate parameters; labels from prompt |
+| Calibration seam (`Calibration`) | Temperature scaling post-training; soup averaging |
+| Exact rule → cache → metadata → lexical → embedding → classifier cascade | Strands routing: ≥0.9 act → 0.5–0.9 confirm → <0.5 human |
+| Cache key includes model/calibration/policy versions | Soup of 3 seeds + calibration on each checkpoint |
+| `unsupported_generation_field` | Decision model explicitly NOT a text generator |
+
+**Gemma 4 E4B as `InferenceBackend` candidate:**
+- ~15GB bf16, 139ms on H100, Decision Index 39.42
+- Q4_K_M ~4.6GB → V100 feasible
+- IQ2_XS ~2–3GB → V100 optimal with GSQ quality
+- Soup of 3 seeds → no single-point-of-failure in training noise
+- Apache-2.0 base (google/gemma-4-E4B-it) → can redistribute
+
+**Key insight — "asking many questions is nearly free":**
+Strands' hybrid torso (Gated DeltaNet layers) enables shared-prefix caching:
+state encoded once, forked per question, only question tokens run fresh.
+This is the same optimization opportunity as `BM25 build-once` (§9.1):
+hoist candidate representation out of per-question loops. OpenCodifier's
+multi-dimensional confidence (top-prob + margin + entropy + OOD) maps onto
+Strands' multi-question-per-forward-pass capability — run choice for
+candidate ranking, noul for OOD detection, score for ordinal, all in one
+execution.
+
+**Calibration as a first-class seam (D15 already):** Strands' finding that
+"raw softmax probability ≠ calibrated confidence; calibration is mandatory"
+is exactly D15's `Calibration` seam. Their per-kind temperature (noul 0.9107,
+choice 0.7342, score 1.3278) is per-primitive calibration — the same
+parameter we're fitting per (kind, cardinality, class).
+
+**Confidence routing as ladder policy:** The Jev API routing convention
+(≥0.9 act / 0.5–0.9 confirm / <0.5 escalate) maps 1:1 onto
+`LadderPolicy::gate()` outcomes. The Gemma 4 tier data (E2B/E4B/12B/26B)
+gives us the accuracy/calibration/latency tradeoff curve per size, which is
+exactly the data needed for ladder rung selection.
+
+---
+
+### §21.10 Gemma 4 GGUF Serving via llama.cpp on T5500 V100
+
+**Simplest path (no new builds, no PSU dependency):**
+
+The `unsloth/gemma-4-E4B-it-GGUF` GGUF files (Q4_K_M 4.64GB, Q3_K_S
+3.60GB) are directly downloadable. However, these are the base Gemma 4 IT
+model — NOT the Strands Decider pointer head. The Strands Gemma 4 models
+use a custom LoRA adapter + pointer head on top of the base Gemma 4 text
+decoder.
+
+**The Strands Decider GGUF export** (`fabricant451/strands-decider-2B-hobson-v19-GGUF`,
+526 downloads) is the community's answer. But it only covers v19 (Qwen3.5
+base), not the Gemma 4 models.
+
+**What's missing:** A GGUF export of the Gemma 4 v1 Strands Decider models
+(E2B/E4B/12B/26B-A4B). The LoRA adapter + pointer head would need to be
+exported alongside the base Gemma 4 text decoder into GGUF format.
+
+**Path forward:**
+1. Export Strands Gemma 4 v1 via `strands_decider.hf_export` → safetensors
+2. Quantize with llama.cpp `llama-quantize` to Q4_K_M (~4.6GB for E4B)
+3. Serve via llama.cpp server on V100 SM70
+4. Wrap with Strands `/v1/systemone` HTTP protocol adapter
+
+Or: use `unsloth/gemma-4-E4B-it-GGUF` Q4_K_M as the base torso, fine-tune
+the pointer head via the OpenCodifier training pipeline (TRAINING.md), then
+export as GGUF. This combines GSQ-quality base with OpenCodifier's own
+decision head.
+
+---
+
+### §21.11 TurboQuant v3 + 1Cat-vLLM Integration Path
+
+**The TurboQuant SDPA kernel (PR #779) is in 1Cat-vLLM draft status.**
+
+The integration path:
+```
+TurboQuant v3 (INT4 + AWQ + protected FP16 channels)
+  → ONNX export or safetensors with TurboQuant metadata
+  → 1Cat-vLLM compressed-tensors reader
+  → V100 SM70 optimized kernels
+  → High-throughput inference
+```
+
+**Relevance to T5500 PSU constraint:** Once the replacement PSU arrives:
+1. Install TurboQuant v3 CUDA kernels on T5500
+2. Run `turboquant_v3_compress()` on the Strands Decider E4B model
+3. Convert TurboQuant output to 1Cat-vLLM compressed-tensors format
+4. Serve through 1Cat-vLLM with V100 SM70 kernels
+
+**TurboQuant's protected channels (2% FP16 outliers) directly applies to
+V100 quantization:** V100 has different numerical sensitivity than H100.
+The TurboQuant outlier-detection finds which weight channels are sensitive
+to aggressive quantization, keeps those in FP16, aggressively quantizes the
+rest. This is the same principle as the NVFP4 "E" (NaN/Inf safety) in
+1Cat-vLLM's naming.
+
+---
+
+### §21.12 Strata Engine — Consumer GPU Context for Gemma 4 E4B
+
+**GitHub:** `Niko1221/Strata`, 27.3K stars. One-click install for
+Qwen3.8-Flash-Next on Windows/Linux.
+
+**Key data for T5500 planning:**
+- Qwen3.8-Flash-Next (MoE ~125B) serves via IQ/AWQ quantization +
+  MoE expert caching (active experts in VRAM, rest paged from RAM)
+- RTX 5070 12GB: Q2_0 → 94 tok/s decode, 2,650 tok/s prompt
+- **Strata does not support V100** (CUDA compute capability mismatch)
+- But: the expert-caching + quantization architecture is the design
+  pattern for serving large MoE models on memory-constrained hardware
+
+**Relevance:** Not a direct serving path for T5500, but the expert-caching
+design applies to any future MoE decision model. Gemma 4 is dense (not MoE),
+so expert-caching doesn't apply, but the IQ quantization + GGUF serving
+pattern does.
+
+---
+
+### §21.13 Research Gaps and Open Questions
+
+1. **No GGUF export of Strands Decider Gemma 4 models.** The community has
+   exported v19 (Qwen3.5) but not the Gemma 4 v1 models (E2B/E4B/12B/26B).
+   This is the critical missing piece for llama.cpp serving.
+
+2. **GSQ serving on V100 requires 1Cat-vLLM compressed-tensors.** Stock
+   llama.cpp does not read GSQ format directly; it reads GGUF K-Quants.
+   ISTA-DASLab provides GGUF K-Quant exports for Qwen3.8 but NOT for
+   Strands Decider Gemma 4. The path is: GSQ quantize Strands → GGUF
+   export → llama.cpp or 1Cat-vLLM.
+
+3. **TurboQuant PR #779 is draft/integration-pending.** TurboQuant v3's
+   SDPA kernel is not yet merged into 1Cat-vLLM. Monitor for merge before
+   investing integration effort.
+
+4. **E2B attention bug noted in eval/results.md:** "Decision Index measured
+   before the E2B attention fix; on requests with several questions its
+   yes/no answers went through the faulty kernel path." Verify before
+   using E2B as the default rung.
+
+5. **Confidence fails on missing images (v1 vs v21):** v1 is more
+   overconfident than v21 when image is absent. This matters for the
+   vision path — always check image presence before asking.
+
+6. **Order sensitivity is non-zero:** reversing option list shifts
+   distribution by ~0.016 due to causal attention. OpenCodifier's
+   candidate ordering should be tested for position bias, especially
+   for the embedding (vtx) rung (§9.3: vtx has +15.1pp position-0
+   excess vs decision fork +2.7pp).
+
+7. **The Gemma 4 E4B Decision Index of 39.42 vs 12B's 47.14** — is the
+   19% accuracy gain worth 2× the memory and compute? On T5500 V100
+   (16GB cards), E4B Q4_K_M ~4.6GB fits with KV cache headroom; 12B
+   Q4_K_M ~9.2GB requires two V100s or aggressive KV quantization.
+   **E4B is the T5500 sweet spot.**
+
+8. **GSQ vs K-Quant quality gap:** GSQ's headline (Llama-3.1-70B 2-bit
+   GSQ at 75.57 vs QTIP 77.25) shows GSQ closes most of the scalar vs
+   vector gap. But Gemma 4's decision head (~1M params) may have
+   different quantization sensitivity than the LLM weights. The pointer
+   head should be kept at higher precision (Q8_0 minimum) while the
+   torso can use aggressive quantization.
