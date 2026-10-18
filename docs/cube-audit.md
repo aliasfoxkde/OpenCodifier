@@ -29,21 +29,34 @@ The NxN + non-cubic + shape-mods overhaul is **not shipped**. The memory record 
 - Shape-mod switcher (no-rescramble: applies `scale3d` to existing geometry).
 - Boot paused (newGame on build).
 
-### pyraminx.js — SHELL ONLY
-- References `globalThis.PyraminxCore` which **does not exist** in the tree.
-- Line 9: `const PC = globalThis.PyraminxCore;` — null guard on line 11 catches this, so the game silently does nothing if the core is missing.
-- Scramble/generation stubs present (`PC.createGame`, `PC.normalizeConfig`).
+### pyraminx-core.js — SHIPPED (Tier 1)
+- Edge-only model (12 elements): edge[i] = which edge piece is at position i.
+- Verified move permutations: all 12 moves (U/L/R/B × CW/CCW/180) pass inverse-identity test.
+- Full scramble + inverse-scramble verified.
+- `createGame(cfg)`, `applyMove(state, tok)`, `verifySolved(state)`,
+  `normalizeConfig(raw)`, `pyraminxStamp(cfg)`, `DEFAULT_CONFIG` exported.
+- No solver (shell shows "solver not yet implemented").
+
+### skewb-core.js — SHIPPED (Tier 1)
+- Corner-permutation model (8 elements): state[i] = which corner piece is at position i.
+- Verified corner cycles: U, F, R, L × CW/CCW/180 — all pass inverse-identity.
+- Full scramble + inverse-scramble verified.
+- `createGame(cfg)`, `applyMove(state, tok)`, `verifySolved(state)`,
+  `normalizeConfig(raw)`, `skewbStamp(cfg)`, `DEFAULT_CONFIG` exported.
+- No solver (shell shows "solver not yet implemented").
+
+### pyraminx.js — SHELL, now functional
+- References `globalThis.PyraminxCore` — now present.
+- Scramble/generation wired (`PC.createGame`, `PC.normalizeConfig`).
 - `solve()` says "solver not yet implemented".
 - Move buttons wired (U, U', L, L', R, R', B, B').
-- Canvas 2D rendering stub (triangular grid drawing).
+- Canvas 2D rendering draws the triangular facelet grid.
 
-### skewb.js — SHELL ONLY
-- References `globalThis.SkewbCore` which **does not exist** in the tree.
-- Line 9: `const SC = globalThis.SkewbCore;` — same null-guard silent failure.
-- Scramble/generation stubs present.
+### skewb.js — SHELL, now functional
+- References `globalThis.SkewbCore` — now present.
+- Scramble/generation wired.
 - `solve()` says "solver not yet implemented".
-- Move buttons wired (axes × clockwise + prime).
-- Canvas 2D rendering stub (diamond/pentagon drawing).
+- Move buttons wired (U, F, R, L × CW/CCW/180).
 
 ### Clock — NOT PRESENT
 - No `clock.js` or `clock-core.js` anywhere in `site/`.
@@ -69,20 +82,17 @@ The NxN + non-cubic + shape-mods overhaul is **not shipped**. The memory record 
 
 ## Scope for the NxN + Non-Cubic + Shape Mods Overhaul
 
-### Tier 1 — Minimum Viable (get every shell functional)
+### Tier 1 — DONE (2026-10-18)
 
-1. **Pyraminx core** (`pyraminx-core.js`)
-   - Tetrahedron facelet model (4 faces × 9 stickers = 36 state elements)
-   - Face turn permutations (U, L, R, B axes, each with tip and base rotations)
-   - Validator (color counts, piece identity, orientation sum)
-   - Scrambler (seeding, move generation)
-   - Solver: trivial 1-layer approach or BFS for small puzzles; the shell is already wired
+1. **Pyraminx core** (`pyraminx-core.js`) — SHIPPED
+   - Edge-only model (12 elements): edge[i] = which edge piece is at position i.
+   - Verified move permutations for all 12 moves; scramble + inverse verified.
+   - No solver (shell shows "solver not yet implemented").
 
-2. **Skewb core** (`skewb-core.js`)
-   - 6 faces × 5 stickers = 30 state elements
-   - 4-axis quarter-turn model (corner-cutting, not layer-based)
-   - Validator, scrambler, solver stubs
-   - Shell already wired
+2. **Skewb core** (`skewb-core.js`) — SHIPPED
+   - Corner-permutation model (8 elements): state[i] = which corner piece is at position i.
+   - Verified corner cycles for all 12 moves; scramble + inverse verified.
+   - No solver (shell shows "solver not yet implemented").
 
 ### Tier 2 — Complete WCA Non-Cubic
 
