@@ -1629,3 +1629,42 @@ ecosystem (and Fastino's GLiDE demo) convention is a
   deterministic, not verifiable locally, violates the
   deterministic-first principle); soft-label smoothing over the
   ballot (masks which exclusions are exact versus approximate).
+
+## D38 — The SigLIP2 zero-shot vision rung: split-tower ONNX transport, feature-free contract (track V, 2026-10-16)
+
+- **What**: image-bearing states are decided by a SigLIP2 zero-shot classifier
+  that takes an image and a candidate list and returns a calibrated probability
+  distribution — no training data, no fine-tuning, no ML dependency in the
+  decision surface.
+- **Arm of record**: `onnx-community/siglip2-base-patch16-256-ONNX`; the
+  split-tower variant (`vision_model.onnx` + `text_model.onnx`) rather than
+  the 1.5 GiB monolith, so the text tower runs once per question set and the
+  image tower once per state.
+- **Wire contract** (grounded against the transformers.js and optimum-onnx
+  export configs for SigLIP2):
+  - vision graph — input `pixel_values` f32 `[B,3,H,W]` (CHW, mean/std
+    normalized); output `pooler_output` f32 `[B,E]` (SigLIP2-base: E=768).
+  - text graph — inputs `input_ids` i64 rows + `attention_mask` i64 rows;
+    output `pooler_output` f32 `[B,E]`, likewise.
+- **Dep architecture (D11)**: ONNX transport lives in `opencodifier-runtime`
+  (`siglip.rs`); preprocessing, prompt encoding, and the zero-shot head live
+  in `opencodifier-model/vision/serve.rs` behind a `vision` feature. The
+  decision contract module (`vision.rs`) is ort-free — no ONNX dep, no ML
+  runtime, compiles in every build.
+- **Image carrier**: `State` carries `ImageInput` (typed PNG/JPEG bytes);
+  `state_from_messages` returns a parts array when images are present,
+  a plain string when text-only (byte-identical to pre-D38 behavior for
+  text-only callers, D38§2).
+- **Ladder**: image-capable requests fire the vision rung only when
+  configured; without it the engine returns `VisionRequired` and the HTTP
+  adapter maps it to HTTP 400 with `engine.vision_required`.
+- **Confidence**: the zero-shot head (cosine similarity, softmax, logit scale)
+  is calibrated before the result is exposed — raw softmax probability is not
+  calibrated confidence.
+- **Rejection (Phase H)**: `--image` without `--vision-model-dir` refuses at
+  CLI assembly; `VisionClassifier` refuses text-only states with a typed error
+  rather than degrading silently.
+- **Rejected**: single-tower monolith (charges every request for both towers'
+  memory); storing embeddings for re-ranking (no vector DB in V1); serving
+  the ONNX transport from the model crate (violates D11 heavyweight-dep
+  confinement).
