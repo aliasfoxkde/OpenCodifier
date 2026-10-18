@@ -103,8 +103,7 @@ shipped while the browser demo rides §58).
 | 75–78 | Examples: tool selection / context pruning / skill selection / escalation | done | the four worked examples are the calling discipline of `skills/tool-selection.md`, `context-pruning.md`, `memory-selection.md` (the §77 skill-selection shape), and `escalation.md`/`verification.md` |
 | 79 | Architectural Relationship | done-as-documented | the semantic-plane / routing-plane / execution-plane separation, restated in `docs/INTEGRATION_AMORTYX.md` §1 |
 | 80 | Core Thesis | done | realized |
-
-## What remains, ordered (the actionable distillation)
+| 81 | Vision rung (Track V) | partial | SigLIP2 zero-shot vision classifier — phases E-H done (D38, `vision.rs` contract, `runtime/siglip.rs` split-tower ONNX, `model/vision/serve.rs` with tokenizer, CLI `--image`/`--vision-model-dir`); phases I-J blocked on SigLIP2 ONNX weights; phase K (D38 record + ARCHITECTURE §8) done |
 
 **CPU-light (doable on a busy host) — consumed 2026-09-29:**
 2. ~~D15 full-distribution refit prep~~ **done** — the fork emits the full
