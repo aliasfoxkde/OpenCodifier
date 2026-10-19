@@ -27,10 +27,9 @@
 - **Gates:** suite ≥ 0.68 AND JevBench ≥ 0.6494 before any HF publish
 - **T5500 precondition:** power on 2×V100, set `nvidiaia_powershift.sh` (120W caps per GPU)
 
-### 5. jabr upstream PR
-- **Adapter:** `bench/backends/opencodifier.py` in `/nas/Temp/repos/jabr-classifier-benchmark/`
-- **Already on board:** Board C (v1 0.346 micro, v2 0.400 micro, 866/866, 0 errors, 1.6 ms/case)
-- **Action:** Submit PR to `jabr/classifier-benchmark` upstream
+### 5. jabr upstream PR — ✅ DONE
+- **PR:** https://github.com/aliasfoxkde/classifier-benchmark/pull/1 (fork `aliasfoxkde/classifier-benchmark`, branch `opencodifier-backend`)
+- **Upstream:** needs review + merge by jabr maintainers at `jabr/classifier-benchmark`
 
 ---
 
