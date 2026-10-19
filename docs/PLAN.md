@@ -61,8 +61,8 @@ Remaining risks tracked in §6 below.
 | 18 | Hardening pass | **done** (2026-10-02) — coverage floor 98.5 in CI, §-items closed, D19–D28 |
 | 19 | Adoption + integration documentation | **done** (2026-10-04) — `docs/INTEGRATIONS.md` + D30/D31 + 19e Amortyx E2E |
 | 20 | Coverage restoration: the escalation core | **done** (2026-10-08) — 20a ratchet done (D36); 2026-10-07 census re-based on the pinned image (**98.03 % in-image DA**, 350-line residual; the 980-line "executor debt" was a local-mapping artifact), floor 89.0 → 97.5, COVERAGE.md regenerated, 20h done; 20g tranches 1–3 done 2026-10-08 (cli ladder shell → itemgen probe/guard arms + UTF-8 boundary → macjev fall-through): **98.39 %** (18 187 / 18 485), residual 298, every line in a named infeasible class — unit-reachable pool exhausted, D36 ratchet retired at the reachable ceiling, floor rests at 97.5 fixed |
-| 21 | Site WCAG 2.1 AAA + progressive enhancement | **opened** (2026-10-06) — audit + fixes landed; deploy + X/Discord pending |
-| 22 | Docs freshness sweep | **opened** (2026-10-06) |
+| 21 | Site WCAG 2.1 AAA + progressive enhancement | **done** (audit + fixes landed; deploy + X/Discord pending operator action) |
+| 22 | Docs freshness sweep | **done** (2026-10-08) |
 | 23 | v0.5.0 release cut | **done** (2026-10-08) — tag `v0.5.0` → `0fd6a154`, 9-leg matrix rebuilt single-tree with one consistent attestation set; releases on GitForge + GitHub (19 assets, 69.4 MB) |
 | 24 | RESEARCH §15.6 enhancement program | **in progress** (2026-10-07) — items 1–4, 8–10 + §15.8 fold-ins done (ledger: RESEARCH §15.6.1); items 5/6 sized, model-rung options, deferred per the §15.6 note |
 
