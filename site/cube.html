@@ -19,16 +19,16 @@
   document.documentElement.setAttribute("data-theme-mode", mode);
 })();
 </script>
-<title>OpenCodifier — Rubik's Cube: a solver that shows its decisions</title>
-<meta name="description" content="A real 3D Rubik's Cube you can orbit, scramble, and turn — with a deterministic layer-by-layer solver that shows its plan step by step. Every insert is verified by simulation; the genuine ties (which equal-length setup to use) go to the Decisions SDK engine, and a refusal falls back to roster order without derailing the solve.">
+<title>OpenCodifier — Twisty Cubes 2×2–21×21: a solver that shows its decisions</title>
+<meta name="description" content="The whole N×N family — 2×2 to 21×21 — plus mirror, ghost, and sudokube skins at 3×3. Orbit a real 3D cube or paint a fast net view; the 2×2 and 3×3 coaches step through simulation-verified plans, and every size validates the piece laws on every move.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon-32.png" type="image/png" sizes="32x32">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta property="og:site_name" content="OpenCodifier">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://opencodifier.pages.dev/cube.html">
-<meta property="og:title" content="OpenCodifier — Rubik's Cube: a solver that shows its decisions">
-<meta property="og:description" content="Orbit, scramble, turn. Then ask for the layer-by-layer plan and step through it: every move simulation-verified, every tie labeled rule / roster / engine. Seeded and deterministic.">
+<meta property="og:title" content="OpenCodifier — Twisty Cubes 2×2–21×21: a solver that shows its decisions">
+<meta property="og:description" content="2×2 to 21×21 on one page: orbit the 3D view or read the net, scramble with wide turns, and step through a simulation-verified plan on the sizes the coach covers. Seeded and deterministic.">
 <meta property="og:image" content="https://opencodifier.pages.dev/assets/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -37,7 +37,7 @@
 <link rel="stylesheet" href="tw.css">
 </head>
 <body>
-<a class="skip-link" href="#cube">Skip to the Rubik's Cube</a>
+<a class="skip-link" href="#cube">Skip to the cube</a>
 
 <div class="bg-mesh" aria-hidden="true"></div>
 
@@ -83,56 +83,73 @@
 </nav>
 
 <header class="hero hero-slim" id="top">
-  <h1><span class="grad">Rubik's Cube</span> — a solver that shows its decisions</h1>
+  <h1><span class="grad">Twisty cubes, 2×2 to 21×21</span> — a solver that shows its decisions</h1>
   <p class="hero-sub">
-    A real 3D cube: drag to orbit, press a face to turn it, scramble it as deep
-    as you like. Then ask for the <strong>layer-by-layer plan</strong> — cross,
-    corners, middle edges, then orientation and permutation, step by step with
-    a coach line explaining each. The solver is deterministic and
-    <strong>every move is verified by simulation before it is played</strong>.
-    When several setups reach the next phase in the same number of moves, the
-    tie goes to the engine — and the rung chip on each step says who picked it.
-    The seed is optional: leave it empty and every game rolls a fresh random
-    number, shown so the scramble stays reproducible.
+    The whole N×N family on one page. Pick a size: 2×2 and 3×3 render as a
+    real 3D cube you can drag to orbit, with <strong>deterministic
+    step-by-step coaches</strong> — every move verified by simulation before
+    it is played, and genuine ties (which equal-length setup to use) sent to
+    the engine, with the rung chip saying who picked. From 4×4 up the page
+    switches to a fast net view and honest free play: scrambles use the full
+    legal turn set (wide turns included, width adjustable), and the
+    <strong>piece-law validator checks every position</strong> as you move —
+    color counts, piece multiplicity, corner twist, edge flip. The coach
+    covers what it can prove; where it can't, the page says so instead of
+    faking a solve. The seed is optional: leave it empty and every game rolls
+    a fresh random number, shown so the scramble stays reproducible.
   </p>
   </header>
 
 <main>
-<section id="cube" class="section" data-toc-label="Rubik's Cube">
-  <div id="cube-root" aria-label="Rubik's Cube game"></div>
+<section id="cube" class="section" data-toc-label="Twisty Cubes">
+  <div id="cube-root" aria-label="Twisty cube game"></div>
 
   <div class="grid-2 game-about">
     <div class="card">
       <h3>What decides what</h3>
       <ul class="checks">
-        <li><strong>The method is a rule, full stop.</strong> Layer-by-layer:
-          cross, first-layer corners, middle edges, edge orientation, corner
-          orientation, corner permutation, edge permutation, final alignment.
-          None of that is ever &ldquo;asked&rdquo; — it is the fixed skeleton of
-          the solve, and every candidate insert is verified against the
-          54-facelet model before it is played.</li>
-        <li><strong>The genuine ties are the set-ups.</strong> Sune or anti-sune,
-          Ua or Ub, U-twist before or after: when several alignments reach the
-          next phase in the same number of moves, the engine arbitrates. The
-          step's rung chip reads rule (no tie), roster (tie, nobody asked), or
-          engine (tie, the runtime chose).</li>
-        <li><strong>A refusal cannot derail the solve.</strong> If the engine
-          declines or is off, the solver takes the first equal option — roster
-          order — and the rung says so. The plan still verifies.</li>
+        <li><strong>Two verified cores, honestly split.</strong> 3×3 runs the
+          battle-tested 54-facelet core: layer-by-layer — cross, corners,
+          middle edges, edge orientation, corner orientation, corner
+          permutation, edge permutation, final alignment. 2×2 runs its own
+          core: layer build, the (R′ D′ R D) orientation loop, then a
+          breadth-first search over the 24 top permutations for a shortest
+          finish. 4×4–21×21 get no solver claim at all.</li>
+        <li><strong>Every candidate move is simulation-verified before it is
+          played.</strong> The method is a rule, not a suggestion; an insert
+          that would disturb a solved piece is never played.</li>
+        <li><strong>The genuine ties are the set-ups.</strong> When several
+          alignments reach the next phase in the same number of moves, the
+          engine arbitrates. The step's rung chip reads rule (no tie), roster
+          (tie, nobody asked), or engine (tie, the runtime chose).</li>
+        <li><strong>The piece laws run everywhere.</strong> Color counts,
+          piece multiplicity, corner-twist and edge-flip sums are checked on
+          every position at every size — the laws chip stays green or names
+          what broke. Wide turns obey the number-first SiGN convention.</li>
         <li><strong>Determinism is test-pinned.</strong> Same seed, same
-          scramble, same plan — and the pinned PLL algebras (pure edge
-          3-cycles, double swaps, corner transpositions) are asserted by
-          simulation in the test suite.</li>
+          scramble, same plan — asserted by simulation in the test suite,
+          including the 2×2 coach over 1,000 seeded scrambles.</li>
       </ul>
     </div>
     <div class="card card-honest">
       <h3>Honest edges</h3>
       <ul class="crosses">
-        <li>The solver is beginner layer-by-layer, not a speed solver: expect
-          ~140 moves, not 20. The point is a plan you can read, not a record.</li>
-        <li>Turns are instant with a face flash, not tweened layer animations —
-          the state you see is always the exact facelet state, with no
-          animation drift between what is shown and what is solved.</li>
+        <li>The coaches are beginner layer-by-layer, not speed solvers: expect
+          ~140 moves on 3×3, not 20. The point is a plan you can read, not a
+          record.</li>
+        <li>4×4 and up have no solver. That is deliberate: a reduction or
+          parity-aware big-cube solver is a real project, and shipping a fake
+          one would be a lie. Big cubes are free play with live piece-law
+          validation — which is exactly what a decision runtime does with
+          problems it can't decide: it says so.</li>
+        <li>From 4×4 up the cube renders as a 2D net on canvas, not 3D — a
+          21×21 has 2,646 stickers and one DOM node each is a dead browser.
+          Same facelets, same truth, cheap paint.</li>
+        <li>Mirror, ghost, and sudokube are 3×3 skins — same algebra, same
+          plan, different piece geometry or sticker print. Fisher, windmill,
+          megaminx, and square-1 need different cut lines; they are not faked.
+          Pyraminx, Skewb, and Clock have their own pages with their own
+          verified cores.</li>
         <li>A hand move mid-plan drops the rest of the plan on purpose: a plan
           computed for a state you then changed is a guess wearing a lab coat.
           Press solve again for a fresh one.</li>
@@ -187,6 +204,7 @@
 <script src="toc.js"></script>
 <script src="sdk/decisions-sdk.js"></script>
 <script src="cube-core.js"></script>
+<script src="cube-n-core.js"></script>
 <script src="cube.js"></script>
 </body>
 </html>

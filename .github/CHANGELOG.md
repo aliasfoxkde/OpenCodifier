@@ -8,6 +8,10 @@ releases may break, and every breaking change is recorded in this file
 
 ## [0.6.1] — 2026-10-15
 
+> Version note: `v0.6.0` was cut as a draft release and its tag pattern was
+> retired (immutable tombstone) before publication; everything it contained
+> shipped in `0.6.1`. There is no published 0.6.0.
+
 The engine learns when not to answer: selective-prediction evidence
 floors and elicited abstention join the calibration stack, the corpus
 toolchain becomes a first-class item generator crate, and the
