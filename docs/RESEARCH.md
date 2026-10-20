@@ -3681,3 +3681,163 @@ V100 CUDA kernels (not vLLM) is the current path. The Strands project's
 could train in ~20-30 hours. Key optimization: use `-fa on` (FlashAttention)
 for prefill, -t 12 threads validated on 13600K (but V100 has different
 threading). Monitor for the PSU OCP issue per the T5500 power-cap regime.
+
+## §23 — NCM / diffusion text generation: audited, harvested, not adopted (2026-10-20, user-directed)
+
+Full note with sources: **`docs/references/NCM-next-concept-modeling.md`**.
+
+### §23.1 The headline, corrected
+
+NCM (arXiv 2610.14162, Stanford + Together AI, 2026-10-09) is **not a
+diffusion model** — no noise schedule, no denoising, no iterative resampling.
+It is a **discrete coarse-to-fine multi-resolution generator**: a multiscale
+residual VQ-VAE tokenizer (K discrete code levels, each level encoding the
+residual of earlier ones) plus a decoder-only transformer that emits **one
+level per forward pass**, predicting all positions within a level in parallel.
+**NFE = K** (8–32 depending on task). The lineage is VAR-style next-scale
+prediction, not masked diffusion.
+
+The speed claim is **31×, versus diffusion LMs only** (21× vs DUO on LM1B,
+10× on OWT, 31× vs AURORA-LM on XSum; H100, batch 16, 1,024 sequences;
+README range 9–31×). The commonly-quoted "32×" is wrong, and **the paper
+reports no AR-LLM wall-clock comparison at all** — the Scaling Intelligence
+blog states this explicitly. The only AR comparison is NFE (8 vs 64), i.e.
+6–8× fewer generator calls against ~99M-parameter AR baselines.
+
+### §23.2 Why it does not transfer to a decision runtime
+
+Our decision is **one verdict read from a single forward pass** over a prompt
+containing the question plus all N options — we are already at **1 generator
+call per decision**; NCM would be **K = 8–32 calls**. NCM's advantage
+compresses *token decode*; we do not decode tokens. Our cost driver is
+**prefill**, which NCM cannot reduce.
+
+Worse for us, the released code is **generate-only**: no scoring, likelihood,
+or log-probability function exists anywhere in `models/next_concept.py`, and
+the paper describes no downstream scoring application. Level 0 is a coarse
+semantic sketch (1 code for LM1B/WMT14) with **no trained "the answer is X"
+token**, and candidate likelihood across a hierarchy with fixed per-level
+lengths is undefined. Adapting to selection = re-implementing the
+**unpublished training code** + a task-specific tokenizer and level schedule
++ inventing a readout.
+
+Engineering cost: **no ONNX, no safetensors, no GGUF, no `transformers`
+modeling class** (raw `torch.save` `.pt`). A faithful ORT port of the
+generator (per-level subgraphs, dynamic block-diagonal masks, per-level
+RoPE/level embeddings, per-level `post_upsample_conv`, optional tied codebook
+heads) plus the multiscale residual VQ tokenizer plus a parity harness is
+**3–6 engineer-weeks + GPU time before any training**. Quality ceiling:
+**nothing above 725M**, scaling study on LM1B only, contexts 129–560 tokens,
+no instruction tuning, no MCQ supervision. The **OpenWebText weights are not
+even released** (`owt/TODO.md`).
+
+Licensing: the published stack is clean (MIT / Apache-2.0, shippable with
+attribution). **`hazyresearch/nsm` and `hazyresearch/ncp` have no license
+tag** — all-rights-reserved by default, legally unusable — and those are the
+only artifacts large enough to matter (NSM's are also *aborted* `.tmp`
+training saves). The NSM generator additionally carries a `shared_head_mlp`
+head absent from the released NCM configs: a different branch, not the paper
+weights.
+
+**Verdict: do not adopt.**
+
+### §23.3 Harvest — four transferable ideas, none requiring NCM
+
+1. **Coarse-to-fine compute allocation → a new ladder rung (H1).** A cheap
+   coarse pass decides whether the expensive pass is needed. In our ladder:
+   a small concept-level predictor between embedding similarity and the
+   decision model, to classify question type, shortlist candidates, or
+   abstain early. Attacks **prefill**, our actual cost driver. Low risk;
+   composes with the existing `retrieve` node's `top_n`/`floor` and with
+   metadata/BM25 narrowing.
+2. **Entropy alongside accuracy on the choice distribution (H2).** NCM reports
+   mean unigram entropy next to every generative perplexity to catch
+   degenerate low-entropy samples (OWT AR greedy: PPL 1.07, entropy 1.65 —
+   collapsed). Our analogue: report the entropy of the per-option choice
+   softmax at every rung. 0.80 accuracy with near-zero choice entropy is
+   overfitting a skewed eval; high entropy with low accuracy is
+   under-confident. Cheap; turns "silence is a finding" into a metric.
+3. **Cross-slice calibration transfer test (H3).** NCM Table 7 exists because
+   generative perplexity is reference-model dependent. Our analogue: fit the
+   calibration temperature on one surface (e.g. the suite holdout) and
+   evaluate on another (JevBench-231, jabr board) and report the delta. If
+   the temperature does not transfer, we have a **calibration defect, not a
+   model defect** — this is the cheapest high-value check against our ECE
+   pain (0.2411 E1-C, 0.2067 raw / 0.1269 calibrated E1-E, vs JEV 0.08).
+4. **Conditioning-corruption augmentation (H4).** NCM trains with randomly
+   corrupted conditioning levels so the model stays sane when a conditioning
+   part of the input is missing. Our analogue: train the decision model to
+   stay correct when **one option's context is missing or corrupted** —
+   maps onto the non-negotiable rule "never silently discard candidates on
+   weak semantic evidence". Cheap to try on the existing arm.
+
+Deprioritized: **MBR-style agreement aggregation** (sample K verdict-slot
+reads with K fixed seeds, aggregate by agreement). Deterministic by
+construction so it does not break replay determinism, but it costs K× latency
+for a small expected gain over F26's 0.8083, and latency is the product.
+
+### §23.4 The "static context + tournament bracket" question
+
+The intuition — a fixed-context model that scales to more decision work by
+filtering options down (tournament bracket / decision tree) rather than by
+growing the context — is sound, and it does **not** require NCM. Two honest
+cautions before building it:
+
+1. **A tournament multiplies model passes.** NCM's win came from
+   *compressing* passes, not multiplying them. A bracket of 4 narrowing
+   rounds + a final decision is 5 calls, not 1 — worse than today unless each
+   narrowing round is dramatically cheaper than the decision pass (e.g. a
+   tiny model over option text only, no question context).
+2. **The verdict-slot readout already sees every option at once.** The
+   parallel-decision fork returns the full per-choice softmax distribution
+   in one pass (F26: 0.8083 via the slot readout vs 0.217 for the scorer-style
+   mismatch). A bracket has to beat a single pass that already has global
+   information — a high bar, and it is exactly the bar H1 attacks from the
+   prefill side instead.
+
+**Recommendation: implement H1 as a rung, not NCM as a model.** If the coarse
+rung measurably shortens the decision prompt, the same mechanism scales to
+arbitrarily many candidates by construction.
+
+### §23.5 Diffusion-LM landscape, for completeness
+
+LLaDA (8B) and Dream (7B) decode at ~20 tok/s in practice once refinement
+steps are counted — slower than AR, because every step reprocesses the full
+length-L sequence. The speed leaders are distilled/flow models (Mercury Coder
+Mini ~1,109 tok/s on H100) with quality still ~5–15 points behind AR. NVIDIA's
+Fast-dLLM reaches up to 27.6× throughput on LLaDA/Dream via adaptive parallel
+decoding.
+
+**The generalizable lesson:** diffusion's parallelism advantage **shrinks as
+the output gets shorter and the step count grows**, and is **entirely absent
+when the output is a single typed decision**. Diffusion buys no determinism
+(noise injection) and no calibration. **No diffusion model in the literature
+reports a multiple-choice selection benchmark** — that is our niche, and it
+is currently uncontested.
+
+### §23.6 Measured finding — the exact-proof lever is dead on JevBench (2026-10-20)
+
+`benchmarks/decision-model/runner/proof_fusion.py` measured a proof-first
+fusion on JevBench 231 (engine arm `engine-v4`, model arm E1-E slot):
+
+| arm | correct / 231 | accuracy |
+|---|---|---|
+| engine (lexical + relational) | 87 | 0.3766 |
+| E1-E 2B verdict-slot | 158 | 0.6840 |
+| proof-first fusion | 158 | 0.6840 |
+
+**The engine's relational solver fired on 0 of 231 items.** Its fact extractor
+accepts only exact grammar patterns (`X depends on Y`,
+`X is healthy|degraded|down|failing`, `X: s1, s2, …`,
+`X comes back online only after Y`), while JevBench states are free prose.
+A proof-first fusion therefore measured **identical to the model alone**
+(delta 0 items). The engine beats E1-E on only two families: trap (0.500 vs
+0.375) and judge_hard (0.471 vs 0.412).
+
+**Consequences:** (a) the fusion recipe is not a lever — the ceiling equals
+the model; (b) the relational solver needs a **prose fact extractor** before
+any operator work (including temporal operators for temporal_numeric 0.333)
+is worth doing; (c) an extractor that fires *wrongly* is worse than none,
+because the non-negotiable rule forbids silently discarding candidates on weak
+semantic evidence — any future extractor must be measured against the 2B
+model's own accuracy on the same items.
