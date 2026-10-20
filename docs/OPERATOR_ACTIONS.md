@@ -77,5 +77,6 @@ ORT_DYLIB_PATH=~/.local/lib/python3.13/site-packages/onnxruntime/capi/libonnxrun
 ---
 
 ## Git state
-- `vision/vision-rung-2026-10` → gitforge @ `50fe817` (clean, pushed)
+- `vision/vision-rung-2026-10` → gitforge @ `0fdca52` (clean, pushed)
+  - **2026-10-20 additions:** NCM audit (§23 in RESEARCH.md), proof-first fusion measurement (0/231 proofs, fusion ceiling = model alone), docs/references/NCM-next-concept-modeling.md
 - `site/games-audit-2026-10` → gitforge + origin (PR #7 MERGED)
