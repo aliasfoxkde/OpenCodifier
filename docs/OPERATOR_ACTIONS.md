@@ -18,14 +18,18 @@
 
 ---
 
-## T5500-dependent — do when node is powered on
+## T5500-dependent — done
 
-### 4. VIVERE E1 arms training (#88, #169)
-- **Corpus:** `~/oc-model-eval/corpora/e1-sft-v2/` (177,999 rows, sha verified)
-- **Bodies staged:** 2B + 4B Qwen3.5 + LoRA
-- **Trainer:** `runner/e1_train.py` on fedora → night chain → gate eval → JevBench conditional leg
-- **Gates:** suite ≥ 0.68 AND JevBench ≥ 0.6494 before any HF publish
-- **T5500 precondition:** power on 2×V100, set `nvidiaia_powershift.sh` (120W caps per GPU)
+### 4. VIVERE E1 arms training (#88) — ✅ BOTH GATES PASSED
+- **T5500 powered on 2026-10-19**
+- **E1-E 2B:** suite holdout 0.8083 ≥ 0.75 GATE_PASS; JevBench 231 0.6840 ≥ 0.6494 GATE_PASS
+- **Artifacts:** `~/t5500-bundle/runs/e1-e-qwen2b/adapter-best/`
+- **JevBench manifest:** `~/t5500-bundle/eval-results/jevbench-slot-e1e-best-231/`
+- **Status:** First own arm to pass both release-gate legs. Ready for HF publish when operator approves.
+
+### 4b. VIVERE MiMo extraction (GPU 1)
+- GPU 1 available for teacher scoring with MiMo on T5500
+- T5500 GPU0 available for VIVERE work
 
 ### 5. jabr upstream PR — ✅ DONE
 - **PR:** https://github.com/aliasfoxkde/classifier-benchmark/pull/1 (fork `aliasfoxkde/classifier-benchmark`, branch `opencodifier-backend`)
