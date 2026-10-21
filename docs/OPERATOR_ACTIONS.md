@@ -115,4 +115,4 @@ ORT_DYLIB_PATH=~/.local/lib/python3.13/site-packages/onnxruntime/capi/libonnxrun
 | Temporal operators | **§25 in RESEARCH.md.** Needs NER+date extraction (not pattern matching). PROSE_FACT_EXTRACTOR.md written. |
 | Vulkan serving | **LlamaDecisionClassifier exists in llamacpp.rs.** |
 | HF release E1-E 2B | **Ready.** Model card (docs/MODEL_CARD_E1E.md) + upload script (scripts/upload_e1e_to_hf.sh). Awaiting org name + approval. |
-| E1-F/E1-G arms | **Running.** E1-F 20.8% (step 2420/11615), E1-G 17.3% (step 3300/19058). No NaNs. |
+| E1-F/E1-G arms | **Running.** E1-F ~22% (step 2560/11615), loss 0.1382, slot_agree 0.978; E1-G ~18% (step 3520/19058), loss 0.0624, tok_acc 0.974. No NaNs. |
