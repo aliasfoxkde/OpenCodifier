@@ -1669,7 +1669,42 @@ ecosystem (and Fastino's GLiDE demo) convention is a
   the ONNX transport from the model crate (violates D11 heavyweight-dep
   confinement).
 
-## D39 — The NLI verbalization verifier is a drop-in escalation rung (2026-10-20)
+## D40 — Per-family ladder routing: accuracy-based, not calibration-based (2026-10-21)
+
+- **What**: route questions to the minimum sufficient rung based on JevBench
+  family, through the existing `LadderPolicy::per_kind` mechanism.
+- **Why not per-family calibration first**: `per_family_calibration.py` on e1e-slot-231
+  shows all 18 families hit T=200 (temperature ceiling) — the E1-E model's
+  overconfidence is accuracy-dominant, not calibration-shape. Per-family T fitting
+  produces degenerate results on every family. The ECE gap (0.207) is closed
+  only by better training, not better calibration parameters.
+- **The routing lever**: engine arm accuracy varies 0.00–1.00 across families.
+  `tool_selection` (0.99) can skip the model rung entirely. `temporal_numeric`
+  (0.333) and `multi_hop` (0.11) need the model rung directly. Routing on
+  accuracy thresholds lets the engine handle high-confidence families at zero model
+  cost while escalating hard families immediately.
+- **IR change required**: none. `LadderPolicy::per_kind` already accepts a
+  `BTreeMap<NodeKind, DecisionPolicy>`. The routing decision is: which `NodeKind`
+  gets which policy, and which families escalate immediately vs use the engine.
+  The `NodeKind` → family mapping requires either (a) a question attribute carrying
+  family, or (b) a lookup table from question text pattern to family.
+  The `question_id` in JevBench results encodes family (`hard-temporal_numeric-03`)
+  but that lives in the eval harness, not the decision request. Until a family
+  attribute is added to the request IR, the routing is an eval-harness
+  post-process (run engine-only on tool_selection/intent items, model-only on
+  multi_hop/temporal_numeric items), not a live engine feature.
+- **Implementation when family is in the request**: add `family: Option<String>` to
+  `RequestMetadata` or `DecisionPolicy`. At the ladder gate, map family to the
+  minimum rung: high-accuracy families → engine-only (lexical + relational),
+  low-accuracy families → escalate to model immediately. The `LadderPolicy`
+  already resolves per_kind, so this is a config change, not a code change.
+- **Calibration seam**: per-family calibration artifacts are still produced by
+  `per_family_calibration.py` for documentation. The routing decision uses
+  accuracy thresholds, not ECE thresholds.
+- **Blocking on eval data**: E1-F and E1-G holdout eval rows will show which
+  families improve under the new arms. Routing thresholds should be re-tuned
+  after those results land.
+
 
 - **What**: the NLI verbalization verifier (`NliVerifier`) wires into the
   escalation ladder as a plain `Rung`, with no executor changes.
