@@ -1,4 +1,4 @@
-# Operator Action Checklist — 2026-10-22
+# Operator Action Checklist — 2026-10-21
 
 ## Immediately actionable
 
@@ -33,6 +33,15 @@
   Teacher-gold argmax agreement 96.1–97.7%. Attacks accuracy AND calibration.
 - **E1-G (GPU 0):** corpus merged-v6-full (306,999 rows, Jev-distilled stream).
   Includes 129,000 rows whose labels were distilled from Jev 1.13 itself.
+- **CORPUS NOTE (v3 corpus analysis, 2026-10-21):** `SargeDev/jev-distill-corpus-v3`
+  (740,957 rows) has **zero family overlap** with JevBench-231's taxonomy
+  (`relational_compositional`, `lexical_semantic`, `metadata_match`). E1-G's
+  merged-v6 corpus is the typed-decisions stream (same decision schema as JevBench)
+  — the more relevant training signal. v3's yuri_v3 families (technical, agent,
+  knowledge, business, medical, genomics, physics…) do not map to eval families.
+  The path forward is (a) upweight the typed-decisions stream, (b) remap v3 families
+  to eval taxonomy, or (c) per-family routing via `family: Option<String>` in the
+  request IR. See RESEARCH.md §29.
 - **Knobs:** Qwen3.5-2B + verdict-slot LoRA (r=16, alpha=32, dropout=0.05,
   lr=1e-4, batch=2, accum=8, max_len=2048, fp16, sdpa, seed=42, 1 epoch).
 - **Chain:** train → suite holdout eval → JevBench public 231 slot readout.
