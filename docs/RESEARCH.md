@@ -3946,3 +3946,20 @@ This is where the next training iteration should focus.
 
 **The board ceiling without multi-hop:** if temporal_numeric + long_policy + trap + judge_hard + ambiguous + multi_hop each reach 0.700, the board average rises from 0.684 to ~0.740. That closes half the gap to JEV's reported numbers.
 
+### §27 V1.1 backlog items — what's planned, what's not (2026-10-21)
+
+SPEC_COVERAGE §71 names five planned V1.1 items. Audit result:
+
+| Item | Status | Notes |
+|---|---|---|
+| Semantic cache | **No design** | Approximate-match cache keyed on state embedding (not exact decision key). Needs a design doc. |
+| Hybrid retrieval | **No design** | Combines BM25 + embedding similarity. §24 already exists for pure lexical. |
+| Multilingual | **Gap confirmed** | Zero i18n support anywhere in the codebase. Would need tokenizer + training data + eval suite. |
+| Graph optimizer | **Blocked by D22** | D22 forbids wave-structure transforms. "Optimizer" here is dead-node elimination + CSE only. |
+| Reranker | **§26 already done** | Basic reranking exists. §71 likely means semantic/embedding reranker — needs design. |
+
+**HTTP overhead (D9 row 6, unmeasured):** `opencodifier-http` adds 2 ms p99 overhead. This row is in the D9 table but no criterion bench exists for it — only a probe. Should add `bench_http_overhead` to `opencodifier-http/benches/` to track it.
+
+**Actionable now:** write design docs for semantic cache and hybrid retrieval. These are separable from training and don't need GPU. Multilingual needs a separate eval suite (not started). Graph optimizer is D22-blocked.
+
+
