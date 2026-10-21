@@ -3958,7 +3958,7 @@ SPEC_COVERAGE §71 names five planned V1.1 items. Audit result:
 | Graph optimizer | **Blocked by D22** | D22 forbids wave-structure transforms. "Optimizer" here is dead-node elimination + CSE only. |
 | Reranker | **§26 already done** | Basic reranking exists. §71 likely means semantic/embedding reranker — needs design. |
 
-**HTTP overhead (D9 row 6, unmeasured):** `opencodifier-http` adds 2 ms p99 overhead. This row is in the D9 table but no criterion bench exists for it — only a probe. Should add `bench_http_overhead` to `opencodifier-http/benches/` to track it.
+**HTTP overhead (D9 row 6):** `crates/opencodifier-http/benches/http.rs` has `bench_http_overhead` — criterion bench over a real loopback socket, measures full POST /v1/decide round-trip. Budget is 2 ms p99.
 
 **Actionable now:** write design docs for semantic cache and hybrid retrieval. These are separable from training and don't need GPU. Multilingual needs a separate eval suite (not started). Graph optimizer is D22-blocked.
 
