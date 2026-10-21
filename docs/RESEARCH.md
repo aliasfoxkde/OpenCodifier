@@ -3841,3 +3841,43 @@ is worth doing; (c) an extractor that fires *wrongly* is worse than none,
 because the non-negotiable rule forbids silently discarding candidates on weak
 semantic evidence — any future extractor must be measured against the 2B
 model's own accuracy on the same items.
+
+### §24 Vision -> state extraction pipeline — finding: none exists (2026-10-21)
+
+Task #183 asked whether `VisionClassifier` (`vision.rs`, SigLIP2 zero-shot
+rung) could serve as a "state extraction pipeline" for visual decision
+classes. The answer after a full code audit:
+
+**What exists:**
+- `VisionClassifier`: zero-shot classification only — pools image
+  embeddings, scores a fixed candidate set via cosine similarity × logit
+  scale × softmax, returns a `Distribution`. No OCR, no captioning, no
+  VQA, no structured output of any kind.
+- `facts::extract` (`engine/src/facts.rs`): deterministic grammar that
+  parses **text** for patterns like `X depends on Y`, `X is healthy`,
+  `X: s1, s2, …`. Text-only — no image path.
+- `focus` module (`engine/src/focus.rs`): sentence-level extraction over
+  **text** within a token budget. Text-only.
+- `State::images()` / `ImageInput`: image storage only, no extraction.
+
+**What does not exist:**
+Any pipeline that takes an image and produces structured facts in the
+`State.facts` BTreeMap. This is a genuine gap, not an unimplemented feature:
+it was never specced. The honest scope of "vision rung" in this codebase is
+*classification of images against a fixed label set*, not visual understanding.
+
+**When this would matter:** If the engine ever needs to route on visual
+evidence (e.g., "which server rack is shown in this image?", "is this
+hardware healthy from its panel?"), the current rung cannot produce the
+structured facts the relational solver needs. A visual decision class would
+require one of:
+1. A VLM that returns structured JSON / typed fields (SigLIP2 is a dual
+   encoder, not a VLM)
+2. A captioning model whose output is then piped through `facts::extract`
+3. A dedicated OCR model for text-in-images
+
+**Decision:** Do not design a vision extraction pipeline until a specific
+visual decision class is identified and the upstream model (VLM or OCR)
+is chosen. SigLIP2 alone is not the right substrate. Document as a standing
+gap; revisit when §15 (relational) or §16 (focus) surfaces a visual routing
+requirement.
