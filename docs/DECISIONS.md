@@ -1668,3 +1668,33 @@ ecosystem (and Fastino's GLiDE demo) convention is a
   memory); storing embeddings for re-ranking (no vector DB in V1); serving
   the ONNX transport from the model crate (violates D11 heavyweight-dep
   confinement).
+
+## D39 — The NLI verbalization verifier is a drop-in escalation rung (2026-10-20)
+
+- **What**: the NLI verbalization verifier (`NliVerifier`) wires into the
+  escalation ladder as a plain `Rung`, with no executor changes.
+- **Why it works without code changes**: `NliVerifier` implements the engine's
+  `Classifier` trait (the same seam every other rung uses), so passing it as a
+  fallback to `EngineHandle::with_rungs` or `DecisionEngine::new_with_rungs`
+  is sufficient. The executor's existing ladder walk already calls
+  `rung.classifier.decide_extended(state, question, handoff)` — exactly what
+  `NliVerifier` implements.
+- **Ladder integration**: add `NliVerifier` as a `Rung` at the desired
+  position in the fallback list. The NLI rung fires when the previous rung's
+  gate does not accept, and the NLI distribution (entailment masses renormalized
+  over candidates) is the final answer if the NLI rung's own gate accepts.
+- **Feature gate**: the serving scorer (`OnnxNliScorer`) requires the `nli`
+  feature (tokenizers + onnx runtime). The contract — `NliVerifier`,
+  `NliScorer`, `Verbalizer`, `entailment_distribution`, and the `Classifier`
+  impl — is always compiled and usable with a scripted scorer in tests.
+- **Model id encodes the verbalizer tag**: `"nli-zeroshot:model.onnx:bare"` vs
+  `"nli-zeroshot:model.onnx:answer-is"`. Swapping the template invalidates
+  cached decisions automatically (D6).
+- **Cache key**: the ladder already decorates each rung's model id and
+  calibration version into the engine identity, so a ladder with an NLI rung
+  re-keys when the graph or template changes.
+- **Distingushed from the verifier cascade**: the engine's verifier cascade
+  (which runs after the threshold gate) is a separate mechanism — it checks
+  whether a second opinion agrees with a *verified-band* answer. The NLI rung
+  is an escalation step that replaces the decision model for *any* answer
+  below the accept gate, not just verified-band ones.
