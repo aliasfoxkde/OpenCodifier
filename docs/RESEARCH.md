@@ -3912,3 +3912,37 @@ integration (§23.6 consequence b). A VLM-based extractor (returning structured
 JSON) is the most plausible substrate; the existing `focus` module provides the
 pipelining pattern.
 
+### §26 JevBench family roadmap — where the board is won and lost (2026-10-21)
+
+E1-E 2B (verdict-slot LoRA on Qwen3.5-2B, JevBench public 231):
+
+**Perfect families (acc = 1.000):** tool_selection, routing, routing_hard, ordinal
+These families need no model work — the engine or a simple rule can handle them.
+
+**Strong families (acc ≥ 0.800):** intent (0.833), policy (0.833), fact (0.917), extraction (0.958)
+The model is solid here. Marginal improvement possible; not the bottleneck.
+
+**Moderate families (0.500–0.799):** adversarial (0.667), probability (0.700), adequacy (0.583), tradeoff (0.500)
+Room to improve. These likely need better decision logic or training signal.
+
+**Weak families (acc < 0.500):** ambiguous (0.429), judge_hard (0.412), multi_hop (0.389), trap (0.375), long_policy (0.368), temporal_numeric (0.333)
+These 6 families drag the board average from ~0.85 (if perfect on strong) to 0.684.
+This is where the next training iteration should focus.
+
+**The 6 hardest families breakdown:**
+- `temporal_numeric` (0.333): date/temporal NER + reasoning — needs §25 prose extractor
+- `long_policy` (0.368): long context + policy reasoning — context management lever
+- `trap` (0.375): adversarial candidates designed to fool — wrong-answer traps
+- `multi_hop` (0.389): multi-step reasoning — needs compositional reasoning ability
+- `judge_hard` (0.412): judgment under complexity — the model second-guesses itself
+- `ambiguous` (0.429): intentionally ambiguous inputs — abstention is correct
+
+**Roadmap implications:**
+1. **E1-F/G results** will show which families improve with better training data
+2. **Per-family routing** (D40): route high-confidence families to engine-only, hard families to model
+3. **Prose fact extractor** (§25): only lifts temporal_numeric — targeted, not general
+4. **Multi-hop reasoning**: likely needs a chain-of-thought or compositional model — not a training data fix
+5. **Abstention on ambiguous**: the model should abstain more on intentionally ambiguous inputs
+
+**The board ceiling without multi-hop:** if temporal_numeric + long_policy + trap + judge_hard + ambiguous + multi_hop each reach 0.700, the board average rises from 0.684 to ~0.740. That closes half the gap to JEV's reported numbers.
+
