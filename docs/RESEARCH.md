@@ -3989,7 +3989,10 @@ to 2B decision model work.
 FlashAttention, paged KV, speculative decoding, GGUF loading. SM70-specific
 CUDA kernels inform faster inference backend options for T5500 V100s.
 
-**Action:** Monitor `woct0rdho/llama.cpp` for NVIDIA upstream. Once available,
-evaluate fused LoRA on the E1-E adapter via the existing llama.cpp serving path.
+**Action (fork skeleton landed):** `forks/llama.cpp/` has the branch-only fork with
+build/serve scripts. Run `just build-llama-fork` to produce `llama-server` from the
+parallel-decision base. Next: apply `woct0rdho/strix` fast LoRA patches when the
+NVIDIA port is available, then benchmark against the baseline fork path.
+See `docs/FORK_LLAMA_SERVER.md` and `DECISIONS.md D41`.
 
 
