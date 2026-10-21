@@ -39,7 +39,7 @@ sed "s/\[OPERATOR: add org name\]/$ORG/g" \
 
 # --- Calibration artifact ---
 # Copy the fitted calibration artifact so users can recalibrate
-CALIB_SRC="benchmarks/decision-model/results/calibration/qwen3.5-2b-q4_k_m/fit.json"
+CALIB_SRC="benchmarks/decision-model/results/calibration/e1e-qwen3.5-2b-holdout.json"
 if [[ -f "$CALIB_SRC" ]]; then
   mkdir -p "$TEMP_DIR/calibration"
   cp "$CALIB_SRC" "$TEMP_DIR/calibration/fit.json"
