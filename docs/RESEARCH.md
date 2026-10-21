@@ -3893,16 +3893,22 @@ online only after`). JevBench states are free prose — 0 of 231 items match
 any pattern (§23.6). Before any temporal operator work, a prose extractor is
 required.
 
-**If a prose extractor existed**, the temporal_numeric gap (0.333) suggests the
-extractor's parser needs patterns for:
-- Temporal sequences: "A happens before B", "A after B", "A while B"
-- Numeric facts: thresholds, deltas, ordering — the `temporal_numeric` class
-  covers items that require understanding relative timing of events
+**temporal_numeric requires date/NER extraction, not just patterns.** Probed
+hard.jsonl: states are warranty contracts and legal text, questions are
+structured dicts with `criteria`/`instructions`/`type` fields. Example:
+"Delivery date: 31 August 2026... period starts on delivery date, ends 18
+months later... Was claim CL-28-00471 reported within the warranty period?"
+This needs: (a) date/temporal entity extraction (31 Aug 2026, "18 months later"),
+(b) temporal relationship computation ("before" end date), (c) comparison to a
+named claim date. This is NER + temporal reasoning, not pattern matching.
 
-**Prerequisite order:** prose fact extractor → temporal operators → temporal_numeric lift.
-Without the first step, the second is untestable.
+**Prerequisite chain:** prose NER/temporal extractor → relational facts →
+temporal operators in solver → temporal_numeric lift. No step is a
+standalone win.
 
-**Current blocker:** §23.6 consequence (b) — the prose fact extractor must be
-measured against the 2B model's own accuracy on the same items before any
-integration. No extractor is currently specced or built.
+**Current blocker:** the prose extractor must be specced (which NER/temporal
+model?), measured against the 2B model's accuracy on the same items before
+integration (§23.6 consequence b). A VLM-based extractor (returning structured
+JSON) is the most plausible substrate; the existing `focus` module provides the
+pipelining pattern.
 
