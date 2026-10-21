@@ -17,7 +17,9 @@ use opencodifier_core::{
     Candidate, ChoiceQuestion, DecisionOutcome, DecisionQuestion, DecisionRequest, FactValue,
     ImageInput, RequestMetadata, State,
 };
-use opencodifier_engine::{Classifier, DecisionPolicy, EngineHandle, LadderPolicy, MockClassifier, Rung, RungModality};
+use opencodifier_engine::{
+    Classifier, DecisionPolicy, EngineHandle, LadderPolicy, MockClassifier, Rung, RungModality,
+};
 
 use opencodifier_model::{ModelError, NliScorer, NliVerifier, Verbalizer};
 
@@ -82,13 +84,7 @@ fn choice_request(q: ChoiceQuestion) -> DecisionRequest {
 }
 
 fn trace_fact(trace: &opencodifier_core::DecisionTrace, node: &str, fact: &str) -> Option<&str> {
-    trace
-        .entries
-        .iter()
-        .find(|e| e.node == node)?
-        .detail
-        .get(fact)?
-        .as_str()
+    trace.entries.iter().find(|e| e.node == node)?.detail.get(fact)?.as_str()
 }
 
 fn nli_verifier(masses: Vec<f64>) -> Arc<dyn Classifier> {
@@ -109,10 +105,7 @@ fn nli_rung(masses: Vec<f64>) -> Rung {
 fn verify_primary() -> Arc<dyn Classifier> {
     Arc::new(
         MockClassifier::new("mock/primary")
-            .with_script(
-                "model",
-                vec![("cloud-large", 0.6), ("local-tiny", 0.4)],
-            )
+            .with_script("model", vec![("cloud-large", 0.6), ("local-tiny", 0.4)])
             .unwrap(),
     )
 }
@@ -142,7 +135,8 @@ fn nli_rung_fires_on_verify_band_primary() {
     )
     .unwrap();
 
-    let response = engine.decide(&choice_request(choice_question("model", &five_candidates()))).unwrap();
+    let response =
+        engine.decide(&choice_request(choice_question("model", &five_candidates()))).unwrap();
     assert_eq!(
         response.outcome(),
         DecisionOutcome::Accept,
@@ -151,10 +145,7 @@ fn nli_rung_fires_on_verify_band_primary() {
     let chain = trace_fact(response.trace(), "threshold", "rung_chain")
         .and_then(|v| v.as_str())
         .unwrap_or_default();
-    assert!(
-        chain.contains("nli-test:model.onnx:bare"),
-        "NLI rung fired: {chain}"
-    );
+    assert!(chain.contains("nli-test:model.onnx:bare"), "NLI rung fired: {chain}");
 }
 
 /// The NLI rung abstains when all entailment mass is zero.
@@ -169,7 +160,8 @@ fn nli_rung_refuses_degenerate_entailment() {
     )
     .unwrap();
 
-    let response = engine.decide(&choice_request(choice_question("model", &five_candidates()))).unwrap();
+    let response =
+        engine.decide(&choice_request(choice_question("model", &five_candidates()))).unwrap();
     // A refused distribution is surfaced as Verify on that question.
     assert_eq!(response.outcome(), DecisionOutcome::Verify);
 }
@@ -188,17 +180,15 @@ fn nli_rung_orders_by_entailment_mass() {
     )
     .unwrap();
 
-    let response = engine.decide(&choice_request(choice_question("model", &five_candidates()))).unwrap();
+    let response =
+        engine.decide(&choice_request(choice_question("model", &five_candidates()))).unwrap();
     assert_eq!(response.outcome(), DecisionOutcome::Accept);
     let answer = match response.answers().first().unwrap() {
         opencodifier_core::DecisionAnswer::Choice { choice, .. } => choice.as_str(),
         other => panic!("unexpected answer shape: {other:?}"),
     };
     // beta has the higher entailment mass after renormalization
-    assert_eq!(
-        answer, "local-tiny",
-        "NLI reorder flipped the primary's preference"
-    );
+    assert_eq!(answer, "local-tiny", "NLI reorder flipped the primary's preference");
 }
 
 /// An accepting primary never fires the NLI rung (D27 — exactly one classifier).
@@ -206,10 +196,7 @@ fn nli_rung_orders_by_entailment_mass() {
 fn accepting_primary_skips_nli_rung() {
     let accepting_primary = Arc::new(
         MockClassifier::new("mock/primary")
-            .with_script(
-                "model",
-                vec![("cloud-large", 0.95), ("local-tiny", 0.05)],
-            )
+            .with_script("model", vec![("cloud-large", 0.95), ("local-tiny", 0.05)])
             .unwrap(),
     );
     let engine = EngineHandle::with_rungs(
@@ -221,15 +208,13 @@ fn accepting_primary_skips_nli_rung() {
     )
     .unwrap();
 
-    let response = engine.decide(&choice_request(choice_question("model", &five_candidates()))).unwrap();
+    let response =
+        engine.decide(&choice_request(choice_question("model", &five_candidates()))).unwrap();
     assert_eq!(response.outcome(), DecisionOutcome::Accept);
     let chain = trace_fact(response.trace(), "threshold", "rung_chain")
         .and_then(|v| v.as_str())
         .unwrap_or_default();
-    assert!(
-        chain.is_empty(),
-        "no rung fired on accepting primary: {chain}"
-    );
+    assert!(chain.is_empty(), "no rung fired on accepting primary: {chain}");
 }
 
 /// The NLI verifier's model id encodes the template tag, so the cache key
@@ -280,10 +265,8 @@ fn nli_rung_is_modality_skipped_for_image_state() {
     // Image state with a text-only NLI rung skips it (routing, not abstention)
     // and the verify-band primary remains verify.
     assert_eq!(response.outcome(), DecisionOutcome::Verify);
-    let skipped =
-        trace_fact(response.trace(), "threshold", "rungs_skipped").and_then(|v| v.as_str()).unwrap_or_default();
-    assert!(
-        skipped.contains("nli-test"),
-        "NLI rung was not skipped: {skipped}"
-    );
+    let skipped = trace_fact(response.trace(), "threshold", "rungs_skipped")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    assert!(skipped.contains("nli-test"), "NLI rung was not skipped: {skipped}");
 }
