@@ -3881,3 +3881,28 @@ visual decision class is identified and the upstream model (VLM or OCR)
 is chosen. SigLIP2 alone is not the right substrate. Document as a standing
 gap; revisit when §15 (relational) or §16 (focus) surfaces a visual routing
 requirement.
+
+### §25 Temporal operators and prose-fact extraction — prerequisite for #180 (2026-10-21)
+
+Task #180: "add temporal operators" for `temporal_numeric` (JevBench accuracy
+0.333, the worst-performing family on the engine arm). Current status:
+
+**The relational solver cannot parse prose.** `facts.rs` has four exact patterns
+(`depends on`, `is healthy|degraded|down|failing`, `HealthList`, `comes back
+online only after`). JevBench states are free prose — 0 of 231 items match
+any pattern (§23.6). Before any temporal operator work, a prose extractor is
+required.
+
+**If a prose extractor existed**, the temporal_numeric gap (0.333) suggests the
+extractor's parser needs patterns for:
+- Temporal sequences: "A happens before B", "A after B", "A while B"
+- Numeric facts: thresholds, deltas, ordering — the `temporal_numeric` class
+  covers items that require understanding relative timing of events
+
+**Prerequisite order:** prose fact extractor → temporal operators → temporal_numeric lift.
+Without the first step, the second is untestable.
+
+**Current blocker:** §23.6 consequence (b) — the prose fact extractor must be
+measured against the 2B model's own accuracy on the same items before any
+integration. No extractor is currently specced or built.
+
