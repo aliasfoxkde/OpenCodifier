@@ -637,11 +637,11 @@ certificate, no cardinality invariance, no rotation invariance.
   best-match score mass vs the calibration corpus band; candidate- vs
   category-level marginal disagreement (TV > τ, label-free, §9.2-3);
   conformal prediction-set size (§9.2-7).
-- **BM25 is built 4× per question on the default path**
-  (narrowing.rs once; classifier.rs three more times: query scoring,
-  support scoring, label scoring). B3's build-once handoff never
-  reached the classifier path. Fedora re-baseline (in flight) gives
-  the fair per-stage numbers; build-once is the follow-up.
+- **BM25 is built once per question** (B3 done): `LexicalScores::score`
+  tokenizes the query once and builds per-document frequency maps at index
+  time; `score_all` reuses them. The `lexical_handoff` (executor.rs)
+  passes the built index to the deciding classifier so it skips its own
+  rebuild. The 4× rebuild claim above was stale.
 - **Never-abstain-at-bottom is unclaimed value**: 19% of JevBench
   engine abstentions scored incorrect while a 0.667-accuracy rung sat
   below. Escalation should be exhausted before abstention (B6 config
@@ -3995,4 +3995,46 @@ parallel-decision base. Next: apply `woct0rdho/strix` fast LoRA patches when the
 NVIDIA port is available, then benchmark against the baseline fork path.
 See `docs/FORK_LLAMA_SERVER.md` and `DECISIONS.md D41`.
 
+### §29 v3 corpus analysis — family taxonomy mismatch with JevBench (2026-10-21)
+
+Downloaded and structurally analyzed `SargeDev/jev-distill-corpus-v3` (740,957 rows,
+Apache-2.0). Canonical fields: `id`, `kind` (noul/choice/score), `options`,
+`target` (normalized probability distribution), `state`, `question`, `domain`,
+`family`, `source`.
+
+**v3 corpus structure (train split, 655,806 rows):**
+
+| Source | Rows | Families | Kinds |
+|---|---|---|---|
+| yuri_v3 | 443,977 | 14 families (technical, agent, knowledge, business, medical, genomics, physics, chemistry, theology, biology, science, spatial, structured) | score + choice + noul |
+| yuri_v1 | 137,203 | knowledge only | noul only |
+| openjev_v2 | 74,626 | openjev only | choice + noul |
+
+**JevBench-231 family taxonomy (what the eval actually tests):**
+
+| Class | Eval share | E1-E acc | Character |
+|---|---|---|---|
+| relational_compositional | 200/280 (71%) | 0.675 | multi-hop reasoning, avg 137-char contexts |
+| lexical_semantic | 40/280 (14%) | — | routing/reranking, avg 55-char contexts |
+| metadata_match | 40/280 (14%) | 0.975 | constraint satisfaction, avg 452-char contexts |
+
+**Critical finding: zero family overlap.** v3's families (`knowledge`, `technical`, `agent`, `business`, `medical`, `genomics`, `physics`, `chemistry`, `theology`, `biology`, `science`, `spatial`, `structured`, `openjev`) have **no intersection** with JevBench's families (`relational_compositional`, `lexical_semantic`, `metadata_match`).
+
+**Implications for training arms:**
+
+1. **E1-G (v3 corpus) is training on a disjoint distribution.** 655K rows of yuri_v3+yuri_v1+openjev_v2 do not provide direct signal for relational/multi-hop reasoning or constraint-satisfaction tasks. The arm will improve the families it trains on (technical/agent/knowledge routing, medical/physical science classification) but has **no guaranteed path** to closing the relational_compositional gap (E1-E weakest class at 0.675).
+
+2. **E1-F (soft-label typed-decisions) is better aligned.** The typed-decisions corpus (LocalLLaMA/typed-decisions) uses the same decision schema as JevBench (`choice`/`noul`/`score` with structured questions over operational scenarios). The eval harness itself (`suite_holdout_rel200.json`) structures items as `class` + `context` + `candidates` — this is the same shape as typed-decisions rows. E1-F's soft labels are therefore the more relevant training signal for JevBench families.
+
+3. **The family taxonomy gap is the root cause of the weak-class problem.** JevBench's `relational_compositional` family tests multi-step constraint reasoning (e.g., "which single component restores every part of the chain?"). v3 has `structured` (23,599 rows) and `physics` (23,231 rows) which *might* contain some compositional reasoning, but the eval's specific relational structure is not labeled as such.
+
+4. **The path forward requires one of:**
+   - (a) **Remap v3 families** to JevBench taxonomy — label or cluster v3 rows by whether they test compositional/multi-hop reasoning, then upweight those for the next arm's training set.
+   - (b) **Expand typed-decisions** — the corpus that E1-F uses already maps well; a larger or more diverse version of it would directly target the weak families.
+   - (c) **Per-family ladder routing** (D40, #186) — route hard families (relational_compositional, temporal_numeric) directly to the model without going through the engine, eliminating the 0.377-accuracy engine rung from the cascade for those items.
+   - (d) **Prose extractor for temporal_numeric** (§25) — the only hard family with a documented prerequisite chain; v3 has no temporal_numeric equivalent.
+
+5. **v3 OOD split (13,058 openjev rows)** tests distribution shift on openjev-family tasks. This is a useful calibration signal but does not overlap with the eval families either.
+
+**Actionable next step:** Before committing to a v3-based arm, reformat a sample of v3 rows into the JevBench `class` taxonomy and run a quick probe to measure whether the v3-trained model scores any better on relational_compositional items than E1-E does. If not, the next training arm should target the typed-decisions corpus directly or a family-remapped v3 slice.
 
