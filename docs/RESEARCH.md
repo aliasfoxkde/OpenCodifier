@@ -3962,4 +3962,34 @@ SPEC_COVERAGE §71 names five planned V1.1 items. Audit result:
 
 **Actionable now:** write design docs for semantic cache and hybrid retrieval. These are separable from training and don't need GPU. Multilingual needs a separate eval suite (not started). Graph optimizer is D22-blocked.
 
+### §28 Fast LoRA kernels in llama.cpp (2026-10-21)
+
+Reddit: fused LoRA kernels recover ~80% of throughput loss from applying small
+adapters. On AMD Strix Halo, a 35 MB LoRA dropped token throughput from 1500 →
+300 t/s without kernels; fused kernels recovered it to 1400 t/s. The bottleneck
+is `mat_mul_id` — the identity-matrix-scaled LoRA computation running every
+token generation step.
+
+**Why it matters:** E1-E/E1-F/E1-G are r=16 LoRA adapters on Qwen3.5-2B
+(~3–4 MB). We serve them through llama.cpp's HTTP interface. If fused LoRA
+kernels land in mainline, per-token latency improves at zero decision-quality
+cost.
+
+**Key references:**
+- `woct0rdho/strix-llama.cpp` fork — AMD RDNA 3.5 (gfx1151) optimized
+- `ggml-org/llama.cpp` issue #27093 — upstream tracking
+- NVIDIA CUDA port: not done yet; SM70 (V100) port is non-trivial
+- Upstream to mainline llama.cpp is planned but "takes time"
+
+**Strata** (`Niko1221/Strata`): llama.cpp-based Qwen3.8-Flash-Next (125B)
+serving on consumer hardware. Infrastructure reference, not directly applicable
+to 2B decision model work.
+
+**1Cat-vLLM** (`1CatAI/1Cat-vLLM`): vLLM fork for Tesla V100 (SM70).
+FlashAttention, paged KV, speculative decoding, GGUF loading. SM70-specific
+CUDA kernels inform faster inference backend options for T5500 V100s.
+
+**Action:** Monitor `woct0rdho/llama.cpp` for NVIDIA upstream. Once available,
+evaluate fused LoRA on the E1-E adapter via the existing llama.cpp serving path.
+
 
