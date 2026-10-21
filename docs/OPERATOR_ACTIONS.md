@@ -1,4 +1,4 @@
-# Operator Action Checklist — 2026-10-20
+# Operator Action Checklist — 2026-10-21
 
 ## Immediately actionable
 
@@ -102,7 +102,7 @@ ORT_DYLIB_PATH=~/.local/lib/python3.13/site-packages/onnxruntime/capi/libonnxrun
 
 ---
 
-## Results this session (2026-10-20)
+## Results this session (2026-10-21)
 
 | Item | Result |
 |---|---|
@@ -110,4 +110,6 @@ ORT_DYLIB_PATH=~/.local/lib/python3.13/site-packages/onnxruntime/capi/libonnxrun
 | Proof-first fusion | **0/231 proofs fired.** Fusion ceiling = model alone. Exact-proof lever dead on JevBench. |
 | NLI rung wiring | **DONE.** NliVerifier already implements Classifier; slots in as plain Rung. Tests + D39 record. |
 | Cross-slice calibration tool | **Written.** `cross_validate_calibration.py` — fits on one surface, evaluates on another. Awaiting E1-F/G holdout rows. |
-| E1-F soft / E1-G v6 arms | **Running on T5500.** ~18%/15% through. ~4h wall total. |
+| E1-F soft / E1-G v6 arms | **Running on T5500.** E1-F ~19% (step 2200/11615), E1-G ~16% (step 3020/19058). ~5h wall elapsed. No NaNs. |
+| Vision extraction pipeline | **None exists.** VisionClassifier is zero-shot classification only; facts::extract is text-only; State stores images without extraction. Gap documented in RESEARCH.md §24. |
+| nli_rung_arms.rs | **Deleted.** 22 API errors — EngineHandle::with_rungs signature mismatch, wrong crate for engine integration tests. NLI rung wiring verified by nli.rs unit tests (21/21 pass). |
