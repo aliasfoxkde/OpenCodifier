@@ -481,6 +481,16 @@ site-wasm:
     cd crates/opencodifier-wasm && wasm-pack build \
         --target web --out-dir ../../site/wasm --out-name opencodifier_wasm
 
+# Build llama-server from the decision inference fork (D41).
+# Requires: CMake >= 3.20, C++17, Vulkan SDK (AMD) or CUDA SDK (NVIDIA).
+# Output: forks/llama.cpp/build/parallel-decision/build/bin/llama-server
+build-llama-fork:
+    ./forks/llama.cpp/build.sh
+
+# Clean the fork build (removes cloned repo and build artifacts).
+clean-llama-fork:
+    rm -rf forks/llama.cpp/build forks/llama.cpp/parallel-decision
+
 # Remove build artifacts and coverage output.
 clean:
     cargo clean

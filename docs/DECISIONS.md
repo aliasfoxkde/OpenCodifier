@@ -1733,3 +1733,27 @@ ecosystem (and Fastino's GLiDE demo) convention is a
   whether a second opinion agrees with a *verified-band* answer. The NLI rung
   is an escalation step that replaces the decision model for *any* answer
   below the accept gate, not just verified-band ones.
+
+## D41 — llama.cpp decision inference fork: branch-only tracking of fast LoRA kernels (2026-10-22)
+
+Reddit post (2026-10-21): fused LoRA kernels recover ~80% of throughput loss from
+applying small adapters. On AMD Strix Halo, a 35 MB LoRA dropped token throughput from
+1500 → 300 t/s without kernels; fused kernels recovered it to 1400 t/s. The bottleneck
+is `mat_mul_id` — the identity-matrix-scaled LoRA computation running every token.
+
+- **Tracking strategy**: branch-only until the fork graduates. Base:
+  OpenCodifier's `parallel-decision` fork (hash ad129b0+) which has the tree-mode
+  `/v1/decision` endpoint. Patches on top: `woct0rdho/strix-llama.cpp` fast LoRA
+  kernels for AMD RDNA 3.5, with NVIDIA CUDA port TBD.
+- **What was stripped** for decision-only serving: generation code (KV cache, samplers,
+  beam search), paged KV / 128K context (we cap at 2048), all quant types except
+  Q4_K_M, all attention variants except SDPA, MoE expert routing.
+- **What was kept**: transformer forward pass, fused LoRA application, tree-mode
+  decision readout endpoint, static binary output.
+- **The Rust HTTP client does not change**: `LlamaDecisionClassifier` in
+  `opencodifier-model/src/llamacpp.rs` talks to the server over `POST /v1/decision`;
+  the fork replaces only the server binary.
+- **Disk layout**: `forks/llama.cpp/` in the repo root — `README.md`,
+  `build.sh`, `serve.sh`. No GGUF artifacts: T5500 bundle or HuggingFace.
+- **Revisit condition**: when fused LoRA kernels land in mainline llama.cpp,
+  the fork tracking becomes unnecessary and `forks/` can be removed.
