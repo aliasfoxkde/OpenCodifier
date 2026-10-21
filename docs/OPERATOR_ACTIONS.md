@@ -102,14 +102,17 @@ ORT_DYLIB_PATH=~/.local/lib/python3.13/site-packages/onnxruntime/capi/libonnxrun
 
 ---
 
-## Results this session (2026-10-21)
+## Results this session (2026-10-21) — 9 commits pushed
 
 | Item | Result |
 |---|---|
-| NCM adoption | **Not adopted.** Not a diffusion model; 31× vs diffusion LMs only; no AR comparison; 725M ceiling; 3–6 week port; NSM/NCP unlicensed. Harvested 4 ideas. |
-| Proof-first fusion | **0/231 proofs fired.** Fusion ceiling = model alone. Exact-proof lever dead on JevBench. |
-| NLI rung wiring | **DONE.** NliVerifier already implements Classifier; slots in as plain Rung. Tests + D39 record. |
-| Cross-slice calibration tool | **Written.** `cross_validate_calibration.py` — fits on one surface, evaluates on another. Awaiting E1-F/G holdout rows. |
-| E1-F soft / E1-G v6 arms | **Running on T5500.** E1-F ~19% (step 2200/11615), E1-G ~16% (step 3020/19058). ~5h wall elapsed. No NaNs. |
-| Vision extraction pipeline | **None exists.** VisionClassifier is zero-shot classification only; facts::extract is text-only; State stores images without extraction. Gap documented in RESEARCH.md §24. |
-| nli_rung_arms.rs | **Deleted.** 22 API errors — EngineHandle::with_rungs signature mismatch, wrong crate for engine integration tests. NLI rung wiring verified by nli.rs unit tests (21/21 pass). |
+| NCM adoption | **Not adopted.** §23 documented in RESEARCH.md. |
+| Proof-first fusion | **0/231 proofs fired.** §23.6. |
+| NLI rung wiring | **DONE.** 21/21 nli.rs tests pass. nli_rung_arms.rs deleted (22 API errors). |
+| Per-family calibration | **CLOSED.** E1-E T=200 degenerate on all 18 families — ECE is accuracy-dominant. Better training is the only lever. per_family_calibration.py written. |
+| Vision extraction pipeline | **Gap documented.** RESEARCH.md §24. |
+| Per-family routing | **D40 in DECISIONS.md.** Accuracy-based routing (not calibration). Family attribute not yet in request IR. |
+| Temporal operators | **§25 in RESEARCH.md.** Needs NER+date extraction (not pattern matching). PROSE_FACT_EXTRACTOR.md written. |
+| Vulkan serving | **LlamaDecisionClassifier exists in llamacpp.rs.** |
+| HF release E1-E 2B | **Ready.** Model card (docs/MODEL_CARD_E1E.md) + upload script (scripts/upload_e1e_to_hf.sh). Awaiting org name + approval. |
+| E1-F/E1-G arms | **Running.** E1-F 20.8% (step 2420/11615), E1-G 17.3% (step 3300/19058). No NaNs. |
