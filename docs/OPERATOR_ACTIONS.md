@@ -1,4 +1,4 @@
-# Operator Action Checklist — 2026-10-21
+# Operator Action Checklist — 2026-10-22
 
 ## Immediately actionable
 
@@ -95,24 +95,30 @@ ORT_DYLIB_PATH=~/.local/lib/python3.13/site-packages/onnxruntime/capi/libonnxrun
 ---
 
 ## Git state
-- `main` → gitforge @ `7ec223b` (clean, pushed)
-  - **2026-10-20:** NCM audit (§23 RESEARCH.md), proof-first fusion (0/231 proofs), D39 NLI rung decision record, cross_validate_calibration.py, merged vision branch
-- `vision/vision-rung-2026-10` → gitforge @ `7ec223b` (synced with main)
+- `main` → gitforge @ `d75df6d` (clean, pushed)
+  - **2026-10-22:** Fixed stale HTTP bench note (§27), fixed calibration artifact path in upload script, updated OPERATOR_ACTIONS
+- `vision/vision-rung-2026-10` → gitforge @ `d75df6d` (synced with main)
 - `site/games-audit-2026-10` → gitforge + origin (PR #7 MERGED)
 
 ---
 
-## Results this session (2026-10-21) — 9 commits pushed
+## Results this session (2026-10-22)
 
 | Item | Result |
 |---|---|
-| NCM adoption | **Not adopted.** §23 documented in RESEARCH.md. |
-| Proof-first fusion | **0/231 proofs fired.** §23.6. |
-| NLI rung wiring | **DONE.** 21/21 nli.rs tests pass. nli_rung_arms.rs deleted (22 API errors). |
-| Per-family calibration | **CLOSED.** E1-E T=200 degenerate on all 18 families — ECE is accuracy-dominant. Better training is the only lever. per_family_calibration.py written. |
-| Vision extraction pipeline | **Gap documented.** RESEARCH.md §24. |
-| Per-family routing | **D40 in DECISIONS.md.** Accuracy-based routing (not calibration). Family attribute not yet in request IR. |
-| Temporal operators | **§25 in RESEARCH.md.** Needs NER+date extraction (not pattern matching). PROSE_FACT_EXTRACTOR.md written. |
-| Vulkan serving | **LlamaDecisionClassifier exists in llamacpp.rs.** |
-| HF release E1-E 2B | **Ready.** Model card (docs/MODEL_CARD_E1E.md) + upload script (scripts/upload_e1e_to_hf.sh). Awaiting org name + approval. |
-| E1-F/E1-G arms | **Running.** E1-F ~22% (step 2560/11615), loss 0.1382, slot_agree 0.978; E1-G ~18% (step 3520/19058), loss 0.0624, tok_acc 0.974. No NaNs. |
+| E1-F/E1-G arms | **Running.** E1-F ~28% (step 3260/11615), loss 0.2659; E1-G ~23% (step 4480/19058), loss 0.1292. No NaNs. |
+| §27 HTTP bench | **Already existed.** Fixed stale note in RESEARCH.md — `crates/opencodifier-http/benches/http.rs` has bench_http_overhead. |
+| Upload script fix | **Fixed.** Calibration artifact path corrected to `e1e-qwen3.5-2b-holdout.json`. |
+| JEV-27B corpus discovery | **New lane.** `SargeDev/jev-distill-corpus-v3` (740,957 rows) with `family`/`domain`/`target` fields. yuri_v3 (498k rows) from Jev 1.13; openjev_v2 (94k, CC0). |
+| Training pipeline improvements | **Identified.** Multi-teacher aggregation, domain-specific adapters, quality-weighted curriculum, fast iteration on 1000-item stratified slice. |
+
+---
+
+## JEV-27B corpus — action items
+
+Priority for next session:
+
+1. **Probe JEV-27B on JevBench-231** — `autotrust/JEV-27B` (Qwen3.8-27B + 109M LoRA) as contamination audit baseline
+2. **Train on v3 corpus directly** — 740k rows with Jev 1.13 soft labels; replace/augment E1-G's merged-v6
+3. **Use openjev_v2 for clean eval** — 94k CC0 rows with programmatic ground truth
+4. **VIVERE extract from JEV-27B on contested items** — E1-E slot_agree ~0.98; mine the ~2% disagreement for training signal
