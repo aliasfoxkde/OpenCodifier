@@ -65,6 +65,7 @@ Remaining risks tracked in §6 below.
 | 22 | Docs freshness sweep | **done** (2026-10-08) |
 | 23 | v0.5.0 release cut | **done** (2026-10-08) — tag `v0.5.0` → `0fd6a154`, 9-leg matrix rebuilt single-tree with one consistent attestation set; releases on GitForge + GitHub (19 assets, 69.4 MB) |
 | 24 | RESEARCH §15.6 enhancement program | **in progress** (2026-10-07) — items 1–4, 8–10 + §15.8 fold-ins done (ledger: RESEARCH §15.6.1); items 5/6 sized, model-rung options, deferred per the §15.6 note |
+| 25 | The gate program: escalation, lanes, first-run detection, CI/CD | **opened** (2026-10-21) — design `docs/ESCALATION_LANES_PLAN.md`; #188 premise validation first, tasks #188–#197 |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
@@ -1636,6 +1637,45 @@ Acceptance: each landed unit carries its own tests + doc-of-record
 amendment; the ladder's empty-default byte-identity holds for every
 engine change (fleet equivalence on the committed graphs); no new
 placeholder anywhere.
+
+## Phase 25 — The gate program: escalation, lanes, first-run detection, CI/CD (opened 2026-10-21)
+
+**What this phase is.** The engine stops being only a decision oracle and
+becomes a *component of someone else's AI system*: a fast, deterministic gate
+in front of the LLM the user already has. Design of record:
+**`docs/ESCALATION_LANES_PLAN.md`**. Tasks #188–#197. The premise
+validation (#188) runs **first** — if the gate does not beat a bare LLM on the
+same items, the rest is decoration.
+
+**Why now.** The IR already declares `DecisionOutcome::Escalate` and never
+constructs it; the engine already has an ordered rung tail; the ladder already
+has per-rung gates; `ladder fit-boolean` already consumes evidence JSONL.
+What is missing is the mechanism, the payload, the configuration layer, and
+the named stacks — and the repo has **no config file at all**, which is the
+structural gap under every one of these.
+
+| task | scope | status |
+|---|---|---|
+| #188 | gated-LLM A/B — does the gate beat a bare LLM? (`engine_wrong` vs the host's error rate) | open |
+| #189 | escalation contract — `escalate_below`, `EscalationReport`, the `Escalate` outcome, every wire format | open |
+| #190 | `opencodifier-config` — the config layer: discovery, precedence, strict `config.*` errors | open |
+| #191 | lanes — the named presets (`zero`, `guard`, `delegate`, `local-2b/4b/9b`, `verify`, `ci`) | open |
+| #192 | first-run detection — `opencodifier init` / `opencodifier doctor` | open |
+| #193 | feedback loop — `POST /v1/feedback` + `codify_feedback` → `ladder fit-boolean` | open |
+| #194 | `codify_gate` — the compact agent-facing MCP gate tool | open |
+| #195 | CI/CD recipes — test selection, queue priority, stale process, risk gate | open |
+| #196 | playground QA tool — yes/no question + a real confidence score, in the browser | open |
+| #197 | re-capture the recipe expected-response files against the current engine | **done** (2026-10-22) — all 15 captures re-recorded against the live engine; the diff is the model-id move alone (`relational-v1\|builtin-lexical-v1` → `relational-v2\|builtin-lexical-v2`, D43) and its derived cache hash, with no answer, confidence, or outcome changed. `strict-verify` was found to have *no* request document and was therefore never verified — it is exercised by the same `requests/choice.json` as `minimal-choice` (one request, two gates, two outcomes), and now is. The check is read-only and CI-gated: `just check-recipes` / the `e2e` job's *Recipe captures match a live run* step. |
+
+**The line that must not move.** OpenCodifier stays the *runtime*. The CI
+integration supplies a JSON facts file; the engine decides. The runtime does
+not become a CI system, and the engine does not gain a provider SDK — it posts
+a JSON document to a URL the operator configured, and it never calls a model
+vendor itself.
+
+Acceptance: each task carries its own gate (recorded in the task); the
+byte-identity rule holds for every engine change; the whole program is
+premise-validated by #188 before the surfaces multiply.
 
 ## Spec coverage map (audit, 2026-09-28; refreshed 2026-09-30)
 

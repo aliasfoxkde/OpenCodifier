@@ -3884,6 +3884,13 @@ requirement.
 
 ### §25 Temporal operators and prose-fact extraction — prerequisite for #180 (2026-10-21)
 
+> **Update (2026-10-21, later the same day):** the exact-grammar half of this
+> chain shipped — timestamps, deadline/event facts, and the `soonest_deadline`
+> / `most_recent_event` operators — and the A/B is measured. It does **not**
+> reach `temporal_numeric`: the family's answers are band labels, not
+> entities, so the gap is model-side. See **§30** and **D43**. The prose
+> extractor below is still undecided and still untouched.
+
 Task #180: "add temporal operators" for `temporal_numeric` (JevBench accuracy
 0.333, the worst-performing family on the engine arm). Current status:
 
@@ -4038,3 +4045,56 @@ Apache-2.0). Canonical fields: `id`, `kind` (noul/choice/score), `options`,
 
 **Actionable next step:** Before committing to a v3-based arm, reformat a sample of v3 rows into the JevBench `class` taxonomy and run a quick probe to measure whether the v3-trained model scores any better on relational_compositional items than E1-E does. If not, the next training arm should target the typed-decisions corpus directly or a family-remapped v3 slice.
 
+
+## §30 — Temporal operators shipped; the `temporal_numeric` premise did not (2026-10-21)
+
+§25 specced the prerequisite chain for #180: a temporal extractor → relational
+facts → temporal operators. What landed is the **exact-grammar** half of that
+chain, and the measurement says the chain does not reach `temporal_numeric`.
+Binding record: **D43**.
+
+**What landed.** The facts grammar gained ISO timestamps (`YYYY-MM-DD`,
+optionally `THH:MM`, calendar-validated including leap years) and two fact
+forms — `Deadline { entity, at }` and `Event { entity, at }` — parsed from
+`"X <phrase> by <ts>"` and `"X <phrase> on <ts>"`. Two operators ride them:
+`soonest_deadline` and `most_recent_event`. The solver's model id moved
+`relational-v1` → `relational-v2`.
+
+**The A/B** (engine arm, `suite_temporal_v1.json`, 100 items, seed 20261021):
+
+| arm | identity | acc | ECE | accept/abstain/verify | p50 |
+|---|---|---:|---:|---|---:|
+| before | `relational-v1\|builtin-lexical-v2` | 0.290 | 0.196 | 24 / 72 / 4 | 3.09 ms |
+| after | `relational-v2\|builtin-lexical-v2` | **1.000** | **0.000** | 100 / 0 / 0 | 5.29 ms |
+
+Determinism verified in both arms (`predictions_match = true`,
+`max_prob_delta = 0.0`).
+
+**What the numbers do and do not say.** The suite is generated from the
+solver's own grammar, so 1.000 says the operators implement the semantics
+they claim, exactly and deterministically. It does **not** measure transfer to
+`temporal_numeric` — an in-grammar suite cannot. The before-arm is the more
+informative half: 72 of 100 items **abstained** rather than guessing, which is
+the abstention-is-success posture working when the evidence was absent.
+
+**Why `temporal_numeric` stays at 0.333.** Its answers are band labels
+(`sep_26`, `eur_692_00`, `9_credits`, `over_limit`) requiring DST transitions,
+leap years, business-day resets, proration and unit conversion. A relational
+operator proves *entities*, not bands. The gap is model-side (routing per
+D40, plus E1-F/E1-G), not solver-side — consistent with §23.6's finding that
+the exact-proof lever is dead on this family.
+
+**Behaviour neutrality on the pinned suites.** Board B re-measured 2026-10-21
+with `relational-v2`: accuracy 0.683, per-class 0.875 / 0.225 / 0.95, outcome
+mix 51 abstain / 42 accept / 27 verify — identical to the recorded
+`relational-v1` row. The suite contains zero ISO dates and zero
+`by`/`on`-terminated sentences outside the `depends on` pattern (checked
+directly), so the temporal arm cannot fire on it; the family tier is inert
+when no request carries a family.
+
+**The open half.** §25's other half — a *prose* extractor (NER + temporal
+relations over warranty contracts and legal text) — is untouched and still
+undecided. It is a model-side investment (a VLM-based structured extractor is
+the plausible substrate) and must be measured against the 2B model's accuracy
+on the same items before integration (§23.6 consequence b). Nothing in D43
+depends on it.
