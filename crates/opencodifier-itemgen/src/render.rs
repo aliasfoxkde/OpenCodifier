@@ -26,6 +26,16 @@ pub fn status_word(status: Health, rng: &mut Rng) -> &'static str {
     }
 }
 
+/// The verb phrases a deadline may be stated with. Each phrase is one
+/// or two words and the preposition that follows it is fixed by the
+/// grammar: "by" for a deadline.
+const DEADLINE_PHRASES: &[&str] = &["is due", "is scheduled", "must land"];
+
+/// The verb phrases a dated event may be stated with. Each phrase is one
+/// or two words and the preposition that follows it is fixed by the
+/// grammar: "on" for an event.
+const EVENT_PHRASES: &[&str] = &["completed", "started", "was updated"];
+
 /// One fact as a grammar-exact sentence (no trailing period).
 #[must_use]
 pub fn fact_sentence(fact: &RelationalFact, rng: &mut Rng) -> String {
@@ -43,6 +53,14 @@ pub fn fact_sentence(fact: &RelationalFact, rng: &mut Rng) -> String {
         }
         RelationalFact::RestoresAfter { later, earlier } => {
             format!("{later} comes back online only after {earlier}")
+        }
+        RelationalFact::Deadline { entity, at } => {
+            let phrase = DEADLINE_PHRASES[rng.below(DEADLINE_PHRASES.len())];
+            format!("{entity} {phrase} by {}", at.to_iso())
+        }
+        RelationalFact::Event { entity, at } => {
+            let phrase = EVENT_PHRASES[rng.below(EVENT_PHRASES.len())];
+            format!("{entity} {phrase} on {}", at.to_iso())
         }
     }
 }
@@ -69,6 +87,12 @@ pub fn canonical_sentence(fact: &RelationalFact) -> String {
         }
         RelationalFact::RestoresAfter { later, earlier } => {
             format!("{later} comes back online only after {earlier}")
+        }
+        RelationalFact::Deadline { entity, at } => {
+            format!("{entity} is due by {}", at.to_iso())
+        }
+        RelationalFact::Event { entity, at } => {
+            format!("{entity} completed on {}", at.to_iso())
         }
     }
 }

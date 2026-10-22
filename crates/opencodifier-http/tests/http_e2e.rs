@@ -7,13 +7,14 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use opencodifier_core::{
-    BooleanQuestion, Candidate, ChoiceQuestion, DecisionPolicy, DecisionQuestion, DecisionRequest,
-    Limits, RequestMetadata, RiskLevel, ScoreLevel, ScoreQuestion, State,
+    BooleanQuestion, Candidate, ChoiceQuestion, DecisionFamily, DecisionPolicy, DecisionQuestion,
+    DecisionRequest, Limits, RequestMetadata, RiskLevel, ScoreLevel, ScoreQuestion, State,
 };
-use opencodifier_engine::{DecisionGraph, EngineConfig, EngineHandle};
+use opencodifier_engine::{DecisionGraph, EngineConfig, EngineHandle, LadderPolicy};
 use opencodifier_schema::WireFormat;
 use opencodifier_schema::native::Native;
 use opencodifier_schema::openai::OpenAi;
@@ -27,10 +28,9 @@ struct TestServer {
     handle: Arc<EngineHandle>,
 }
 
-/// Spawns the production router on its own listener and reports the URL.
-async fn spawn_server() -> TestServer {
-    let handle =
-        Arc::new(EngineHandle::lexical(EngineConfig::with_default_pipeline().unwrap()).unwrap());
+/// Spawns the production router over an already-built engine.
+async fn spawn_server_with(engine: EngineHandle) -> TestServer {
+    let handle = Arc::new(engine);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let router = opencodifier_http::router(Arc::clone(&handle));
@@ -38,6 +38,26 @@ async fn spawn_server() -> TestServer {
         axum::serve(listener, router).await.unwrap();
     });
     TestServer { base_url: format!("http://{addr}"), handle }
+}
+
+/// Spawns the production router on its own listener and reports the URL.
+async fn spawn_server() -> TestServer {
+    spawn_server_with(
+        EngineHandle::lexical(EngineConfig::with_default_pipeline().unwrap()).unwrap(),
+    )
+    .await
+}
+
+/// The family-routing server (D42): the default lexical engine under a
+/// ladder whose `intent` family resolves its own gate override.
+async fn spawn_family_server() -> TestServer {
+    let ladder = LadderPolicy {
+        id: "e2e-family-routing".to_owned(),
+        per_family: BTreeMap::from([("intent".to_owned(), DecisionPolicy::default())]),
+        ..LadderPolicy::default()
+    };
+    let config = EngineConfig::with_default_pipeline().unwrap().with_ladder(ladder);
+    spawn_server_with(EngineHandle::lexical(config).unwrap()).await
 }
 
 fn client() -> reqwest::Client {
@@ -191,7 +211,7 @@ async fn healthz_reports_the_engine_identity() {
     assert_eq!(response["status"], "ok");
     assert_eq!(response["identity"]["graph_version"], health.identity.graph_version);
     // The composed id: the relational solver over the lexical classifier.
-    assert_eq!(response["identity"]["model_id"], "relational-v1|builtin-lexical-v2");
+    assert_eq!(response["identity"]["model_id"], "relational-v2|builtin-lexical-v2");
     assert_eq!(response["identity"]["calibration_version"], health.identity.calibration_version);
     assert_ne!(response["identity"]["engine_semver"].as_str().unwrap(), "");
     assert_eq!(response["nodes"].as_u64().unwrap(), u64::try_from(health.nodes).unwrap());
@@ -233,6 +253,7 @@ async fn request_beyond_server_limits_is_a_400_not_a_500() {
         RequestMetadata {
             request_id: None,
             limits: Limits { max_questions: 64, ..Limits::default() },
+            family: None,
         },
     )
     .unwrap();
@@ -850,4 +871,114 @@ async fn chat_completions_reports_abstention_as_a_200() {
     let content: Value =
         serde_json::from_str(body["choices"][0]["message"]["content"].as_str().unwrap()).unwrap();
     assert!(content.is_object(), "content: {content}");
+}
+
+/// The one two-candidate choice every family test decides, over the
+/// native codec.
+fn family_choice_payload(family: Option<&str>) -> String {
+    let metadata = RequestMetadata {
+        family: family.map(|name| DecisionFamily::new(name).unwrap()),
+        ..RequestMetadata::default()
+    };
+    let request = DecisionRequest::new(
+        State::from_text("refactor the rust parser module without allocating"),
+        vec![DecisionQuestion::Choice(
+            ChoiceQuestion::new(
+                "model",
+                "Which model should refactor the parser?",
+                vec![
+                    Candidate::new("local-qwen", "fast local coding model for rust refactors")
+                        .unwrap(),
+                    Candidate::new("cloud-large", "long context cloud reasoning service").unwrap(),
+                ],
+            )
+            .unwrap(),
+        )],
+        DecisionPolicy::default(),
+        metadata,
+    )
+    .unwrap();
+    Native.encode_request(&request).unwrap().to_string()
+}
+
+/// Every `policy_source` fact a response's trace recorded, if any rung
+/// of the ladder recorded one.
+///
+/// A trace entry's `detail` is a map of [`FactValue`], and a
+/// `FactValue::Text` serializes as the tagged object
+/// `{"kind": "text", "value": "..."}` — not as a bare JSON string. The
+/// value is therefore read out of the tag, and a `policy_source` that
+/// is not a text fact is skipped rather than silently stringified.
+fn trace_policy_sources(response: &Value) -> Vec<&str> {
+    response["trace"]["entries"]
+        .as_array()
+        .expect("trace entries")
+        .iter()
+        .filter_map(|entry| {
+            let fact = &entry["detail"]["policy_source"];
+            (fact["kind"] == "text").then_some(fact["value"].as_str()).flatten()
+        })
+        .collect()
+}
+
+/// D42 over HTTP: a request carrying a family the ladder maps lands its
+/// gate override on the trace as `policy_source: family:<name>`. The
+/// same payload without a family — and a valid family the ladder does
+/// not map — runs the request policy and records no ladder source at
+/// all: the family tier is additive, never ambient.
+#[tokio::test]
+async fn a_family_override_lands_in_the_trace_over_native_http() {
+    let server = spawn_family_server().await;
+
+    let routed = post_json(&server.base_url, "/v1/decide", &family_choice_payload(Some("intent")))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    let sources = trace_policy_sources(&routed);
+    // Both rungs that can carry a gate — the decision node and the
+    // threshold node — record the source, so the count is two, not
+    // one. What the assertion is about is that *every* recorded source
+    // is the family tier: a node-specific or kind-specific override
+    // would show up here as `node:<id>` / `kind:<name>`.
+    assert!(
+        !sources.is_empty() && sources.iter().all(|s| *s == "family:intent"),
+        "every policy_source must be the family tier: {sources:?} — trace: {routed}"
+    );
+
+    let unmapped =
+        post_json(&server.base_url, "/v1/decide", &family_choice_payload(Some("unmapped-family")))
+            .await
+            .json::<Value>()
+            .await
+            .unwrap();
+    assert!(
+        trace_policy_sources(&unmapped).is_empty(),
+        "an unmapped family must fall through to the request policy: {unmapped}"
+    );
+
+    let bare = post_json(&server.base_url, "/v1/decide", &family_choice_payload(None))
+        .await
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert!(
+        trace_policy_sources(&bare).is_empty(),
+        "a request without a family must run the request policy: {bare}"
+    );
+}
+
+/// The family is a validated identifier, not free text (D42): a
+/// malformed name is refused at the wire with the schema's invalid-value
+/// code — before the engine, the ladder, or the cache ever see it.
+#[tokio::test]
+async fn a_malformed_family_is_refused_at_the_wire() {
+    let server = spawn_server().await;
+    let mut payload: Value = serde_json::from_str(&family_choice_payload(Some("intent"))).unwrap();
+    payload["metadata"]["family"] = json!("not a valid id");
+
+    let response = post_json(&server.base_url, "/v1/decide", &payload.to_string()).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(error_code(&body), "schema.invalid_value", "body: {body}");
 }

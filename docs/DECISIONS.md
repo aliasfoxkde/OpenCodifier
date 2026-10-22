@@ -1757,3 +1757,113 @@ is `mat_mul_id` — the identity-matrix-scaled LoRA computation running every to
   `build.sh`, `serve.sh`. No GGUF artifacts: T5500 bundle or HuggingFace.
 - **Revisit condition**: when fused LoRA kernels land in mainline llama.cpp,
   the fork tracking becomes unnecessary and `forks/` can be removed.
+
+## D42 — Per-family ladder routing: the family is a validated request attribute (2026-10-21)
+
+D40 established that the routing lever is *accuracy*, not calibration, and left the
+mechanism unimplemented because the request IR had no family attribute. This decision
+ships that mechanism.
+
+- **What**: `RequestMetadata` gains `family: Option<DecisionFamily>`; `LadderPolicy`
+  gains `per_family: BTreeMap<String, DecisionPolicy>`; `LadderProfile` gains the same
+  field; `LadderPolicy::resolve` gains a `family: Option<&str>` argument and a family
+  tier. Resolution order is **node id → family → node kind** — most specific first.
+  The family tier sits between the other two because a family names *what kind of
+  decision* is being made, which is more specific than the deciding node's kind but
+  less specific than the node's own id.
+- **The family is a validated identifier, not free text**: `DecisionFamily` reuses the
+  IR's shared identifier rules (`[A-Za-z0-9_.-]`, max 128 bytes). The label is
+  caller-supplied and lands in cache-key material, in trace output, and in log lines,
+  so it is bounded by construction and cannot smuggle a policy directive through —
+  it selects only among the rungs a deployment has already configured. A request
+  carrying a malformed family is refused **at the wire, before the engine ever sees
+  it**, with the schema's `schema.invalid_value` code and HTTP 400. (Amended
+  2026-10-22: this record originally said the refusal carries `ir.invalid_id`. The
+  IR does produce that code — `DecisionFamily::new` returns `CoreError::InvalidId` —
+  but the *wire* path never reaches it: the native adapter deserializes the request
+  with serde first, and serde's `Deserialize` for the identifier newtype maps the
+  validation failure to a serde error, which the adapter reports as
+  `schema.invalid_value`. The IR-level code is reachable only from Rust code that
+  constructs the type directly. The security property the claim was making — a
+  malformed family never reaches the engine, the ladder, or the cache — holds
+  either way, and the wire test asserts the code that is actually emitted.)
+- **Absent means absent**: the field is `skip_serializing_if = "Option::is_none"`, so a
+  request without a family serializes byte-identically to the pre-field form and its
+  cache key does not shift. A request *with* a family is part of the canonical request
+  bytes, so two requests differing only in family get different cache keys — required,
+  because the family changes which rung answers. `CacheKeyBuilder` is unchanged: the
+  metadata already serializes into the canonical bytes.
+- **The trace names the source**: the gate records `policy_source: family:<name>`,
+  alongside the existing `node:<id>` and `kind:<name>` strings.
+- **Profile keys are validated at load**: a `per_family` key that is not a legal family
+  name could never match a request and would be a silently dead override, so
+  `LadderProfile::into_ladder` refuses it with `engine.invalid_config`.
+- **No wire-format change**: the native format is an identity codec over the IR's own
+  serde representation, so `metadata.family` is already on the wire; the CLI and MCP
+  read native request documents, so the label flows through unchanged.
+- **The thresholds are NOT decided here**: D40 measured all 18 JevBench families at the
+  T = 200 calibration ceiling, so the routing thresholds are accuracy-based and must be
+  re-tuned once E1-F/E1-G land. This decision ships the mechanism; no family profile is
+  shipped until there is a measured basis for one.
+
+
+## D43 — Temporal operators: the solver gained dates, and the premise of #180 did not survive them (2026-10-21)
+
+#180 asked the relational solver to close the JevBench `temporal_numeric` family
+(E1-E 2B accuracy 0.333). It does not, and this decision records why, what was
+built instead, and what the measurement actually shows.
+
+- **The premise was falsified by inspection.** All 15 `temporal_numeric` items were
+  read. Their answers are *band labels* (`sep_26`, `eur_692_00`, `9_credits`,
+  `over_limit`) that require multi-constraint reasoning the solver does not have and
+  should not have: daylight-saving transitions, leap years, business-day resets,
+  proration, unit conversion. A deterministic relational operator proves *entities*,
+  not bands. The gap is model-side (routing per D40, plus E1-F/E1-G training), not
+  solver-side. The exact-proof lever on this family was already recorded as dead in
+  RESEARCH §23.6; this is the same finding seen from the solver side.
+- **What was built anyway: a general capability.** The facts grammar gained ISO
+  timestamps (`YYYY-MM-DD`, optionally `THH:MM`, validated against the Gregorian
+  calendar including leap years) and two fact forms — `Deadline { entity, at }` and
+  `Event { entity, at }` — parsed from `"<entity> <phrase> by <ts>"` and
+  `"<entity> <phrase> on <ts>"`. Two new operators ride them: `soonest_deadline`
+  (the entity whose deadline falls strictly first) and `most_recent_event` (the
+  entity whose event falls strictly latest). Both are general ops-analytics
+  primitives, not benchmark-shaped.
+- **Two operators, not one, on purpose.** A single "temporal ordering" operator
+  cannot tell "deadline" from "event"; the two run in opposite directions, so
+  conflating them would answer confidently and wrongly. Keeping them separate means
+  a context that mixes both produces *disagreement → abstain* rather than a
+  confidently incorrect pick. Ties abstain. A winner outside the candidate set
+  delegates to the next rung rather than answering.
+- **Date-shaped words are not entity names.** The extractor rejects a token that
+  parses as a timestamp when testing whether it is an entity, so a date can never be
+  read as a candidate name. Dates are also not lexically salient, so the answer
+  cannot be recovered by overlap.
+- **The cache key moved**: the solver's model id is now `relational-v2|<inner>`
+  (was `relational-v1|<inner>`). Behaviour changed, so cached decisions from the old
+  solver must not be reused.
+- **The measurement** — engine arm on `suite_temporal_v1.json` (100 items, class
+  `temporal_ordering`, generated by `benchmarks/decision-model/suite/
+  generate_temporal_suite.py`, seed 20261021), same binary, same host (SWARMONE):
+
+  | arm | identity | accuracy | ECE | outcomes (accept/abstain/verify) | p50 |
+  |---|---|---|---|---|---|
+  | before | `relational-v1\|builtin-lexical-v2` | 0.290 | 0.196 | 24 / 72 / 4 | 3.09 ms |
+  | after | `relational-v2\|builtin-lexical-v2` | **1.000** | **0.000** | 100 / 0 / 0 | 5.29 ms |
+
+  Determinism: `predictions_match = true`, `max_prob_delta = 0.0` in both arms.
+
+- **What that 1.000 does and does not mean.** The suite is generated from the
+  solver's own grammar, so accuracy 1.000 says the operators implement the
+  semantics they claim, exactly and deterministically. It does **not** say the
+  capability transfers to `temporal_numeric` — a deliberately in-grammar suite
+  cannot measure transfer. The before-arm is the more informative half: 72 of 100
+  items **abstained** rather than guessing, which is the abstention-is-success
+  posture working as designed when the evidence was absent.
+- **Not shipped as a release lever.** The temporal operators are a general engine
+  capability, not a benchmark row. No JevBench number changed, and none is claimed
+  to. `temporal_numeric` remains at 0.333 for E1-E 2B and is routed like any other
+  family.
+- **Re-tuning is deferred**: the family-routing thresholds (D42's mechanism) still
+  need E1-F/E1-G measurements before any family profile ships.
+

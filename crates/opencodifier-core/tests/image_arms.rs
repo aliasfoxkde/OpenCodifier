@@ -76,6 +76,7 @@ fn per_image_and_count_limits_are_enforced_together() {
     let oversized = RequestMetadata {
         request_id: None,
         limits: Limits { max_image_bytes: 4, ..Limits::default() },
+        family: None,
     };
     let request = DecisionRequest::new(
         State::from_text("what is pictured").with_image(image(ImageMediaType::Png, 5)),
@@ -88,8 +89,11 @@ fn per_image_and_count_limits_are_enforced_together() {
         Err(opencodifier_core::CoreError::ImageTooLarge { bytes: 5, limit: 4 })
     ));
 
-    let too_many =
-        RequestMetadata { request_id: None, limits: Limits { max_images: 1, ..Limits::default() } };
+    let too_many = RequestMetadata {
+        request_id: None,
+        limits: Limits { max_images: 1, ..Limits::default() },
+        family: None,
+    };
     let request = DecisionRequest::new(
         State::from_text("two pictures")
             .with_image(image(ImageMediaType::Png, 1))

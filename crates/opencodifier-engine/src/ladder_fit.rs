@@ -251,7 +251,7 @@ mod tests {
         assert_eq!(profile.id, "unfair-tos-fit-v1");
         let ladder = profile.into_ladder().expect("profile carries an override");
         let (policy, source) = ladder
-            .resolve("any-node", crate::graph::NodeKind::Boolean)
+            .resolve("any-node", crate::graph::NodeKind::Boolean, None)
             .expect("the boolean kind override fires");
         assert_eq!(source, "kind:boolean");
         assert_eq!(policy.boolean_threshold(), Some(fit.threshold));

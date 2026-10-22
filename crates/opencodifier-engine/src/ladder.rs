@@ -46,7 +46,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use opencodifier_core::DecisionPolicy;
+use opencodifier_core::{DecisionFamily, DecisionPolicy};
 use serde::Deserialize;
 
 use crate::calibration::{Calibration, CalibrationArtifact, ProofAwareCalibration};
@@ -166,6 +166,15 @@ pub struct LadderPolicy {
     /// Policy per deciding node kind, used when the deciding node has no
     /// [`Self::per_node`] entry.
     pub per_kind: BTreeMap<NodeKind, DecisionPolicy>,
+    /// Policy per request family (D40/#186), used when the deciding node
+    /// has no [`Self::per_node`] entry and the request carries a family.
+    ///
+    /// The family is the caller's label for the *kind of decision* being
+    /// made — `relational_compositional`, `temporal_numeric`,
+    /// `tool_selection`, … It is never interpreted by the engine: it is a
+    /// routing key into this map. Resolution order is node id, then
+    /// family, then node kind — most specific first.
+    pub per_family: BTreeMap<String, DecisionPolicy>,
     /// Calibration per rung, keyed by the same `node:<id>` /
     /// `kind:<name>` strings the trace records as `policy_source`.
     /// `None` from [`Self::resolve_calibration`] means the engine-level
@@ -183,6 +192,7 @@ impl PartialEq for LadderPolicy {
         self.id == other.id
             && self.per_node == other.per_node
             && self.per_kind == other.per_kind
+            && self.per_family == other.per_family
             && self.calibrations.len() == other.calibrations.len()
             && self
                 .calibrations
@@ -204,17 +214,36 @@ impl LadderPolicy {
     /// byte-identically to a single-policy engine.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.per_node.is_empty() && self.per_kind.is_empty() && self.calibrations.is_empty()
+        self.per_node.is_empty()
+            && self.per_kind.is_empty()
+            && self.per_family.is_empty()
+            && self.calibrations.is_empty()
     }
 
     /// The override for a question decided by node id `node_id` of kind
-    /// `kind`, most specific first, paired with the source to record in
-    /// the trace (`node:<id>` / `kind:<name>`). `None` when the ladder
-    /// has no override for this node — the request policy governs.
+    /// `kind` for a request carrying `family`, most specific first,
+    /// paired with the source to record in the trace (`node:<id>` /
+    /// `family:<name>` / `kind:<name>`). `None` when the ladder has no
+    /// override for this node — the request policy governs.
+    ///
+    /// The family tier sits between the node tier and the kind tier: a
+    /// family names *what kind of decision* is being made, which is more
+    /// specific than the deciding node's kind but less specific than the
+    /// node's own id.
     #[must_use]
-    pub fn resolve(&self, node_id: &str, kind: NodeKind) -> Option<(&DecisionPolicy, String)> {
+    pub fn resolve(
+        &self,
+        node_id: &str,
+        kind: NodeKind,
+        family: Option<&str>,
+    ) -> Option<(&DecisionPolicy, String)> {
         if let Some(policy) = self.per_node.get(node_id) {
             return Some((policy, format!("node:{node_id}")));
+        }
+        if let Some(family) = family
+            && let Some(policy) = self.per_family.get(family)
+        {
+            return Some((policy, format!("family:{family}")));
         }
         if let Some(policy) = self.per_kind.get(&kind) {
             return Some((policy, format!("kind:{}", kind.as_str())));
@@ -270,6 +299,15 @@ impl LadderPolicy {
                 self.id
             ));
         }
+        // A family key must be a name a request could actually carry:
+        // requests validate their family as an identifier, so a key that
+        // is not one could never match and would be a silently dead
+        // override.
+        for family in self.per_family.keys() {
+            if let Err(error) = DecisionFamily::new(family.as_str()) {
+                return Err(format!("family `{family}` is not a usable family name: {error}"));
+            }
+        }
         Ok(())
     }
 }
@@ -301,6 +339,10 @@ pub struct LadderProfile {
     /// names (`rule`, `lexical`, `choice`, …).
     #[serde(default)]
     pub per_kind: BTreeMap<NodeKind, DecisionPolicy>,
+    /// Per-request-family rung policies (D40/#186), keyed by the family's
+    /// name as the caller writes it in `RequestMetadata::family`.
+    #[serde(default)]
+    pub per_family: BTreeMap<String, DecisionPolicy>,
     /// Per-rung calibration artifacts, keyed by the same `node:<id>` /
     /// `kind:<name>` strings the trace records.
     #[serde(default)]
@@ -336,6 +378,7 @@ impl LadderProfile {
             id: self.id,
             per_node: self.per_node,
             per_kind: self.per_kind,
+            per_family: self.per_family,
             calibrations: BTreeMap::new(),
         };
         if ladder.is_empty() {
@@ -388,7 +431,7 @@ mod tests {
     fn empty_ladder_resolves_nothing() {
         let ladder = LadderPolicy::new("none");
         assert!(ladder.is_empty());
-        assert_eq!(ladder.resolve("decide", NodeKind::Choice), None);
+        assert_eq!(ladder.resolve("decide", NodeKind::Choice, None), None);
         ladder.validate().unwrap();
     }
 
@@ -399,11 +442,11 @@ mod tests {
             per_kind: BTreeMap::from([(NodeKind::Choice, policy(0.9))]),
             ..LadderPolicy::default()
         };
-        let (resolved, source) = ladder.resolve("q_decide", NodeKind::Choice).unwrap();
+        let (resolved, source) = ladder.resolve("q_decide", NodeKind::Choice, None).unwrap();
         assert_eq!(resolved.min_confidence(), 0.9);
         assert_eq!(source, "kind:choice");
         // A different kind is untouched.
-        assert_eq!(ladder.resolve("q_decide", NodeKind::Boolean), None);
+        assert_eq!(ladder.resolve("q_decide", NodeKind::Boolean, None), None);
     }
 
     #[test]
@@ -412,15 +455,60 @@ mod tests {
             id: "test-v1".into(),
             per_node: BTreeMap::from([("decide_choice".into(), policy(0.7))]),
             per_kind: BTreeMap::from([(NodeKind::Choice, policy(0.95))]),
+            per_family: BTreeMap::new(),
             calibrations: BTreeMap::new(),
         };
-        let (resolved, source) = ladder.resolve("decide_choice", NodeKind::Choice).unwrap();
+        let (resolved, source) = ladder.resolve("decide_choice", NodeKind::Choice, None).unwrap();
         assert_eq!(resolved.min_confidence(), 0.7);
         assert_eq!(source, "node:decide_choice");
         // Another choice node falls through to the kind entry.
-        let (resolved, source) = ladder.resolve("decide_other", NodeKind::Choice).unwrap();
+        let (resolved, source) = ladder.resolve("decide_other", NodeKind::Choice, None).unwrap();
         assert_eq!(resolved.min_confidence(), 0.95);
         assert_eq!(source, "kind:choice");
+    }
+
+    #[test]
+    fn per_family_resolves_between_node_and_kind() {
+        let ladder = LadderPolicy {
+            id: "family-v1".into(),
+            per_node: BTreeMap::from([("decide_choice".into(), policy(0.70))]),
+            per_family: BTreeMap::from([("temporal_numeric".into(), policy(0.85))]),
+            per_kind: BTreeMap::from([(NodeKind::Choice, policy(0.95))]),
+            calibrations: BTreeMap::new(),
+        };
+        // Node id wins over family.
+        let (resolved, source) =
+            ladder.resolve("decide_choice", NodeKind::Choice, Some("temporal_numeric")).unwrap();
+        assert_eq!(resolved.min_confidence(), 0.70);
+        assert_eq!(source, "node:decide_choice");
+        // Family wins over kind.
+        let (resolved, source) =
+            ladder.resolve("decide_other", NodeKind::Choice, Some("temporal_numeric")).unwrap();
+        assert_eq!(resolved.min_confidence(), 0.85);
+        assert_eq!(source, "family:temporal_numeric");
+        // An unlisted family falls through to the kind entry.
+        let (resolved, source) =
+            ladder.resolve("decide_other", NodeKind::Choice, Some("fact")).unwrap();
+        assert_eq!(resolved.min_confidence(), 0.95);
+        assert_eq!(source, "kind:choice");
+        // No family at all behaves exactly as before.
+        let (resolved, source) = ladder.resolve("decide_other", NodeKind::Choice, None).unwrap();
+        assert_eq!(resolved.min_confidence(), 0.95);
+        assert_eq!(source, "kind:choice");
+    }
+
+    #[test]
+    fn a_family_only_ladder_is_not_empty() {
+        // A ladder whose only override is per-family still configures
+        // something, so it must not be treated as the empty default (an
+        // empty ladder is rejected at load).
+        let ladder = LadderPolicy {
+            id: "family-only-v1".into(),
+            per_family: BTreeMap::from([("multi_hop".into(), policy(0.99))]),
+            ..LadderPolicy::default()
+        };
+        assert!(!ladder.is_empty());
+        ladder.validate().unwrap();
     }
 
     #[test]

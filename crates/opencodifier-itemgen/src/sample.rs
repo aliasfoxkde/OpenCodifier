@@ -278,7 +278,10 @@ pub fn count_statuses(facts: &[RelationalFact]) -> (usize, usize, usize) {
                     bump(&mut counts, *status);
                 }
             }
-            RelationalFact::DependsOn { .. } | RelationalFact::RestoresAfter { .. } => {}
+            RelationalFact::DependsOn { .. }
+            | RelationalFact::RestoresAfter { .. }
+            | RelationalFact::Deadline { .. }
+            | RelationalFact::Event { .. } => {}
         }
     }
     counts

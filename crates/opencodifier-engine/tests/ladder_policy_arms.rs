@@ -67,7 +67,7 @@ fn a_named_ladder_without_overrides_is_empty_and_governs_nothing() {
     // is actually overridden.
     let ladder = LadderPolicy::new("idle-v1");
     assert!(ladder.is_empty());
-    assert_eq!(ladder.resolve("choice", NodeKind::Choice), None);
+    assert_eq!(ladder.resolve("choice", NodeKind::Choice, None), None);
     assert!(ladder.resolve_calibration("choice", NodeKind::Choice).is_none());
     ladder.validate().unwrap();
 }
@@ -81,17 +81,18 @@ fn policy_resolution_is_most_specific_first_and_names_its_source() {
         id: "specificity-v1".to_owned(),
         per_node: BTreeMap::from([("choice".to_owned(), gate(0.95))]),
         per_kind: BTreeMap::from([(NodeKind::Choice, gate(0.60)), (NodeKind::Boolean, gate(0.70))]),
+        per_family: BTreeMap::new(),
         calibrations: BTreeMap::new(),
     };
 
-    let (node, source) = ladder.resolve("choice", NodeKind::Choice).unwrap();
+    let (node, source) = ladder.resolve("choice", NodeKind::Choice, None).unwrap();
     assert_eq!((node.min_confidence(), source.as_str()), (0.95, "node:choice"));
 
-    let (kind, source) = ladder.resolve("choice_other", NodeKind::Choice).unwrap();
+    let (kind, source) = ladder.resolve("choice_other", NodeKind::Choice, None).unwrap();
     assert_eq!((kind.min_confidence(), source.as_str()), (0.60, "kind:choice"));
 
     assert_eq!(
-        ladder.resolve("score", NodeKind::Score),
+        ladder.resolve("score", NodeKind::Score, None),
         None,
         "a node id and kind with no entry resolve to nothing"
     );
@@ -107,7 +108,7 @@ fn calibration_resolution_is_independent_of_policy_resolution() {
         per_kind: BTreeMap::from([(NodeKind::Choice, gate(0.90))]),
         ..LadderPolicy::default()
     };
-    let (policy, source) = policy_only.resolve("choice", NodeKind::Choice).unwrap();
+    let (policy, source) = policy_only.resolve("choice", NodeKind::Choice, None).unwrap();
     assert_eq!((policy.min_confidence(), source.as_str()), (0.90, "kind:choice"));
     assert!(
         policy_only.resolve_calibration("choice", NodeKind::Choice).is_none(),
@@ -117,7 +118,7 @@ fn calibration_resolution_is_independent_of_policy_resolution() {
     let calibration_only = LadderPolicy::new("calibration-only-v1")
         .with_calibration("node:choice", Arc::new(IdentityCalibration) as _);
     assert!(
-        calibration_only.resolve("choice", NodeKind::Choice).is_none(),
+        calibration_only.resolve("choice", NodeKind::Choice, None).is_none(),
         "a calibration override is not a gate override"
     );
     let (calibration, source) =
@@ -152,6 +153,28 @@ fn ladder_equality_is_the_whole_composition_not_just_the_gates() {
     let calibrated = LadderPolicy::new("eq-v1")
         .with_calibration("kind:choice", Arc::new(IdentityCalibration) as _);
     assert_ne!(kind_gated(), calibrated, "a rung calibration changes the composition");
+}
+
+#[test]
+fn a_profile_can_carry_a_family_tier() {
+    // The family tier is part of the deployment surface, not an
+    // in-memory-only convenience: a shipped profile names its families,
+    // and a request carrying one of them resolves against it — and
+    // against nothing else.
+    let rung = r#"{ "min_confidence": 0.95, "verify_below": 0.90,
+                    "abstain_below": 0.45, "risk": "low" }"#;
+    let document = format!(r#"{{ "id": "family-v1", "per_family": {{ "multi_hop": {rung} }} }}"#);
+    let ladder = profile(&document).into_ladder().unwrap();
+    let (policy, source) = ladder.resolve("choice", NodeKind::Choice, Some("multi_hop")).unwrap();
+    assert_eq!((policy.min_confidence(), source.as_str()), (0.95, "family:multi_hop"));
+    assert!(
+        ladder.resolve("choice", NodeKind::Choice, None).is_none(),
+        "a family tier does not govern a request with no family"
+    );
+    assert!(
+        ladder.resolve("choice", NodeKind::Choice, Some("other")).is_none(),
+        "an unlabelled family does not inherit another family's rung"
+    );
 }
 
 #[test]
@@ -200,7 +223,7 @@ fn a_profile_builds_node_keyed_rung_calibrations() {
     let ladder = profile(&document).into_ladder().unwrap();
     assert_eq!(ladder.id, "node-cal-v1");
 
-    let (policy, policy_source) = ladder.resolve("choice", NodeKind::Choice).unwrap();
+    let (policy, policy_source) = ladder.resolve("choice", NodeKind::Choice, None).unwrap();
     assert_eq!((policy.min_confidence(), policy_source.as_str()), (0.95, "node:choice"));
 
     let (calibration, calibration_source) =

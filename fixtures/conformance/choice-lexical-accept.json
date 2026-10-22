@@ -58,7 +58,7 @@
             },
             "key": {
               "kind": "text",
-              "value": "d659ab52bd399b701e09989925dc48f299d90ddb660b8e4045207acb91f12576"
+              "value": "dc3d4b7f46c45042998eea736ee198736ceb0720942133f4adc1312c92cd38ef"
             }
           },
           "node": "cache"
@@ -142,7 +142,7 @@
             },
             "model": {
               "kind": "text",
-              "value": "relational-v1|builtin-lexical-v2"
+              "value": "relational-v2|builtin-lexical-v2"
             },
             "ood": {
               "kind": "float",

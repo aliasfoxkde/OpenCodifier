@@ -171,7 +171,11 @@ impl WireFormat for Anthropic {
             state,
             questions,
             opencodifier_core::DecisionPolicy::default(),
-            opencodifier_core::RequestMetadata { request_id: None, limits: limits.clone() },
+            opencodifier_core::RequestMetadata {
+                request_id: None,
+                limits: limits.clone(),
+                family: None,
+            },
         )
         .map_err(SchemaError::from)
     }

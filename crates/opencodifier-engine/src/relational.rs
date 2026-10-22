@@ -22,11 +22,12 @@
 //! check, so a candidate set that narrowed the true answer away is
 //! answered with a delegation, never with a second-best guess.
 //!
-//! The three operators are general ops-analytics primitives — root cause
+//! The five operators are general ops-analytics primitives — root cause
 //! over a dependency graph, healthiest group by count, first to restore
-//! under ordering constraints — not fixtures for any particular
-//! question: they fire on whatever question has the facts that make a
-//! proof possible, and they must agree when several fire at once.
+//! under ordering constraints, soonest deadline, most recent event — not
+//! fixtures for any particular question: they fire on whatever question
+//! has the facts that make a proof possible, and they must agree when
+//! several fire at once.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -37,7 +38,7 @@ use opencodifier_core::{
 
 use crate::classifier::{Classifier, LexicalClassifier};
 use crate::error::EngineError;
-use crate::facts::{Health, RelationalFact, extract};
+use crate::facts::{Health, RelationalFact, Timestamp, extract};
 
 /// A classifier that answers what it can prove and delegates the rest.
 #[derive(Debug)]
@@ -53,7 +54,7 @@ impl RelationalSolver {
     /// refit of either produces a distinct cache key (PLANNING.md §64).
     #[must_use]
     pub fn new(inner: Arc<dyn Classifier>) -> Self {
-        Self { model_id: format!("relational-v1|{}", inner.model_id()), inner }
+        Self { model_id: format!("relational-v2|{}", inner.model_id()), inner }
     }
 
     /// The solver over the built-in lexical classifier — the fully
@@ -78,6 +79,8 @@ impl RelationalSolver {
             root_cause(&facts, &candidates),
             healthiest(&facts, &candidates),
             first_restored(&facts, &candidates),
+            soonest_deadline(&facts, &candidates),
+            most_recent_event(&facts, &candidates),
         ]
         .into_iter()
         .flatten()
@@ -237,6 +240,63 @@ fn first_restored(facts: &[RelationalFact], candidates: &[&str]) -> Option<Strin
     candidates.contains(&first.as_str()).then(|| first.clone())
 }
 
+/// Soonest deadline (temporal ordering): the unique entity whose
+/// deadline falls strictly earlier than every other deadline, and a
+/// candidate.
+///
+/// An entity's own deadlines rank by their earliest one — a second,
+/// later deadline on the same entity does not make it less urgent. A
+/// tie between two entities means no proof: "which is due first" is
+/// undecidable when two are due at the same moment.
+fn soonest_deadline(facts: &[RelationalFact], candidates: &[&str]) -> Option<String> {
+    let mut deadlines: BTreeMap<&str, Vec<Timestamp>> = BTreeMap::new();
+    for fact in facts {
+        if let RelationalFact::Deadline { entity, at } = fact {
+            deadlines.entry(entity.as_str()).or_default().push(*at);
+        }
+    }
+    let mut ranked: Vec<(&str, Timestamp)> = deadlines
+        .into_iter()
+        .filter_map(|(entity, times)| times.into_iter().min().map(|at| (entity, at)))
+        .collect();
+    if ranked.is_empty() {
+        return None;
+    }
+    ranked.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(b.0)));
+    let (soonest, at) = ranked[0];
+    if ranked.len() > 1 && ranked[1].1 == at {
+        return None;
+    }
+    candidates.contains(&soonest).then(|| soonest.to_owned())
+}
+
+/// Most recent event (temporal ordering): the unique entity whose event
+/// falls strictly later than every other event, and a candidate.
+///
+/// The mirror of [`soonest_deadline`]: an entity's events rank by their
+/// latest one, and a tie between two entities means no proof.
+fn most_recent_event(facts: &[RelationalFact], candidates: &[&str]) -> Option<String> {
+    let mut events: BTreeMap<&str, Vec<Timestamp>> = BTreeMap::new();
+    for fact in facts {
+        if let RelationalFact::Event { entity, at } = fact {
+            events.entry(entity.as_str()).or_default().push(*at);
+        }
+    }
+    let mut ranked: Vec<(&str, Timestamp)> = events
+        .into_iter()
+        .filter_map(|(entity, times)| times.into_iter().max().map(|at| (entity, at)))
+        .collect();
+    if ranked.is_empty() {
+        return None;
+    }
+    ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
+    let (latest, at) = ranked[0];
+    if ranked.len() > 1 && ranked[1].1 == at {
+        return None;
+    }
+    candidates.contains(&latest).then(|| latest.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]
@@ -386,7 +446,7 @@ mod tests {
     #[test]
     fn model_id_composes_inner_and_solver() {
         let solver = RelationalSolver::lexical();
-        assert!(solver.model_id().starts_with("relational-v1|"));
+        assert!(solver.model_id().starts_with("relational-v2|"));
         assert!(solver.model_id().ends_with(LexicalClassifier::new().model_id()));
         let other = RelationalSolver::new(Arc::new(MockClassifier::new("mock/x")));
         assert_ne!(solver.model_id(), other.model_id(), "inner swaps must change the cache key");
@@ -437,6 +497,64 @@ mod tests {
         let distribution = decide(&solver, combined, &["north", "south"]);
         assert_eq!(distribution.top().key, "north");
         assert_eq!(distribution.top().probability, 1.0);
+    }
+
+    #[test]
+    fn proves_the_soonest_deadline() {
+        let solver = RelationalSolver::lexical();
+        let text = "invoice is due by 2026-03-01. contract is due by 2026-01-15. \
+                    payroll is due by 2026-06-30.";
+        let distribution = decide(&solver, text, &["invoice", "contract", "payroll"]);
+        assert_eq!(distribution.top().key, "contract");
+        assert_eq!(distribution.top().probability, 1.0);
+    }
+
+    #[test]
+    fn proves_the_most_recent_event() {
+        let solver = RelationalSolver::lexical();
+        let text = "deploy completed on 2026-02-01. rollback completed on 2026-03-11. \
+                    audit completed on 2026-01-05.";
+        let distribution = decide(&solver, text, &["deploy", "rollback", "audit"]);
+        assert_eq!(distribution.top().key, "rollback");
+        assert_eq!(distribution.top().probability, 1.0);
+    }
+
+    #[test]
+    fn an_entity_ranks_by_its_own_earliest_deadline() {
+        let solver = RelationalSolver::lexical();
+        // Two deadlines on one entity: the sooner one is the one that
+        // binds, and a later duplicate does not make it less urgent.
+        let text = "invoice is due by 2026-03-01. invoice is due by 2026-05-01. \
+                    contract is due by 2026-04-01.";
+        let distribution = decide(&solver, text, &["invoice", "contract"]);
+        assert_eq!(distribution.top().key, "invoice");
+        assert_eq!(distribution.top().probability, 1.0);
+    }
+
+    #[test]
+    fn abstains_when_two_deadlines_tie() {
+        let solver = RelationalSolver::lexical();
+        let text = "invoice is due by 2026-03-01. contract is due by 2026-03-01.";
+        let distribution = decide(&solver, text, &["invoice", "contract"]);
+        assert!(distribution.top().probability < 1.0, "a tie is undecidable: no proof");
+    }
+
+    #[test]
+    fn abstains_when_the_soonest_deadline_is_not_a_candidate() {
+        let solver = RelationalSolver::lexical();
+        let text = "invoice is due by 2026-03-01. contract is due by 2026-04-01.";
+        let distribution = decide(&solver, text, &["contract", "payroll"]);
+        assert!(distribution.top().probability < 1.0, "must delegate, not prove a second-best");
+    }
+
+    #[test]
+    fn a_deadline_and_an_event_do_not_both_prove() {
+        let solver = RelationalSolver::lexical();
+        // Two temporal operators fire and disagree, so the solver has no
+        // proof: it delegates rather than picking a direction.
+        let text = "invoice is due by 2026-03-01. audit completed on 2026-05-01.";
+        let distribution = decide(&solver, text, &["invoice", "audit"]);
+        assert!(distribution.top().probability < 1.0, "conflicting temporal proofs must delegate");
     }
 
     #[test]

@@ -606,7 +606,7 @@ impl WireFormat for OpenAi {
 
 /// Wraps caller limits into request metadata.
 fn limits_metadata(limits: &Limits) -> opencodifier_core::RequestMetadata {
-    opencodifier_core::RequestMetadata { request_id: None, limits: limits.clone() }
+    opencodifier_core::RequestMetadata { request_id: None, limits: limits.clone(), family: None }
 }
 
 /// Reads the state text and images out of an `input` content-part array

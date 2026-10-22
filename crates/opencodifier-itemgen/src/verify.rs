@@ -276,6 +276,27 @@ mod tests {
         }
     }
 
+    /// The temporal fact kinds must round-trip through the rendering
+    /// and the extraction grammar: a rendered deadline or event has to
+    /// re-extract to the identical fact, timestamps included.
+    #[test]
+    fn the_temporal_fact_kinds_round_trip_through_the_grammar() {
+        use opencodifier_engine::facts::{RelationalFact, Timestamp};
+        let at = Timestamp::parse("2026-03-01T09:30").expect("the sample timestamp parses");
+        for fact in [
+            RelationalFact::Deadline { entity: "invoice".to_owned(), at },
+            RelationalFact::Event { entity: "audit".to_owned(), at },
+        ] {
+            let sentence = canonical_sentence(&fact);
+            let extracted = opencodifier_engine::facts::extract(&format!("{sentence}."));
+            assert_eq!(
+                extracted,
+                vec![fact],
+                "{sentence} must re-extract to the fact it was rendered from"
+            );
+        }
+    }
+
     #[test]
     fn a_corrupted_fact_set_fails_the_round_trip() {
         let mut rng = Rng::new(22);
@@ -335,9 +356,10 @@ mod tests {
             RelationalFact::DependsOn { dependent, dependency } => {
                 dependent == name || dependency == name
             }
-            RelationalFact::Health { entity, .. } | RelationalFact::HealthList { entity, .. } => {
-                entity == name
-            }
+            RelationalFact::Health { entity, .. }
+            | RelationalFact::HealthList { entity, .. }
+            | RelationalFact::Deadline { entity, .. }
+            | RelationalFact::Event { entity, .. } => entity == name,
             RelationalFact::RestoresAfter { later, earlier } => later == name || earlier == name,
         }
     }

@@ -309,7 +309,7 @@ fn the_handle_surfaces_the_graph_identity_and_health() {
 
     // Identity and health agree with the configuration underneath.
     let identity = handle.identity();
-    assert_eq!(identity.model_id, "relational-v1|builtin-lexical-v2");
+    assert_eq!(identity.model_id, "relational-v2|builtin-lexical-v2");
     assert_eq!(identity.graph_version, EngineIdentity::builtin().graph_version);
     assert_eq!(identity.embedding_model, "none");
     let health = handle.health();

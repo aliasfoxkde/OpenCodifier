@@ -344,7 +344,7 @@ pub fn manifest_value(config: &GenConfig, stats: &GenStats) -> serde_json::Value
         "mention_salience_probe": mentions,
         "verification": {
             "round_trip": "extracted facts must equal constructed facts",
-            "solver": "relational-v1|lexical, probability 1.0 on gold (choice families)",
+            "solver": "relational-v2|lexical, probability 1.0 on gold (choice families)",
             "score": "gold level re-derived from extracted facts through the rubric",
             "lexical": "recorded, not enforced (AFLITE-style probe)"
         }

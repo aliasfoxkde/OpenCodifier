@@ -37,8 +37,11 @@ fn fixture_value(path: &str) -> Value {
 
 /// The request the native fixture describes, built with core constructors.
 fn native_request() -> DecisionRequest {
-    let metadata =
-        RequestMetadata { request_id: Some("fixture-0001".to_owned()), limits: Limits::default() };
+    let metadata = RequestMetadata {
+        request_id: Some("fixture-0001".to_owned()),
+        limits: Limits::default(),
+        family: None,
+    };
     DecisionRequest::new(
         State::from_text("route this request across local models")
             .with_fact("context_tokens", opencodifier_core::FactValue::Integer(4_096)),
@@ -161,6 +164,7 @@ fn native_image_request() -> DecisionRequest {
     let metadata = RequestMetadata {
         request_id: Some("fixture-images-0001".to_owned()),
         limits: Limits::default(),
+        family: None,
     };
     DecisionRequest::new(
         State::from_text("classify the attached chart").with_image(ImageInput::new(

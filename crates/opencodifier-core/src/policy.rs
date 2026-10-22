@@ -7,6 +7,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{CoreError, CoreResult};
+use crate::ids::DecisionFamily;
 
 /// How consequential a decision is. Higher risk demands stronger
 /// confidence or verification before the answer is accepted.
@@ -609,6 +610,27 @@ pub struct RequestMetadata {
     pub request_id: Option<String>,
     /// Resource ceilings for this request.
     pub limits: Limits,
+    /// Optional decision family for this request (D40/#186).
+    ///
+    /// The family is the caller's label for *what kind of decision this
+    /// is* — e.g. `relational_compositional`, `temporal_numeric`,
+    /// `tool_selection`. The engine never interprets it: it is a routing
+    /// key, and the ladder maps it to a policy.
+    ///
+    /// It is a [`DecisionFamily`], not free text, so the shared
+    /// identifier rules bound it: the label lands in cache-key material,
+    /// in trace output, and in log lines, and a caller can smuggle
+    /// nothing through it but a choice among the rungs a deployment has
+    /// already configured.
+    ///
+    /// Absent on the default, and serialized as absent, so a request
+    /// without a family is byte-identical to the pre-field form and its
+    /// cache key does not shift. When present it *is* part of the
+    /// canonical request bytes, so two requests differing only in family
+    /// get different cache keys — required, because the family changes
+    /// which rung answers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub family: Option<DecisionFamily>,
 }
 
 #[cfg(test)]

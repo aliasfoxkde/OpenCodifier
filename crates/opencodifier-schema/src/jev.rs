@@ -668,7 +668,7 @@ fn wire_error(field: &str, error: &serde_json::Error) -> SchemaError {
 
 /// Wraps caller limits into request metadata.
 fn metadata(limits: &Limits) -> opencodifier_core::RequestMetadata {
-    opencodifier_core::RequestMetadata { request_id: None, limits: limits.clone() }
+    opencodifier_core::RequestMetadata { request_id: None, limits: limits.clone(), family: None }
 }
 
 /// Re-expresses a level distribution as a probability map over indices.

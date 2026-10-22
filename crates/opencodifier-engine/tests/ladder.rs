@@ -18,11 +18,12 @@ use std::sync::Arc;
 
 use common::{boolean_question, choice_question, config, engine_with, request_with_policy};
 use opencodifier_core::{
-    DecisionAnswer, DecisionOutcome, DecisionPolicy, FactValue, RequestMetadata, RiskLevel, State,
+    DecisionAnswer, DecisionFamily, DecisionOutcome, DecisionPolicy, FactValue, RequestMetadata,
+    RiskLevel, State,
 };
 use opencodifier_engine::{
-    CacheKeyBuilder, EngineConfig, EngineError, IdentityCalibration, LadderPolicy, LadderProfile,
-    MockClassifier, NodeKind, TemperatureCalibration,
+    CacheKeyBuilder, EngineConfig, EngineError, EngineIdentity, IdentityCalibration, LadderPolicy,
+    LadderProfile, MockClassifier, NodeKind, TemperatureCalibration,
 };
 
 /// A request policy looser than the rung overrides below: accept at
@@ -60,6 +61,26 @@ fn policy_source(response: &opencodifier_core::DecisionResponse) -> Option<Strin
         Some(opencodifier_core::FactValue::Text(source)) => Some(source.clone()),
         _ => None,
     })
+}
+
+/// The same request, labelled with a decision family (D40/#186).
+///
+/// The family is the caller's label for *what kind of decision this is* —
+/// `multi_hop`, `temporal_numeric`, and so on. The engine never
+/// interprets it; the ladder maps it to a policy.
+fn loose_request_in_family(
+    questions: Vec<opencodifier_core::DecisionQuestion>,
+    family: Option<&str>,
+) -> opencodifier_core::DecisionRequest {
+    request_with_policy(
+        State::from_text("Summarize research across many sources and compare findings"),
+        questions,
+        DecisionPolicy::default(),
+        RequestMetadata {
+            family: family.map(|name| DecisionFamily::new(name).unwrap()),
+            ..RequestMetadata::default()
+        },
+    )
 }
 
 #[test]
@@ -136,6 +157,107 @@ fn a_per_node_rung_beats_the_per_kind_rung() {
     let (response, _) = engine.decide_with_report(&request).unwrap();
     assert_eq!(response.outcome(), DecisionOutcome::Verify);
     assert_eq!(policy_source(&response).as_deref(), Some("node:boolean"));
+}
+
+#[test]
+fn a_per_family_rung_routes_the_request_and_names_its_source() {
+    // The family tier (D40/#186) sits between the node tier and the kind
+    // tier: a request labelled `multi_hop` is gated by the family's rung,
+    // and the trace says so — `family:multi_hop`, not `kind:boolean`.
+    let classifier = Arc::new(
+        MockClassifier::new("mock/family")
+            .with_script("tools", vec![("true", 0.9), ("false", 0.1)])
+            .unwrap(),
+    );
+    let ladder = LadderPolicy {
+        id: "family-v1".to_owned(),
+        per_family: BTreeMap::from([("multi_hop".to_owned(), rung(0.95))]),
+        per_kind: BTreeMap::from([(NodeKind::Boolean, rung(0.70))]),
+        ..LadderPolicy::default()
+    };
+    let engine = engine_with(config(1).with_ladder(ladder), classifier).unwrap();
+
+    // Labelled: the family rung (0.95) demands more than the answer's 0.9,
+    // so the run verifies — and the trace names the family.
+    let labelled = loose_request_in_family(
+        vec![boolean_question("tools", "Does this request need tools?")],
+        Some("multi_hop"),
+    );
+    let (response, _) = engine.decide_with_report(&labelled).unwrap();
+    assert_eq!(response.outcome(), DecisionOutcome::Verify);
+    assert_eq!(policy_source(&response).as_deref(), Some("family:multi_hop"));
+
+    // Unlabelled: the family tier does not apply, so the kind rung (0.70)
+    // governs and the same 0.9 accepts.
+    let unlabelled = loose_request_in_family(
+        vec![boolean_question("tools", "Does this request need tools?")],
+        None,
+    );
+    let (response, _) = engine.decide_with_report(&unlabelled).unwrap();
+    assert_eq!(response.outcome(), DecisionOutcome::Accept);
+    assert_eq!(policy_source(&response).as_deref(), Some("kind:boolean"));
+
+    // A family with no entry falls through to the kind tier rather than
+    // failing closed: an unknown label is not a reason to stop deciding.
+    let other = loose_request_in_family(
+        vec![boolean_question("tools", "Does this request need tools?")],
+        Some("temporal_numeric"),
+    );
+    let (response, _) = engine.decide_with_report(&other).unwrap();
+    assert_eq!(response.outcome(), DecisionOutcome::Accept);
+    assert_eq!(policy_source(&response).as_deref(), Some("kind:boolean"));
+}
+
+#[test]
+fn a_per_node_rung_still_beats_the_per_family_rung() {
+    // Resolution order is node > family > kind. The family tier is a
+    // *routing* convenience, never a way to override a node's own gate.
+    let classifier = Arc::new(
+        MockClassifier::new("mock/family-node")
+            .with_script("tools", vec![("true", 0.9), ("false", 0.1)])
+            .unwrap(),
+    );
+    let ladder = LadderPolicy {
+        id: "node-over-family-v1".to_owned(),
+        per_node: BTreeMap::from([("boolean".to_owned(), rung(0.70))]),
+        per_family: BTreeMap::from([("multi_hop".to_owned(), rung(0.95))]),
+        ..LadderPolicy::default()
+    };
+    let engine = engine_with(config(1).with_ladder(ladder), classifier).unwrap();
+    let labelled = loose_request_in_family(
+        vec![boolean_question("tools", "Does this request need tools?")],
+        Some("multi_hop"),
+    );
+    let (response, _) = engine.decide_with_report(&labelled).unwrap();
+    assert_eq!(response.outcome(), DecisionOutcome::Accept);
+    assert_eq!(policy_source(&response).as_deref(), Some("node:boolean"));
+}
+
+#[test]
+fn the_family_is_part_of_the_cache_identity() {
+    // Two requests that differ only in family must not share a cached
+    // decision: the family changes which rung answers, and the cache
+    // stores the *gated* response. A family-less request, meanwhile, is
+    // byte-identical to the pre-field form — the label is absent, not
+    // null — so its cache key does not shift.
+    let questions = || vec![boolean_question("tools", "Does this request need tools?")];
+    let multi_hop = loose_request_in_family(questions(), Some("multi_hop"));
+    let temporal = loose_request_in_family(questions(), Some("temporal_numeric"));
+    let unlabelled = loose_request_in_family(questions(), None);
+    let identity = EngineIdentity::builtin();
+
+    let key_of = |request: &opencodifier_core::DecisionRequest| {
+        CacheKeyBuilder::build(request, &identity).unwrap()
+    };
+    assert_ne!(key_of(&multi_hop), key_of(&temporal), "different families, different keys");
+    assert_ne!(key_of(&multi_hop), key_of(&unlabelled), "a family is part of the request");
+
+    let bytes = CacheKeyBuilder::canonical_bytes(&unlabelled).unwrap();
+    let text = String::from_utf8(bytes).unwrap();
+    assert!(
+        !text.contains("family"),
+        "an absent family must not appear in the canonical bytes: {text}"
+    );
 }
 
 #[test]

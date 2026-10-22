@@ -346,7 +346,17 @@ routing is part of its contract, not error.
 | interactive (fastest 0.800) | Qwen3.5-4B **UD-Q4_K_XL** | 0.800 | 0.074 | 0.45 | 4.9 s | 2778 MiB |
 | balanced | Qwen3.5-2B (Q4_K_M) | 0.725 | **0.062** | 0.50 | 1.7 s | 1222 MiB |
 | fast | Qwen3.5-0.8B (q4_0) | 0.650 | 0.074 | 0.35 | 613 ms | 537 MiB |
-| zero-ML floor (engine default) | relational-v1 over lexical | 0.683 | 0.094 | **0.950** | **1.3 ms** | 0 MiB |
+| zero-ML floor (engine default) | relational-v2 over lexical | 0.683 | 0.094 | **0.950** | **1.3 ms** | 0 MiB |
+
+The floor row's identity moved to `relational-v2` on 2026-10-21 (D43: the
+solver gained temporal operators, so its model id and cache key moved with it).
+Re-measured the same day on Board B: accuracy **0.683**, per-class
+0.875 / 0.225 / 0.95, outcome mix 51 abstain / 42 accept / 27 verify — all
+identical to the recorded `relational-v1` row; ECE 0.0947 against the recorded
+0.094. The pinned suite contains no ISO dates and no `by`/`on`-terminated
+sentences outside the `depends on` pattern, so the temporal arm cannot fire on
+it. The latency figure is the recorded release-build number, not the
+2026-10-21 re-measurement (a debug build on a loaded host).
 
 ### Complete board (113 runs, 2026-09-25 → 2026-10-05)
 

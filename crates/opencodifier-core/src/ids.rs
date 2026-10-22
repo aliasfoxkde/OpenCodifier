@@ -95,6 +95,23 @@ define_id! {
     NodeId
 }
 
+define_id! {
+    /// Names the decision family a request belongs to.
+    ///
+    /// The family is the caller's label for *what kind of decision this
+    /// is* — `relational_compositional`, `temporal_numeric`,
+    /// `tool_selection`. It is a routing key: the ladder maps it to a
+    /// policy, and the engine never interprets it.
+    ///
+    /// It is an identifier, not free text, for the same reason every
+    /// other id is: the name lands in cache-key material, in trace
+    /// output, and in log lines, so the shared charset and length bound
+    /// (`[A-Za-z0-9_.-]`, max 128 bytes) apply. A caller cannot smuggle
+    /// a policy directive through it — the label only ever selects among
+    /// the rungs a deployment has already configured.
+    DecisionFamily
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::float_cmp)]

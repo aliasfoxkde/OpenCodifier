@@ -105,7 +105,7 @@ pub mod trace;
 pub use answer::{DecisionAnswer, Distribution, DistributionEntry};
 pub use confidence::ConfidenceReport;
 pub use error::{CoreError, CoreResult};
-pub use ids::{CandidateId, NodeId, QuestionId};
+pub use ids::{CandidateId, DecisionFamily, NodeId, QuestionId};
 pub use policy::{
     AbstainCandidate, DEFAULT_MAX_IMAGE_BYTES, DEFAULT_MAX_IMAGES, DecisionPolicy, Limits, OodMode,
     RequestMetadata, RiskLevel,

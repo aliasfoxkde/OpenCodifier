@@ -47,7 +47,7 @@
 //!         DecisionQuestion::Boolean(BooleanQuestion::new("needs_tools", "Tools?").unwrap()),
 //!     ],
 //!     opencodifier_core::DecisionPolicy::default(),
-//!     RequestMetadata { request_id: None, limits: Limits::default() },
+//!     RequestMetadata { request_id: None, limits: Limits::default(), family: None },
 //! )
 //! .unwrap();
 //!

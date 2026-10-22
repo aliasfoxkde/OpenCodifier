@@ -180,8 +180,11 @@ mod tests {
     #[test]
     fn exposes_the_policy_and_metadata_it_was_built_with() {
         let policy = DecisionPolicy::default();
-        let metadata =
-            RequestMetadata { request_id: Some("req-0001".to_owned()), limits: Limits::default() };
+        let metadata = RequestMetadata {
+            request_id: Some("req-0001".to_owned()),
+            limits: Limits::default(),
+            family: None,
+        };
         let request = DecisionRequest::new(
             State::from_text("route this request"),
             vec![sample_question()],
@@ -211,6 +214,7 @@ mod tests {
         let metadata = RequestMetadata {
             request_id: None,
             limits: Limits { max_input_bytes: 8, ..Limits::default() },
+            family: None,
         };
         assert!(matches!(
             DecisionRequest::new(
@@ -228,6 +232,7 @@ mod tests {
         let metadata = RequestMetadata {
             request_id: None,
             limits: Limits { max_image_bytes: 8, ..Limits::default() },
+            family: None,
         };
         let state = State::from_text("what is pictured").with_image(image(ImageMediaType::Png, 16));
         assert!(matches!(
@@ -246,6 +251,7 @@ mod tests {
         let metadata = RequestMetadata {
             request_id: None,
             limits: Limits { max_images: 1, ..Limits::default() },
+            family: None,
         };
         let state = State::from_text("two pictures")
             .with_image(image(ImageMediaType::Png, 4))
@@ -281,6 +287,7 @@ mod tests {
         let metadata = RequestMetadata {
             request_id: None,
             limits: Limits { max_candidates: 2, ..Limits::default() },
+            family: None,
         };
         let candidates: Vec<Candidate> =
             ["a", "b", "c"].iter().map(|id| Candidate::new(*id, "d").expect("valid")).collect();

@@ -980,10 +980,7 @@ impl<'a> Executor<'a> {
         // hold exact rungs to p ≥ 1.0 while the model rung uses its
         // calibrated thresholds. `None` when no override applies —
         // byte-identical to the single-policy engine.
-        let (policy, ladder_source) = self.config.ladder.resolve(id, kind).map_or_else(
-            || (self.request.policy(), None),
-            |(policy, source)| (policy, Some(source)),
-        );
+        let (policy, ladder_source) = self.policy_for(id, kind);
         // Per-rung calibration (D15/B4): a rung's confidences are not
         // commensurable with the engine default's, so a configured rung
         // calibration replaces it for this rung's questions. `None`
@@ -1127,6 +1124,31 @@ impl<'a> Executor<'a> {
             || distribution.entropy() >= policy.entropy_ceiling()
     }
 
+    /// The policy that governs a question decided by node `node_id` of
+    /// kind `kind`, paired with the ladder source to record in the trace.
+    ///
+    /// The ladder resolves node id → family → node kind (D42). With no
+    /// override for this node, the request policy governs and the trace
+    /// gains no `policy_source` fact — byte-identical to the
+    /// single-policy engine.
+    fn policy_for(&self, node_id: &str, kind: NodeKind) -> (&DecisionPolicy, Option<String>) {
+        self.config
+            .ladder
+            .resolve(
+                node_id,
+                kind,
+                self.request
+                    .metadata()
+                    .family
+                    .as_ref()
+                    .map(opencodifier_core::DecisionFamily::as_str),
+            )
+            .map_or_else(
+                || (self.request.policy(), None),
+                |(policy, source)| (policy, Some(source)),
+            )
+    }
+
     /// Applies the confidence gate, the escalation walk (D27), and the
     /// verifier cascade to every decided question. Decisions a fallback
     /// rung answered are returned as replacements: the walk's final rung
@@ -1148,10 +1170,7 @@ impl<'a> Executor<'a> {
             // request policy, and the trace gains no `policy_source`
             // fact — byte-identical to the single-policy engine.
             let (node_id, kind) = &decision.decided_by;
-            let (policy, ladder_source) = self.config.ladder.resolve(node_id, *kind).map_or_else(
-                || (self.request.policy(), None),
-                |(policy, source)| (policy, Some(source)),
-            );
+            let (policy, ladder_source) = self.policy_for(node_id, *kind);
             // The escalation walk (D27): only a non-accepting gate fires
             // the next rung, so an accepted question runs exactly one
             // classifier. Each rung is gated by its own policy when it
