@@ -320,6 +320,12 @@ class EngineAdapter:
                     },
                     "metadata": {
                         "request_id": f"jevbench-{t.id}",
+                        # D40/D42: the family rides every request so a
+                        # per-family ladder can route it. Inert (no
+                        # per_family entries → byte-identical gating)
+                        # until a profile ships; the label is the
+                        # harness's own validated family name.
+                        "family": t.family,
                         "limits": {
                             "max_input_bytes": 1048576,
                             "max_questions": 32,

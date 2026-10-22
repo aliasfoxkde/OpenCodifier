@@ -27,31 +27,40 @@
 
 ## T5500-dependent
 
-### 5. E1-F / E1-G arms training (GPU 1 + GPU 0) — IN PROGRESS
-- **Started:** 2026-10-20 16:37 UTC (re-launched after SSH session bug)
+### 5. E1-F / E1-G arms training — COMPLETE (both chains ran clean)
 - **E1-F (GPU 1):** corpus e1-softlabel-v2 (187,822 rows, teacher distributions from MiMo).
-  Teacher-gold argmax agreement 96.1–97.7%. Attacks accuracy AND calibration.
+  Trained 11,615/11,615 steps; adapter-best saved. **Fails the release gate:**
+  suite holdout 0.725 (< 0.75), JevBench-231 0.6667 (≥ 0.6494). Calibration is
+  the win: suite ECE 0.0907, JevBench ECE 0.1446 — roughly half of E1-E's.
 - **E1-G (GPU 0):** corpus merged-v6-full (306,999 rows, Jev-distilled stream).
-  Includes 129,000 rows whose labels were distilled from Jev 1.13 itself.
+  Trained 19,058/19,058 steps, **zero `gn=nan`**, final val loss 0.0387 /
+  tok_acc 0.9845; adapter-best saved. **Passes both gates but does not
+  dethrone E1-E:** suite holdout 0.7667, rel200 0.7214, JevBench-231 0.6805
+  (macro 0.6055, ECE 0.294). Champion remains E1-E at 0.8083 / 0.6840.
+- **Leakage audit (2026-10-22): CLEAN.** Exact + 200-char-prefix normalized
+  state-text match, 196 text-state JevBench items × 292,412 unique v6 training
+  prompts: 0 exact matches, 0 prefix matches. E1-G's 0.6805 is reportable.
+  (Audit script: `/tmp/leakage_audit_v6.py` on t5500.)
 - **CORPUS NOTE (v3 corpus analysis, 2026-10-21):** `SargeDev/jev-distill-corpus-v3`
   (740,957 rows) has **zero family overlap** with JevBench-231's taxonomy
   (`relational_compositional`, `lexical_semantic`, `metadata_match`). E1-G's
-  merged-v6 corpus is the typed-decisions stream (same decision schema as JevBench)
-  — the more relevant training signal. v3's yuri_v3 families (technical, agent,
-  knowledge, business, medical, genomics, physics…) do not map to eval families.
-  The path forward is (a) upweight the typed-decisions stream, (b) remap v3 families
-  to eval taxonomy, or (c) per-family routing via `family: Option<String>` in the
-  request IR. See RESEARCH.md §29.
+  per-family JevBench breakdown shows the cost (macro 0.6055 vs E1-E's 0.6832,
+  one family at 0.0) even though the overall number survives. The path forward
+  is (a) upweight the typed-decisions stream, (b) remap v3 families
+  to eval taxonomy, or (c) per-family routing via `metadata.family` (D42,
+  shipped — mechanism only, no profile until thresholds are re-measured).
+  See RESEARCH.md §29.
 - **Knobs:** Qwen3.5-2B + verdict-slot LoRA (r=16, alpha=32, dropout=0.05,
   lr=1e-4, batch=2, accum=8, max_len=2048, fp16, sdpa, seed=42, 1 epoch).
-- **Chain:** train → suite holdout eval → JevBench public 231 slot readout.
 - **Gates:** suite ≥ 0.75 AND JevBench 231 ≥ 0.6494 (E1-E champion is 0.8083 / 0.6840).
-- **LEAKAGE AUDIT REQUIRED before reporting any v6 number:** merged-v6-full
-  contains Jev-distilled labels; if any JevBench-231 item leaked, the number
-  is contaminated and must be disclosed.
-- **Logs:** `~/t5500-bundle/logs/e1fg-{e1f-soft,e1g-v6}.out` (outer launcher),
-  `e1fg-{e1f-soft,e1g-v6}-train.log` (trainer).
-- **Script:** `~/t5500-bundle/train_e1fg.sh` (Usage: `./train_e1fg.sh <e1f-soft|e1g-v6> [gpu_index]`).
+- **NaN gate fixed (2026-10-22):** the launcher's `grep -qiE '(^|[^a-z])nan([^a-z]|$)'`
+  false-positived on a single transient `gn=nan` at E1-F step 5180 and aborted
+  its eval chain. Fixed copy strips `gn=nan` before grepping; **synced back to
+  `~/t5500-bundle/train_e1fg.sh` on 2026-10-22** after pid 54136 exited (old
+  script kept as `train_e1fg.sh.bak-badgate`).
+- **Scripts/results:** `~/t5500-bundle/runs/{e1-f-2b-soft,e1-g-2b-v6}/`,
+  `~/t5500-bundle/eval-results/jevbench-slot-{e1f-soft,e1g-v6}-231/`,
+  logs `~/t5500-bundle/logs/e1fg-*.out`.
 
 ### 6. HF release of E1-E 2B — awaiting operator approval
 - **Gates:** suite holdout 0.8083 ≥ 0.75 ✅; JevBench 231 0.6840 ≥ 0.6494 ✅
@@ -115,7 +124,7 @@ ORT_DYLIB_PATH=~/.local/lib/python3.13/site-packages/onnxruntime/capi/libonnxrun
 
 | Item | Result |
 |---|---|
-| E1-F/E1-G arms | **Running.** E1-F ~28% (step 3260/11615), loss 0.2659; E1-G ~23% (step 4480/19058), loss 0.1292. No NaNs. |
+| E1-F/E1-G arms | **Complete.** E1-F: 0.725 suite / 0.6667 JevBench — fails gate, ECE halved. E1-G: 0.7667 suite / 0.6805 JevBench — passes gate, below champion. E1-E remains champion. Leakage audit clean. |
 | §27 HTTP bench | **Already existed.** Fixed stale note in RESEARCH.md — `crates/opencodifier-http/benches/http.rs` has bench_http_overhead. |
 | Upload script fix | **Fixed.** Calibration artifact path corrected to `e1e-qwen3.5-2b-holdout.json`. |
 | JEV-27B corpus discovery | **New lane.** `SargeDev/jev-distill-corpus-v3` (740,957 rows) with `family`/`domain`/`target` fields. yuri_v3 (498k rows) from Jev 1.13; openjev_v2 (94k, CC0). |
