@@ -1741,13 +1741,26 @@ applying small adapters. On AMD Strix Halo, a 35 MB LoRA dropped token throughpu
 1500 → 300 t/s without kernels; fused kernels recovered it to 1400 t/s. The bottleneck
 is `mat_mul_id` — the identity-matrix-scaled LoRA computation running every token.
 
-- **Tracking strategy**: branch-only until the fork graduates. Base:
-  OpenCodifier's `parallel-decision` fork (hash ad129b0+) which has the tree-mode
-  `/v1/decision` endpoint. Patches on top: `woct0rdho/strix-llama.cpp` fast LoRA
-  kernels for AMD RDNA 3.5, with NVIDIA CUDA port TBD.
-- **What was stripped** for decision-only serving: generation code (KV cache, samplers,
-  beam search), paged KV / 128K context (we cap at 2048), all quant types except
-  Q4_K_M, all attention variants except SDPA, MoE expert routing.
+- **Tracking strategy**: branch-only until the fork graduates. The base is
+  `thecodacus/llama.cpp` @ `parallel-decision` (commit `8f02796`), which has the
+  tree-mode `/v1/decision` endpoint. OpenCodifier's patch on top is
+  `aliasfoxkde/llama.cpp` @ `parallel-decision-oc` (commit `7ae36f4`): it adds the
+  full per-choice `distribution` map next to the winner-only `probability`, which the
+  Rust client requires — a winner-only server is refused rather than back-filled
+  with synthesized mass. Optional third layer: `woct0rdho/llama.cpp` @ `strix` fast
+  LoRA kernels for AMD RDNA 3.5, with NVIDIA CUDA port TBD.
+- **Nothing is stripped** (amended 2026-10-22). This record originally claimed the
+  build removed generation code, paged KV, all quant types except Q4_K_M, all
+  attention variants except SDPA, and MoE routing. The shipped build removes none of
+  them: it is a stock llama.cpp build of the decision fork, and the only feature
+  switches it sets are the build-target ones (`LLAMA_BUILD_EXAMPLES=OFF`,
+  `LLAMA_BUILD_TESTS=OFF`). Stripping is a per-quantization-type and
+  per-attention-variant edit across the whole tree — a permanent merge burden against
+  every upstream rebase — and it buys a *size* win, not a latency one, since the
+  decision path reads the same kernels the generation path does. The binary is already
+  18 MB with the full feature set, which is not the constraint. **Rule**: strip only
+  what a measured constraint requires, and record the measurement in
+  `docs/FORK_LLAMA_SERVER.md` first.
 - **What was kept**: transformer forward pass, fused LoRA application, tree-mode
   decision readout endpoint, static binary output.
 - **The Rust HTTP client does not change**: `LlamaDecisionClassifier` in
@@ -1755,6 +1768,9 @@ is `mat_mul_id` — the identity-matrix-scaled LoRA computation running every to
   the fork replaces only the server binary.
 - **Disk layout**: `forks/llama.cpp/` in the repo root — `README.md`,
   `build.sh`, `serve.sh`. No GGUF artifacts: T5500 bundle or HuggingFace.
+- **Provenance**: the built binary's commit, backend, and host are written to
+  `forks/llama.cpp/build/BUILD-INFO.txt`, so a shipped server is traceable to the
+  fork commit that produced it.
 - **Revisit condition**: when fused LoRA kernels land in mainline llama.cpp,
   the fork tracking becomes unnecessary and `forks/` can be removed.
 

@@ -1,76 +1,118 @@
 # llama.cpp Decision Inference Fork
 
-Branch-only tracking of llama.cpp variants optimized for OpenCodifier's
-decision model serving. This is experimental — promote to a real fork if it
-graduates.
+The decision-serving lane: a llama.cpp tree that answers **finite-schema
+decisions** in one batched forward pass instead of generating prose.
 
-## Tracking strategy
+This is a *tracking* fork, not a rewrite. The upstream decision engine
+(`tools/parallel-decision/`) does the work; OpenCodifier's job is to
+build it correctly, pin it, and prove the contract.
+
+## Lineage
+
+| Layer | Where | Commit |
+|---|---|---|
+| Upstream base | `thecodacus/llama.cpp` @ `parallel-decision` | `8f02796` |
+| OpenCodifier patch | `aliasfoxkde/llama.cpp` @ `parallel-decision-oc` | `7ae36f4` |
+
+`7ae36f4` adds the full per-choice `distribution` map next to the
+winner-only `probability` in the `/v1/decision` readout. The Rust client
+(`LlamaDecisionClassifier`) **refuses** a winner-only response rather
+than synthesizing mass, so this commit is the difference between a
+server the engine can use and one it rejects.
+
+`build.sh` clones the published fork by default and falls back to the
+upstream base only if the fork is unreachable. The fork's branch tip is
+recorded in `build/BUILD-INFO.txt` with the backend and the build host,
+so a shipped binary is traceable to a commit.
+
+Optional third layer: `woct0rdho/llama.cpp` @ `strix` (AMD RDNA 3.5
+fused LoRA kernels, recovering ~80% of the throughput an unfused
+`mat_mul_id` costs on small adapters — see `docs/RESEARCH.md` §28).
+`build.sh` merges it when the branch is fetchable and skips it
+otherwise. The NVIDIA CUDA port of those kernels does not exist yet.
+
+## What the build actually does
+
+The build is a **stock llama.cpp build of the decision fork**. It does
+*not* strip features — no generation code, quantization type, or
+attention variant is removed. Concretely, the build passes:
 
 ```
-upstream/llama.cpp          — ggml-org/llama.cpp mainline
-parallel-decision/          — OpenCodifier's parallel-decision fork (verdict-slot readout)
-  woct0rdho/strix-llama   — AMD Strix Halo fast LoRA kernels (fused mat_mul_id)
+-DCMAKE_BUILD_TYPE=Release
+-DLLAMA_BUILD_SERVER=ON      -DLLAMA_BUILD_EXAMPLES=OFF
+-DLLAMA_BUILD_TESTS=OFF       -DLLAMA_BUILD_TOOLS=ON
+-DGGML_NATIVE=ON              -DBUILD_SHARED_LIBS=OFF
+-DGGML_STATIC=ON
 ```
 
-Base: OpenCodifier's parallel-decision fork (hash ad129b0+), which has the
-native tree-mode `/v1/decision` endpoint with full per-choice distribution readout.
+plus `-DGGML_CUDA=ON` or `-DGGML_VULKAN=ON` when `BACKEND` says so.
 
-Patches on top:
-1. woct0rdho's fused LoRA kernels (recovers ~80% of throughput loss from small adapters)
+Why not strip? Stripping is a per-ggml-quantization-type and
+per-attention-variant edit across the whole tree, and it is a *size*
+optimization, not a latency one — the decision path reads the same
+kernels the generation path does. The cost of stripping is a permanent
+merge burden against every upstream rebase; the benefit is a smaller
+binary. The binary is already 18 MB with the full feature set, which is
+not the constraint. Stripping stays unbuilt until someone measures a
+real constraint it removes.
 
-## What was stripped
+`LLAMA_BUILD_TOOLS` must stay `ON`: `tools/server/` lives under
+`tools/`, and gating tools off silently removes the `llama-server`
+target entirely.
 
-For decision-only serving, the following are **not built**:
+## Measured
 
-- Generation code (KV cache management, samplers, beam search, grammar-guided generation)
-- Long context support (paged KV, 128K contexts)
-- All quantization types except Q4_K_M (our adapters are Q4_K_M GGUF)
-- All attention variants except SDPA (Qwen3.5-2B uses SDPA only)
-- MoE expert routing (not applicable to dense 2B model)
+CPU backend, AMD Ryzen 7 5700U, 16 cores, no GPU:
 
-## What was kept
+| Fact | Value |
+|---|---|
+| Binary | `build/bin/llama-server`, 18 MB, statically linked |
+| Model | `Qwen3.5-2B-Q4_K_M.gguf` |
+| `/v1/decision` round trip | 1.37 s cold (prefill 1.26 s, scoring 0.10 s) |
+| Readout | full `distribution` map, all declared choices |
 
-- Transformer forward pass
-- Fused LoRA application (fast kernel work)
-- Tree-mode decision readout endpoint (`/v1/decision`)
-- Static binary output
+The 1.37 s is dominated by prefill of the shared prefix. The decision
+path's own scoring is ~0.10 s.
 
-## Build requirements
-
-- CMake >= 3.20
-- C++17 compiler
-- Vulkan SDK (for AMD Vulkan builds)
-- CUDA SDK (for NVIDIA GPU builds)
-
-## Quick start
+## Build
 
 ```bash
-# Build the fork
-./build.sh
-
-# Start the server
-./serve.sh --base Qwen3.5-2B-Q4_K_M.gguf --lora e1e-adapter-Q4_K_M.gguf
-
-# Server runs on 127.0.0.1:8080, serves /v1/decision
+./build.sh                # clone + configure + build llama-server
+BACKEND=vulkan ./build.sh # AMD/NVIDIA Vulkan backend
+./build.sh clean          # remove the clone and the build tree
 ```
 
-## Remote setup
+Output:
+
+- `build/bin/llama-server`
+- `build/BUILD-INFO.txt` — binary path, repo, branch, base commit, final
+  commit, backend, build time, host
+
+Requirements: CMake ≥ 3.20, a C++17 compiler. CUDA and Vulkan SDKs only
+for their respective backends.
+
+## Serve
 
 ```bash
-cd forks/llama.cpp
-git remote add upstream https://github.com/ggml-org/llama.cpp
-git remote add parallel-decision https://github.com/opencodifier/llama.cpp  # when promoted
-git remote add woct0rdho https://github.com/woct0rdho/llama.cpp
-git fetch --all
+./serve.sh --base /path/to/Qwen3.5-2B-Q4_K_M.gguf
 ```
+
+The server binds `127.0.0.1:8080` by default. It must be started with
+`--decision-seqs N` (N ≥ 3) or `/v1/decision` is refused with
+`decisions are disabled`; `serve.sh` sets this.
 
 ## OpenCodifier integration
 
-The `LlamaDecisionClassifier` in `crates/opencodifier-model/src/llamacpp.rs`
-is an HTTP client — it talks to this server over `POST /v1/decision`:
+`LlamaDecisionClassifier` (`crates/opencodifier-model/src/llamacpp.rs`)
+is an HTTP client. It posts to `/v1/decision` and reads
+`results[0].fields.choice.distribution`.
 
 ```bash
-opencodifier serve --llama http://127.0.0.1:8080 --llama-model-id pd-fork-ad129b0
+opencodifier serve \
+    --llama http://127.0.0.1:8080 \
+    --llama-model-id 'pd-fork-7ae36f4|qwen3.5-2b-q4_k_m|tree-dist'
 ```
 
-The Rust client does not change when the server binary changes.
+The Rust client does not change when the server binary changes. The
+model id is the cache-key discriminator for the served weights: changing
+it re-keys every cached decision, exactly like a model swap.
