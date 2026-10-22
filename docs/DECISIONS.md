@@ -1883,3 +1883,77 @@ built instead, and what the measurement actually shows.
 - **Re-tuning is deferred**: the family-routing thresholds (D42's mechanism) still
   need E1-F/E1-G measurements before any family profile ships.
 
+## D44 — The decision runner is the fork's own decision-only binary; vLLM and SGLang are rejected (2026-10-22)
+
+The model rung (D26) is an HTTP client to a `llama.cpp` process. The natural
+follow-up question is whether to replace that process with a general-purpose
+inference server — vLLM, SGLang, a combination — so that one stack serves both
+the engine and everything else. This decision answers that question by
+measurement, and records the runner contract.
+
+- **The runner is `llama-parallel-decision`, the fork's own decision-only
+  binary.** It is 9.2 MB against the server's 18.4 MB, speaks a line protocol on
+  stdin/stdout instead of HTTP, and has no chat/completions surface to misuse as
+  a general LLM. Both binaries link the same `llama-decision` engine; the size
+  difference is the HTTP server, chat templating, samplers, and OpenAI
+  compatibility — none of which the model rung uses.
+- **vLLM and SGLang are rejected**, on four independent grounds, any one of
+  which is disqualifying:
+  1. *They are Python.* The repo's binding rule is "no Python at runtime"
+     (`CLAUDE.md`), and the base binary must be useful with zero ML. A vLLM
+     install is tens of gigabytes of wheels plus an interpreter; the decision
+     runner is a static ELF with no runtime dependency.
+  2. *Their API is generation-shaped.* Both expose `/v1/completions` and
+     `/v1/chat/completions` — a token stream. The model rung needs the **full
+     per-choice distribution** in one forward pass with no sampling, which the
+     fork's decision engine computes directly over the answer trie. A general
+     server would have to reimplement that as constrained decoding and then
+     re-derive the distribution from logprobs — the trap already recorded in
+     RESEARCH §2.
+  3. *They are built for GPU throughput.* This host has no CUDA. The 2B arm's
+     ~600 ms is a CPU-serial prefill, not a batching problem.
+  4. *They add a dependency without adding a capability.* The engine's
+     `Transport` trait is one `post_json` call; a second, heavier stack would
+     satisfy it equally well and cost more.
+- **Parity is proven, not assumed.** The decision-only runner does not accept a
+  schema — it accepts pre-rendered prompt files — so the rendering had to be
+  reconstructed from the server's own `compile_schema` (`decision-engine.cpp:610`)
+  and `render_prompt` (`:666`). Two details are load-bearing and both were wrong
+  in the first attempt: the catalog **quotes** its allowed values (it writes
+  `json_text(v)`, not the bare string), and the prompt is rendered with the
+  model's **jinja** template, split at the `<<decision-context>>` sentinel, with
+  `enable_thinking: false`. With those matched, the two runners agree exactly:
+
+  | | coding | analysis | writing | research |
+  |---|---|---|---|---|
+  | server `/v1/decision` | 0.5432648062705994 | 0.42237746715545654 | 0.012004137970507145 | 0.02235357090830803 |
+  | `llama-parallel-decision` | 0.543265 | 0.422377 | 0.0120041 | 0.0223536 |
+
+  Token counts match too (shared 67, context 29), so the two runners are the
+  same engine over the same prefix.
+- **Latency is at parity, not better.** An earlier session's figures suggested
+  the CLI was meaningfully faster than HTTP; that did not reproduce. Re-measured
+  interleaved on the same host at load_avg ~19: worker 0.64–0.81 s warm versus
+  server 0.62–0.88 s warm. The runner's win is footprint and surface area, not
+  speed. Recording the honest number matters more than the flattering one.
+- **The server's batch path shows no per-decision amortization on this host.**
+  `/v1/decision` takes up to 256 contexts; per-decision time was flat —
+  n=1 → 584 ms, n=4 → 550, n=8 → 563, n=16 → 586, n=32 → 525. Batching is a
+  capacity feature on CPU and a speed feature on GPU; here it is only the
+  former. This changes what the `contexts` array is worth in this deployment.
+- **Thread count matters more than transport.** The worker mode takes a thread
+  count; 8 threads was best (0.52–0.55 s warm) and 16 threads was catastrophic
+  (6.5–13.3 s) on a 16-core host already at load ~19. Oversubscription, not
+  the runner, explains the earlier outlier.
+- **The engine seam is unchanged.** `Transport`
+  (`crates/opencodifier-model/src/llamacpp.rs:136`) is still one `post_json`
+  call, and a worker-mode transport would be a second implementation of that
+  trait with the line protocol in place of the HTTP request. It is **not built**,
+  and the measurements say it is not urgent: the HTTP path is the same speed and
+  the server's batching is the capability the runner lacks. No live server runs
+  in the test suite (D26); everything about the model rung is testable through a
+  scripted transport.
+- **Full write-up**: [`DECISION_RUNNER.md`](DECISION_RUNNER.md), including the
+  reproduction steps and the honest limits (CPU-only, shared host, small
+  four-choice payload, `strix` branch still unfetchable and irrelevant here).
+
