@@ -113,6 +113,11 @@ jobs:
           cargo build --release
       - name: End-to-end validation (serve + MCP, PLAN 18d)
         run: python3 scripts/e2e_validate.py --binary /tmp/oc-e2e-target/release/opencodifier --port 8188
+      # The shipped recipe captures must be what the committed engine
+      # produces today. Read-only: the check exits non-zero on a
+      # difference and never rewrites the files.
+      - name: Recipe captures match a live run
+        run: python3 recipes/capture.py --binary /tmp/oc-e2e-target/release/opencodifier --check --port 8178
 
   - name: supply-chain
     image: opencodifier-ci-rust:2

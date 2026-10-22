@@ -62,5 +62,13 @@ __pycache__/
 # (BENCHMARKS.md "Shuffled-context OOD probe").
 benchmarks/decision-model/suite/suite_long.json
 benchmarks/decision-model/suite/suite_shuffled.json
+benchmarks/decision-model/suite/suite_temporal_v1.json
+
+# The decision-fork build tree and the clone it builds from: both are
+# rebuilt by forks/llama.cpp/build.sh and never committed. The clone is
+# a separate git repository (it would confuse the workspace's own
+# tooling), and the build tree holds an 18 MB binary plus its objects.
+forks/llama.cpp/build/
+forks/llama.cpp/parallel-decision/
 .wrangler/
 .pi/

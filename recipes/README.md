@@ -10,14 +10,22 @@ All recipes use the zero-ML engine (`opencodifier serve` never loads a
 model — the default stack is the relational solver over the lexical
 classifier), so every number is reproducible on any machine. The traces
 name the deciding stack by its composed model id
-(`relational-v1|builtin-lexical-v1`).
+(`relational-v2|builtin-lexical-v2`).
+
+> **The captures are verified, not assumed.** Every file under
+> `expected/` is checked against a live engine run by
+> `just check-recipes` (CI: the `e2e` job's *Recipe captures match a
+> live run* step). The check is read-only — it exits non-zero on a
+> difference and never rewrites the files. Re-record with
+> `python3 recipes/capture.py` when the engine's identity or behavior
+> moves; `git diff` on `expected/` then shows exactly what changed.
 
 ## The recipes
 
 | Graph | Demonstrates | Outcome with the paired request |
 |-------|--------------|--------------------------------|
 | [`minimal-choice.json`](minimal-choice.json) | The smallest graph that can decide a choice question: normalize → filter → choice → threshold → output. The `filter` node is not optional — choice questions are decided only over candidates that survived narrowing, and a graph without narrowing abstains by design. | `verify` — top probability 0.687 sits between `verify_below` (0.65) and `min_confidence` (0.8), so the runtime asks for a second opinion instead of overclaiming. |
-| [`strict-verify.json`](strict-verify.json) | The full escalation ladder (rule, cache, filter, lexical) with a deliberately strict 0.95 gate. | `verify` — even the full pipeline's lexical evidence does not clear 0.95, and the refusal is the correct answer. |
+| [`strict-verify.json`](strict-verify.json) | The full escalation ladder (rule, cache, filter, lexical) with a deliberately strict 0.95 gate. It is exercised by the **same** request as `minimal-choice` ([`requests/choice.json`](requests/choice.json)) — one request, two gates, two outcomes, which is the recipe's whole point. | `verify` — even the full pipeline's lexical evidence does not clear 0.95, and the refusal is the correct answer. |
 | [`boolean-score.json`](boolean-score.json) | A graph without a `choice` node: boolean and score questions only. | `abstain` — lexical evidence for both questions is below `abstain_below` (0.5). Abstention is a successful outcome (HTTP 200); the answers array still carries the full distributions. |
 | [`registry/`](registry/) | The §63 Decision Registry end to end (D20): [`registry/model-selection.definition.json`](registry/model-selection.definition.json) is a decision *definition*; its request is the exact output of `DecisionDefinition::instantiate` (pinned by a test, not hand-written), run through `minimal-choice.json`'s graph. | `verify` — the registry path feeds the same IR and engine as a hand-written request: top probability 0.687 for `local-glm`, between `verify_below` (0.65) and `min_confidence` (0.8). |
 

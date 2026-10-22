@@ -3,8 +3,9 @@
 
 default := "ci"
 
-# Full CI gate: format, lint, test, doc, deny, audit, pattern scan.
-ci: fmt-check lint test doc deny scan
+# Full CI gate: format, lint, test, doc, deny, audit, pattern scan, recipe
+# captures.
+ci: fmt-check lint test doc deny scan check-recipes
 
 # Criterion benches for the D9 per-stage budgets (DECISIONS.md D9).
 bench:
@@ -46,6 +47,19 @@ audit:
 # Security pattern scan: fail on findings newer than the baseline.
 scan:
     aegis --format json scan --file . --baseline .aegis/baseline.json --quiet
+
+# Verify the shipped recipe captures against a live engine run.
+#
+# The captures under `recipes/expected/` are what `opencodifier recipe
+# install` hands a user, so they must be what the committed engine
+# actually produces today. The check is read-only: it exits non-zero on
+# a difference and never rewrites the files. Re-record with
+# `python3 recipes/capture.py` when the engine moves.
+check-recipes:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build -p opencodifier-cli
+    python3 recipes/capture.py --binary target/debug/opencodifier --check
 
 # Unused-dependency check.
 machete:
