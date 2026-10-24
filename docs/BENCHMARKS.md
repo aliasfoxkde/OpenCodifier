@@ -1031,6 +1031,60 @@ is the binding constraint on the gate leg at 0.8B (0.40 hard / 0.475 soft
 vs e1-e-2B's relational strength); no 0.8B recipe in this program has
 cleared it.
 
+### Gate A/B — engine-gated vs bare rung on rel200 (#188, 2026-10-24)
+
+The escalation program's premise (ESCALATION_LANES_PLAN.md §9, task
+#188): the engine's *confident* decisions should be trusted outright and
+the model rung called only for the rest, so the gated system should beat
+the bare rung at a fraction of its cost. This is the premise-validation
+run; the lane work (#189+) was gated on it.
+
+Three passes over the same 280 items (`suite_holdout_rel200.json`, the
+relational-heavy diagnostic slice, sha256 `afe6770c…`), offline campaign
+host, release engine + fork llama-server on CPU with
+Qwen3.5-2B-Q4_K_M.gguf (greedy, `--decision-seqs 3`): **Arm A** — the
+bare rung, Rust-client prompt verbatim, every item. **Engine pass** —
+`opencodifier serve` with the shipped policy (min 0.8 / verify 0.65 /
+abstain 0.5, risk low), no rung attached. **Arm B** — gated: the
+engine's `accept` band answers verbatim (saved call); every other
+outcome goes to the rung with Arm A's prompt.
+
+| arm | acc (meta/lex/rel) | acc | p50 | prompt tokens | LLM calls |
+|---|---|---|---|---|---|
+| A — bare rung | 1.00 / 0.625 / 0.37 | 0.496 | 3,428 ms | 44,796 | 280 |
+| engine alone (raw argmax) | 0.75 / 0.375 / 0.955 | 0.843 | 1.9 ms | 0 | 0 |
+| **B — gated** | 1.00 / 0.625 / 0.74 | **0.761** | 32.6 ms | 22,770 | 139 |
+
+Gate, set before the run: `engine_wrong < arm_a_error_rate` and
+`saved_calls ≥ 0.20`. Result: **engine_wrong 0.000** — the accept band
+(141 items: 133 relational + 8 metadata, zero lexical) is 141/141
+correct; rule-of-three upper bound ≈ 0.021, still ~24× under Arm A's
+error rate 0.5036 — and **saved_calls 0.5036** (141/280 never touch the
+rung, 2× the bar). **GATE SHIPS.** All three passes replay bit-identical.
+
+The selection is the result, not the average. The engine's raw argmax is
+inverted relative to its own confidence: excellent where it commits
+(relational 0.955), weak where it abstains (lexical 0.375, metadata
+0.750) — and its confidence knows it, routing precisely the weak
+regions out of the accept band. The gated composite beats the bare rung
+by +26.4 pp at half the prompt tokens and ~100× lower p50 (the median
+item is engine-served), while beating neither component everywhere: on
+the 139 routed items the LLM scored ≈ 0.52 where the engine's raw
+argmax would have scored 0.68 — the gate is *conservative* on this
+slice, and the routed subset is exactly the handoff the escalation
+lanes (#189, EscalationReport) exist to make better than a bare call.
+
+Caveats, stated plainly: rel200 is the diagnostic slice, not the primary
+gate suite — its 200 relational items are where the bare 2B rung
+collapses (0.37), and metadata_match is at ceiling for every arm, so
+all separation comes from one class; the accept band's zero-error is
+141 samples deep, not infinite; Arm B's abstains call the rung too
+(accept-vs-rest routing is this harness's design, not a product
+default); the rung saw only the suite-level instruction template, no
+per-class tuning. Per-item rows, distributions, and replays:
+`benchmarks/decision-model/results/gate-ab-suite-rel200.json`
+(runner: `benchmarks/decision-model/runner/run_gate_ab.py`).
+
 ### r19 E2B quant-ladder speed reference (2026-10-05)
 
 `llama-bench` pp400 (single-shot prompt processing over a 400-token
