@@ -34,12 +34,12 @@ does not exist upstream, §28), Windows/macOS publication legs.
 
 | # | area | evidence | offline? |
 |---|---|---|---|
-| G1 | **Phase 25 #188 premise validation** — the gate-vs-bare-LLM A/B | PLAN.md: "runs **first** — if the gate does not beat a bare LLM, the rest is decoration"; no harness exists (the harness *is* the deliverable) | **yes — flagship** |
+| G1 | **Phase 25 #188 premise validation** — the gate-vs-bare-LLM A/B | PLAN.md: "runs **first** — if the gate does not beat a bare LLM, the rest is decoration"; no harness exists (the harness *is* the deliverable) | **DONE 2026-10-24 — GATE SHIPS** (engine_wrong 0.000 < 0.5036, saved_calls 0.5036 ≥ 0.20; BENCHMARKS.md "Gate A/B" section) |
 | G2 | **#189 escalation contract** | `DecisionOutcome::Escalate` declared (`core/src/response.rs:28`) but **never constructed**; no `EscalationReport`, no `escalate_below`, zero HTTP/MCP exposure. Absent ⇒ byte-identical behaviour already holds trivially | yes |
 | G3 | **#190 `opencodifier-config`** | "the repo has **no config file at all**, which is the structural gap under every one of these" (PLAN.md) | yes |
 | G4 | **#191 lanes / #192 init+doctor** | 8 named presets designed, none implemented; no `lane`/`init`/`doctor` subcommands in the CLI | yes (after G3) |
 | G5 | **#193 feedback loop / #194 `codify_gate` / #195 CI recipes / #196 playground QA** | MCP has 6 tools (no `codify_gate`); HTTP has 9 routes (no `/v1/feedback`); playground QA tool absent | yes (after G2/G3) |
-| G6 | **§27 design docs** — semantic cache ("No design"), hybrid retrieval ("No design") | RESEARCH §27 marks both "actionable now … don't need GPU"; reranker semantic half likewise undesigned | yes |
+| G6 | **§27 implementation + reranker design** — cache/hybrid designs already exist (`docs/SEMANTIC_CACHE.md`, `docs/HYBRID_RETRIEVAL.md`, both landed `afbe738` while §27 still said "No design"); the cross-encoder reranker was the one genuinely undesigned item → `docs/SEMANTIC_RERANKER.md` | RESEARCH §27 corrected 2026-10-24; §26 reranking (lexical/cosine) already ships | yes |
 | G7 | **Fork build-smoke CI job** | fork branch has `smoke.sh` (proven) but no CI job builds the fork | yes (write; heavy to run) |
 | G8 | **`scripts/upload_e1e_to_hf.sh` hardening** | script is complete (fixed `d75df6d`) but assumes t5500 artifact layout; can take a path argument + `--dry-run` verification offline | yes (partial) |
 | G9 | **Stale bookkeeping** | OPERATOR_ACTIONS git-state says "main → gitforge @ `d75df6d` (pushed)"; actually gitforge/main is **3 behind, 0 ahead** (fast-forwardable), origin/main is 390 behind (deliberately unsynced — operator call) | yes |
@@ -85,8 +85,13 @@ precedence "flag > env > project > user > default", strict `config.*`
 errors. Gate: "no-config ⇒ byte-identical (fixture suite); every existing
 flag is an override". Unblocks #191/#192.
 
-**Track D — §27 design docs** (semantic cache, hybrid retrieval,
-semantic reranker): pure writing, explicitly greenlit by §27.
+**Track D — §27 work.** Designs for the semantic cache and hybrid
+retrieval already exist (found 2026-10-24: §27's "No design" rows were
+stale — both docs landed in `afbe738` alongside the audit that denied
+them), so Track D shrinks to (a) correcting that audit, (b) the one
+genuinely undesigned §27 item — the cross-encoder semantic reranker
+(`docs/SEMANTIC_RERANKER.md`), and (c) implementation of cache/hybrid
+when the phase ordering reaches them.
 
 **Track E — housekeeping:** push gitforge (fast-forward), refresh
 OPERATOR_ACTIONS git-state, run `just check-macjev` (host lane available

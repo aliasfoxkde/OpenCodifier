@@ -3959,15 +3959,20 @@ SPEC_COVERAGE §71 names five planned V1.1 items. Audit result:
 
 | Item | Status | Notes |
 |---|---|---|
-| Semantic cache | **No design** | Approximate-match cache keyed on state embedding (not exact decision key). Needs a design doc. |
-| Hybrid retrieval | **No design** | Combines BM25 + embedding similarity. §24 already exists for pure lexical. |
+| Semantic cache | **Design done** | `docs/SEMANTIC_CACHE.md`. *(Corrected 2026-10-24: this row said "No design", but the design doc landed in the same commit as this audit (`afbe738`) — the row was written before the doc and never reconciled. Implementation remains.)* |
+| Hybrid retrieval | **Design done** | `docs/HYBRID_RETRIEVAL.md` (same commit, same correction). §24 already exists for pure lexical. Implementation remains. |
 | Multilingual | **Gap confirmed** | Zero i18n support anywhere in the codebase. Would need tokenizer + training data + eval suite. |
 | Graph optimizer | **Blocked by D22** | D22 forbids wave-structure transforms. "Optimizer" here is dead-node elimination + CSE only. |
-| Reranker | **§26 already done** | Basic reranking exists. §71 likely means semantic/embedding reranker — needs design. |
+| Reranker | **§26 already done** | `LexicalReranker`/`EmbeddingReranker` ship. §71's remaining reranker work is the cross-encoder pass — design in `docs/SEMANTIC_RERANKER.md` (2026-10-24). |
 
 **HTTP overhead (D9 row 6):** `crates/opencodifier-http/benches/http.rs` has `bench_http_overhead` — criterion bench over a real loopback socket, measures full POST /v1/decide round-trip. Budget is 2 ms p99.
 
-**Actionable now:** write design docs for semantic cache and hybrid retrieval. These are separable from training and don't need GPU. Multilingual needs a separate eval suite (not started). Graph optimizer is D22-blocked.
+**Actionable now (corrected 2026-10-24):** the semantic cache and hybrid
+retrieval design docs exist (`docs/SEMANTIC_CACHE.md`,
+`docs/HYBRID_RETRIEVAL.md`) — implementation is the remaining work, and it
+is separable from training and needs no GPU. The cross-encoder reranker
+design is `docs/SEMANTIC_RERANKER.md`. Multilingual needs a separate eval
+suite (not started). Graph optimizer is D22-blocked.
 
 ### §28 Fast LoRA kernels in llama.cpp (2026-10-21)
 
