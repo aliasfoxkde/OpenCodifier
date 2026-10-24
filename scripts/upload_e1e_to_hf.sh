@@ -33,9 +33,21 @@ cp "$ADAPTER_DIR/adapter_model.safetensors" "$TEMP_DIR/"
 cp "$ADAPTER_DIR/adapter_config.json" "$TEMP_DIR/"
 
 # --- Write model card from template ---
-# Fill in the org name placeholder
-sed "s/\[OPERATOR: add org name\]/$ORG/g" \
+# Fill in BOTH org placeholders (line 92's bare [OPERATOR] went
+# unsubstituted before this — the card shipped with a raw placeholder;
+# the post-substitution grep below is the guard). Each pattern is
+# escaped as a literal so sed never treats it as a character class, and
+# `|` is the delimiter so an org name never collides with the pattern;
+# HF orgs are [A-Za-z0-9-_] but the delimiter makes that a
+# non-requirement.
+sed -e "s|\[OPERATOR: add org name\]|$ORG|g" \
+    -e "s|\[OPERATOR\]|$ORG|g" \
   docs/MODEL_CARD_E1E.md > "$TEMP_DIR/README.md"
+if grep -q "\[OPERATOR" "$TEMP_DIR/README.md"; then
+  echo "ERROR: unsubstituted placeholder remains in README.md:" >&2
+  grep -n "\[OPERATOR" "$TEMP_DIR/README.md" >&2
+  exit 1
+fi
 
 # --- Calibration artifact ---
 # Copy the fitted calibration artifact so users can recalibrate
