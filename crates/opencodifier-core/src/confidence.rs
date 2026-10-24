@@ -66,10 +66,15 @@ impl ConfidenceReport {
     /// Applies the policy cascade to this report: which outcome does the
     /// current confidence justify?
     ///
-    /// Cascade (PLANNING.md §19, §20):
+    /// Cascade (PLANNING.md §19, §20; escalation band from
+    /// `ESCALATION_LANES_PLAN.md` §2.1):
     ///
     /// ```text
     /// c <  abstain_below   -> ABSTAIN
+    /// abstain_below <= c
+    ///   <  escalate_below  -> ESCALATE (only when the band is set;
+    ///                         absent, this branch never fires and the
+    ///                         cascade is byte-identical)
     /// c >= min_confidence  -> ACCEPT for Low/Medium risk, unless an
     ///                         uncertainty gate trips (entropy >= ceiling,
     ///                         margin < minimum, OOD > ceiling)
@@ -89,6 +94,9 @@ impl ConfidenceReport {
         let confidence = self.calibrated_confidence;
         if confidence < policy.abstain_below() {
             DecisionOutcome::Abstain
+        } else if policy.escalate_below().is_some_and(|escalate_below| confidence < escalate_below)
+        {
+            DecisionOutcome::Escalate
         } else if confidence >= policy.min_confidence()
             && matches!(policy.risk(), RiskLevel::Low | RiskLevel::Medium)
             && !policy.uncertainty_gate_trips(self)
@@ -130,6 +138,34 @@ mod tests {
 
         let report = ConfidenceReport::from_distribution(&uncertain, 0.55, 0.0, None).expect("ok");
         assert_eq!(report.outcome_for(&policy), crate::response::DecisionOutcome::Verify);
+    }
+
+    #[test]
+    fn escalate_band_hands_the_middle_to_the_host() {
+        use crate::response::DecisionOutcome;
+        // Band [0.5, 0.65): below abstain stays terminal, inside the
+        // band escalates, at/above the band is the old cascade.
+        let policy =
+            DecisionPolicy::default().with_escalate_below(0.65).expect("inside the cascade");
+        let uncertain = Distribution::from_pairs([("a", 0.5), ("b", 0.5)]).expect("ok");
+        for (calibrated, expected) in [
+            (0.45, DecisionOutcome::Abstain),
+            (0.55, DecisionOutcome::Escalate),
+            (0.64, DecisionOutcome::Escalate),
+            (0.65, DecisionOutcome::Verify),
+            (0.90, DecisionOutcome::Accept),
+        ] {
+            let report =
+                ConfidenceReport::from_distribution(&uncertain, calibrated, 0.0, None).expect("ok");
+            assert_eq!(report.outcome_for(&policy), expected, "c={calibrated}");
+        }
+
+        // Absent the band, the same middle confidence routes to the
+        // verifier — today's behaviour, byte for byte.
+        let base = DecisionPolicy::default();
+        assert_eq!(base.escalate_below(), None);
+        let report = ConfidenceReport::from_distribution(&uncertain, 0.55, 0.0, None).expect("ok");
+        assert_eq!(report.outcome_for(&base), DecisionOutcome::Verify);
     }
 
     #[test]

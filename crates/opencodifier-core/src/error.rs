@@ -118,6 +118,15 @@ pub enum CoreError {
         /// The ceiling that rejected it.
         limit: usize,
     },
+
+    /// An escalation report was attached to a response whose outcome was
+    /// not `Escalate`, or the report itself violated its contract
+    /// (`ESCALATION_LANES_PLAN.md` §2.2, task #189).
+    #[error("invalid escalation report: {reason}")]
+    InvalidEscalation {
+        /// Human-readable explanation of the violated constraint.
+        reason: String,
+    },
 }
 
 impl CoreError {
@@ -147,6 +156,7 @@ impl CoreError {
             Self::InvalidImage { .. } => "ir.invalid_image",
             Self::ImageTooLarge { .. } => "ir.image_too_large",
             Self::TooManyImages { .. } => "ir.too_many_images",
+            Self::InvalidEscalation { .. } => "ir.invalid_escalation",
         }
     }
 }

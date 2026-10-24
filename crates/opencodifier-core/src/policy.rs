@@ -80,6 +80,12 @@ pub struct DecisionPolicy {
     /// Label-set overlap ceiling (RESEARCH §15.6 item 4). `None` — the
     /// default — measures nothing and stays byte-identical.
     max_label_overlap: Option<f64>,
+    /// The escalation band (`ESCALATION_LANES_PLAN.md` §2.1, task #189):
+    /// `abstain_below <= c < escalate_below` hands the decision off as
+    /// [`crate::response::DecisionOutcome::Escalate`] with the engine's
+    /// partial work, instead of routing it to the verifier. `None` — the
+    /// default — keeps the cascade byte-identical to the pre-band form.
+    escalate_below: Option<f64>,
 }
 
 /// Deserialization mirror for [`DecisionPolicy`]; conversion validates.
@@ -108,6 +114,8 @@ struct RawDecisionPolicy {
     abstain_candidate: Option<AbstainCandidate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     max_label_overlap: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    escalate_below: Option<f64>,
 }
 
 /// Which deterministic signal feeds the OOD channel (D28).
@@ -209,6 +217,7 @@ impl From<DecisionPolicy> for RawDecisionPolicy {
             boolean_threshold: policy.boolean_threshold,
             abstain_candidate: policy.abstain_candidate,
             max_label_overlap: policy.max_label_overlap,
+            escalate_below: policy.escalate_below,
         }
     }
 }
@@ -242,6 +251,10 @@ impl TryFrom<RawDecisionPolicy> for DecisionPolicy {
             Some(overlap) => policy.with_max_label_overlap(overlap)?,
             None => policy,
         };
+        let policy = match raw.escalate_below {
+            Some(threshold) => policy.with_escalate_below(threshold)?,
+            None => policy,
+        };
         Ok(policy.with_ood_mode(raw.ood_mode.unwrap_or_default()))
     }
 }
@@ -262,6 +275,7 @@ impl DecisionPolicy {
         boolean_threshold: None,
         abstain_candidate: None,
         max_label_overlap: None,
+        escalate_below: None,
     };
 
     /// Validates and constructs a policy.
@@ -302,6 +316,7 @@ impl DecisionPolicy {
             boolean_threshold: None,
             abstain_candidate: None,
             max_label_overlap: None,
+            escalate_below: None,
         })
     }
 
@@ -461,6 +476,44 @@ impl DecisionPolicy {
         }
         self.ood_ceiling = ceiling;
         Ok(self)
+    }
+
+    /// Sets the escalation band (`ESCALATION_LANES_PLAN.md` §2.1, task
+    /// #189): `abstain_below <= c < escalate_below` yields
+    /// [`crate::response::DecisionOutcome::Escalate`] — the engine hands
+    /// the host model its partial work instead of routing the decision
+    /// to the verifier. Absent (the default), this band never fires and
+    /// canonical serializations are byte-identical to the pre-band
+    /// form. The band must sit inside the confidence cascade.
+    ///
+    /// # Errors
+    ///
+    /// [`CoreError::InvalidPolicy`] unless the threshold is a finite
+    /// value in `[0, 1]` with `abstain_below <= escalate_below <=
+    /// min_confidence`.
+    pub fn with_escalate_below(mut self, threshold: f64) -> CoreResult<Self> {
+        if !crate::error::is_unit_interval(threshold) {
+            return Err(CoreError::InvalidPolicy {
+                reason: format!("escalate_below must be a finite value in [0, 1], got {threshold}"),
+            });
+        }
+        if !(self.abstain_below <= threshold && threshold <= self.min_confidence) {
+            return Err(CoreError::InvalidPolicy {
+                reason: format!(
+                    "expected abstain_below <= escalate_below <= min_confidence, \
+                     got {threshold} outside [{}, {}]",
+                    self.abstain_below, self.min_confidence
+                ),
+            });
+        }
+        self.escalate_below = Some(threshold);
+        Ok(self)
+    }
+
+    /// The escalation band, when one is configured.
+    #[must_use]
+    pub fn escalate_below(&self) -> Option<f64> {
+        self.escalate_below
     }
 
     /// Confidence at or above which a decision is accepted outright.
@@ -789,5 +842,43 @@ mod tests {
         let back: Limits = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(back, raised);
         assert!(json.contains(r#""max_image_bytes":8"#) && json.contains(r#""max_images":2"#));
+    }
+
+    #[test]
+    fn escalate_band_serializes_absent_when_unset() {
+        // The canonical pre-band form: no key, no cache-key drift
+        // (ESCALATION_LANES_PLAN §2.1's byte-for-byte promise).
+        let json = serde_json::to_string(&DecisionPolicy::default()).expect("serialize");
+        assert!(!json.contains("escalate_below"), "absent-on-default: {json}");
+        let back: DecisionPolicy = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back.escalate_below(), None);
+        assert_eq!(back, DecisionPolicy::default());
+    }
+
+    #[test]
+    fn escalate_band_round_trips_when_set() {
+        let policy =
+            DecisionPolicy::default().with_escalate_below(0.65).expect("inside the cascade");
+        assert_eq!(policy.escalate_below(), Some(0.65));
+        let json = serde_json::to_string(&policy).expect("serialize");
+        assert!(json.contains(r#""escalate_below":0.65"#), "present-on-set: {json}");
+        let back: DecisionPolicy = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, policy);
+    }
+
+    #[test]
+    fn escalate_band_must_sit_inside_the_cascade() {
+        let base = DecisionPolicy::default(); // abstain 0.5 <= band <= 0.8
+        assert!(base.clone().with_escalate_below(0.5).is_ok());
+        assert!(base.clone().with_escalate_below(0.8).is_ok());
+
+        // Below abstain_below the band would be dead code.
+        let err = base.clone().with_escalate_below(0.49).expect_err("refused");
+        assert!(matches!(err, CoreError::InvalidPolicy { .. }));
+        // Above min_confidence it would swallow the accept band.
+        assert!(base.clone().with_escalate_below(0.81).is_err());
+        // Out of range / non-finite never pass.
+        assert!(base.clone().with_escalate_below(1.5).is_err());
+        assert!(base.with_escalate_below(f64::NAN).is_err());
     }
 }

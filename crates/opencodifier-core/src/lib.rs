@@ -94,6 +94,7 @@
 pub mod answer;
 pub mod confidence;
 pub mod error;
+pub mod escalation;
 pub mod ids;
 pub mod policy;
 pub mod question;
@@ -105,6 +106,11 @@ pub mod trace;
 pub use answer::{DecisionAnswer, Distribution, DistributionEntry};
 pub use confidence::ConfidenceReport;
 pub use error::{CoreError, CoreResult};
+pub use escalation::{
+    CandidateEvidence, DEFAULT_ESCALATION_BUDGET_BYTES, EngineProvenance, EscalationAction,
+    EscalationGate, EscalationGateKind, EscalationPayload, EscalationQuestion, EscalationReason,
+    PartialAnswer, PartialAnswerValue, StateSummary,
+};
 pub use ids::{CandidateId, DecisionFamily, NodeId, QuestionId};
 pub use policy::{
     AbstainCandidate, DEFAULT_MAX_IMAGE_BYTES, DEFAULT_MAX_IMAGES, DecisionPolicy, Limits, OodMode,
