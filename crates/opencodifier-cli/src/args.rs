@@ -75,6 +75,10 @@ pub enum Command {
     Ladder(LadderCommand),
     /// Lane operations: the named stack presets (#191).
     Lane(LaneCommand),
+    /// First-run detection: probe the host, propose lanes, write config.
+    Init(InitArgs),
+    /// Host health check: the init probes, no writes, exit 0/1.
+    Doctor(DoctorArgs),
     /// Built-in recipe fleet operations.
     Recipe(RecipeCommand),
 }
@@ -95,6 +99,8 @@ impl Command {
             Self::Models(models) => crate::models::run(&models.command),
             Self::Ladder(ladder) => crate::ladder::run(&ladder.command),
             Self::Lane(lane) => crate::lane::run(&lane.command),
+            Self::Init(init) => crate::init_doctor::run_init(&init),
+            Self::Doctor(doctor) => crate::init_doctor::run_doctor(&doctor),
             Self::Recipe(recipe) => crate::recipes::run(&recipe.command),
         }
     }
@@ -351,8 +357,37 @@ pub struct LaneCommand {
     pub command: LaneSubcommand,
 }
 
-/// Lane operations (#191). A lane is a contract, not a size: the named,
-/// complete answer to "what stack should serve this request?".
+/// Arguments of `opencodifier init` (#192): probe, propose, write.
+/// Never downloads anything.
+#[derive(Debug, Args)]
+pub struct InitArgs {
+    /// Accept the top lane proposal non-interactively.
+    #[arg(long)]
+    pub yes: bool,
+
+    /// Machine-readable proposal on stdout; no writes.
+    #[arg(long)]
+    pub json: bool,
+
+    /// Choose a lane directly, skipping the proposal.
+    #[arg(long, value_name = "NAME")]
+    pub lane: Option<String>,
+
+    /// Where to write the config. Default: `./opencodifier.json`.
+    #[arg(long, value_name = "PATH")]
+    pub out: Option<PathBuf>,
+}
+
+/// Arguments of `opencodifier doctor` (#192): the init probes, no
+/// writes, exit 0/1.
+#[derive(Debug, Args)]
+pub struct DoctorArgs {
+    /// Machine-readable probe report on stdout.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Lane operations.
 #[derive(Debug, Subcommand)]
 pub enum LaneSubcommand {
     /// Print the lane table: name, tags, accuracy standing-in, artifacts

@@ -25,6 +25,7 @@ mod args;
 mod decide;
 mod error;
 mod graph;
+mod init_doctor;
 mod input;
 mod ladder;
 mod lane;
