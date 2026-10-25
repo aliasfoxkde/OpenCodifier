@@ -111,7 +111,7 @@ async fn the_handshake_announces_the_runtime() {
 }
 
 #[tokio::test]
-async fn the_tool_list_is_exactly_the_phase_15_set() {
+async fn the_tool_list_is_exactly_the_phase_15_set_plus_the_gate() {
     let (client, server_task) = session().await;
     let listed = client.list_tools(Default::default()).await.unwrap();
     let mut names: Vec<String> = listed.tools.iter().map(|tool| tool.name.to_string()).collect();
@@ -122,6 +122,7 @@ async fn the_tool_list_is_exactly_the_phase_15_set() {
             "codify_batch",
             "codify_decide",
             "codify_explain",
+            "codify_gate",
             "codify_graph",
             "codify_validate",
             "codify_verify",
@@ -156,6 +157,34 @@ async fn codify_decide_returns_the_canonical_response() {
         .find(|entry| entry["node"] == "choice")
         .unwrap();
     assert!(choice_entry["detail"]["model"]["value"].as_str().unwrap().contains("lexical"));
+    client.cancel().await;
+    server_task.await.unwrap();
+}
+
+/// The agent-facing gate over the wire (#194): question + state in, the
+/// small verdict out, with `proceed` consistent with the outcome.
+#[tokio::test]
+async fn codify_gate_answers_the_compact_verdict() {
+    let (client, server_task) = session().await;
+    let result = call(
+        &client,
+        "codify_gate",
+        json!({
+            "question": "Should this request be decided by the deterministic engine before any model is paid for?",
+            "state": "an agent loop about to choose a serving stack for a classification request",
+        }),
+    )
+    .await;
+    assert_eq!(result.is_error, Some(false), "{:?}", result.structured_content);
+    let gate = structured(&result);
+    let keys: Vec<&str> = gate.as_object().unwrap().keys().map(String::as_str).collect();
+    assert_eq!(keys, vec!["confidence", "outcome", "probability", "proceed", "value"]);
+    // `proceed` only under a decisive affirmative — the contract an agent
+    // loop relies on to tell 'no' from 'unsure'.
+    assert_eq!(
+        gate["proceed"].as_bool().unwrap(),
+        gate["outcome"] == "accept" && gate["value"].as_bool().unwrap()
+    );
     client.cancel().await;
     server_task.await.unwrap();
 }

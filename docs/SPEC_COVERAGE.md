@@ -58,7 +58,7 @@ shipped while the browser demo rides §58).
 
 | § | Section | Verdict | Evidence |
 |---|---|---|---|
-| 31 | MCP | done | rmcp 2.2 stdio server, six `codify_*` tools (D17) |
+| 31 | MCP | done | rmcp 2.2 stdio server, seven `codify_*` tools (D17; `codify_gate` added by #194) |
 | 32 | MCP Tool Introspection | done | rmcp schema introspection |
 | 33 | Skills | done | `skills/` — README protocol + all eight §33 areas (routing, model-selection, tool-selection, tool-gating, context-pruning, escalation, verification, memory-selection) |
 | 34 | Built-in Recipes | done | the twelve §34 areas as runnable graphs + paired requests + captured responses under `recipes/`; `opencodifier recipe list` / `recipe install [--dest] [--force]` ship the fleet inside the binary (`include_str!`), installed bytes byte-identical to the committed copies (18g) |

@@ -1,7 +1,7 @@
 //! `opencodifier-mcp` — the Model Context Protocol surface (PLAN Phase 10,
 //! PLANNING.md §31, §55).
 //!
-//! Six decision tools over an assembled [`EngineHandle`], served on stdio
+//! Seven decision tools over an assembled [`EngineHandle`], served on stdio
 //! via `opencodifier mcp serve`. The surface is deliberately thin in the
 //! same way the HTTP surface is: every tool normalizes its payload through
 //! [`opencodifier_schema`] and executes through the engine facade, so MCP
@@ -62,7 +62,7 @@ use crate::envelope::{Failure, respond};
 /// is refused up front with `mcp.batch_too_large`.
 pub use opencodifier_engine::MAX_BATCH;
 
-/// The MCP server: the six Phase-15 decision tools over an assembled
+/// The MCP server: the decision tools over an assembled
 /// [`EngineHandle`].
 #[derive(Debug, Clone)]
 pub struct OpenCodifierServer {
@@ -98,6 +98,20 @@ pub struct ValidateArgs {
     /// serialization shape (the same document `recipes/*.json` and
     /// `--graph` carry).
     pub graph: Value,
+}
+
+/// Arguments of `codify_gate` (#194): the compact agent-facing
+/// "should I proceed?" call.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct GateArgs {
+    /// The yes/no question to decide, e.g. "Should I run the full test
+    /// suite before committing?".
+    pub question: String,
+    /// The unstructured context the question is about: the working-tree
+    /// summary, the CI failure, the candidate list — whatever the agent is
+    /// weighing.
+    #[serde(default)]
+    pub state: Option<String>,
 }
 
 #[tool_router]
@@ -177,6 +191,22 @@ impl OpenCodifierServer {
     )]
     fn codify_explain(&self, Parameters(args): Parameters<RequestArgs>) -> CallToolResult {
         respond(self.explain_document(&args.request))
+    }
+
+    /// The compact agent-facing gate (#194): one boolean question, one
+    /// small answer — `proceed`, `confidence`, `outcome` — built for an
+    /// agent loop deciding whether to spend tokens before spending them.
+    #[tool(
+        name = "codify_gate",
+        description = "Compact agent-facing gate: decide one yes/no question over a state and \
+         return {proceed, confidence, outcome, value, probability}. Purpose-built for an agent \
+         loop — cheap, small, one call. `proceed` is true only when the runtime decided \
+         decisively for the affirmative; an abstain/escalate outcome is proceed: false with the \
+         typed outcome preserved, so the caller can tell 'no' from 'unsure'. State the question \
+         affirmatively (negator-free text)."
+    )]
+    fn codify_gate(&self, Parameters(args): Parameters<GateArgs>) -> CallToolResult {
+        respond(self.gate_document(&args))
     }
 }
 
@@ -294,6 +324,48 @@ impl OpenCodifierServer {
                 .map_err(|error| {
                     Failure::engine(&EngineError::Serialization { reason: error.to_string() })
                 })?,
+        }))
+    }
+
+    /// The compact gate (#194): one boolean question over the caller's
+    /// state, decided through the same engine as every other tool, then
+    /// projected down to the small agent-facing answer. The question text
+    /// is negator-free by contract (parity flips booleans); the caller
+    /// states the question affirmatively.
+    fn gate_document(&self, args: &GateArgs) -> Result<Value, Failure> {
+        let mut state = serde_json::Map::new();
+        // The canonical IR requires a state text even when the caller has
+        // none; an empty string is a legal, evidence-free state.
+        state.insert("text".to_owned(), Value::String(args.state.clone().unwrap_or_default()));
+        let request = Value::Object(serde_json::Map::from_iter([
+            ("state".to_owned(), Value::Object(state)),
+            (
+                "questions".to_owned(),
+                serde_json::json!([{
+                    "type": "boolean",
+                    "id": "gate",
+                    "text": args.question,
+                }]),
+            ),
+        ]));
+        let response = self.decide_document(&request)?;
+        let answer = &response["answers"][0];
+        let value = answer["value"].as_bool().unwrap_or(false);
+        let outcome = response["outcome"].as_str().unwrap_or_default();
+        // Decisive is the IR's own predicate (Accept | Verified): a
+        // verifier-agreed affirmative proceeds too. Anything else is
+        // 'unsure', never 'no'.
+        let decisive = matches!(outcome, "accept" | "verified");
+        let confidence = answer["confidence"].as_f64().unwrap_or(0.0);
+        Ok(serde_json::json!({
+            // `proceed` requires a decisively-accepted affirmative; an
+            // abstain/escalate/verify outcome is proceed:false with the
+            // typed outcome preserved, so "no" and "unsure" stay distinct.
+            "proceed": decisive && value,
+            "confidence": confidence,
+            "outcome": response["outcome"],
+            "value": value,
+            "probability": answer["probability"],
         }))
     }
 
@@ -581,5 +653,65 @@ mod tests {
         let call = respond(server().decide_document(&document));
         assert_eq!(call.is_error, Some(false));
         assert_eq!(call.structured_content.unwrap()["outcome"], "abstain");
+    }
+
+    /// The gate answers a small document; the answer shape is exactly the
+    /// five keys an agent loop consumes — nothing more.
+    #[tokio::test]
+    async fn gate_returns_the_compact_verdict() {
+        let args = GateArgs {
+            question: "Should this request run the deterministic engine first?".to_owned(),
+            state: Some("an agent loop about to spend tokens on a large model".to_owned()),
+        };
+        let call = respond(server().gate_document(&args));
+        assert_eq!(call.is_error, Some(false), "{:?}", call.structured_content);
+        let gate = call.structured_content.unwrap();
+        let keys: Vec<&str> = gate.as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(keys, vec!["confidence", "outcome", "probability", "proceed", "value"]);
+        assert!(gate["proceed"].is_boolean());
+        assert!(gate["confidence"].as_f64().unwrap() >= 0.0);
+        assert!(
+            matches!(gate["outcome"].as_str(), Some("accept" | "verify")),
+            "lexical stack gate lands on accept or verify, got {:?}",
+            gate["outcome"]
+        );
+        // `proceed` implies the boolean was decisively true; never the
+        // reverse (a false boolean under an accept is still proceed:false).
+        if gate["proceed"].as_bool().unwrap() {
+            assert!(gate["value"].as_bool().unwrap());
+        }
+    }
+
+    /// The doc says the gate is small by design: the whole structured
+    /// answer stays under a bounded byte budget even with a large state —
+    /// the state is consumed, never echoed.
+    #[tokio::test]
+    async fn gate_never_echoes_the_state_back() {
+        let big = "x".repeat(10_000);
+        let args = GateArgs { question: "Is the state heavy?".to_owned(), state: Some(big) };
+        let call = respond(server().gate_document(&args));
+        assert_eq!(call.is_error, Some(false));
+        let rendered = call.structured_content.unwrap().to_string();
+        assert!(rendered.len() < 2_000, "gate answered in {} bytes", rendered.len());
+    }
+
+    /// A gate question the engine cannot decide decisively keeps the typed
+    /// outcome and reports proceed:false — 'unsure' is not 'no'.
+    #[tokio::test]
+    async fn gate_abstention_is_proceed_false_with_the_outcome_named() {
+        let args = GateArgs {
+            question: "Should I deploy to production right now?".to_owned(),
+            state: None,
+        };
+        let call = respond(server().gate_document(&args));
+        assert_eq!(call.is_error, Some(false), "{:?}", call.structured_content);
+        let gate = call.structured_content.unwrap();
+        // No state, no evidence: the engine does not decide decisively,
+        // and the typed outcome says so — 'unsure' is not 'no'.
+        assert!(
+            matches!(gate["outcome"].as_str(), Some("abstain" | "verify" | "escalate")),
+            "expected a non-decisive outcome, whole gate: {gate}"
+        );
+        assert!(!gate["proceed"].as_bool().unwrap(), "an undecided gate never proceeds: {gate:?}");
     }
 }

@@ -36,7 +36,7 @@ implemented and tested:
   bands.
 - MCP — `opencodifier mcp serve` exposes `codify_decide`,
   `codify_batch`, `codify_graph`, `codify_validate`, `codify_verify`,
-  and `codify_explain` as tools over stdio: point any MCP host at the
+  `codify_explain`, and `codify_gate` as tools over stdio: point any MCP host at the
   binary and the runtime's decisions become host-side tool calls. Stdio
   only, so the surface is local by construction.
 

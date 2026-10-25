@@ -206,7 +206,7 @@ on the path — the bind is loopback by policy.
 
 ## 3. MCP — `opencodifier mcp serve`
 
-Six decision tools over stdio (the only transport the local-first
+Seven decision tools over stdio (the only transport the local-first
 posture allows):
 
 | Tool | What it does |
@@ -217,6 +217,7 @@ posture allows):
 | `codify_validate` | preflight a payload or graph without executing |
 | `codify_verify` | re-verify a prior decision (the confidence-gated verifier path) |
 | `codify_explain` | the deterministic execution trace — the only explanation surface; chain-of-thought is never exposed |
+| `codify_gate` | the compact agent-facing "should I proceed?" call (#194): one yes/no question + state → `{proceed, confidence, outcome, value, probability}`; `proceed` only under a decisive affirmative, so 'no' and 'unsure' stay distinct |
 
 ### 3.1 Register with an MCP client (Claude Code example)
 
