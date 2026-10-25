@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 /// The raw document as parsed from JSON. Kept distinct from
 /// [`ResolvedConfig`] so validation failures carry key paths.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RawConfig {
     /// Named lane selection and lane table.
@@ -127,7 +127,7 @@ pub struct ResolvedConfig {
 }
 
 /// Named lane selection and lane table.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LaneSection {
     /// The active lane name (e.g. `zero`, `guard`, `local-2b`).
@@ -135,7 +135,7 @@ pub struct LaneSection {
 }
 
 /// Engine settings.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EngineSection {
     /// Path to the decision graph document.
@@ -147,7 +147,7 @@ pub struct EngineSection {
 }
 
 /// Ordered rung tail overrides.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RungsSection {
     /// Rung identifiers in execution order.
@@ -155,7 +155,7 @@ pub struct RungsSection {
 }
 
 /// Model backend settings.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelSection {
     /// Backend identifier (`onnx`, `llamacpp`, ...).
@@ -173,7 +173,7 @@ pub struct ModelSection {
 }
 
 /// Ladder profile settings.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LadderSection {
     /// Path to the ladder profile document.
@@ -181,7 +181,7 @@ pub struct LadderSection {
 }
 
 /// Escalation settings.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EscalationSection {
     /// URL the escalation payload is posted to; the engine never calls
@@ -197,7 +197,7 @@ pub struct EscalationSection {
 }
 
 /// HTTP settings.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct HttpSection {
     /// Bind address; the default stays `127.0.0.1`.

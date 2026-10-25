@@ -73,6 +73,8 @@ pub enum Command {
     Models(ModelsCommand),
     /// Ladder-profile operations (D25).
     Ladder(LadderCommand),
+    /// Lane operations: the named stack presets (#191).
+    Lane(LaneCommand),
     /// Built-in recipe fleet operations.
     Recipe(RecipeCommand),
 }
@@ -92,6 +94,7 @@ impl Command {
             Self::Mcp(args) => crate::mcp::run(&args),
             Self::Models(models) => crate::models::run(&models.command),
             Self::Ladder(ladder) => crate::ladder::run(&ladder.command),
+            Self::Lane(lane) => crate::lane::run(&lane.command),
             Self::Recipe(recipe) => crate::recipes::run(&recipe.command),
         }
     }
@@ -338,6 +341,40 @@ pub struct LadderCommand {
     /// The ladder operation to run.
     #[command(subcommand)]
     pub command: LadderSubcommand,
+}
+
+/// `opencodifier lane …`
+#[derive(Debug, Args)]
+pub struct LaneCommand {
+    /// The lane operation to run.
+    #[command(subcommand)]
+    pub command: LaneSubcommand,
+}
+
+/// Lane operations (#191). A lane is a contract, not a size: the named,
+/// complete answer to "what stack should serve this request?".
+#[derive(Debug, Subcommand)]
+pub enum LaneSubcommand {
+    /// Print the lane table: name, tags, accuracy standing-in, artifacts
+    /// expected.
+    List,
+    /// Print the exact config document a lane expands to.
+    Show {
+        /// The lane name (`zero`, `guard`, `delegate`, `local-2b/4b/9b`,
+        /// `verify`, `ci`).
+        #[arg(value_name = "NAME")]
+        name: String,
+    },
+    /// Write the lane's expanded config to a file (the project config by
+    /// default). Never probes or downloads artifacts; `doctor` verifies.
+    Use {
+        /// The lane name.
+        #[arg(value_name = "NAME")]
+        name: String,
+        /// Where to write the config. Default: `./opencodifier.json`.
+        #[arg(long, value_name = "PATH")]
+        out: Option<PathBuf>,
+    },
 }
 
 /// Ladder operations.

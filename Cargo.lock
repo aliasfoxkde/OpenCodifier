@@ -1455,6 +1455,7 @@ version = "0.6.1"
 dependencies = [
  "assert_cmd",
  "clap",
+ "opencodifier-config",
  "opencodifier-core",
  "opencodifier-engine",
  "opencodifier-http",

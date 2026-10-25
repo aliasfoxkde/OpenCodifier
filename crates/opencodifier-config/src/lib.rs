@@ -25,9 +25,13 @@
 //! `config.*` error codes, never silently degrade.
 
 pub mod error;
+pub mod lane;
 pub mod resolved;
 
 pub use error::{ConfigError, ConfigResult};
+pub use lane::{
+    LANE_TABLE, LaneError, LanePreset, LaneTag, expand as lane_expand, preset as lane_preset,
+};
 pub use resolved::{
     EngineSection, EscalationSection, HttpSection, LadderSection, LaneSection, ModelSection,
     RawConfig, ResolvedConfig, RungsSection,
