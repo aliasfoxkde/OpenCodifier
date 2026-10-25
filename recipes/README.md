@@ -54,6 +54,14 @@ forced answer would.
 | [`verification.json`](verification.json) | Does an answer need verification | `verify` (0.703) |
 | [`document-relevance.json`](document-relevance.json) | Score a document's relevance | `abstain` (0.333) |
 | [`code-review-risk.json`](code-review-risk.json) | Score a change's review risk | `abstain` (0.25) |
+| [`ci-test-selection.json`](ci-test-selection.json) | Which test scope runs for a diff (choice over CI facts) | `verify` (0.740) |
+| [`ci-queue-priority.json`](ci-queue-priority.json) | How urgently a queued job starts (score) | `abstain` |
+| [`ci-stale-process.json`](ci-stale-process.json) | Is a runner stale and safe to reap (boolean) | `verify` (0.760) |
+| [`ci-risk-gate.json`](ci-risk-gate.json) | Is this failure worth a bigger model (boolean) | `abstain` (0.571) |
+
+The CI recipes decide over a **facts file** a repo-analysis tool emits —
+the schema and the boundary (the runtime never collects the facts itself)
+are documented in [`docs/CI_FACTS.md`](../docs/CI_FACTS.md).
 
 Installing and running one:
 

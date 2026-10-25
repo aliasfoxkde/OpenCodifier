@@ -1,0 +1,39 @@
+{
+  "state": {
+    "text": "choose the test suite to run for the changed files in this diff",
+    "facts": {
+      "changed_files": { "kind": "list", "value": ["crates/core/src/state.rs", "crates/core/src/answer.rs"] },
+      "suite_size": { "kind": "integer", "value": 412 },
+      "import_graph_depth": { "kind": "integer", "value": 3 }
+    }
+  },
+  "questions": [
+    {
+      "type": "choice",
+      "id": "test_selection",
+      "text": "Which test scope should run for this diff?",
+      "candidates": [
+        { "id": "affected-units", "description": "Only the crates the changed files import into" },
+        { "id": "workspace", "description": "The full workspace test suite" },
+        { "id": "smoke", "description": "Compile check and lint only" }
+      ]
+    }
+  ],
+  "policy": {
+    "min_confidence": 0.8,
+    "verify_below": 0.65,
+    "abstain_below": 0.5,
+    "risk": "low"
+  },
+  "metadata": {
+    "request_id": "recipe-ci-test-selection-0001",
+    "limits": {
+      "max_input_bytes": 1048576,
+      "max_questions": 32,
+      "max_candidates": 256,
+      "max_graph_nodes": 128,
+      "max_execution_time": { "secs": 10, "nanos": 0 },
+      "max_retrieval_results": 64
+    }
+  }
+}

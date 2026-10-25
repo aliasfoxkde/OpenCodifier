@@ -1,0 +1,35 @@
+{
+  "state": {
+    "text": "decide whether this failure diagnosis is confident enough to auto-act on",
+    "facts": {
+      "failure_class": { "kind": "text", "value": "flaky-test" },
+      "prior_occurrences": { "kind": "integer", "value": 2 },
+      "diagnosis_confidence": { "kind": "float", "value": 0.71 },
+      "blast_radius_files": { "kind": "integer", "value": 1 }
+    }
+  },
+  "questions": [
+    {
+      "type": "boolean",
+      "id": "risk_gate",
+      "text": "Is this failure worth escalating to a bigger model?"
+    }
+  ],
+  "policy": {
+    "min_confidence": 0.85,
+    "verify_below": 0.75,
+    "abstain_below": 0.6,
+    "risk": "high"
+  },
+  "metadata": {
+    "request_id": "recipe-ci-risk-gate-0001",
+    "limits": {
+      "max_input_bytes": 1048576,
+      "max_questions": 32,
+      "max_candidates": 256,
+      "max_graph_nodes": 128,
+      "max_execution_time": { "secs": 10, "nanos": 0 },
+      "max_retrieval_results": 64
+    }
+  }
+}

@@ -1229,7 +1229,7 @@ fn mcp_serve_refuses_an_unreadable_graph_document_before_the_session() {
 }
 
 #[test]
-fn recipe_list_names_the_twelve_areas() {
+fn recipe_list_names_the_fleet() {
     let output =
         opencodifier().args(["recipe", "list"]).output().expect("run opencodifier recipe list");
     assert_eq!(output.status.code(), Some(0));
@@ -1247,6 +1247,10 @@ fn recipe_list_names_the_twelve_areas() {
         "verification",
         "document-relevance",
         "code-review-risk",
+        "ci-test-selection",
+        "ci-queue-priority",
+        "ci-stale-process",
+        "ci-risk-gate",
     ] {
         assert!(stdout.contains(name), "list is missing `{name}`: {stdout}");
     }

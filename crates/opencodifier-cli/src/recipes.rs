@@ -1,4 +1,5 @@
 //! The built-in recipe fleet (PLANNING.md §34): the twelve decision areas
+//! plus the four CI recipes of the escalation-lanes plan (#195).
 //! as runnable graphs, shipped inside the binary.
 //!
 //! `recipe list` names the fleet; `recipe install <name>` writes a
@@ -38,8 +39,9 @@ struct Recipe {
     expected: &'static str,
 }
 
-/// The fleet: the twelve decision areas of PLANNING.md §34, one recipe
-/// each. `recipe list` prints exactly this table, in this order.
+/// The fleet: the twelve decision areas of PLANNING.md §34 plus the four
+/// CI recipes (#195). `recipe list` prints exactly this table, in this
+/// order.
 const FLEET: &[Recipe] = &[
     Recipe {
         name: "model-routing",
@@ -124,6 +126,34 @@ const FLEET: &[Recipe] = &[
         graph: include_str!("../../../recipes/code-review-risk.json"),
         request: include_str!("../../../recipes/requests/code-review-risk.json"),
         expected: include_str!("../../../recipes/expected/code-review-risk-response.json"),
+    },
+    Recipe {
+        name: "ci-test-selection",
+        description: "Which test scope should run for this diff (choice, CI facts file as state).",
+        graph: include_str!("../../../recipes/ci-test-selection.json"),
+        request: include_str!("../../../recipes/requests/ci-test-selection.json"),
+        expected: include_str!("../../../recipes/expected/ci-test-selection-response.json"),
+    },
+    Recipe {
+        name: "ci-queue-priority",
+        description: "How urgently a queued job should start (score over the queue facts).",
+        graph: include_str!("../../../recipes/ci-queue-priority.json"),
+        request: include_str!("../../../recipes/requests/ci-queue-priority.json"),
+        expected: include_str!("../../../recipes/expected/ci-queue-priority-response.json"),
+    },
+    Recipe {
+        name: "ci-stale-process",
+        description: "Is this CI runner stale and safe to reap (boolean, high-risk posture).",
+        graph: include_str!("../../../recipes/ci-stale-process.json"),
+        request: include_str!("../../../recipes/requests/ci-stale-process.json"),
+        expected: include_str!("../../../recipes/expected/ci-stale-process-response.json"),
+    },
+    Recipe {
+        name: "ci-risk-gate",
+        description: "Is this failure worth escalating to a bigger model (boolean, the #188 gate).",
+        graph: include_str!("../../../recipes/ci-risk-gate.json"),
+        request: include_str!("../../../recipes/requests/ci-risk-gate.json"),
+        expected: include_str!("../../../recipes/expected/ci-risk-gate-response.json"),
     },
 ];
 
@@ -213,7 +243,7 @@ mod tests {
     /// the README's comparison procedure relies on.
     #[test]
     fn every_fleet_file_is_runnable_and_well_formed() {
-        assert_eq!(FLEET.len(), 12, "one recipe per §34 decision area");
+        assert_eq!(FLEET.len(), 16, "twelve §34 areas plus the four #195 CI recipes");
         for recipe in FLEET {
             let document: FleetGraph = serde_json::from_str(recipe.graph)
                 .unwrap_or_else(|error| panic!("{} graph: {error}", recipe.name));
@@ -250,9 +280,9 @@ mod tests {
         }
     }
 
-    /// The fleet names are exactly the twelve §34 decision areas.
+    /// The fleet names, in order.
     #[test]
-    fn the_fleet_names_the_twelve_decision_areas() {
+    fn the_fleet_names_are_stable() {
         let names: Vec<_> = FLEET.iter().map(|recipe| recipe.name).collect();
         assert_eq!(
             names,
@@ -269,6 +299,10 @@ mod tests {
                 "verification",
                 "document-relevance",
                 "code-review-risk",
+                "ci-test-selection",
+                "ci-queue-priority",
+                "ci-stale-process",
+                "ci-risk-gate",
             ]
         );
     }

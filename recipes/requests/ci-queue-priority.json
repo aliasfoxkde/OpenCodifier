@@ -1,0 +1,41 @@
+{
+  "state": {
+    "text": "order the queued jobs: which runs next",
+    "facts": {
+      "wait_time_minutes": { "kind": "integer", "value": 47 },
+      "priority_class": { "kind": "text", "value": "high" },
+      "estimated_cost_usd": { "kind": "float", "value": 1.25 },
+      "queue_depth": { "kind": "integer", "value": 9 }
+    }
+  },
+  "questions": [
+    {
+      "type": "score",
+      "id": "queue_priority",
+      "text": "How urgently should this queued job start?",
+      "levels": [
+        { "label": "deferred" },
+        { "label": "normal" },
+        { "label": "soon" },
+        { "label": "now" }
+      ]
+    }
+  ],
+  "policy": {
+    "min_confidence": 0.8,
+    "verify_below": 0.65,
+    "abstain_below": 0.5,
+    "risk": "low"
+  },
+  "metadata": {
+    "request_id": "recipe-ci-queue-priority-0001",
+    "limits": {
+      "max_input_bytes": 1048576,
+      "max_questions": 32,
+      "max_candidates": 256,
+      "max_graph_nodes": 128,
+      "max_execution_time": { "secs": 10, "nanos": 0 },
+      "max_retrieval_results": 64
+    }
+  }
+}
