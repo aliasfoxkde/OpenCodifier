@@ -1656,9 +1656,9 @@ structural gap under every one of these.
 
 | task | scope | status |
 |---|---|---|
-| #188 | gated-LLM A/B — does the gate beat a bare LLM? (`engine_wrong` vs the host's error rate) | open |
-| #189 | escalation contract — `escalate_below`, `EscalationReport`, the `Escalate` outcome, every wire format | in progress — slice 1 (band + report contract) done `5c489e3`; slice 2 (engine wiring: `Escalate` builds + attaches the report, cache-safe; native round-trip drop defect fixed in `decode_response`) done 2026-10-24 |
-| #190 | `opencodifier-config` — the config layer: discovery, precedence, strict `config.*` errors | open |
+| #188 | gated-LLM A/B — does the gate beat a bare LLM? (`engine_wrong` vs the host's error rate) | **done** (2026-10-23) — gate A/B **GATE SHIPS** (RESEARCH §27 / OPERATOR_ACTIONS git-state); premise validated, the surfaces may multiply |
+| #189 | escalation contract — `escalate_below`, `EscalationReport`, the `Escalate` outcome, every wire format | **done** (2026-10-24) — slice 1 (band + report contract) `5c489e3`; slice 2 (engine wiring: `Escalate` builds + attaches the report, cache-safe; native round-trip drop defect fixed in `decode_response`) `9f86cfe`. HTTP/MCP/CLI ride the escalation block through the Native codec — no interface-crate change needed; foreign adapters are vendor-call codecs that never emit engine decisions, so nothing to add there |
+| #190 | `opencodifier-config` — the config layer: discovery, precedence, strict `config.*` errors | **done** (2026-10-25) — crate landed: discovery (`$OPENCODIFIER_CONFIG` → `./opencodifier.json` → XDG), strict `config.*` error codes (`env_pointee_missing`/`unreadable`/`parse`/`unknown_key`/`out_of_range`), byte-identity default (empty document ⇒ all-`None`), every env input injected at the edge (environment rule); 10 crate tests + 361-test filtered suite green, clippy/fmt/doc clean |
 | #191 | lanes — the named presets (`zero`, `guard`, `delegate`, `local-2b/4b/9b`, `verify`, `ci`) | open |
 | #192 | first-run detection — `opencodifier init` / `opencodifier doctor` | open |
 | #193 | feedback loop — `POST /v1/feedback` + `codify_feedback` → `ladder fit-boolean` | open |
@@ -1666,6 +1666,14 @@ structural gap under every one of these.
 | #195 | CI/CD recipes — test selection, queue priority, stale process, risk gate | open |
 | #196 | playground QA tool — yes/no question + a real confidence score, in the browser | open |
 | #197 | re-capture the recipe expected-response files against the current engine | **done** (2026-10-22) — all 15 captures re-recorded against the live engine; the diff is the model-id move alone (`relational-v1\|builtin-lexical-v1` → `relational-v2\|builtin-lexical-v2`, D43) and its derived cache hash, with no answer, confidence, or outcome changed. `strict-verify` was found to have *no* request document and was therefore never verified — it is exercised by the same `requests/choice.json` as `minimal-choice` (one request, two gates, two outcomes), and now is. The check is read-only and CI-gated: `just check-recipes` / the `e2e` job's *Recipe captures match a live run* step. |
+
+**Closed by decision, not code (2026-10-24 bookkeeping pass):**
+
+| task | disposition |
+|---|---|
+| #180 | premise falsified by D43 — `temporal_numeric` answers are band labels needing multi-constraint reasoning, not relational proofs. The solver gained the general capability anyway (ISO timestamps, `Deadline`/`Event` facts, `soonest_deadline`/`most_recent_event`, in-grammar suite 0.290 → 1.000). The family routes per D42; no solver work remains. |
+| #186 | mechanism shipped as D42 (`metadata.family`, `LadderPolicy.per_family`, node→family→kind resolution, wire refusal of malformed labels). Thresholds deliberately deferred to post-E1-F/E1-G re-tuning — shipping a family profile without a measured basis would violate the gate discipline. Residual: profile tuning, tracked via the measurement program, not this task. |
+| #187 | both arms COMPLETE (2026-10-22): E1-F fails the gate (0.725 suite); E1-G passes (0.7667 / 0.6805) but does not dethrone E1-E (0.8083 / 0.6840). Leakage audit clean. No further training action in this task; next arms are the trainer-backlog lane. |
 
 **The line that must not move.** OpenCodifier stays the *runtime*. The CI
 integration supplies a JSON facts file; the engine decides. The runtime does

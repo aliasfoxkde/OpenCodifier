@@ -1,0 +1,22 @@
+[package]
+name = "opencodifier-config"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Configuration discovery, precedence, and strict validation for OpenCodifier"
+
+[dependencies]
+opencodifier-core = { path = "../opencodifier-core" }
+opencodifier-engine = { path = "../opencodifier-engine" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

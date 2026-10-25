@@ -1469,6 +1469,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "opencodifier-config"
+version = "0.6.1"
+dependencies = [
+ "opencodifier-core",
+ "opencodifier-engine",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "opencodifier-core"
 version = "0.6.1"
 dependencies = [

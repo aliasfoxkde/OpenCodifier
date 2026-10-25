@@ -4103,3 +4103,45 @@ undecided. It is a model-side investment (a VLM-based structured extractor is
 the plausible substrate) and must be measured against the 2B model's accuracy
 on the same items before integration (§23.6 consequence b). Nothing in D43
 depends on it.
+
+## §31 — AnyJev (nokia-applied-research) audit: readout rotation, label-free calibration (2026-10-25, user-directed)
+
+**Source.** `github.com/nokia-applied-research/AnyJev`, Apache-2.0, arXiv
+2610.00831. Python library (~2.2k LOC) that turns any causal LM into a Jev-style
+decision model without training: typed questions (choice / yes-no / score),
+probabilities read from next-token log-probs over answer-label tokens at the
+answer position. Nothing generated, nothing parsed. Cloned read-only to
+`/var/tmp/anyjev-study` (scratch, GC-eligible).
+
+**Their headline.** Raw label-logit readouts flip answers when the option list
+is reordered — 0.230 flip rate on Qwen3-8B/BANKING77. Their **L0 readout**
+(`anyjev/readout.py`, ~82 lines) cuts that to 0.073 and raises
+auto-decidable-at-≤5%-risk from 7.7% → 46.3%, with zero labels.
+
+### What transfers to OpenCodifier
+
+| # | Their mechanism | Our seam | Verdict |
+|---|---|---|---|
+| 1 | **Cyclic-rotation readout**: read the same decision over K cyclic permutations of the option list (every option at every position), combine in log space, divide out a label prior estimated without labels (`prior="batch"` at strength 0.75). Position-bias correction, label-free. | `opencodifier-schema` Jev adapter; the decision-model rung of the ladder. Directly relevant to the measured order-flip/parity problem (negator-parity memory; composed-question discipline). | **ADOPT-WORTHY** — K prefills per decision, cheap; a per-rung feature under `LadderPolicy`, not a default. Needs an `llama.cpp` decode path that can score K prompt variants of one request. |
+| 2 | **Rotation budget** (`docs/rotation_budget.md`, `calibrate_adaptive`): stop early once the running log-odds margin certifies agreement with the full-K cycle at a target rate (default 1%), calibrated on **unlabelled** states via a Clopper–Pearson upper bound. ~3–4× fewer prefills, accuracy unchanged. | The `Calibration` seam; the confidence gate. A statistical certification of "cheap readout agrees with expensive readout" without labels. | **ADOPT-WORTHY** — this is the ladder's early-exit problem solved with a bound instead of a threshold guess. Consistent with abstention-as-success. |
+| 3 | **Label-token discipline** (`map_label_tokens` raises `LabelTokenError` on multi-token or colliding labels) | Any logit-readout rung. Refuse the ambiguous read instead of reading the wrong logit. | **ADOPT** (small) — defensive parity with our pointer-contract invariants rule. |
+| 4 | **Escalation cap as a shared budget**: `max_cot_share` over `cot_window` — a thread-safe global cap on how many recent decisions may escalate to the expensive route. | `LadderPolicy` (D25) escalation gating. | **COMPARE** — interesting bounded-cost variant; risks starving genuinely-hard items under burst. Measure before adopting. |
+| 5 | **Prompt format**: shared prefix across permutations for KV reuse; single-token positional labels; Yes/No attached to content for booleans. | Jev adapter wire shape; serving-path prompts. | **REFERENCE** — matches our serving-path BOS rules; the KV-reuse point matters for the llama.cpp fork lane. |
+| 6 | **Eval discipline**: README numbers read from committed JSON (`bench/*.json`); order-flip rate and auto-decidable-at-risk-k as first-class metrics; `test_readme_numbers.py` asserts docs match data. | `docs/BENCHMARKS.md` reporting; the board map. | **ADOPT** (process) — a doc-vs-data assertion test is cheap and prevents the stale-number class. |
+
+### Not portable
+
+Tacit training recipe and checkpoints (their self-distilled one-pass models;
+Tacit-9B scores JevBench 0.823 on the 231 public set — record as an **external
+reference point** for the board, not an arm). vLLM/SGLang/HF backends (we are
+ONNX/llama.cpp behind traits; D44 stands). The Decision Index leaderboard.
+
+### Placement
+
+Items 1–2 are the first genuinely new *accuracy-per-prefill* lever since the
+calibration program: they attack position bias, which none of our current rungs
+address, and they are label-free, which fits the gate discipline (no new
+labelled corpus needed to evaluate them). Sizing: an L0-style readout rung is a
+`LadderPolicy` extension + a K-variant scorer in the decision-model rung —
+engine-side, no wire-format change. Candidate task for the post-#190 gate
+program; do not start before #190/#191 land.
