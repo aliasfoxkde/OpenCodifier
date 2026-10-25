@@ -1,0 +1,55 @@
+# Fork build-smoke CI job (D41, offline-campaign G7) — DRAFT, not yet wired
+# into .gitforge.yml.
+#
+# What it proves: the parallel-decision fork (upstream base
+# `aliasfoxkde/llama.cpp` @ `parallel-decision-oc`, carrying 7ae36f4's full
+# `distribution` map) still compiles on the CI image's pinned toolchain and
+# produces a runnable llama-server that advertises the decision flags the
+# Rust client requires (`--decision-seqs`). Without this lane, a fork-side
+# regression is only discovered when a serving host tries to boot it.
+#
+# What it deliberately does NOT prove here: end-to-end `/v1/decision`
+# inference. That needs a GGUF (the smoke.sh path), and no model file
+# exists in or downloadable by CI (zero-download is an engine rule; CI
+# egress is crates.io-style only). The full smoke lane stays a host-side
+# procedure: `OpenCodifier-fork/forks/llama.cpp/smoke.sh` on any host with
+# the base model.
+#
+# Why draft-only: the build clones + compiles all of llama.cpp — roughly a
+# 20-40 min lane on top of the existing 6 jobs, every push, for a binary
+# that changes maybe once a month. Wiring it as an always-on push job
+# costs the queue far more than the risk it retires. Operator call: enable
+# as a manual trigger, fold into the push graph, or leave as a documented
+# host-side recipe.
+#
+# To enable: append this job to .gitforge.yml's `jobs:` list (and confirm
+# the deployed runner honors a `manual` trigger type; if it does not, the
+# fallback is a commented-out block toggled per release).
+name: fork-build-smoke
+version: "1.0"
+trigger_on: []            # manual only — never fires on push/PR as drafted
+environment:
+  CARGO_TERM_COLOR: always
+jobs:
+  - name: fork-build-smoke
+    image: opencodifier-ci-rust:2
+    # Fresh clone of llama.cpp + full compile: sized like the test lane's
+    # storm headroom, not the calm-path time.
+    timeout: 60m
+    steps:
+      - name: Build the fork llama-server (CPU backend)
+        run: |
+          export BACKEND=cpu
+          # build.sh clones the fork itself; container egress reaches
+          # github.com the same way it reaches crates.io.
+          bash forks/llama.cpp/build.sh
+      - name: Binary advertises the decision contract
+        run: |
+          BIN=forks/llama.cpp/build/bin/llama-server
+          test -x "${BIN}"
+          # --decision-seqs is the fork's own flag: stock llama-server
+          # refuses it, so a successful usage/exit here proves the
+          # decision tree is compiled in.
+          "${BIN}" --help 2>&1 | grep -q -- "--decision-seqs"
+      - name: BUILD-INFO recorded
+        run: cat forks/llama.cpp/build/BUILD-INFO.txt
