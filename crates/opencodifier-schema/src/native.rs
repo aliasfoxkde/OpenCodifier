@@ -123,14 +123,20 @@ impl WireFormat for Native {
         for answer in response.answers() {
             revalidate_distribution(answer)?;
         }
-        DecisionResponse::new(
+        let rebuilt = DecisionResponse::new(
             response.answers().to_vec(),
             response.outcome(),
             response.confidence().clone(),
             response.trace().clone(),
             *response.metrics(),
         )
-        .map_err(SchemaError::from)
+        .map_err(SchemaError::from)?;
+        // `DecisionResponse::new` cannot carry the escalation report; the
+        // validated attachment path is the only way it rides back.
+        match response.escalation() {
+            Some(report) => rebuilt.with_escalation(report.clone()).map_err(SchemaError::from),
+            None => Ok(rebuilt),
+        }
     }
 }
 

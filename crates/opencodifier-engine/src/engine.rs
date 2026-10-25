@@ -36,7 +36,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use opencodifier_core::{DecisionRequest, DecisionResponse, DecisionTrace, FactValue, TraceEntry};
+use opencodifier_core::{
+    DecisionOutcome, DecisionRequest, DecisionResponse, DecisionTrace, FactValue, TraceEntry,
+};
 
 use crate::cache::{CacheConfig, CacheKey, CacheKeyBuilder, DecisionCache, EngineIdentity};
 use crate::calibration::{Calibration, IdentityCalibration};
@@ -476,6 +478,8 @@ impl DecisionEngine {
             &self.token,
         );
         let outcome: GraphOutcome = executor.run()?;
+        let escalated = outcome.outcome == DecisionOutcome::Escalate;
+        let escalation = escalated.then(|| Self::escalation_report(request, &outcome, &identity));
         let response = DecisionResponse::new(
             outcome.answers,
             outcome.outcome,
@@ -483,6 +487,10 @@ impl DecisionEngine {
             outcome.trace,
             outcome.metrics,
         )?;
+        let response = match escalation {
+            Some(report) => response.with_escalation(report)?,
+            None => response,
+        };
         let report = RunReport {
             waves: outcome.waves,
             parallel_waves: outcome.parallel_waves,
@@ -497,6 +505,121 @@ impl DecisionEngine {
         };
         self.cache.insert(key, response.clone());
         Ok((response, report))
+    }
+
+    /// Builds the escalation handoff document for an `Escalate` outcome.
+    ///
+    /// Every field is a pure function of the finished decision (rule 4
+    /// of `opencodifier_core::escalation`): same request + same engine
+    /// version produces the byte-identical report, so it rides the
+    /// cache-safe path. No chain of thought — the trace is the
+    /// deterministic `TraceEntry` list verbatim (rule 1).
+    fn escalation_report(
+        request: &DecisionRequest,
+        outcome: &GraphOutcome,
+        identity: &EngineIdentity,
+    ) -> opencodifier_core::EscalationReport {
+        use opencodifier_core::{
+            CandidateEvidence, EngineProvenance, EscalationAction, EscalationGate,
+            EscalationGateKind, EscalationPayload, EscalationQuestion, EscalationReason,
+            PartialAnswer, PartialAnswerValue, StateSummary,
+        };
+
+        let report = &outcome.report;
+        let question =
+            request.questions().first().map_or("", opencodifier_core::DecisionQuestion::text);
+        let kind = match request.questions().first() {
+            Some(opencodifier_core::DecisionQuestion::Choice(_)) => "choice",
+            Some(opencodifier_core::DecisionQuestion::Boolean(_)) => "boolean",
+            Some(opencodifier_core::DecisionQuestion::Score(_)) => "score",
+            None | Some(_) => "unknown",
+        };
+        let state = request.state();
+        let threshold = request.policy().escalate_below().unwrap_or(report.calibrated_confidence);
+
+        // Candidates ruled in/out from the narrowing report of the
+        // question the decision resolved — deterministic engine output.
+        let (ruled_in, ruled_out) = outcome
+            .narrowing
+            .iter()
+            .find(|n| request.questions().first().is_some_and(|q| n.question_id() == q.id()))
+            .map_or((Vec::new(), Vec::new()), |n| {
+                let ins = n
+                    .surviving()
+                    .iter()
+                    .map(|c| CandidateEvidence {
+                        id: c.id().clone(),
+                        why: "survived deterministic narrowing".to_owned(),
+                    })
+                    .collect();
+                let outs = n
+                    .removed()
+                    .iter()
+                    .map(|id| CandidateEvidence {
+                        id: id.clone(),
+                        why: "excluded by rule or narrowed out".to_owned(),
+                    })
+                    .collect();
+                (ins, outs)
+            });
+
+        let partial_answer = outcome.answers.first().and_then(|answer| match answer {
+            opencodifier_core::DecisionAnswer::Choice { choice, distribution, .. } => {
+                Some(PartialAnswer {
+                    value: PartialAnswerValue::Text(choice.as_str().to_owned()),
+                    probability: distribution.top().probability,
+                })
+            }
+            opencodifier_core::DecisionAnswer::Boolean { value, probability, .. } => {
+                Some(PartialAnswer {
+                    value: PartialAnswerValue::Boolean(*value),
+                    probability: *probability,
+                })
+            }
+            opencodifier_core::DecisionAnswer::Score { level, distribution, .. } => {
+                Some(PartialAnswer {
+                    value: PartialAnswerValue::Text(level.clone()),
+                    probability: distribution.top().probability,
+                })
+            }
+            // `#[non_exhaustive]` future variants contribute no partial
+            // answer; the report still carries question, state, and trace.
+            _ => None,
+        });
+
+        let mut report_doc = opencodifier_core::EscalationReport {
+            reason: EscalationReason::BelowConfidence,
+            gate: EscalationGate {
+                kind: EscalationGateKind::Confidence,
+                threshold,
+                observed: report.calibrated_confidence,
+            },
+            requested_action: EscalationAction::AskTheHostModel,
+            engine: EngineProvenance {
+                model_id: identity.model_id.clone(),
+                graph_version: identity.graph_version,
+                calibration_version: identity.calibration_version,
+                engine_semver: identity.engine_semver.clone(),
+            },
+            payload: EscalationPayload {
+                question: EscalationQuestion { kind: kind.to_owned(), text: question.to_owned() },
+                state_summary: StateSummary {
+                    text_bytes: state.text().len(),
+                    fact_count: state.facts().count(),
+                    image_count: state.image_count(),
+                },
+                candidates_ruled_in: ruled_in,
+                candidates_ruled_out: ruled_out,
+                partial_answer,
+                trace: outcome.trace.entries().to_vec(),
+                guidance: "Answer from the state summary and evidence above; reply 'unknown' \
+                           if the evidence does not settle it."
+                    .to_owned(),
+                truncated: false,
+            },
+        };
+        report_doc.fit_to(opencodifier_core::DEFAULT_ESCALATION_BUDGET_BYTES);
+        report_doc
     }
 
     /// Request-level checks the IR does not make.
@@ -542,7 +665,7 @@ impl DecisionEngine {
         for entry in cached.trace().entries() {
             trace.push(entry.clone());
         }
-        match DecisionResponse::new(
+        let rebuilt = match DecisionResponse::new(
             cached.answers().to_vec(),
             cached.outcome(),
             cached.confidence().clone(),
@@ -556,6 +679,25 @@ impl DecisionEngine {
             // Degrade to the cached response unchanged rather than fail a
             // decision that already succeeded once.
             Err(_) => cached.clone(),
+        };
+        Self::with_escalation_for(rebuilt, cached)
+    }
+
+    /// Reattaches a cached response's escalation report, if any. The
+    /// rebuild above constructs a fresh response (which drops the
+    /// report); a cached Escalate decision must still carry its handoff
+    /// document — same request, same report (rule 4 of
+    /// `opencodifier_core::escalation`).
+    fn with_escalation_for(
+        rebuilt: DecisionResponse,
+        cached: &DecisionResponse,
+    ) -> DecisionResponse {
+        match cached.escalation() {
+            Some(report) => match rebuilt.with_escalation(report.clone()) {
+                Ok(response) => response,
+                Err(_) => cached.clone(),
+            },
+            None => rebuilt,
         }
     }
 }

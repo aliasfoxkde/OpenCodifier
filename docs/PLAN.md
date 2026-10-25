@@ -1657,7 +1657,7 @@ structural gap under every one of these.
 | task | scope | status |
 |---|---|---|
 | #188 | gated-LLM A/B — does the gate beat a bare LLM? (`engine_wrong` vs the host's error rate) | open |
-| #189 | escalation contract — `escalate_below`, `EscalationReport`, the `Escalate` outcome, every wire format | open |
+| #189 | escalation contract — `escalate_below`, `EscalationReport`, the `Escalate` outcome, every wire format | in progress — slice 1 (band + report contract) done `5c489e3`; slice 2 (engine wiring: `Escalate` builds + attaches the report, cache-safe; native round-trip drop defect fixed in `decode_response`) done 2026-10-24 |
 | #190 | `opencodifier-config` — the config layer: discovery, precedence, strict `config.*` errors | open |
 | #191 | lanes — the named presets (`zero`, `guard`, `delegate`, `local-2b/4b/9b`, `verify`, `ci`) | open |
 | #192 | first-run detection — `opencodifier init` / `opencodifier doctor` | open |

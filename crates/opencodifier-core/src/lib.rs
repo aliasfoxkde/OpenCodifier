@@ -109,7 +109,7 @@ pub use error::{CoreError, CoreResult};
 pub use escalation::{
     CandidateEvidence, DEFAULT_ESCALATION_BUDGET_BYTES, EngineProvenance, EscalationAction,
     EscalationGate, EscalationGateKind, EscalationPayload, EscalationQuestion, EscalationReason,
-    PartialAnswer, PartialAnswerValue, StateSummary,
+    EscalationReport, PartialAnswer, PartialAnswerValue, StateSummary,
 };
 pub use ids::{CandidateId, DecisionFamily, NodeId, QuestionId};
 pub use policy::{
