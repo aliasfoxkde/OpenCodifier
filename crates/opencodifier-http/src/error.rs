@@ -117,6 +117,12 @@ pub enum HttpError {
         /// The I/O error that ended the serve loop.
         std::io::Error,
     ),
+
+    /// `POST /v1/feedback` hit a server with no evidence sink configured
+    /// (#193). The feedback surface is opt-in (`--evidence`); its absence
+    /// is a loud 404, not a silent drop.
+    #[error("no evidence sink configured: start `serve --evidence <PATH>` to enable /v1/feedback")]
+    FeedbackDisabled,
 }
 
 impl HttpError {
@@ -129,6 +135,7 @@ impl HttpError {
             Self::RemoteBindForbidden(_) => "http.remote_bind_forbidden",
             Self::Bind { .. } => "http.bind_failed",
             Self::Serve(_) => "http.serve_failed",
+            Self::FeedbackDisabled => "http.feedback_disabled",
         }
     }
 
@@ -149,6 +156,7 @@ impl HttpError {
             Self::Engine(_) | Self::RemoteBindForbidden(_) | Self::Bind { .. } | Self::Serve(_) => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
+            Self::FeedbackDisabled => StatusCode::NOT_FOUND,
         }
     }
 

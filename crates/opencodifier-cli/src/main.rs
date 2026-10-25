@@ -24,6 +24,7 @@
 mod args;
 mod decide;
 mod error;
+mod feedback;
 mod graph;
 mod init_doctor;
 mod input;

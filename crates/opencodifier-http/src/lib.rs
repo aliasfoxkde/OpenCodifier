@@ -72,7 +72,7 @@ use opencodifier_engine::EngineHandle;
 
 pub use crate::config::ServerConfig;
 pub use crate::error::{ErrorBody, ErrorDetail, HttpError};
-pub use crate::routes::{MAX_BODY_BYTES, router};
+pub use crate::routes::{MAX_BODY_BYTES, router, router_with_feedback};
 
 /// Alias used throughout the crate for fallible surface operations.
 pub type HttpResult<T> = Result<T, HttpError>;
@@ -107,6 +107,23 @@ pub async fn serve_with_shutdown(
     handle: Arc<EngineHandle>,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> HttpResult<()> {
+    serve_with_feedback(config, handle, None, shutdown).await
+}
+
+/// [`serve_with_shutdown`] with the feedback evidence sink enabled (#193):
+/// `POST /v1/feedback` appends `{p_true, label, source, digest}` rows to
+/// `evidence` in the JSONL format `ladder fit-boolean` reads. `None`
+/// leaves the feedback surface disabled (loud 404).
+///
+/// # Errors
+///
+/// As [`serve_with_shutdown`].
+pub async fn serve_with_feedback(
+    config: ServerConfig,
+    handle: Arc<EngineHandle>,
+    evidence: Option<std::path::PathBuf>,
+    shutdown: impl Future<Output = ()> + Send + 'static,
+) -> HttpResult<()> {
     // Register the shutdown source *before* the socket opens. A signal
     // future such as [`shutdown_signal`] only arms its handler on its
     // first poll, so without this pre-poll there is a startup window in
@@ -132,7 +149,7 @@ pub async fn serve_with_shutdown(
         let _ = stderr.flush();
     }
 
-    axum::serve(listener, router(handle))
+    axum::serve(listener, crate::routes::router_with_feedback(handle, evidence))
         .with_graceful_shutdown(async move { shutdown.as_mut().await })
         .await
         .map_err(HttpError::from)
@@ -150,7 +167,8 @@ fn pre_poll_shutdown(
 }
 
 /// Resolves when the operator interrupts the process (`Ctrl-C`).
-async fn shutdown_signal() {
+/// The default shutdown source: `Ctrl-C` plus `SIGTERM`.
+pub async fn shutdown_signal() {
     let _ = tokio::signal::ctrl_c().await;
 }
 

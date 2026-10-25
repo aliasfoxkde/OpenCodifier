@@ -61,6 +61,7 @@ probe.
 | `/v1/models` | GET | the model lanes actually active (e.g. `relational-v2\|builtin-lexical-v2` for the base binary) — reports what runs, never a catalog of aspirations |
 | `/v1/capabilities` | GET | what this build can decide (kinds, rungs, features) |
 | `/v1/healthz` | GET | liveness/readiness |
+| `/v1/feedback` | POST | append one `{p_true, label, source, digest}` evidence row to the serve's `--evidence` JSONL — the format `ladder fit-boolean` reads (#193). Opt-in: without `--evidence` the route is a loud `404 http.feedback_disabled` |
 
 ### 2.3 A minimal decision call
 

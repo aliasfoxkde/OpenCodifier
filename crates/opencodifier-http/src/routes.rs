@@ -19,6 +19,7 @@
 //! before parsing, payloads are never echoed back, and abstention is a
 //! `200` — a refused decision is the runtime working, not a failure.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::body::Bytes;
@@ -27,7 +28,9 @@ use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use opencodifier_core::{DecisionRequest, DecisionResponse, Limits};
-use opencodifier_engine::{DecisionGraph, EngineHandle, EngineResult, GraphDocument, MAX_BATCH};
+use opencodifier_engine::{
+    DecisionGraph, EngineError, EngineHandle, EngineResult, GraphDocument, MAX_BATCH,
+};
 use opencodifier_schema::native::Native;
 use opencodifier_schema::{
     SchemaError, WireFormat, anthropic::Anthropic, jev::Jev, openai::OpenAi,
@@ -65,6 +68,9 @@ pub const FORMAT_HEADER: &str = "x-opencodifier-format";
 /// public trait untouched (D30).
 type SelectedFormat = Box<dyn WireFormat + Send>;
 
+/// The router's state: the engine plus the optional feedback sink (#193).
+pub type AppState = (Arc<EngineHandle>, Option<Arc<std::sync::Mutex<PathBuf>>>);
+
 /// Resolves [`FORMAT_HEADER`] to the wire adapter for this request.
 ///
 /// Header absent ⇒ [`Native`], which is why every pre-D30 caller is
@@ -97,12 +103,25 @@ fn selected_format(headers: &HeaderMap) -> Result<SelectedFormat, HttpError> {
     }
 }
 
-/// Builds the `/v1` router over `handle`.
+/// Builds the `/v1` router over `handle`. The feedback surface is off:
+/// `/v1/feedback` is not registered. Byte-identical to the pre-#193
+/// router; use [`router_with_feedback`] to enable it.
 ///
 /// Pure builder: tests drive it through a bound listener directly and
 /// [`serve`](crate::serve) drives the same router in production, so the
 /// two paths cannot diverge.
 pub fn router(handle: Arc<EngineHandle>) -> Router {
+    router_with_feedback(handle, None)
+}
+
+/// Builds the `/v1` router over `handle` with the feedback surface
+/// enabled (#193): `POST /v1/feedback` appends `{p_true, label, source,
+/// digest}` rows to `evidence_path` in the exact JSONL format
+/// `ladder fit-boolean` reads, closing the calibration loop with no new
+/// mathematics. The append happens on the blocking pool (the evidence
+/// file is shared mutable state, so writes are serialized by a mutex).
+pub fn router_with_feedback(handle: Arc<EngineHandle>, evidence_path: Option<PathBuf>) -> Router {
+    let feedback = evidence_path.map(|path| Arc::new(std::sync::Mutex::new(path)));
     Router::new()
         .route("/v1/decide", post(decide))
         .route("/v1/batch", post(batch))
@@ -113,8 +132,9 @@ pub fn router(handle: Arc<EngineHandle>) -> Router {
         .route("/v1/capabilities", get(capabilities))
         .route("/v1/healthz", get(healthz))
         .route("/v1/chat/completions", post(chat_completions))
+        .route("/v1/feedback", post(feedback_handler))
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
-        .with_state(handle)
+        .with_state((handle, feedback))
 }
 
 /// `POST /v1/chat/completions` — the OpenAI-compatible decision surface.
@@ -146,7 +166,7 @@ pub fn router(handle: Arc<EngineHandle>) -> Router {
 /// `opencodifier` extension object carries the outcome and calibrated
 /// confidence a chat shape has no slot for.
 async fn chat_completions(
-    State(handle): State<Arc<EngineHandle>>,
+    State((handle, _feedback)): State<AppState>,
     body: Bytes,
 ) -> Result<Json<Value>, HttpError> {
     let payload = parse_json(&body)?;
@@ -352,7 +372,7 @@ fn schema_required(response_format: Option<&Value>, properties: &Value) -> Value
 /// `500`. The error envelope itself is always the native one (D30): a
 /// client needs exactly one error contract regardless of request format.
 async fn decide(
-    State(handle): State<Arc<EngineHandle>>,
+    State((handle, _feedback)): State<AppState>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<Value>, HttpError> {
@@ -391,7 +411,7 @@ async fn decide(
 /// transport status is `200` whenever the batch itself was well-formed,
 /// mirroring the posture that a refused decision is the runtime working.
 async fn batch(
-    State(handle): State<Arc<EngineHandle>>,
+    State((handle, _feedback)): State<AppState>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<Value>, HttpError> {
@@ -474,7 +494,7 @@ async fn validate_request(headers: HeaderMap, body: Bytes) -> Result<Json<Value>
 /// contract: the response reports the composed engine model id
 /// (`relational-v2|builtin-lexical-v2` for the base binary) rather than
 /// pretending to enumerate a catalog of installed artifacts.
-async fn models(State(handle): State<Arc<EngineHandle>>) -> Json<Value> {
+async fn models(State((handle, _feedback)): State<AppState>) -> Json<Value> {
     let identity = handle.identity();
     Json(json!({
         "models": [{
@@ -493,7 +513,7 @@ async fn models(State(handle): State<Arc<EngineHandle>>) -> Json<Value> {
 /// The decision kinds are the IR's three question types; the test module
 /// pins the list against a decoded question of each kind so the list
 /// cannot silently drift from what `/v1/decide` actually accepts.
-async fn capabilities(State(handle): State<Arc<EngineHandle>>) -> Json<Value> {
+async fn capabilities(State((handle, _feedback)): State<AppState>) -> Json<Value> {
     let health = handle.health();
     Json(json!({
         "decision_kinds": DECISION_KINDS,
@@ -607,7 +627,7 @@ async fn graph_run(body: Bytes) -> Result<Json<Value>, HttpError> {
 /// Liveness here means "the engine assembled and can answer": the identity
 /// is the real graph/model/calibration identity, not a literal `ok` string
 /// standing in for a probe that never checked anything.
-async fn healthz(State(handle): State<Arc<EngineHandle>>) -> Json<Value> {
+async fn healthz(State((handle, _feedback)): State<AppState>) -> Json<Value> {
     let health = handle.health();
     Json(json!({
         "status": "ok",
@@ -622,6 +642,84 @@ async fn healthz(State(handle): State<Arc<EngineHandle>>) -> Json<Value> {
         "parallelism": health.parallelism,
         "cache_enabled": health.cache_enabled,
     }))
+}
+
+/// The `POST /v1/feedback` body (#193). `p_true` and `label` are the
+/// exact row `ladder fit-boolean` reads; `source` distinguishes `human`
+/// (drives thresholds) from `host_model`/`outcome` (self-confirming,
+/// recorded but never fitted); `digest` is the sha256 of the canonical
+/// request bytes — the join key to the engine's own stored answer.
+#[derive(Debug, serde::Deserialize)]
+struct FeedbackBody {
+    /// The model's probability for the `true` verdict, within [0, 1].
+    p_true: f64,
+    /// Whether `true` was actually correct.
+    label: bool,
+    /// Where the label came from: `human`, `host_model`, or `outcome`.
+    source: String,
+    /// Hex sha256 of the canonical request bytes (the join key).
+    #[serde(default)]
+    digest: Option<String>,
+}
+
+/// `POST /v1/feedback` — append one evidence row (§6 of the lanes plan).
+///
+/// The sink is the caller-named JSONL file (`--evidence` on `serve`).
+/// With no sink configured the route refuses with `404` semantics: the
+/// feedback surface is opt-in, and its absence must be as loud as its
+/// presence. The append runs on the blocking pool; the mutex
+/// serializes concurrent writers.
+async fn feedback_handler(
+    State((_, feedback)): State<AppState>,
+    body: Bytes,
+) -> Result<(axum::http::StatusCode, Json<Value>), HttpError> {
+    let Some(sink) = feedback else {
+        return Err(HttpError::FeedbackDisabled);
+    };
+    let payload: FeedbackBody = serde_json::from_slice(&body).map_err(|error| {
+        HttpError::from(SchemaError::invalid_value(
+            "body",
+            format!("not a feedback document: {error}"),
+        ))
+    })?;
+    if !(0.0..=1.0).contains(&payload.p_true) {
+        return Err(HttpError::from(SchemaError::invalid_value(
+            "p_true",
+            "must be within [0, 1]".to_owned(),
+        )));
+    }
+    if !matches!(payload.source.as_str(), "human" | "host_model" | "outcome") {
+        return Err(HttpError::from(SchemaError::invalid_value(
+            "source",
+            "must be one of: human, host_model, outcome".to_owned(),
+        )));
+    }
+    let row = json!({
+        "p_true": payload.p_true,
+        "label": payload.label,
+        "source": payload.source,
+        "digest": payload.digest,
+    });
+    let line = serde_json::to_string(&row).map_err(|error| {
+        HttpError::Engine(EngineError::Serialization { reason: error.to_string() })
+    })?;
+    let path = Arc::clone(&sink);
+    tokio::task::spawn_blocking(move || {
+        use std::io::Write as _;
+
+        let guard = path.lock().map_err(|_| HttpError::Engine(EngineError::Cancelled))?;
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(guard.as_path())
+            .map_err(HttpError::from)?;
+        writeln!(file, "{line}").map_err(HttpError::from)?;
+        file.flush().map_err(HttpError::from)?;
+        Ok::<(), HttpError>(())
+    })
+    .await
+    .map_err(|_| HttpError::Engine(EngineError::Cancelled))??;
+    Ok((axum::http::StatusCode::CREATED, Json(json!({"appended": 1, "source": payload.source}))))
 }
 
 /// The decision kinds `/v1/decide` accepts, as the capabilities
@@ -826,7 +924,7 @@ mod tests {
             }}},
         });
         let error = chat_completions(
-            State(Arc::clone(&handle)),
+            State((Arc::clone(&handle), None)),
             Bytes::from(serde_json::to_vec(&body).unwrap()),
         )
         .await
@@ -871,7 +969,7 @@ mod tests {
         let handle = zero_ml_engine();
         for payload in ["{}", r#"{"requests": "all at once"}"#] {
             let error = batch(
-                State(Arc::clone(&handle)),
+                State((Arc::clone(&handle), None)),
                 HeaderMap::new(),
                 Bytes::from(payload.to_owned()),
             )
@@ -918,7 +1016,7 @@ mod tests {
         let openai_body = OpenAi.encode_request(&request).unwrap();
 
         let native = decide(
-            State(Arc::clone(&handle)),
+            State((Arc::clone(&handle), None)),
             HeaderMap::new(),
             Bytes::from(serde_json::to_vec(&native_body).unwrap()),
         )
@@ -928,7 +1026,7 @@ mod tests {
         let mut openai_headers = HeaderMap::new();
         openai_headers.insert(FORMAT_HEADER, "openai".parse().unwrap());
         let openai = decide(
-            State(Arc::clone(&handle)),
+            State((Arc::clone(&handle), None)),
             openai_headers,
             Bytes::from(serde_json::to_vec(&openai_body).unwrap()),
         )
@@ -938,7 +1036,7 @@ mod tests {
         let mut native_headers = HeaderMap::new();
         native_headers.insert(FORMAT_HEADER, "native".parse().unwrap());
         let explicit_native = decide(
-            State(Arc::clone(&handle)),
+            State((Arc::clone(&handle), None)),
             native_headers,
             Bytes::from(serde_json::to_vec(&native_body).unwrap()),
         )
@@ -957,7 +1055,7 @@ mod tests {
         let handle = zero_ml_engine();
         let mut headers = HeaderMap::new();
         headers.insert(FORMAT_HEADER, "yaml".parse().unwrap());
-        let error = decide(State(Arc::clone(&handle)), headers, Bytes::from_static(b"{}"))
+        let error = decide(State((Arc::clone(&handle), None)), headers, Bytes::from_static(b"{}"))
             .await
             .unwrap_err();
         assert_eq!(error.code(), "schema.invalid_value");
@@ -977,7 +1075,7 @@ mod tests {
         headers.insert(FORMAT_HEADER, "openai".parse().unwrap());
         let body = json!({ "requests": [wire, wire] });
         let batched = batch(
-            State(Arc::clone(&handle)),
+            State((Arc::clone(&handle), None)),
             headers,
             Bytes::from(serde_json::to_vec(&body).unwrap()),
         )

@@ -28,10 +28,16 @@ use crate::{input, output, runtime};
 /// fails.
 pub(crate) fn run(args: &ServeArgs) -> Result<(), CliError> {
     let (_, server, handle) = assemble(args)?;
+    let evidence = args.evidence.clone();
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|error| CliError::engine(CODE_RUNTIME_FAILED, error.to_string()))?;
     runtime
-        .block_on(opencodifier_http::serve(server, Arc::new(handle)))
+        .block_on(opencodifier_http::serve_with_feedback(
+            server,
+            Arc::new(handle),
+            evidence,
+            opencodifier_http::shutdown_signal(),
+        ))
         .map_err(|error| CliError::engine(error.code(), error.to_string()))
 }
 
@@ -120,6 +126,7 @@ mod tests {
             focus_budget: None,
             ladder: None,
             llama: crate::args::LlamaRungArgs::default(),
+            evidence: None,
             policy,
         }
     }

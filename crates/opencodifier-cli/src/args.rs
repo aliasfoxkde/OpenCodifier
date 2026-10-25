@@ -81,6 +81,8 @@ pub enum Command {
     Doctor(DoctorArgs),
     /// Built-in recipe fleet operations.
     Recipe(RecipeCommand),
+    /// Append one labeled evidence row to a JSONL file (#193).
+    Feedback(crate::feedback::FeedbackArgs),
 }
 
 impl Command {
@@ -102,6 +104,7 @@ impl Command {
             Self::Init(init) => crate::init_doctor::run_init(&init),
             Self::Doctor(doctor) => crate::init_doctor::run_doctor(&doctor),
             Self::Recipe(recipe) => crate::recipes::run(&recipe.command),
+            Self::Feedback(feedback) => crate::feedback::run(&feedback),
         }
     }
 }
@@ -268,6 +271,13 @@ pub struct ServeArgs {
     /// the flag for the contract).
     #[command(flatten)]
     pub llama: LlamaRungArgs,
+
+    /// Evidence JSONL for the feedback loop (#193): `POST /v1/feedback`
+    /// appends `{p_true, label, source, digest}` rows to this file, in
+    /// the exact format `ladder fit-boolean` reads. Without the flag the
+    /// `/v1/feedback` route is not served.
+    #[arg(long, value_name = "PATH")]
+    pub evidence: Option<PathBuf>,
 
     /// JSON `DecisionPolicy`. Accepted and validated for symmetry with
     /// `decide`, but policy is per-request in the canonical IR, so no
