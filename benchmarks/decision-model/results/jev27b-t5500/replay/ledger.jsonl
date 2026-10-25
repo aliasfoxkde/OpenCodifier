@@ -1,0 +1,7 @@
+{"event": "cap", "cap_usd": 0.0, "ts": 1792964216.313705}
+{"event": "reserve", "reservation_id": "c3c6a4c74ad44cf690f867d7ad3f3c76", "reserved_usd": 0.0, "ts": 1792964216.3246894, "meta": {"task_id": "easy-intent-00", "adapter": "strands-systemone"}}
+{"event": "settle", "reservation_id": "c3c6a4c74ad44cf690f867d7ad3f3c76", "charged_usd": 0.0, "ts": 1792964216.3322058, "meta": {"task_id": "easy-intent-00", "basis": "zero_route_fee_compute_excluded"}}
+{"event": "reserve", "reservation_id": "4debbf7d188a43648295c5536bcb8dbe", "reserved_usd": 0.0, "ts": 1792964216.3347385, "meta": {"task_id": "easy-intent-01", "adapter": "strands-systemone"}}
+{"event": "settle", "reservation_id": "4debbf7d188a43648295c5536bcb8dbe", "charged_usd": 0.0, "ts": 1792964216.3529873, "meta": {"task_id": "easy-intent-01", "basis": "zero_route_fee_compute_excluded"}}
+{"event": "reserve", "reservation_id": "d88fa09ef2704d96bbf511fb76955379", "reserved_usd": 0.0, "ts": 1792964216.404902, "meta": {"task_id": "easy-intent-02", "adapter": "strands-systemone"}}
+{"event": "settle", "reservation_id": "d88fa09ef2704d96bbf511fb76955379", "charged_usd": 0.0, "ts": 1792964216.4170656, "meta": {"task_id": "easy-intent-02", "basis": "zero_route_fee_compute_excluded"}}

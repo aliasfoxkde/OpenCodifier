@@ -1,0 +1,39 @@
+{
+  "adapter_warnings": [],
+  "arm": "strands",
+  "charged_usd": 0.0,
+  "dataset_sha256": "dc3995d8ae1e2fc8e81ce38431add509eb8bb39b85aadfd0c7c32079382dde51",
+  "determinism": {
+    "attempted": 3,
+    "correct_match": 3,
+    "predictions_match": true
+  },
+  "harness": {
+    "commit": "9ec6f15a8773aaffbbb41e7d7e65a20599ab0cc3",
+    "license": "MIT",
+    "method": "docs/METHOD-v1.4.md (public split)",
+    "repo": "fstandhartinger/jevbench"
+  },
+  "mapping_notes": "wire record (state + one typed question) verbatim into the authors' `strands-decider serve` /v1/systemone (their published serving path; prompts are the server's); response mapping mirrors JevBench's typesafe adapter: noul -> {yes: p, no: 1-p}, choice/score probabilities native as-is, never renormalized; no label override \u2014 predictions derived from the distribution like the official adapter's rows",
+  "model_files": {},
+  "n_tasks": 231,
+  "resources": {
+    "cpu_seconds": 0.41,
+    "io_read_mib": 0.0,
+    "io_write_mib": 0.8,
+    "peak_rss_mib": 31.9,
+    "sampling": {
+      "interval_s": 0.25,
+      "pids_seen": 1,
+      "samples": 1
+    },
+    "tree_rss_mib_final": 33.0,
+    "wall_s": 0.55
+  },
+  "serve": {},
+  "strands_model": {
+    "ckpt": null,
+    "endpoint": "http://127.0.0.1:18398",
+    "model": "qwen3.8-27b"
+  }
+}

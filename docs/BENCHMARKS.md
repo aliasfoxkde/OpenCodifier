@@ -282,6 +282,7 @@ Source: jev-style repo README, JevBench RESULTS, jev.page (recorded in
 | system | public acc | provenance |
 |---|---:|---|
 | hosted Jev (TypeSafe) | 86.6 % | official |
+| **Qwen3.8-27B UD-Q3_K_XL, decision fork tree mode (our run — T5500 2×V100)** | **86.6 % (200/231), Brier 0.194, ECE 0.038, p50 0.74 s** | our run, authors' harness, deterministic (231/231 replay match) — matches hosted Jev on accuracy with better calibration |
 | llm-qwen3.5-4b (jev.page decision server) | 80.5 % / 651 ms p50 | self-reported |
 | Jev-Style-2B v3 | 73.6 % | self-run, GGUF F16 |
 | strands-decider-2B-hobson-v19 | 72.3 % (167/231), Brier 0.342, ECE 0.050 | official, preregistered run record |
