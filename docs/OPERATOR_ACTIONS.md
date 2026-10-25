@@ -113,10 +113,10 @@ ORT_DYLIB_PATH=~/.local/lib/python3.13/site-packages/onnxruntime/capi/libonnxrun
 ---
 
 ## Git state
-- `main` → gitforge @ `ac1626c` (clean, pushed; fast-forwarded 2026-10-23:
-  `f60fd87..ac1626c` — offline-campaign plan, family-threading + docs,
-  aegis regen, upload-script fix)
-  - `main` vs `origin/main`: **ahead 393, behind 1** — origin's one extra
+- `main` → gitforge @ `5c05289` (clean, pushed 2026-10-24; recent:
+  #188 gate A/B **GATE SHIPS**, #189 slice 1, §27 corrections +
+  SEMANTIC_RERANKER design, tokio RUSTSEC bump, aegis regen)
+  - `main` vs `origin/main`: **ahead 399, behind 1** — origin's one extra
     commit is the PR #7 merge (`b3d03ae`, same content as the local
     `site/games-audit-2026-10` line). Reconciling origin is an operator
     decision (GitForge is the CI pipeline of record).
@@ -125,7 +125,7 @@ ORT_DYLIB_PATH=~/.local/lib/python3.13/site-packages/onnxruntime/capi/libonnxrun
 - `vision/vision-rung-2026-10` → gitforge @ `d75df6d`-era (merged lineage)
 - `site/games-audit-2026-10` → gitforge + origin (PR #7 MERGED)
 - Stale worktree (operator cleanup candidate): `/home/mkinney/agent-work/
-  opencodifier-correctness-20261020` — 390 commits behind, clean, its one
+  opencodifier-correctness-20261020` — ~399 commits behind, clean, its one
   "extra" commit is the PR #7 duplicate.
 
 ---
