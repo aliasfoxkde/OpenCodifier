@@ -361,10 +361,11 @@ mod tests {
             );
             checked += 1;
         }
-        // The 12 fleet recipes plus the three earlier example graphs
+        // The 16 fleet recipes (12 originals plus the four CI recipes
+        // of #195) plus the three earlier example graphs
         // (`minimal-choice`, `strict-verify`, `boolean-score`) — every
         // committed graph participates, none silently skipped.
-        assert_eq!(checked, 15, "every committed recipe graph participates");
+        assert_eq!(checked, 19, "every committed recipe graph participates");
     }
 
     /// Engine identity is untouched by optimization: only the shape of

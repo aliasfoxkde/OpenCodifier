@@ -20,7 +20,7 @@ we do not document aspirational surfaces.
 | Surface | Shape | Best for |
 |---|---|---|
 | HTTP (`opencodifier serve`) | JSON over loopback, native `/v1/*` | services, CI gates, routers, anything that speaks HTTP |
-| MCP (`opencodifier mcp serve`) | six `codify_*` tools on stdio | coding agents and MCP clients (Claude Code, IDEs) |
+| MCP (`opencodifier mcp serve`) | seven `codify_*` tools on stdio | coding agents and MCP clients (Claude Code, IDEs) |
 | CLI (`opencodifier …`) | one-shot processes, `--format` selectable | scripts, cron, shell pipelines, format conversion |
 | Library (`opencodifier-*` crates) | in-process Rust, strict layering | embedding the engine in your own binary |
 | WASM (`opencodifier-wasm`) | the zero-ML decision runtime | browser and sandboxed hosts (D23) |
