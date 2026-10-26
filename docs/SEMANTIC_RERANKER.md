@@ -29,15 +29,20 @@ everything after it: the decision only ever sees the top of the list.
 | node knob (`graph.rs` `reranker:`) | `"lexical"` \| `"embedding"`, unknown refused | a third value: `"model"` |
 | rung URL (`opencodifier serve --llama <URL>`) | decision rung (`/v1/decision`) | a sibling flag for the rerank endpoint |
 | D41 fork llama-server | **already exposes `/rerank`, `/reranking`, `/v1/rerank`** (Jina/TEI shapes, `relevance_score` field) | nothing — no fork change |
-| local artifacts | `gte-modernbert-base-q8_0.gguf` + ONNX fp16/fp32/int8/q4 ladder, `deberta-v3-base-zeroshot-v2.0`, `nli-deberta-v3-small`, `modernbert-large-instruct` | the evaluation set |
+| local artifacts | `gte-modernbert-base-q8_0.gguf` + ONNX fp16/fp32/int8/q4 ladder, `deberta-v3-base-zeroshot-v2.0`, `nli-deberta-v3-small`, `modernbert-large-instruct` — **the shipped GGUF does not load in the fork** (bert.cpp-era conversion, see the probe result under Evaluation plan); the ONNX ladder is the reference backend | the evaluation set |
 
 ## Design
 
 ### Topology: a second server process, not a second rung
 
 llama-server serves one model in one mode. The decision rung is a
-generative model (Qwen3.5-2B family); `/v1/rerank` refuses to boot
-without `--reranking` and a RANK-pooling (classification-head) model.
+generative model (Qwen3.5-2B family); `/v1/rerank` boots with
+`--reranking` on a separate process. (Probe 2026-10-25: the server
+does **not** refuse a model without a RANK-pooling head — it loads
+whatever loads and force-imposes `pooling_type = RANK` at init, with a
+warning. The load-time constraint is architecture keys; the
+*score-quality* constraint is a reranker-trained head, which
+`gte-modernbert-base` does not have — see Evaluation plan item 3.)
 So the reranker cannot share the rung's process:
 
 ```
@@ -137,11 +142,57 @@ Graphs that don't name `"model"` keep full byte-identity.
    (`gte-modernbert-onnx-int8`) becomes the reference backend via a
    different transport, and this doc's transport section revises.
 
+   **Run 2026-10-25 — GGUF path disqualified; the ONNX ladder is the
+   reference backend.** Four findings:
+
+   1. The shipped `gte-modernbert-base-q8_0.gguf` does not load in the
+      fork at all: `error loading model hyperparameters: key not found
+      in model: bert.context_length`. Its keys are a bert.cpp-era
+      conversion of a NER-tuned checkpoint (`ner.labels`,
+      `bert.pooling_method`, `bert.model_type = ner`) — not this
+      repo's converter output.
+   2. Re-converted with the fork's own converter
+      (`parallel-decision/convert_hf_to_gguf.py --outtype q8_0` →
+      arch `modern-bert`, `context_length 8192`): loads, serves
+      `/v1/rerank`, byte-deterministic across boots (identical
+      scores on repeat calls and a second server start).
+   3. The artifact carries **no** RANK head — no pooling key at all.
+      Init warns `model default pooling_type is [-1], but [4] was
+      specified`: `--reranking` force-imposes RANK. The head this
+      probe was written to verify is not in the GGUF; the flag
+      manufactures it.
+   4. With pooling forced, the score is doc-dominated, not
+      query-driven. For the query "how do I configure the decision
+      gate" over `[calibrating a decision confidence threshold for
+      the gate, cooking pasta with tomato sauce, escalation bands in
+      the calibrated confidence policy]`: pasta first
+      (0.238 > 0.015 > −0.175). For "cooking pasta with tomato
+      sauce recipe" the unrelated gate document still scores 0.649
+      (vs pasta 0.688). A base bi-encoder concatenated as
+      `query [EOS] [SEP] doc` under a forced cross-encoder pooling
+      head does not discriminate query-document relevance.
+
+   Consequences: shuffle rate (1) and the e2e arm (2) stay **gated**
+   — counting "answer-changed" items with an invalid cross-encoder
+   would fabricate precisely the number the experiment exists to
+   earn. The reference backend is the ONNX ladder per this doc's own
+   decision rule; its transport (in-process `Reranker` implementor,
+   not the fork's HTTP endpoint) is the revision owed when the
+   implementor lands. Scratch artifact of the probe:
+   `/var/tmp/opencode/gte-modernbert-base-q8_0-refix.gguf`
+   (the operator's models dir still holds the unloadable original —
+   replacing it is an operator call, not a probe side effect).
+
 ## Open questions
 
-- **Model of record**: `gte-modernbert-base-q8_0.gguf` (CPU-friendly,
-  same-server path) vs the ONNX deberta ladder (known-good on this host
-  from the NLI board rows). Probe decides; the trait hides the choice.
+- **Model of record**: ~~`gte-modernbert-base-q8_0.gguf` (CPU-friendly,
+  same-server path)~~ **decided by the probe (2026-10-25): the GGUF
+  path is out** — the shipped file doesn't load, the re-convert carries
+  no RANK head, and the forced head ranks pasta above the query's own
+  topic (Evaluation plan item 3 has the numbers). The ONNX deberta
+  ladder (known-good on this host from the NLI board rows) is the
+  reference backend; the trait still hides the final choice until an
+  implementor exists.
 - **`rerank_top_k` default**: 16 is a starting guess; fit it like D9
   fits budgets (criterion over the suite), don't hard-code folklore.
 - **Margin-as-verify**: cross-encoder top-2 margin as a *verify*

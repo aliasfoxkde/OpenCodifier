@@ -7,28 +7,77 @@
 #   huggingface-cli login  (with a token that can write to the org)
 #
 # Usage:
-#   ./upload_e1e_to_hf.sh <org-name> [--dry-run]
+#   ./upload_e1e_to_hf.sh <org-name> [--adapter-dir PATH] [--dry-run]
+#
+# Options:
+#   --adapter-dir PATH  Directory holding adapter_model.safetensors and
+#                       adapter_config.json. Defaults to $ADAPTER_DIR,
+#                       then the t5500 bundle layout. The staged set is
+#                       validated up front: a missing file aborts with
+#                       the exact names, before anything is copied.
+#   --dry-run           Stage and print the upload plan only. Fully
+#                       offline — huggingface-cli is never invoked, so
+#                       this verifies the script on a host with no HF
+#                       tooling installed.
 #
 # Example:
-#   ./upload_e1e_to_hf.sh my-org-name
+#   ./upload_e1e_to_hf.sh my-org-name --adapter-dir ./adapter-best --dry-run
 
 set -euo pipefail
 
-ORG="${1:?Usage: $0 <org-name> [--dry-run]}"
+usage() {
+  echo "Usage: $0 <org-name> [--adapter-dir PATH] [--dry-run]" >&2
+  exit 64
+}
+
+[[ $# -ge 1 ]] || usage
+ORG="$1"
+shift
+
+ADAPTER_DIR="${ADAPTER_DIR:-/home/mkinney/t5500-bundle/runs/e1-e-qwen2b/adapter-best}"
+DRY_RUN=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)
+      DRY_RUN="--dry-run"
+      ;;
+    --adapter-dir)
+      [[ $# -ge 2 ]] || { echo "ERROR: --adapter-dir needs a path" >&2; usage; }
+      ADAPTER_DIR="$2"
+      shift
+      ;;
+    *)
+      echo "ERROR: unknown argument: $1" >&2
+      usage
+      ;;
+  esac
+  shift
+done
+
+if [[ -n "$DRY_RUN" ]]; then
+  echo "=== DRY RUN — no changes will be made ==="
+fi
+
 REPO_ID="${ORG}/opencodifier-e1e-2b"
 TEMP_DIR="$(mktemp -d)"
 trap "rm -rf $TEMP_DIR" EXIT
 
-DRY_RUN=""
-if [[ "${2:-}" == "--dry-run" ]]; then
-  DRY_RUN="--dry-run"
-  echo "=== DRY RUN — no changes will be made ==="
+# --- Adapter files (from T5500 or local copy) ---
+# Validate before staging so a wrong path names every missing file at
+# once instead of dying on the first cp.
+required=(adapter_model.safetensors adapter_config.json)
+missing=()
+for f in "${required[@]}"; do
+  [[ -f "$ADAPTER_DIR/$f" ]] || missing+=("$f")
+done
+if [[ ${#missing[@]} -gt 0 ]]; then
+  echo "ERROR: adapter dir '$ADAPTER_DIR' is missing:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  echo "Pass --adapter-dir PATH (or set ADAPTER_DIR)." >&2
+  exit 66
 fi
 
 echo "Staging files to $TEMP_DIR ..."
-
-# --- Adapter files (from T5500 or local copy) ---
-ADAPTER_DIR="${ADAPTER_DIR:-/home/mkinney/t5500-bundle/runs/e1-e-qwen2b/adapter-best}"
 cp "$ADAPTER_DIR/adapter_model.safetensors" "$TEMP_DIR/"
 cp "$ADAPTER_DIR/adapter_config.json" "$TEMP_DIR/"
 
