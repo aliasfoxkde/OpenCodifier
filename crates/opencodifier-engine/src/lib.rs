@@ -131,6 +131,7 @@ pub mod optimize;
 pub mod relational;
 pub mod report;
 pub mod rerank;
+pub mod rotation;
 pub mod rules;
 pub mod wire;
 
