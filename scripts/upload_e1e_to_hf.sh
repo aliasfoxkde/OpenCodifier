@@ -116,7 +116,14 @@ echo ""
 
 if [[ -z "$DRY_RUN" ]]; then
   echo "Uploading ... (Ctrl+C to abort)"
-  huggingface-cli upload \
+  # hub 1.x removed huggingface-cli; the successor is `hf upload`
+  # (same subcommand surface). Fall back for older hub installs.
+  if command -v hf >/dev/null 2>&1; then
+    HF_BIN=(hf)
+  else
+    HF_BIN=(huggingface-cli)
+  fi
+  "${HF_BIN[@]}" upload \
     "$REPO_ID" \
     "$TEMP_DIR/" \
     --repo-type model \
