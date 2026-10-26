@@ -368,6 +368,7 @@ arm — sampled decode, never comparable to decision rows.
 
 | run | acc (meta/lex/rel) | acc | ECE | p50 | determinism |
 |---|---|---|---|---|---|
+| llama__Spark-X2.6-4B-Q4_K_M.json ¹⁷ | 1.00 / 0.90 / 0.45 | 0.783 | 0.095 | 13180.8ms | yes (Δp 0.000) |
 | embed__embeddinggemma-300M-Q8_0.json | 0.62 / 0.62 / 0.25 | 0.500 | 0.256 | 634.9ms | yes |
 | embed__gte-modernbert-base.json | 0.45 / 0.78 / 0.50 | 0.575 | 0.330 | 3374.8ms | yes |
 | embed__gte-modernbert-onnx-fp32.json | 0.45 / 0.78 / 0.50 | 0.575 | 0.330 | 811.4ms | yes |
@@ -854,6 +855,41 @@ is a readout bug alarm, not a model verdict — the free-form readout
 probe is the discriminating test. The freeform row's p50 cell is the
 whole-run mean (per-item walls not recorded); at CPU latency the arm
 is escalation/verifier duty, same posture as strands.
+
+¹⁷ Spark-X2.6-4B audit — **no-go** (2026-10-25, NAS-era host CPU, -t 12,
+OC decision fork tree mode, suite sha-locked). Result: **0.783** overall
+(per-class meta/lex/rel **1.00 / 0.90 / 0.45**), ECE **0.095**, p50
+13.18 s / p95 38.7 s, deterministic on replay (Δp 0.000), 120/120
+parseable. Measured against the D16 acceptance tiers: accuracy clears
+the minimum tier (0.767) and lands just under the interactive stretch
+(0.800), but the run is disposed no-go on the two legs that the tiers
+treat as binding:
+
+1. **ECE fails both tiers** (0.095 vs 0.069 interactive / 0.057
+   frontier-min). The bin shape is the known overconfidence signature
+   at 4B scale, slightly worse than the Qwen3.5-4B family at the same
+   quant (0.069–0.074) — this is a calibration-property delta of the
+   base model, not a harness artifact: 120/120 valid distributions,
+   deterministic, no readout anomalies.
+2. **Relational composition sits at the ≤4B ceiling** (0.45, vs the
+   0.525 first-crossing level and the Qwen3.5-4B arm's 0.45 exactly).
+   Spark replicates the board's structural finding (every model arm
+   ≤ 4B ≤ 0.50 relational) rather than breaking it — the class that
+   the engine's own solver already proves at 0.950 in 1.3 ms.
+
+Disposition reasoning: Q4_K_M was chosen first as the likely
+deployment quant; since its ECE failure is a base-model property (the
+same bins would need a per-tier calibration artifact, and the
+relational leg fails on structure, not on quantization), the Q8_0
+follow-up (already downloaded) is NOT run — neither D16 blocker can
+plausibly move with a quant cut, per the board's own "quantization is
+mostly free" finding for 4-bit-K-and-above. The 1.00/0.90 metadata and
+lexical classes show Spark is a competent instruction-following 4B;
+the verdict is "not a decision-model candidate under the shipped
+tiers", not "broken". If a lane ever needs Spark, the open questions
+are the calibration artifact and nothing else. Receipts:
+`benchmarks/decision-model/results/sparkx26-4b-q4km.json`
+(model sha256 `30b77e2e…`, llamacpp decision fork, batched tree arm).
 
 What the board established (full findings catalog in REPORT.md):
 
