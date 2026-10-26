@@ -1,6 +1,31 @@
-# Operator Action Checklist — 2026-10-21
+# Operator Action Checklist — 2026-10-26
 
 ## Immediately actionable
+
+### 0. History rewrite landed locally — two force-pushes remain (2026-10-26)
+- **What happened:** every push to GitHub was rejected — 77 historical
+  `.aegis/baseline.json` blobs (up to 120 MB) exceed GitHub's 100 MB
+  hard limit. `git filter-repo --strip-blobs-bigger-than 50M` was run
+  with operator approval; local `main` (492 commits) is now clean
+  (largest reachable blob 52 MB, `.git` 695→252 MB) and is a verified
+  content superset of GitHub's tip (PRs #1–#7 all present; the one
+  fixture diff is the intentional D43 `relational-v2` re-key).
+- **Remaining operator actions** (agent force-push is deny-listed):
+  1. `git push --force-with-lease origin main` — lands the rewritten
+     history on GitHub.
+  2. `git push --force-with-lease gitforge main` — GitForge `main`
+     (`3c921c9`) holds the same content as rewritten `645f284`; the
+     plain push is non-FF for sha reasons only. `sync/agent-tooling`
+     (`97966eb`) likewise maps into rewritten history.
+- **Aftermath:** all commit shas changed (root included). Local
+  worktrees are already re-synced (`OpenCodifier-fork`,
+  `opencodifier-correctness-20261020` clean on rewritten tips).
+  Backup of the pre-rewrite `.git`: `/var/tmp/oc-git-backup-20261026`
+  (697 MB, NVMe) — keep until both force-pushes land and CI is green.
+- **Root cause / rule:** aegis baseline regens must trim the `.git`
+  ledger (units[]) before commit — this is the second incident of the
+  untrimmed-ledger trap, now at history scale. CI image pinning for
+  aegis regeneration must also match the gate's `--config`.
 
 ### 1. PR #7 — merge cube games branch ✅
 - **Branch:** `site/games-audit-2026-10` (gitforge + origin)
