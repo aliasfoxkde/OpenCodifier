@@ -369,6 +369,7 @@ arm — sampled decode, never comparable to decision rows.
 | run | acc (meta/lex/rel) | acc | ECE | p50 | determinism |
 |---|---|---|---|---|---|
 | llama__Spark-X2.6-4B-Q4_K_M.json ¹⁷ | 1.00 / 0.90 / 0.45 | 0.783 | 0.095 | 13180.8ms | yes (Δp 0.000) |
+| llama__Ternary-Bonsai-2-27B-PTQ1_0.json (stock letters, V100 pair) ¹⁸ | 1.00 / 0.725 / 0.425 | 0.658 | 0.153 | 1215.0ms | yes (Δp 0.000); 7 invalid dists |
 | embed__embeddinggemma-300M-Q8_0.json | 0.62 / 0.62 / 0.25 | 0.500 | 0.256 | 634.9ms | yes |
 | embed__gte-modernbert-base.json | 0.45 / 0.78 / 0.50 | 0.575 | 0.330 | 3374.8ms | yes |
 | embed__gte-modernbert-onnx-fp32.json | 0.45 / 0.78 / 0.50 | 0.575 | 0.330 | 811.4ms | yes |
@@ -890,6 +891,28 @@ tiers", not "broken". If a lane ever needs Spark, the open questions
 are the calibration artifact and nothing else. Receipts:
 `benchmarks/decision-model/results/sparkx26-4b-q4km.json`
 (model sha256 `30b77e2e…`, llamacpp decision fork, batched tree arm).
+
+¹⁸ Ternary-Bonsai-2-27B PTQ1_0 — the #35 reopen probe (2026-10-26,
+t5500 2×V100 SXM2 tensor-split 1,1, PrismML fork `9a9394a` — the only
+build that loads ggml type 143; stock letters readout, full locked
+suite, 336.7 s wall). Result: **0.658** overall, per-class
+1.00 / 0.725 / 0.425, ECE **0.153**, 7 invalid distributions, replay
+bit-exact, **p50 1.21 s** (CPU arm: 73.8 s/readout — the V100 pair is
+~60× and the class's speed blocker is gone; 5.67 GiB weights load in
+~29 s). Verdict: **viable-on-GPU, not a candidate.** Every leg loses
+to the 27B Q3_K_XL standard arm (0.866 / ECE 0.038) at comparable
+size, and to the Qwen3.5-2B balanced tier on both accuracy and ECE;
+the retention story does not survive the letters interface at this
+scale. Two records worth keeping: (a) the ternary ladder now has a
+GPU rung measured end to end — #35's original question is answered,
+the class returns only if a future retention-tuned ternary lands;
+(b) accuracy by answer position (0.75 / 0.77 / 0.58 / 0.65 / 1.00 /
+1.00) is a clean position-bias signature — the strongest board-side
+motivation yet for the §31 rotation readout. Receipts:
+`benchmarks/decision-model/results/bonsai27b-ptq1_0-stock.json`
+(model sha256 `53107f53…`, host `t5500`; the config's `vulkan-igpu`
+device label is the build's detection string — compute ran on the
+CUDA V100s).
 
 What the board established (full findings catalog in REPORT.md):
 

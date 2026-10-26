@@ -4145,3 +4145,32 @@ labelled corpus needed to evaluate them). Sizing: an L0-style readout rung is a
 `LadderPolicy` extension + a K-variant scorer in the decision-model rung —
 engine-side, no wire-format change. Candidate task for the post-#190 gate
 program; do not start before #190/#191 land.
+
+## §32 — Starred-repo sweep: the unrecorded remainder (2026-10-25, user-directed)
+
+A pass over the operator's starred repositories against what earlier
+sections already recorded (AnyJev → §31, Model-Optimizer → §19,
+1Cat-vLLM + GSQ + the V100 plan → §21, jebadiah-27b → §9/§14). The
+rows below are the ones with no existing record. Verdicts use the
+standing scale.
+
+| repo | what it is | verdict |
+|---|---|---|
+| `zvec-ai/zvec-grep` (4.2k★) | local-first workspace search for coding agents | **COMPARE** vs the `jevgrep` addendum (§15): if jevgrep already covers the lexical seam, this is a dependency, not a build. Audit before duplicating. |
+| `vinilana/jev-gateway` (322★) | Jev for coding agents via tool-calling | **COMPARE** vs `codify_gate` (#194): same consumer (agents), different wire (tool-call vs MCP). Read for feature gaps only; D44 (no general gateways) stands for the decision rung. |
+| `wdobry/laya-playground` (190★) | Laya's site / games / benchmark / agent-skill bundle | **REFERENCE** — direct competitive template for the playground (#196 shipped); their benchmark format is a candidate fourth eval surface behind the board map (§14) but adds no measurement power we lack. |
+| `mrmps/classifier-dev` (433★) | zero-shot classification over HTTP+MCP on a Cloudflare Worker | **REFERENCE** for the hosted-tier question (task #41 lane): the pattern for a zero-key classifier rung outside the local-first posture. Not adoptable while the default posture forbids cloud. |
+| `FlashML-org/FreeToken` | "datacenter-scale serving on your desktop" | **COMPARE** as a serving stack for the T5500 lane, against 1Cat-vLLM (§21.6) and the OC fork. Only worth a probe if the OC fork hits a wall the fork cannot fix (e.g. batching beyond `--decision-seqs`). |
+| `NVIDIA/SkillSpector` | security scanner for agent skills / MCP servers | **ADOPT-WORTHY (process)** — our MCP surface (opencodifier-mcp, codify_gate) should be scanned by it once; record findings as a security note. Low effort, closes a threat-model gap we have not inventoried. |
+| `zhangcy122/OpenJev` (44★) | System 2→1 flywheel, option-order invariance, typed probabilistic API | **PARTIALLY RECORDED** — OpenJev the model is in §9's board rows; the *repo's* order-invariance test harness is worth lifting into our parity lane when the §31 rotation readout lands (they test the same property from the data side). |
+| `thecodacus/llm-eval-suite` | deterministic agentic eval harness | **REFERENCE** — our harness (run_jevbench + suite runners) is stricter (determinism replay, resource capture). Nothing to adopt; note as a comparison point if we ever publish the harness. |
+
+**Not recorded, deliberately:** kaggle/TPU training repos (platform
+policy: free-tier-first training is already Kaggle T4; nothing new),
+self-hosting/media/smart-home stars (off-mission), litellm-class
+provider gateways (D44).
+
+**Actions worth queueing, in priority order:**
+1. SkillSpector scan of `opencodifier-mcp` + codify_gate (one-shot).
+2. jev-gateway feature read alongside codify_gate docs (one-shot).
+3. OpenJev order-invariance harness → fold into the §31 rotation-readout task when it starts.
