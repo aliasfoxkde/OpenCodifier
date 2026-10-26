@@ -23,14 +23,19 @@ was genuinely exercised.
 20-way concurrent burst on Vulkan: p50 29.7 s / p90 45.8 s for
 80 sequences — no batch amortization on this device class.
 
-**Verdict: NO-GO for the Vulkan serving path.** The iGPU is 2.5×
+**Verdict: NO-GO for the iGPU; OPEN for discrete Vulkan hardware.** The iGPU is 2.5×
 slower than the same host's CPU at 4B: shared LPDDR5 bandwidth means
 the GPU buys no memory-bandwidth advantage, and RADV kernel/queue
-overhead dominates at this model size. The CPU rung stays the
-edge-compute lane; the Vulkan build remains useful only as a
-fallback if a discrete-Vulkan device ever appears in the fleet
-(none currently does — the only dGPUs are the T5500 V100s, which are
-CUDA).
+overhead dominates at this model size. This is an **iGPU-structural**
+result — shared memory kills the bandwidth edge that is the whole
+point of GPU decode at this scale. It is **not** a verdict on Vulkan
+as a backend class: a discrete Vulkan device (AMD dGPU, Intel Arc)
+has dedicated VRAM bandwidth and has never been probed, because none
+exists in the fleet today (the only dGPUs are the T5500 V100s, which
+are CUDA). Re-probe is queued as a standing task with the trigger:
+*any discrete Vulkan-capable device enters the fleet*. The CPU rung
+remains the edge lane until then. The Vulkan build stays proven and
+ready (`build-vulkan/`, deterministic scores, 1m39s load).
 
 **Traps recorded for any re-probe:**
 1. Fork default context (376k) must be overridden (`-c`) on small-VRAM
