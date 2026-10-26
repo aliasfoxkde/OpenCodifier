@@ -4174,3 +4174,59 @@ provider gateways (D44).
 1. SkillSpector scan of `opencodifier-mcp` + codify_gate (one-shot).
 2. jev-gateway feature read alongside codify_gate docs (one-shot).
 3. OpenJev order-invariance harness → fold into the §31 rotation-readout task when it starts.
+
+### §32.1 SkillSpector scan of the MCP surface + skills (2026-10-26, action 1 of §32)
+
+NVIDIA SkillSpector (Apache-2.0, static — never executes the skill),
+run from source against `.claude/skills/` and
+`crates/opencodifier-mcp/` in `--no-llm` mode. Results: MCP crate
+**0 findings, risk score 0**; skills **score 6 / LOW / SAFE** with a
+single MEDIUM — "Data Exfiltration / External Transmission" at
+`decide/SKILL.md:25`, a false positive: the pattern matched the doc's
+`curl` example POSTing to `127.0.0.1:8177` (loopback — the local
+runtime itself; the posture forbids external transmission and the
+example is exactly the local call). No action needed; re-run the scan
+whenever a new skill or MCP tool lands. Reports at
+`/tmp/skillspector-oc-{skills,mcp}.json` (scratch, not committed —
+zero-new-findings is the state of record).
+
+### §32.2 jev-gateway feature read vs codify_gate (2026-10-26, action 2 of §32)
+
+`vinilana/jev-gateway` (cloned read-only to `/var/tmp/jev-gateway-clone`):
+a local proxy that intercepts coding-agent traffic (Codex/Claude Code/
+OpenCode/Kilo/Gemini/Devin launchers) and routes **tool selection**
+through hosted Jev's `/v1/systemone`, everything else passing through
+untouched. It is a *consumer* of Jev's API — not a decision runtime —
+so D44 (no general gateways for the decision rung) is not in conflict:
+we would never proxy agent traffic, but their router mechanics are a
+feature checklist for `codify_gate` (#194) and the lane presets (#191).
+Mechanics worth comparing, all in `src/decide.ts` (243 lines):
+
+1. **Two-question agreement gate**: a choice ("which tool") AND an
+   independent noul boolean ("is a tool needed at all") must agree
+   before the router overrides the LLM; disagreement → passthrough.
+   Our gate uses one multi-component confidence report; their
+   independent-second-question pattern is a cheap structural
+   cross-check worth a COMPARE note in the gate docs.
+2. **Fail-open posture**: any Jev error/timeout → passthrough to the
+   host LLM, never a failed agent turn. Our `codify_gate` fails
+   closed-ish (abstain surfaced to the agent as a typed outcome) —
+   a deliberate, documented posture difference, not a defect.
+3. **Sharded shortlist**: rosters > MAX_TOOLS are sharded, all shards
+   ranked in one call, top candidates re-asked — candidate narrowing
+   at the wire level, exactly our metadata-filter→BM25 ladder shape
+   applied to tool rosters (SHORTLIST_PER_SHARD = 3).
+4. **Safe tool-name contract**: names validated against a strict
+   regex before being placed into prompts (injection surface control)
+   — same threat model as our "input text must never modify policy"
+   rule; nothing to adopt, but confirms the invariant is field practice.
+5. **Argument extraction with certainty floor** (`argMinCertainty`):
+   closed-parameter sets can be filled directly from answers; the
+   whole direct call inherits the weakest argument's certainty. A
+   pattern for future "decide AND parameterize" gate extensions.
+
+Verdict: **no adoption, five COMPARE notes** — the gap analysis
+confirms codify_gate covers our agent-facing lane with a different
+(better-calibrated, self-hosted) mechanism; their sharding and
+two-question patterns are recorded for the gate docs if the agent
+roster use-case grows.
