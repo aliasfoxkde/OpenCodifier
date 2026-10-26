@@ -26,14 +26,16 @@
     if (!main) return [];
     const out = [];
     for (const sec of main.querySelectorAll("section[id]")) {
-      const head = sec.querySelector("h2");
-      if (!head) continue;
       /* label priority: explicit override > the section's kicker line
-         (short by design) > the heading itself (often a full sentence) */
+         (short by design) > the heading itself (often a full sentence).
+         Game pages carry a single h2-less section, so the heading is
+         optional — the explicit label or the section id carries it. */
       const kicker = sec.querySelector(".kicker");
+      const head = sec.querySelector("h2");
       let label = sec.getAttribute("data-toc-label")
         || (kicker && kicker.textContent.trim())
-        || head.textContent.trim();
+        || (head && head.textContent.trim())
+        || sec.id.replace(/[-_]/g, " ");
       if (label.length > 24) label = label.slice(0, 24).trimEnd() + "…";
       out.push({ id: sec.id, label });
     }
@@ -42,7 +44,10 @@
 
   function build() {
     const secs = sections();
-    if (secs.length < 2) return;
+    /* every page gets the rail, even single-section game pages: the entry
+       plus the quick links and progress hairline keep navigation consistent
+       site-wide (a page with no main sections gets nothing). */
+    if (secs.length < 1) return;
 
     const rail = document.createElement("nav");
     rail.className = "toc-rail";

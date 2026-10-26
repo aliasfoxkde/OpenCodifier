@@ -148,7 +148,7 @@ re-ordering, candidate narrowing subset-safety. Fixtures under
 | `runtime-onnx-dynamic` | opencodifier-runtime | ort `load-dynamic` |
 | `llamacpp` | opencodifier-model | ureq (HTTP client only, D26) |
 | `tokenizers` | opencodifier-model | `tokenizers` 0.22 + `fancy-regex` (Kai reference encoder, D33) |
-| `http` | opencodifier-http | axum 0.9, tokio |
+| `http` | opencodifier-http | axum 0.8, tokio (pin corrected by D12) |
 | `mcp` | opencodifier-mcp | rmcp 2.2 (D1) |
 | `cli` | opencodifier-cli | clap v4 |
 | `wasm` | opencodifier-wasm | wasm-bindgen, getrandom js |

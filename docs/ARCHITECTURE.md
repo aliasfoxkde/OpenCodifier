@@ -13,6 +13,7 @@ in a committed phase, **contract** = frozen v1 surface.
 | Schema adapters | `opencodifier-schema` | core |
 | Inference runtime | `opencodifier-runtime` | core (+ `ort` behind one feature) |
 | Decision model | `opencodifier-model` | engine, runtime, core |
+| Item generator | `opencodifier-itemgen` | core, engine |
 | Interfaces | `opencodifier-cli`, `-http`, `-mcp`, `-wasm`, `-ffi` | engine/model, schema |
 
 The dependency arrows only ever point toward `core`. Nothing in the
