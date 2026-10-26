@@ -4146,6 +4146,38 @@ labelled corpus needed to evaluate them). Sizing: an L0-style readout rung is a
 engine-side, no wire-format change. Candidate task for the post-#190 gate
 program; do not start before #190/#191 land.
 
+### §31.1 Shipped: rotation readout + CP-certified early exit (2026-10-26, items 1–2)
+
+Items 1 and 2 landed in `opencodifier-engine` (`src/rotation.rs`,
+commits `a0e71f3`, `c53656b`), adapted to the IR rather than ported:
+
+- **`RotationReadout`** — scores a choice question over K cyclic
+  permutations of the candidate list, combines per-position
+  distributions in log space, divides out the label prior estimated
+  from the read itself (batch prior, no labels). Position-bias
+  correction over the engine's own distribution type; K prefills per
+  decision as §31 sized it.
+- **`RotationReadout::with_early_exit(k_min, target_agreement)`** —
+  the rotation-budget analogue, certified rather than thresholded.
+  After each read at or beyond the floor, two conditions must both
+  hold before stopping: (a) the deterministic worst case (all unread
+  blocks unanimous for the runner-up) cannot take the lead, and (b)
+  the winner's exact Clopper–Pearson lower bound exceeds the unread
+  share m/K. The CP tail is computed by bisection on an in-tree
+  regularized incomplete beta, cross-checked against
+  `scipy.stats.beta.ppf` in tests. Hard questions fall through to
+  the full-K read; the certificate is conservative at small K by
+  design (K=5 unanimous saves one read), savings grow with roster
+  size — the deployment regime.
+- **Tests**: early stop at the certified count (K=9, 6 of 9), a
+  no-exit baseline, invalid-parameter refusals, and CP-bound
+  reference values.
+
+Not yet wired: the rung is engine-side only; exposing it as a
+`LadderPolicy` per-node override and the llama.cpp K-variant scoring
+path remain open (OpenJev's order-invariance harness, §32 action 3,
+folds in at that point).
+
 ## §32 — Starred-repo sweep: the unrecorded remainder (2026-10-25, user-directed)
 
 A pass over the operator's starred repositories against what earlier
