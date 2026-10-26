@@ -33,9 +33,16 @@ as a backend class: a discrete Vulkan device (AMD dGPU, Intel Arc)
 has dedicated VRAM bandwidth and has never been probed, because none
 exists in the fleet today (the only dGPUs are the T5500 V100s, which
 are CUDA). Re-probe is queued as a standing task with the trigger:
-*any discrete Vulkan-capable device enters the fleet*. The CPU rung
+*any discrete Vulkan-capable device enters the fleet* — concretely the
+planned **AMD V620 32 GB** (Vega 20, dedicated HBM2) for the T5500 box,
+or the same card on the Fedora machine via a riser. The CPU rung
 remains the edge lane until then. The Vulkan build stays proven and
 ready (`build-vulkan/`, deterministic scores, 1m39s load).
+
+Caveat for that re-probe: the V620 is a mining card (Vega 20). Confirm
+RADV enumerates it as a *compute* device (it may default to a display
+or be blocked by the driver) before trusting a boot, and expect its
+compute path to be narrower than a consumer dGPU's.
 
 **Traps recorded for any re-probe:**
 1. Fork default context (376k) must be overridden (`-c`) on small-VRAM
