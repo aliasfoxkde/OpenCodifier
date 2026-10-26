@@ -15,6 +15,24 @@ model file); method documents are
 (JevBench). Raw run evidence lives outside the repo and is regenerable
 from the pinned inputs.
 
+## Contents
+
+1. [The system being measured](#the-system-being-measured)
+2. [How to read the boards](#how-to-read-the-boards)
+3. [Board A — JevBench public split](#board-a--jevbench-public-split-shared-axis)
+4. [Board B — our locked suite](#board-b--our-locked-suite-the-full-model-board)
+5. [Board C — jabr classifier benchmark](#board-c--jabr-classifier-benchmark-third-party-ood-gate)
+6. [Cost per 1,000 decisions](#cost-per-1000-decisions-modeled-benchmarkheaven-basis)
+7. [Composite deployment score](#composite-deployment-score)
+8. [The target bar](#the-target-bar)
+9. [Training-corpus landscape](#training-corpus-landscape)
+10. [Methodology & integrity](#methodology--integrity)
+11. [Sources](#sources)
+12. [Reproduction](#reproduction)
+
+Start with Board A for the headline comparison; Board B is the
+deployment-relevant surface; footnotes carry every caveat.
+
 ## The system being measured
 
 OpenCodifier is a local-first, deterministic-first **decision runtime**:

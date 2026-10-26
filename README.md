@@ -17,7 +17,8 @@ model. Jev/System One compatibility is one adapter mode, not the identity.
 **Work in progress — pre-1.0, but real and runnable today.** The
 canonical decision IR, schema adapters (native / OpenAI / Anthropic /
 Jev), deterministic engine (graphs, rules, caches, BM25 narrowing,
-cross-rung escalation), candidate-conditioned decision-model backends,
+cross-rung escalation, position-bias-corrected rotation readouts with
+certified early exit), candidate-conditioned decision-model backends,
 backend traits, and the CLI, HTTP, MCP, and WASM interfaces are
 implemented and tested:
 
@@ -67,6 +68,19 @@ decide a choice question and a deliberately strict gate that answers
 requests that exercise them and the captured responses to compare
 against.
 
+## Measured results (one number per surface)
+
+Every figure below is traceable to a row in
+[`docs/BENCHMARKS.md`](docs/BENCHMARKS.md); the four eval surfaces are
+kept separate on purpose — no number is quoted across surfaces.
+
+| surface | what it is | our number |
+|---|---|---|
+| JevBench-231 (public split) | 231-item typed-decision board | **0.6840** (e1-e arm) |
+| Internal holdout suite | gate suite (231-split disjoint) | **0.8083** (e1-e, GATE_PASS) |
+| Engine rung (deterministic-only) | zero-ML ladder floor | **0.3766** |
+| Board ECE (calibration, raw) | honest-uncertainty check | 0.207 (0.127 with shipped calib) |
+
 ## Design commitments
 
 - **Deterministic first.** Exact rule → cached decision → metadata filter →
@@ -84,17 +98,74 @@ against.
 
 ## Models
 
-Decision-model weights publish to HuggingFace, gated on the release
-policy (suite and benchmark floors before anything ships):
+Decision-model weights publish to HuggingFace, gated on the
+[release policy](docs/RELEASE_POLICY.md) (suite ≥ 0.68 **and** JevBench
+≥ 0.6494 before anything ships). Weights are never downloaded
+automatically — not at build time, not at runtime; access is explicit
+opt-in.
 
-- [`aliasfox/OpenCodifier-Decision-2B-v6full`](https://huggingface.co/aliasfox/OpenCodifier-Decision-2B-v6full)
-  — the published gated weights: per-surface numbers, shipped per-kind
-  calibration, withheld-corpus disclosure.
-- [The aliasfox org](https://huggingface.co/aliasfox) — home of all
-  OpenCodifier model releases.
+| release | org | what |
+|---|---|---|
+| [opencodifier-e1e-2b](https://huggingface.co/TaskWizerAI/opencodifier-e1e-2b) | [TaskWizerAI](https://huggingface.co/TaskWizerAI) | E1-E verdict-slot LoRA on Qwen3.5-2B — first own arm to pass **both** gate legs (suite 0.8083, JevBench 0.6840); ships the holdout-fitted temperature artifact |
+| [OpenCodifier-Decision-2B-v6full](https://huggingface.co/aliasfox/OpenCodifier-Decision-2B-v6full) | [aliasfox](https://huggingface.co/aliasfox) | earlier gated 2B decision weights, per-surface numbers + withheld-corpus disclosure |
 
-Weights are never downloaded automatically — not at build time, not at
-runtime. Access is explicit opt-in ([release policy](docs/RELEASE_POLICY.md)).
+## Documentation
+
+Start here; every page links back to this index. Dense reference docs
+are broken into sections — read top-down only as deep as you need.
+
+**Getting oriented**
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — crates, dependency
+  direction, pipeline shape (5 min).
+- [`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md) — where
+  everything lives in the tree.
+- [`docs/PLANNING.md`](docs/PLANNING.md) — the founding spec (§§1–80);
+  intent, not status.
+
+**Running it**
+
+- [`recipes/`](recipes/) — runnable graphs + captured responses.
+- [`docs/FORK_LLAMA_SERVER.md`](docs/FORK_LLAMA_SERVER.md) — the
+  llama.cpp fork that serves decision rungs.
+- [`docs/DECISION_RUNNER.md`](docs/DECISION_RUNNER.md) — why
+  llama.cpp and not vLLM/SGLang (D44).
+- [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md) — external systems
+  (incl. Amortyx router integration).
+
+**Numbers & evidence**
+
+- [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) — the comparison page of
+  record: board table, per-family breakdowns, footnoted provenance.
+  Read §Board rows first; footnotes carry the caveats.
+- [`docs/VALIDATION.md`](docs/VALIDATION.md) — the #104 validation
+  campaign record.
+- [`docs/COVERAGE.md`](docs/COVERAGE.md) — coverage methodology.
+
+**Governance & decisions**
+
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — binding decision records
+  (D1–D44+); these supersede anything contradictory elsewhere.
+- [`docs/PLAN.md`](docs/PLAN.md) — live execution plan + phase status.
+- [`docs/RELEASE_POLICY.md`](docs/RELEASE_POLICY.md) — the gate any
+  model must clear before publishing.
+- [`docs/OPERATOR_ACTIONS.md`](docs/OPERATOR_ACTIONS.md) — items only
+  the operator can do.
+
+**Research**
+
+- [`docs/RESEARCH.md`](docs/RESEARCH.md) — sectioned research log
+  (§1–§32+), each section self-contained: source, findings, verdict,
+  what shipped. Read the section table of contents at the top, dive
+  into one section.
+- [`docs/TRAINING.md`](docs/TRAINING.md) — the training record: arms,
+  recipes, falsified levers.
+
+**Planning archive** (point-in-time, kept for provenance — not live
+policy): [`docs/planning/`](docs/planning/), including the
+[Vulkan 4B probe](docs/planning/vulkan-4b-probe-2026-10-26.md) no-go
+and the [offline campaign](docs/planning/offline-campaign-2026-10-23.md)
+tracker.
 
 ## Development
 

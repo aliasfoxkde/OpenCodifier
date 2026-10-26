@@ -404,3 +404,49 @@ and deployed — request-side `response_format` ingress (`38daffa9`)
 and response-side extension passthrough (`d182a126`). F-2
 (environmental) is the only open item, and it is not attributable to
 either service.
+
+## 14. Phase-2 consult LIVE (2026-10-26) — shadow task signals + provider ranking
+
+The §12 phase-2 path is no longer future work: the Amortyx side was
+**already built** (plan #177, `amortyx-capability::opencodifier`) and
+shipped in the deployed router binary (0.8.0, strings-confirmable) —
+it was **config-dormant**. Activation required zero code changes:
+
+```yaml
+# /var/tmp/amortyx-router-dev.toml — nested under `routing:` (NOT top-level;
+# `build_opencodifier_client` reads `config.routing.opencodifier`)
+routing:
+  opencodifier:
+    enabled: true
+    base_url: http://127.0.0.1:8177
+    mode: shadow
+    timeout_ms: 250
+    task_signals: true
+```
+
+**Live receipt (2026-10-26 08:48 CDT), first requests through the router:**
+
+- `opencodifier_enabled` — engine wired into dispatch, mode Shadow.
+- `opencodifier_shadow_task_signals` — the §3 batched four-decision call
+  (complexity score + context/tool/freshness booleans) per request,
+  **consult_ms 1–4** (well inside the hot-path budget of §5; the engine's
+  exact-decision cache absorbs repeats).
+- `opencodifier_shadow_decision` — provider-ranking consult
+  (`opencodifier_ordered_chain`), honest `abstain` at confidence 0.36 on
+  requests the zero-ML stack has no basis for — the §4 abstention
+  contract holding as designed; dispatch byte-identical.
+- Config restart clean; OC service (opencodifier.service, :8177) unchanged.
+
+**What shadow collects**: per-request agreement/divergence counters between
+the engine's answers and the router's builtin heuristics
+(`complexity_agreed`, `tool_agreed`, …) in the
+`opencodifier_shadow_task_signals` log event — exactly the §7 evidence
+stream. Promotion to `enforce` (chain reordering) is per §7: shadow
+evidence first, per-decision promotion, abstention rate tracked as a
+first-class metric.
+
+**Config trap recorded**: the `opencodifier:` block at TOML top level
+silently does nothing (unknown key ignored, no client built) — it must sit
+under `routing:`. Startup log `opencodifier_enabled` is the only
+confirmation; a silent absence is a finding (silence = the feature is off,
+not broken).

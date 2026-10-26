@@ -7,6 +7,20 @@ base model, and could we train it **on this host** (AMD Renoir APU, 16 cores,
 
 Companion to `docs/BENCHMARKS.md` (the measured boards this analysis draws on).
 
+## Reading guide
+
+- **§1–8**: the original host-training feasibility analysis (kept for
+  provenance — the answers have since been superseded by the own-model
+  program).
+- **§9**: the own-model distill program — the live record of every arm
+  (E1 series, T2/T3 sweeps), with per-arm verdicts. Start at §9.9 for
+  the gate-passing arms (E1-E).
+- **§10–12**: transfer taxonomy, corpus-prep gates, config/epoch policy.
+- **Dated entries at the bottom** (T3.3, T2.2/T2.3, T88): per-arm
+  verdict records in reverse-chronological flow; append-only.
+- Falsified levers are recorded, not deleted — grep `FALSIFIED\|FAIL\|GATE_FAIL`
+  before re-proposing any training lever.
+
 ## 1. Why the question is live
 
 The bar we set for ourselves — autotrust/JEV-27B, 84.07 mean across six public

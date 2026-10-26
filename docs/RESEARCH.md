@@ -8,6 +8,34 @@ phase sweep re-checks it and adds dated deltas.
 
 Validated: 2026-09-30 / 2026-10-01.
 
+## Section index
+
+Each `§` section is self-contained: source → findings → verdict → what
+shipped. §1–8 are unnumbered-topic sections (cascade literature,
+confidence signals, the System-One board, HRM); §9 onward use dated
+audit records.
+
+| § | topic (date) | one-line takeaway |
+|---|---|---|
+| [9](#9--known-knowns-audit--external-sweep-2026-10-02) | Known-knowns audit + external sweep (10-02) | priority queue replacing §6.6 ordering |
+| [10](#10--performance--accuracy-methods-sweep-2026-10-04) | Performance & accuracy methods (10-04) | `-t 12` prefill win; certified gate thresholds |
+| [11](#11--inference-engine-repos-strata-flash-attention-thecodacusllamacpp-2026-10-04) | Inference-engine repos (10-04) | Strata practices transfer, flash-attention no path |
+| [12](#12--r19-quantization-ladder-where-decision-capability-lives-2026-10-05) | r19 quantization ladder (10-05) | decision capability lives in training, not quant level |
+| [13](#13--deep-research-round-readout-floor-mechanics-the-jebadiah-v2-replication-cascade-attack-surface-2026-10-05) | Readout floor, Jebadiah v2, cascade attack (10-05) | readout floor is upstream logprobs behavior |
+| [14](#14--the-public-board-leaderboards-the-alternatives-press-and-the-dominance-question-2026-10-05) | The public board + dominance question (10-05) | four eval surfaces, one number each, never universal |
+| [15](#15--zero-shot-classification-the-jev-evaluation-literature-board-scoring-rules-and-the-ecosystem-press-2026-10-07-sweep) | Zero-shot classif. + Jev eval literature (10-07) | 8/10 enhancement items shipped (24a–24i) |
+| [16](#16--multi-family-teacher-consensus--the-transfer-vs-size-curve-2026-10-13-future-scope--vision-note-not-a-queued-item) | Teacher consensus, transfer-vs-size (10-13) | vision note, not queued |
+| [17](#17--inference-fork-audit-ik_llamacpp-for-the-cpu-decision-lane-2026-10-14) | ik_llama.cpp audit (10-14) | not adopted for the CPU lane |
+| [18](#18--airllm-audit-layer-streaming-inference--lora-training-2026-10-14) | AirLLM audit (10-14) | layer-streaming not viable here |
+| [19](#19--nvidia-model-optimizer-audit-what-transfers-to-the-quant-program-2026-10-14) | NVIDIA Model-Optimizer (10-14) | what transfers to the quant program |
+| [20](#20--lewmaudit-jepa-world-model-vs-the-decision-runtime-2026-10-14) | LeWM / JEPA world model (10-14) | audited, not adopted |
+| [21](#21--strands-decider-deep-research--gsq--1cat-vllm--t5500-v100-optimization-plan-2026-10-19) | Strands deep research + GSQ + 1Cat-vLLM (10-19) | T5500 V100 plan grounds |
+| [22](#22--strands-decider-deep-research-2026-10-18) | Strands Decider deep research (10-18) | E2B adjudication record |
+| [23](#23--ncm--diffusion-text-generation-audited-harvested-not-adopted-2026-10-20-user-directed) | NCM / diffusion generation (10-20) | audited, harvested, not adopted |
+| [30](#30--temporal-operators-shipped-the-temporal_numeric-premise-did-not-2026-10-21) | Temporal operators (10-21) | shipped; premise falsified |
+| [31](#31--anyjev-nokia-applied-research-audit-readout-rotation-label-free-calibration-2026-10-25-user-directed) | AnyJev rotation + calibration (10-25) | **items 1–2 SHIPPED** (§31.1) |
+| [32](#32--starred-repo-sweep-the-unrecorded-remainder-2026-10-25-user-directed) | Starred-repo sweep (10-25) | SkillSpector scan done; jev-gateway read |
+
 ## 1. Cascade & ladder literature (validates the B-series design)
 
 The core architecture — cheap rungs first, confidence-gated escalation,

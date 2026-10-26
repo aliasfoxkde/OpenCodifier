@@ -66,6 +66,7 @@ Remaining risks tracked in §6 below.
 | 23 | v0.5.0 release cut | **done** (2026-10-08) — tag `v0.5.0` → `0fd6a154`, 9-leg matrix rebuilt single-tree with one consistent attestation set; releases on GitForge + GitHub (19 assets, 69.4 MB) |
 | 24 | RESEARCH §15.6 enhancement program | **in progress** (2026-10-07) — items 1–4, 8–10 + §15.8 fold-ins done (ledger: RESEARCH §15.6.1); items 5/6 sized, model-rung options, deferred per the §15.6 note |
 | 25 | The gate program: escalation, lanes, first-run detection, CI/CD | **opened** (2026-10-21) — design `docs/ESCALATION_LANES_PLAN.md`; #188 premise validation first, tasks #188–#197 |
+| 26 | Amortyx pre-router integration + token-reduction stack | **in progress** (2026-10-26) — phase-2 consult LIVE in shadow (§14 of INTEGRATION_AMORTYX.md: consult p50 ~3 ms, task-signal agreement/divergence counters collecting, abstain-degrades verified on provider ranking); dual-arm parity baseline run (dispatch unchanged = arm parity by construction; shadow counters are the labeled evidence for enforce promotion after ≥1 week); token-reduction design of record `docs/planning/token-reduction-router-stack.md` (M1–M8, build queue 1–5) |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
@@ -1725,3 +1726,23 @@ its doc of record.
   corpus path as read-only ledger consumer with no production claims,
   and §62 training with versioned datasets. No code yet by design —
   implementation follows the shadow-evidence promotion gate.
+
+## Phase 26 — Amortyx pre-router integration + token-reduction stack (opened 2026-10-26)
+
+**What this phase is.** OC becomes a *pre-router* component of the Amortyx
+stack: classify requests before the chain build so traffic routes to the
+right model and trivial/repeat requests never cost a provider call.
+Design of record: **`docs/planning/token-reduction-router-stack.md`**
+(mechanisms M1–M8 + build queue); integration contract:
+`docs/INTEGRATION_AMORTYX.md` §3/§4/§5/§12/§14.
+
+| task | scope | status |
+|---|---|---|
+| #19 | OC `/v1/decide` client in Amortyx (phase-2 consult path) | **done** — shipped in Amortyx router 0.8.0 (plan #177), config-dormant; activation was config-only |
+| #20 | Dual-arm validation: direct vs through-pre-router | **in progress** — phase-1 shadow window IS the first dual-arm (dispatch unchanged = parity by construction); live receipt 2026-10-26: consult p50 ~3 ms / max 9 ms (budget met), 22/22 `complexity_agreed: false` divergence recorded (builtin 3-chars/token estimate inflates trivial probes), honest `abstain` at 0.36 on provider ranking with dispatch byte-identical. Promotion per §7 after ≥1 week of shadow evidence, per-decision |
+| #21 | Token-reduction design doc | **done** (2026-10-26) — `docs/planning/token-reduction-router-stack.md`: M1 pre-router classification (live, shadow), M2 no-LLM-needed short-circuit (the real token killer), M3 consult cache, M4 GitForge per-file review gating (biggest billable sink), M5 `job_suggest`, M6 semantic-cache evidence, M7/M8 no-gos; validation protocol per quality.md dual-arm rule; build queue items 1–5 |
+
+Acceptance: enforce-mode promotion only on shadow evidence + abstention
+rate as first-class metric; abstain degrades byte-identically to today's
+heuristic; every dual-arm reports provider-reported usage as the only
+token truth and stores findings in docs before thread close.
