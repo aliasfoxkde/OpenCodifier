@@ -184,6 +184,27 @@ JevBench RESULTS; jev.page):
 | **Jev-Style-0.8B v3** | **64.1 % (148/231)** | **self-run, official harness — our bridge** |
 | open-jev-zefan-2b | 64.5 % | board |
 | Laya | 58.4 % | official |
+| autotrust/JEV-27B | 88.70 (family-macro) | published (autotrust announcement) — the B2 contamination-audit target |
+
+7. **autotrust/JEV-27B — the contamination-audit arm (queue B2,
+   2026-10-28).** autotrust's own serving path, not a port:
+   `serve_decide.py` (vLLM OpenAI server + `POST /v1/decide` from
+   their HF repo) with their `adapter_vllm/` LoRA and shipped
+   `calibration.json`; the runner (`run_jevbench.py --arm jev27
+   --jev27-endpoint`) posts each task verbatim — kind from the item
+   type, state passthrough, instructions + criteria folded into the
+   single question string the wire carries — with `thinking: "off"`
+   so the row is a pure System-1 audit. Probabilities native as-is
+   (never renormalized), noul false/true mapped to no/yes, failures
+   score incorrect (serial no-retry). Host: Modal H100 burst
+   (~$3-5 of the authorized budget; 27B bf16 + decision head does not
+   fit the T5500 V100 pair, and the head has no llama.cpp path).
+   The audit question: autotrust published **88.70 family-macro** on
+   this split; their model card records training on
+   `SargeDev/jev-distill-corpus-v3` — if their number does not
+   reproduce through their own serving code on our lane, the §14
+   dominance table needs a footnote; if it does, the row is real and
+   the chase target stands.
 
 ## Comparability caveats (stated up front)
 

@@ -977,6 +977,114 @@ class StrandsSystemOneAdapter:
         return res
 
 
+class Jev27Adapter:
+    """autotrust/JEV-27B through its own published serving path.
+
+    POSTs each task to `serve_decide.py`'s POST /v1/decide exactly as
+    autotrust's quickstart does: kind mapped from the task type (noul /
+    score / choice), state passthrough, one question rendered verbatim
+    from the task record (instructions + criteria folded — the wire
+    contract takes a single question string), thinking forced "off" so
+    the row is a pure System-1 audit (their published 88.70 row is the
+    same posture). Response probabilities used as-is (native), never
+    renormalized; predictions left for the harness to derive from the
+    distribution. Failure/HTTP-error => ok=False, which their scoring
+    counts as incorrect (serial no-retry budget semantics).
+
+    The contamination-audit question (burst-compute queue B2): does the
+    published 88.70 family-macro reproduce on our lane with their own
+    serving code, or is the public split training-exposed for them?
+    """
+
+    name = "jev27-systemone"
+    price_input_per_m = 0.0
+    price_output_per_m = 0.0
+    ladder = None
+
+    def __init__(self, endpoint: str, model_label: str, timeout_s: float):
+        self.endpoint = endpoint.rstrip("/")
+        self.model_label = model_label
+        self.timeout_s = timeout_s
+
+    def load(self):
+        pass
+
+    def close(self):
+        pass  # stateless HTTP client; the server is managed externally
+
+    def reserve_estimate(self, _t):
+        return None
+
+    def run(self, t) -> "DecisionResult":
+        import urllib.request  # noqa: PLC0415
+
+        from jevbench.adapters.base import DecisionResult  # noqa: PLC0415
+
+        qtype = t.question["type"]
+        instructions = str(t.question.get("instructions") or "").strip()
+        criteria = t.question.get("criteria")
+        # criteria folded into the question text: the /v1/decide wire
+        # carries one question string, not a criteria dict
+        parts = [p for p in [instructions] if p]
+        if criteria:
+            if isinstance(criteria, dict):
+                rendered = "; ".join(
+                    f"{label}: {text}" for label, text in criteria.items())
+            else:
+                rendered = json.dumps(criteria, ensure_ascii=False)
+            parts.append(rendered)
+        body: dict = {
+            "kind": qtype,
+            "state": t.state,
+            "question": " ".join(parts) if parts else instructions
+            or "Make the decision.",
+            "thinking": "off",
+        }
+        if qtype == "choice":
+            body["options"] = list(t.labels)
+        data = json.dumps(body).encode()
+        req = urllib.request.Request(
+            f"{self.endpoint}/v1/decide", data=data, method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        started = time.perf_counter()
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout_s) as r:
+                parsed = json.loads(r.read())
+        except Exception as e:  # noqa: BLE001 — harness classifies failures
+            return DecisionResult(self.name, False,
+                                  error=f"{type(e).__name__}: {e}",
+                                  probs_source="native",
+                                  model=self.model_label)
+        latency = time.perf_counter() - started
+        res = DecisionResult(self.name, False, status=200, latency_s=latency,
+                             probs_source="native", model=self.model_label,
+                             raw={"qtype": qtype})
+        probs = parsed.get("probabilities")
+        opts = parsed.get("options")
+        if not isinstance(probs, list) or not isinstance(opts, list) \
+                or len(probs) != len(opts) or not opts:
+            res.error = "missing/malformed probabilities/options"
+            return res
+        try:
+            dist = {str(o): float(p) for o, p in zip(opts, probs)}
+        except (TypeError, ValueError) as e:
+            res.error = f"probability parse failed: {e}"
+            return res
+        if qtype == "noul":
+            # their wire answers over ["false","true"]; harness wants yes/no
+            false_p = dist.get("false", dist.get("no"))
+            true_p = dist.get("true", dist.get("yes"))
+            if false_p is None or true_p is None:
+                res.error = "noul options not false/true"
+                return res
+            res.probs = {"yes": true_p, "no": false_p}
+        else:
+            res.probs = dist
+        res.ok = True
+        return res
+
+
 class NliOnnxAdapter:
     """Zero-shot NLI cross-encoder through ONNX Runtime (PLAN 24j; arm of
     record `MoritzLaurer/deberta-v3-base-zeroshot-v2.0`, its own published
@@ -1526,7 +1634,7 @@ def main() -> int:
         "--arm",
         required=True,
         choices=["engine", "fork_4b", "jev_native", "vtx", "nli", "gguf",
-                 "slot", "minicpm", "strands"],
+                 "slot", "minicpm", "strands", "jev27"],
     )
     ap.add_argument(
         "--slot-base",
@@ -1588,6 +1696,17 @@ def main() -> int:
         "--strands-model",
         default="strands-decider",
         help="model label sent in /v1/systemone requests (strands arm)",
+    )
+    ap.add_argument(
+        "--jev27-endpoint",
+        default=None,
+        help="base URL of a serve_decide.py vLLM server running "
+             "autotrust/JEV-27B (required with --arm jev27)",
+    )
+    ap.add_argument(
+        "--jev27-model",
+        default="autotrust/JEV-27B",
+        help="model label recorded for the jev27 arm",
     )
     ap.add_argument(
         "--strands-ckpt",
@@ -1709,6 +1828,9 @@ def main() -> int:
     elif args.arm == "strands":
         adapter = StrandsSystemOneAdapter(args.strands_endpoint,
                                           args.strands_model, args.timeout)
+    elif args.arm == "jev27":
+        adapter = Jev27Adapter(args.jev27_endpoint, args.jev27_model,
+                               args.timeout)
     else:
         adapter = JevNativeBridgeAdapter(args.model_dir, args.threads, args.timeout)
 
@@ -1927,6 +2049,14 @@ def main() -> int:
                        "native as-is, never renormalized; no label "
                        "override — predictions derived from the "
                        "distribution like the official adapter's rows",
+            "jev27": "task kind/state verbatim + instructions/criteria "
+                     "folded into one question string into autotrust's "
+                     "own serve_decide.py POST /v1/decide (their "
+                     "published serving path); thinking forced off = "
+                     "pure System-1 audit; probabilities native as-is, "
+                     "never renormalized; noul false/true mapped to "
+                     "no/yes; failures score incorrect (serial "
+                     "no-retry); contamination-audit leg of B2",
         }[args.arm],
         "determinism": determinism,
         "adapter_warnings": getattr(adapter, "warnings", []),

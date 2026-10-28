@@ -38,8 +38,33 @@ training stays user-gated per TRAINING.md §8 non-goals.
 - **Timeline:** prep (env + corpus upload + smoke) 1 session (day 1);
   train 2-3 sessions (days 2-5); eval legs + gate 0.5 day (day 6);
   conditional JevBench leg +0.5 day. **Total ≈ 1 week.**
+- **Session log (updated 2026-10-28):** session 1 ran to the 12 h cap
+  (kill at step ~2220/11009, upload cell never fired; trainer state
+  step=2000, val 0.0161 / tok_acc 0.9938, train loss 0.077 falling).
+  Recovery via kernel-output harvest + manual HF upload worked; run
+  rate ~193 steps/h ⇒ full epoch ≈ 57 h ≈ 5 sessions if unmodified.
+  Trainer **v6** shipped into the pipeline before session 3: (a)
+  resume-state is uploaded to the HF repo from inside the trainer
+  after every ckpt (`--hf-upload-repo/--hf-upload-token`, background
+  thread, upload failure never kills training) — a 12 h kill now
+  loses at most one upload interval; (b) val-plateau early stop
+  (`--early-stop-patience 6` = 3k steps without best-val gain at
+  val_every 500), plateau counter survives resume. Fingerprint
+  unchanged, so the step-2000 state resumes under v6. Expected: 2-3
+  sessions total instead of 5, depending on plateau onset.
 
-### B2. JEV-27B contamination-audit probe [needs paid burst or T5500]
+### B2. JEV-27B contamination-audit probe [STAGED, blocked on Modal spend limit — 2026-10-28]
+- **Staged:** runner arm `jev27` shipped (`run_jevbench.py --arm jev27`
+  — autotrust's own serve_decide.py POST /v1/decide, thinking off,
+  probabilities native); Modal burst app
+  `benchmarks/decision-model/modal/run_b2_modal.py` (H100, weights in
+  the `jev27-weights` volume, in-process 231 replay); `huggingface`
+  Modal secret created. JEVBENCH.md arm entry 7 records the contract.
+- **Blocker:** first launch refused — "Workspace has exceeded its
+  spend limit" (no cost incurred). Operator action: raise the Modal
+  spend cap; the burst fires unchanged afterward.
+- **Host note:** T5500 ruled out — 2×V100 32 GB cannot hold 27B bf16
+  + decision head, and the head has no llama.cpp path.
 - **Ask:** run `autotrust/JEV-27B` over JevBench-231 through our
   engine bridge to establish the board-topper's true number on our
   lane (contamination audit; §14 dominance question).
