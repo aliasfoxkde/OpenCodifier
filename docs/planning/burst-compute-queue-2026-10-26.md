@@ -68,6 +68,30 @@ training stays user-gated per TRAINING.md §8 non-goals.
   4000 — re-push the same kernel when the quota window reopens
   (~2.5 sessions remain of work: 4300→11009 ≈ 6700 steps at
   ~115 steps/h).
+- **Session-3 output verification (2026-10-29):** kernel output
+  re-fetched and checked — `resume-state.pt` is step=4000 (best
+  0.0119@4000, plateau 0, next_start=64000, 64 adapter tensors,
+  fingerprint data_sha c3118226… matching the corpus), sha256
+  03de354716b34d9f and **byte-identical to the copy on HF**
+  (`ckpt/resume-state.pt` in the private dataset repo). Val curve
+  0.0260→0.0119 through 4000, still improving, no plateau
+  (early-stop never armed); train window loss 0.0462 and falling
+  at the kill. `adapter-best/` @step-4000 also present in the
+  output. **One gap found and closed: the v6 trainer was never
+  committed to the repo** — it existed only in /var/tmp and the HF
+  repo; now committed (`benchmarks/decision-model/runner/
+  e1_train.py`, sha 4c89d244…, byte-identical to the HF copy).
+- **Quota re-probe (2026-10-29 13:49 UTC): still blocked** — push
+  refused with "Maximum weekly GPU quota of 30.00 hours reached";
+  the push was a no-op and no quota was consumed. Kernel metadata
+  verified intact (T4, internet, private, dataset source attached)
+  and the notebook's resume path re-read: cell 2 pulls
+  `ckpt/resume-state.pt` into the run dir and cell 4 passes
+  `--resume`, so a re-push continues from step 4000 unchanged.
+  Kaggle does not publish the reset time; community reports put
+  the weekly GPU quota reset at the Friday/Saturday midnight-UTC
+  boundary — re-push after that and check the status before
+  assuming a run started.
 
 ### B6. d1-2B survey arm — DONE (2026-10-28)
 - LiquidAI/d1-2B (commercial decision model, lfm1.0 license —

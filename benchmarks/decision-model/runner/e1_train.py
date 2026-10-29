@@ -176,6 +176,10 @@ RELATIONAL_SOURCES = (
 )
 
 
+class EarlyStop(Exception):
+    """Raised by maybe_checkpoint when --early-stop-patience fires."""
+
+
 def row_family(row: dict) -> str:
     """Suite-family tag for one corpus row (see RELATIONAL_SOURCES)."""
     source = str(row.get("source") or "")
@@ -376,6 +380,19 @@ def main() -> int:
                     help="write resume-state.pt every N optimizer "
                          "steps (torn exposure is bounded by this "
                          "interval, not the run length)")
+    ap.add_argument("--hf-upload-repo", default="",
+                    help="HF dataset repo id; after each resume-state "
+                         "write, upload it to <repo>/ckpt/ in a "
+                         "background thread so a host kill loses at "
+                         "most one upload interval of progress "
+                         "(empty = disabled)")
+    ap.add_argument("--hf-upload-token", default="",
+                    help="HF token for --hf-upload-repo (required "
+                         "with it)")
+    ap.add_argument("--early-stop-patience", type=int, default=0,
+                    help="stop after N consecutive val points with no "
+                         "best-val-loss improvement (0 = train the "
+                         "full schedule)")
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
 
@@ -855,6 +872,9 @@ def main() -> int:
         return overall, per_family, tok_acc, ent_mean
 
     best = {"step": -1, "val_loss": float("inf")}
+    # consecutive val points without a new best; survives resume via
+    # the checkpoint (like best/val_history)
+    plateau = {"count": 0}
     val_history: list[dict] = []
 
     def maybe_checkpoint(step: int) -> None:
@@ -867,9 +887,23 @@ def main() -> int:
         if val_loss < best["val_loss"]:
             best["step"] = step
             best["val_loss"] = val_loss
+            plateau["count"] = 0
             model.save_pretrained(str(args.out / "adapter-best"))
             log(f"best -> adapter-best/ (step={step} "
                 f"loss={val_loss:.4f})")
+        else:
+            plateau["count"] += 1
+            log(f"plateau={plateau['count']}"
+                f"/{args.early_stop_patience} (step={step} "
+                f"loss={val_loss:.4f} "
+                f"best={best['val_loss']:.4f})")
+        if (args.early_stop_patience > 0
+                and plateau["count"] >= args.early_stop_patience):
+            log(f"EARLY STOP: no best-val improvement over "
+                f"{args.early_stop_patience} val points "
+                f"(best step={best['step']} "
+                f"loss={best['val_loss']:.4f})")
+            raise EarlyStop()
 
     window: deque[float] = deque(maxlen=100)
     cum_loss = 0.0
@@ -919,6 +953,79 @@ def main() -> int:
             torch.cuda.set_rng_state_all(
                 [s.cpu() for s in state["cuda"]])
 
+    def build_manifest(complete: bool, peak_mem: int = 0) -> dict:
+        return {
+            "manifest_version": ("opencodifier.e1-train/6" if complete
+                                 else "opencodifier.e1-train/6-partial"),
+            "complete": complete,
+            "resume": resumed_from,
+            "ckpt_every": args.ckpt_every,
+            "early_stop": {"patience": args.early_stop_patience,
+                           "stopped_early": args.early_stop_patience > 0
+                           and plateau["count"]
+                           >= args.early_stop_patience,
+                           "final_plateau": plateau["count"]},
+            "hf_upload_repo": args.hf_upload_repo or None,
+            "loss_mode": ("soft-slot-kl+stop-ce" if soft_mode
+                          else "hard-verdict-ce"),
+            "base": args.base,
+            "data": {"path": str(rows_path), "sha256": data_sha,
+                     "rows": len(rows), "train": len(train_feats),
+                     "val": len(val_feats),
+                     "loud_skipped_over_maxlen_train": skipped_train,
+                     "loud_skipped_over_maxlen_val": skipped_val,
+                     "soft_bad_slotprobs_train": soft_bad_train,
+                     "soft_bad_slotprobs_val": soft_bad_val},
+            "row_weight": {"field": args.row_weight_field,
+                           "train_rows": len(train_rws),
+                           "train_nonunit": train_nonunit,
+                           "train_mean": round(sum(train_rws)
+                                               / max(1, len(train_rws)),
+                                               6),
+                           "val_nonunit": val_nonunit},
+            "knobs": {"epochs": args.epochs, "lr": args.lr,
+                      "lora_r": args.lora_r,
+                      "lora_alpha": args.lora_alpha,
+                      "lora_dropout": args.lora_dropout,
+                      "target_modules": ["q_proj", "k_proj", "v_proj",
+                                         "o_proj"],
+                      "batch": args.batch, "accum": args.accum,
+                      "max_len": args.max_len, "dtype": args.dtype,
+                      "attn": args.attn, "warmup": args.warmup,
+                      "seed": args.seed, "torch_seeded": True,
+                      "val_frac": args.val_frac,
+                      "val_cap": args.val_cap,
+                      "val_every": args.val_every,
+                      "family_weight": fam_weights,
+                      "length_bucket": args.length_bucket,
+                      "grad_checkpoint": not args.no_grad_checkpoint,
+                      "soft_labels": args.soft_labels,
+                      "teacher_temp": args.teacher_temp,
+                      "stop_weight": args.stop_weight},
+            "optimizer": {"name": "AdamW",
+                          "weight_decay": opt.defaults["weight_decay"],
+                          "betas": list(opt.defaults["betas"]),
+                          "eps": opt.defaults["eps"]},
+            "versions": {"python": platform.python_version(),
+                         "torch": torch.__version__,
+                         "transformers": transformers.__version__,
+                         "peft": peft.__version__},
+            "steps": step,
+            "final_loss_token_weighted": round(
+                cum_loss / max(1, cum_tokens), 4),
+            "tokens_per_second_wall": round(
+                cum_tokens / max(1e-9, time.time() - t0)),
+            "peak_memory_bytes": peak_mem,
+            "loss_surface": ("slot margins: listwise CE(teacher, softmax) "
+                             "+ EOS stop CE" if soft_mode
+                             else "verdict tokens only (y=1 segments "
+                                  "+ EOS)"),
+            "val_history": val_history,
+            "best_checkpoint": {"step": best["step"],
+                                "val_loss": round(best["val_loss"], 4)}
+            if best["step"] >= 0 else None,
+        }
+
     def save_resume_state(cur_step: int, cur_epoch: int,
                           next_start: int) -> None:
         # atomic: tmp + os.replace, so a power death mid-write
@@ -934,7 +1041,8 @@ def main() -> int:
             "adapter": adapter,
             "opt": opt.state_dict(), "sched": sched.state_dict(),
             "scaler": scaler.state_dict(),
-            "best": best, "val_history": val_history,
+            "best": best, "plateau": plateau,
+            "val_history": val_history,
             "window": list(window),
             "cum_loss": cum_loss, "cum_tokens": cum_tokens,
             "rng": capture_rng(),
@@ -942,6 +1050,39 @@ def main() -> int:
         os.replace(tmp, args.out / "resume-state.pt")
         log(f"resume-state -> step={cur_step} "
             f"(epoch={cur_epoch} next_start={next_start})")
+        # partial manifest (v6): a cap-killed or crashed session keeps
+        # its data-quality counts and val history — the fields that
+        # previously existed only in the final manifest
+        (args.out / "train-manifest.json").write_text(
+            json.dumps(build_manifest(complete=False), indent=1) + "\n")
+        if args.hf_upload_repo:
+            import threading
+            def _upload() -> None:
+                try:
+                    from huggingface_hub import HfApi
+                    api = HfApi(token=args.hf_upload_token)
+                    api.upload_file(
+                        path_or_fileobj=str(args.out
+                                            / "resume-state.pt"),
+                        path_in_repo="ckpt/resume-state.pt",
+                        repo_id=args.hf_upload_repo,
+                        repo_type="dataset",
+                        commit_message=(
+                            f"t34 resume-state step={cur_step}"))
+                    api.upload_file(
+                        path_or_fileobj=str(args.out
+                                            / "train-manifest.json"),
+                        path_in_repo="ckpt/train-manifest.json",
+                        repo_id=args.hf_upload_repo,
+                        repo_type="dataset",
+                        commit_message=(
+                            f"t34 partial manifest step={cur_step}"))
+                    log(f"hf upload ok -> ckpt/ "
+                        f"(step={cur_step})")
+                except Exception as exc:  # upload must never
+                    # kill training; the next ckpt retries anyway
+                    log(f"hf upload FAILED (step={cur_step}): {exc}")
+            threading.Thread(target=_upload, daemon=True).start()
 
     if args.resume is not None:
         ckpt_path = args.resume / "resume-state.pt"
@@ -965,6 +1106,8 @@ def main() -> int:
         scaler.load_state_dict(state["scaler"])
         best = state["best"]
         val_history = state["val_history"]
+        # v5 states predate the plateau counter; absence = fresh count
+        plateau["count"] = int(state.get("plateau", {}).get("count", 0))
         window.clear()
         window.extend(state["window"])
         cum_loss = state["cum_loss"]
@@ -1078,7 +1221,12 @@ def main() -> int:
                             f"({args.profile_steps} steps)")
                         profiler = None
                 if args.val_every > 0 and step % args.val_every == 0:
-                    maybe_checkpoint(step)
+                    try:
+                        maybe_checkpoint(step)
+                    except EarlyStop:
+                        save_resume_state(step, epoch,
+                                          start + args.batch)
+                        raise SystemExit(0)
                 if step % args.ckpt_every == 0:
                     # after maybe_checkpoint so the state carries
                     # this step's val point if one just fired
@@ -1092,65 +1240,7 @@ def main() -> int:
     tok.save_pretrained(str(args.out / "adapter"))
     peak_mem = (int(torch.cuda.max_memory_allocated())
                 if torch.cuda.is_available() else 0)
-    manifest = {
-        "manifest_version": "opencodifier.e1-train/5",
-        "resume": resumed_from,
-        "ckpt_every": args.ckpt_every,
-        "loss_mode": ("soft-slot-kl+stop-ce" if soft_mode
-                      else "hard-verdict-ce"),
-        "base": args.base,
-        "data": {"path": str(rows_path), "sha256": data_sha,
-                 "rows": len(rows), "train": len(train_feats),
-                 "val": len(val_feats),
-                 "loud_skipped_over_maxlen_train": skipped_train,
-                 "loud_skipped_over_maxlen_val": skipped_val,
-                 "soft_bad_slotprobs_train": soft_bad_train,
-                 "soft_bad_slotprobs_val": soft_bad_val},
-        "row_weight": {"field": args.row_weight_field,
-                       "train_rows": len(train_rws),
-                       "train_nonunit": train_nonunit,
-                       "train_mean": round(sum(train_rws)
-                                           / max(1, len(train_rws)), 6),
-                       "val_nonunit": val_nonunit},
-        "knobs": {"epochs": args.epochs, "lr": args.lr,
-                  "lora_r": args.lora_r, "lora_alpha": args.lora_alpha,
-                  "lora_dropout": args.lora_dropout,
-                  "target_modules": ["q_proj", "k_proj", "v_proj",
-                                     "o_proj"],
-                  "batch": args.batch, "accum": args.accum,
-                  "max_len": args.max_len, "dtype": args.dtype,
-                  "attn": args.attn, "warmup": args.warmup,
-                  "seed": args.seed, "torch_seeded": True,
-                  "val_frac": args.val_frac,
-                  "val_cap": args.val_cap, "val_every": args.val_every,
-                  "family_weight": fam_weights,
-                  "length_bucket": args.length_bucket,
-                  "grad_checkpoint": not args.no_grad_checkpoint,
-                  "soft_labels": args.soft_labels,
-                  "teacher_temp": args.teacher_temp,
-                  "stop_weight": args.stop_weight},
-        "optimizer": {"name": "AdamW",
-                      "weight_decay": opt.defaults["weight_decay"],
-                      "betas": list(opt.defaults["betas"]),
-                      "eps": opt.defaults["eps"]},
-        "versions": {"python": platform.python_version(),
-                     "torch": torch.__version__,
-                     "transformers": transformers.__version__,
-                     "peft": peft.__version__},
-        "steps": step,
-        "final_loss_token_weighted": round(
-            cum_loss / max(1, cum_tokens), 4),
-        "tokens_per_second_wall": round(
-            cum_tokens / max(1e-9, time.time() - t0)),
-        "peak_memory_bytes": peak_mem,
-        "loss_surface": ("slot margins: listwise CE(teacher, softmax) "
-                         "+ EOS stop CE" if soft_mode
-                         else "verdict tokens only (y=1 segments + EOS)"),
-        "val_history": val_history,
-        "best_checkpoint": {"step": best["step"],
-                            "val_loss": round(best["val_loss"], 4)}
-        if best["step"] >= 0 else None,
-    }
+    manifest = build_manifest(complete=True, peak_mem=peak_mem)
     (args.out / "train-manifest.json").write_text(
         json.dumps(manifest, indent=1) + "\n")
     log(f"manifest -> {args.out / 'train-manifest.json'}")
