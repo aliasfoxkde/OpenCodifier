@@ -30,6 +30,8 @@ lint:
 test:
     cargo test --workspace
     cargo test -p opencodifier-model --features llamacpp,tokenizers
+    sh -n scripts/install-prebuilt.sh
+    python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 # Build and test documentation examples.
 doc:
@@ -472,6 +474,12 @@ release-notes:
         --output dist/RELEASE_NOTES.md \
         --force \
         "${args[@]}"
+
+# Fail closed before publication: release tag/commit/version, clean source,
+# complete target set, identical dependencies/toolchain, generated notes,
+# and checksums must all agree.
+release-set-verify:
+    python3 scripts/verify_release_set.py
 
 # Sync the benchmark board CSV into the site deploy directory. Run after any
 # `runner/board_csv.py` regeneration and before `wrangler pages deploy site`

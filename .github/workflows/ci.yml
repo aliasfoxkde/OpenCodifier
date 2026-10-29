@@ -35,6 +35,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --workspace
       - run: cargo test --doc
+      - run: sh -n scripts/install-prebuilt.sh
+      - run: python3 -m unittest discover -s tests -p 'test_*.py' -v
 
   doc:
     runs-on: ubuntu-latest
