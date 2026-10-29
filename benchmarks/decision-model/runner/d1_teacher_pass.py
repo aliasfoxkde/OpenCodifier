@@ -14,8 +14,10 @@ Output rows: {"id", "record_id", "question", "qtype", "probs", "label",
 import argparse
 import json
 import logging
+import threading
 import time
 import urllib.request
+from queue import Queue
 
 ITEMS = "/nas/Temp/work/oc-model-eval/corpora/teacher-items-v1/items.jsonl"
 
@@ -25,6 +27,8 @@ logger = logging.getLogger("d1_teacher_pass")
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--endpoint", default="http://127.0.0.1:8756")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="concurrent requests (match llama-server -np)")
     parser.add_argument("--items", default=ITEMS)
     parser.add_argument("--pool-ids",
                         default="/nas/Temp/work/oc-model-eval/runs/d1-teacher-v1/pool_record_ids.json")
@@ -142,10 +146,30 @@ def main():
     logger.info("pending %d (pool-first %d pool, %d other); completed %d",
                 len(queue), len(pool_items), len(other_items), len(completed))
 
-    votes = 0
-    started = time.time()
-    with open(args.out, "a", buffering=1) as out:
-        for item in queue:
+    # Parallel voting: worker threads share the single append-only output
+    # file behind a writer thread; resume semantics are unchanged because
+    # the completed-id set was snapshotted above and rows are only
+    # appended once. --limit bounds NEW votes; the overshoot past the
+    # limit is at most workers-1 items.
+    progress = {"done": 0, "ok": 0, "started": time.time()}
+    progress_lock = threading.Lock()
+    write_q = Queue()
+    write_done = threading.Event()
+
+    def writer():
+        with open(args.out, "a", buffering=1) as out:
+            while True:
+                row = write_q.get()
+                if row is None:
+                    write_done.set()
+                    return
+                out.write(json.dumps(row) + "\n")
+
+    def worker():
+        while True:
+            item = work_q.get()
+            if item is None:
+                return
             row = vote(item, args.endpoint)
             # Only completed votes go in the resume file; transient
             # failures (5xx, timeouts) stay pending for the next resume.
@@ -159,18 +183,41 @@ def main():
                 logger.warning("transient failure %s: %s (not recorded)",
                                row["id"], row["error"])
             else:
-                out.write(json.dumps(row) + "\n")
-            votes += 1
+                write_q.put(row)
+            with progress_lock:
+                progress["done"] += 1
+                if row["ok"]:
+                    progress["ok"] += 1
+                n = progress["done"]
+                stop = bool(args.limit and n >= args.limit)
+                if n % 50 == 0:
+                    rate = n / (time.time() - progress["started"])
+                    eta_h = (len(queue) - n) / rate / 3600 if rate else 0.0
+                    logger.info("%d/%d ok=%d (%.2f/s, ETA %.1f h)",
+                                n, len(queue), progress["ok"], rate, eta_h)
             if not row["ok"] and not transient:
                 logger.warning("vote failed %s: %s", row["id"], row["error"])
-            if votes % 50 == 0:
-                rate = votes / (time.time() - started)
-                eta_h = (len(queue) - votes) / rate / 3600 if rate else 0.0
-                logger.info("%d/%d (%.2f/s, ETA %.1f h)",
-                            votes, len(queue), rate, eta_h)
-            if args.limit and votes >= args.limit:
-                break
-    logger.info("finished %d new votes -> %s", votes, args.out)
+            work_q.task_done()
+            if stop:
+                return
+
+    work_q = Queue()
+    for item in queue:
+        if args.limit and work_q.qsize() >= args.limit:
+            break
+        work_q.put(item)
+    for _ in range(args.workers):
+        work_q.put(None)
+    threading.Thread(target=writer, daemon=True).start()
+    threads = [threading.Thread(target=worker) for _ in range(args.workers)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    write_q.put(None)
+    write_done.wait(timeout=30)
+    logger.info("finished %d new votes (%d ok) -> %s",
+                progress["done"], progress["ok"], args.out)
 
 
 if __name__ == "__main__":
