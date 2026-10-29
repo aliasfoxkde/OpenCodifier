@@ -66,7 +66,7 @@ A release candidate must satisfy all of these before the public GitHub mirror is
 - [x] Add a user-local prebuilt installer with platform detection, version pinning, bounded downloads, strict attestation checks, atomic install, and non-destructive failure behavior.
 - [x] Add contract tests for supported/unsupported platforms, wrong target, malformed schema, SHA/size mismatch, dirty provenance, version mismatch, and preserving the previous install.
 - [ ] Document offline/manual asset installation and exact requirements (`curl`, Python 3 standard library, a supported shell); Rust is not an install-time dependency.
-- [x] Re-key the version-dependent WASM conformance cache hash for 0.6.2; the regenerated diff changes only that hash, not the answer/confidence/outcome.
+- [x] Re-key the version-dependent WASM conformance cache hashes for 0.6.2; the three regenerated diffs change only cache hashes, not answers/confidence/outcomes.
 
 ### Phase 2 — Release provenance and runbook
 
