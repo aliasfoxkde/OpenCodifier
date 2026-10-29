@@ -104,6 +104,17 @@ training stays user-gated per TRAINING.md §8 non-goals.
   overshoot. Transient server failures are not recorded, so resume
   re-votes them; permanent parse failures stay recorded so a poisoned
   item cannot loop. Committed on `sync/runner-parallel-teacher`.
+- **Throughput finding (2026-10-29):** the 4-worker pass runs at
+  ~0.07-0.08 votes/s (p50 ~26 s/vote on the local CPU Q8_0 server,
+  4-way concurrent) ⇒ **full stream (185,063 items) ETA ≈ 630-730 h
+  wall — not viable on this host.** The pre-registered pool slice
+  (9,810 quarantine-pool items first) completes in ~37 h and IS
+  viable; it is the active run (pool-first ordering in the runner).
+  Decision: treat the full stream as host-blocked; revisit only on a
+  faster lane (t5500 2×V100 or fedora 5060 Ti serving the same
+  llama-server contract). Until then the pass doubles as the pool
+  slice and pauses (resume-safe) after pool completion unless the
+  operator extends scope.
   through llama.cpp v0.8.0 `/v1/systemone` (`run_jevbench.py --arm d1`,
   local CPU Q8_0, ~2.3 h wall). **0.7489 acc / 0.7616 macro / ECE 0.065 /
   Brier 0.279**, 231/231 valid, 0 failures, p50 5.9 s. Second-best
