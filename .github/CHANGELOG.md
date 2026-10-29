@@ -6,11 +6,11 @@ project does not yet guarantee a stable public API — version `0.x`
 releases may break, and every breaking change is recorded in this file
 (and reflected in `docs/DECISIONS.md` where a binding decision moves).
 
-## [0.6.2] — 2026-10-29
+## [0.6.2] — Unreleased
 
-The 0.6.2 release packages the current engine/CLI from a clean tagged
-source tree and adds a verified prebuilt installation path. It does not
-include model weights in the binary release.
+The planned 0.6.2 release will package the current engine/CLI from a clean
+tagged source tree and add a verified prebuilt installation path. It will
+not include model weights in the binary release.
 
 ### Added
 
