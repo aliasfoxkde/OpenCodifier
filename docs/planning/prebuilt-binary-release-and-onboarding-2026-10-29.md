@@ -1,6 +1,6 @@
 # Prebuilt binary releases and clean OpenCodifier onboarding
 
-> **Status:** active plan and implementation record — 2026-10-29. The existing release is an observed baseline; the proposed clean release is not published yet.
+> **Status:** active plan and implementation record — 2026-10-29. The v0.6.2 candidate is built and locally validated for Linux x86_64 GNU and musl; the release is not published yet.
 
 ## Objective
 
@@ -18,6 +18,16 @@ Observed 2026-10-29 from source, release metadata, and a real Fedora-host run:
 - The GitForge `.gitforge.yml` pipeline is the quality-gate authority. GitHub Actions is explicitly a mirror and must not become a competing CI/release gate.
 - The Amortyx-Stack bootstrap currently clones OpenCodifier and invokes Cargo. That makes the target host install Rust and compile the full workspace even though prebuilt CLI assets already exist.
 - The existing per-binary attestation verifies artifact bytes and records build metadata, but it is not itself a cryptographic signature. GitHub documents release immutability and signed build attestations as stronger provenance/integrity mechanisms; configure/enable these where the hosting policy supports them.
+
+## Validation evidence (2026-10-29)
+
+- PR `#11` is based on `origin/main` and currently points to `9fc6e648fcddb3aa24128a355b8fdc107aabd2c9`. GitHub mirror checks for lint, tests, docs, E2E, supply chain, and code analysis all pass at this commit.
+- Fedora 44 built both `x86_64-unknown-linux-gnu` and the installer-selected `x86_64-unknown-linux-musl` assets from the clean PR commit. Their generated per-asset attestations verify. Both binaries passed **30/30** E2E checks.
+- A fresh `python:3.12-slim` consumer container received curl and CA certificates, with no Rust compiler or Cargo present. The actual installer downloaded the staged musl asset from a local release-shaped directory, verified its attestation, installed `opencodifier 0.6.2`, and passed **30/30** E2E checks. No daemon or service was started.
+- The installer/attestation contract suite passes **11/11** tests. Shell syntax, Python byte-compilation, locked Cargo metadata, and `git diff --check` pass.
+- Fedora `just ci` passed format, clippy, workspace tests, docs, cargo-deny, and cargo-audit, then stopped at Aegis. The host Aegis is 0.6.1 while the cached CI image is 0.6.3. That image also reports zero baseline suppressions and 20,832 unmatched findings on `origin/main`; this is pre-existing scanner/baseline drift, not a clean PR receipt. The baseline was left unchanged rather than regenerated to silence the mismatch.
+- GitForge reports degraded/build-drift service state. Its OpenCodifier pipeline has no observed run for the PR commit; the listed run is pinned to another commit. The required GitForge receipt is still outstanding.
+- Fedora's release preflight has all listed targets ready except Android NDK and `wasm-pack`. The full release matrix therefore remains incomplete.
 
 ## Target behavior
 
@@ -70,17 +80,18 @@ A release candidate must satisfy all of these before the public GitHub mirror is
 
 ### Phase 2 — Release provenance and runbook
 
-- [ ] Strengthen release-set verification to require clean source, tag/version agreement, one commit/lockfile/dependency tree across all targets, and a complete matrix.
-- [ ] Verify the checksum manifest itself against every staged artifact and reject omitted, duplicate, or unexpected entries.
+- [x] Strengthen release-set verification to require clean source, tag/version agreement, one commit/lockfile/dependency tree across all targets, and a complete matrix.
+- [x] Verify the checksum manifest itself against every staged artifact and reject omitted, duplicate, or unexpected entries.
 - [ ] Add a reproducible release runbook using GitForge as gate authority, Fedora for heavy release builds, checksum/attestation verification, draft upload, clean consumer install, then publication.
-- [ ] Add an update/rollback contract: explicit version pin, verify-before-replace, retain prior binary or provide a one-command reinstall of the previous pinned version.
-- [ ] Document signed provenance/immutable release options and the limitation of unsigned JSON SHA records.
+- [x] Add an update/rollback contract: explicit version pin, verify-before-replace, retain prior binary or provide a one-command reinstall of the previous pinned version.
+- [x] Document signed provenance/immutable release options and the limitation of unsigned JSON SHA records.
 
 ### Phase 3 — Clean release candidate
 
 - [ ] Merge the reviewed implementation through the normal PR path and obtain a GitForge gate receipt for the exact commit.
 - [ ] Build a new patch release from a clean tagged commit; build every existing release target and record native versus link-only evidence honestly.
-- [ ] Validate Linux x86_64 prebuilt install and E2E on Fedora without Rust/Cargo present in the disposable consumer environment.
+- [x] Validate the staged Linux x86_64 musl candidate in a fresh consumer container without Rust/Cargo; installation and E2E passed.
+- [ ] Re-download the exact draft-release asset and repeat attestation/install/E2E before publication.
 - [ ] Publish a draft release, verify the exact downloaded bytes and metadata, and publish only after the consumer test passes.
 
 ### Phase 4 — Amortyx-Stack integration
