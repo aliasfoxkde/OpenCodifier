@@ -4290,3 +4290,70 @@ confirms codify_gate covers our agent-facing lane with a different
 (better-calibrated, self-hosted) mechanism; their sharding and
 two-question patterns are recorded for the gate docs if the agent
 roster use-case grows.
+
+## §33 — jevgrep re-read + Tev1-4B audit: two production decision models, both shipping uncalibrated (2026-10-29, user-directed)
+
+Fresh reads of `github.com/dzhng/jevgrep` (extends §15.7) and
+`github.com/togethercomputer/tev1` + HF `togethercomputer/
+Tev1-4B-experimental`. Both are live members of the decision-model
+family; the headline is what they *lack*.
+
+### jevgrep (re-read, v0.5.0 era)
+
+- **Wire contract is now literally ours**: classification goes through
+  the AI SDK's `experimental_evaluate` — `state` + `questions` with
+  boolean questions returning probabilities, separate judgments
+  (relevance / scope / reference), role classifier, priority question.
+  Independent convergence on the OpenCodifier request shape.
+- **No calibration anywhere in the tree**: raw probability as a
+  relevance score, fixed `relevanceBoundary = 0.5`, weak-positive
+  suppression via `weakScoreCeiling = 0.6` (`retrieve.ts:27`),
+  no ECE, no reliability curve, no verifier. This is the
+  counter-example D15 exists for — a shipped system gating on
+  uncalibrated model preferences.
+- **Cache-key discipline matches ours**: SHA-256 over
+  `{schema, request}` with a namespace carrying model/provider/
+  protocol/policy/parser/prompt versions — same invalidation
+  posture as our `CacheKeyBuilder`.
+- **Eval-harness template** (`evals/results/`): immutable saved
+  baselines never re-run, Jev cost reported separately from agent
+  cost, official grader only, per-task receipts + SHA-256
+  provenance, explicit "not a holdout" language. Fresh numbers:
+  8/10 both arms, ~26–29 % total-cost reduction on tuned Python
+  SWE-bench (10 tasks, single-run, self-disclosed).
+
+### Tev1-4B-experimental (Together AI, "Jev-inspired")
+
+- **What it is**: LoRA SFT (r8, 1 epoch, lr 5e-5) of
+  Qwen/Qwen3.5-4B(-Base) on 37,840 public-data rows (MultiNLI/
+  BoolQ/Banking77/AG News/SST-5 + synthetic policies/routing),
+  completion = option letter + EOS under a constrained-generation
+  regex. Their blog: "your own Jev for $17". Repo MIT; weights
+  license "still being finalized"; letter-only **choice** rows —
+  no boolean, no score, strictly narrower than our verdict-slot
+  format.
+- **No calibration, stated**: card and README say "logprobs are
+  model preferences, not calibrated confidence"; calibration listed
+  as not evaluated; all evals at T=0 with `top_logprobs: 5` read
+  off token 1. Same posture gap as jevgrep, this time on the
+  model side.
+- **Honest third-party rerun** (`evaluation/public-third-party/`):
+  frozen inputs, paired counts vs typesafe/jev-1.13 via OpenRouter,
+  Wilson intervals, no pooled headline — and the result is
+  negative for the recipe: phishing 50.6 % vs Jev 62.9 % with
+  Tev1 recall 1.3 % vs 42.7 % (near-always "legitimate");
+  tool_risk tied 93.3 %; ticket_routing 96.3 vs 100. Their card
+  also flags "reused development benchmarks" — the same
+  surface-overfit admission our calibration correction just
+  proved experimentally.
+- **Strategic read**: Tev1 is evidence that the letter-only public-
+  data SFT recipe does not beat Jev on Jev-family safety tasks,
+  and that the differentiator in this family is exactly the two
+  things we already do — per-kind decision types (bool/score, not
+  just choice) and calibrated confidence (D15/D25). Our d1-2B row
+  (0.7489 board, ECE 0.065 raw) remains the reference point; a
+  Tev1-on-our-board arm is possible but low-priority: no GGUF,
+  weights license unsettled, and its readout is a subset of ours.
+
+**Actions taken**: none immediate. Recorded for the D15 evidence
+file and as competitive context for the board submission.
