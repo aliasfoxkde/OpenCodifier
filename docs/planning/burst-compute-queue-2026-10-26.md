@@ -53,6 +53,17 @@ training stays user-gated per TRAINING.md §8 non-goals.
   unchanged, so the step-2000 state resumes under v6. Expected: 2-3
   sessions total instead of 5, depending on plateau onset.
 
+### B6. d1-2B survey arm — DONE (2026-10-28)
+- LiquidAI/d1-2B (commercial decision model, lfm1.0 license —
+  extraction-teacher-only for us) benchmarked on JevBench public 231
+  through llama.cpp v0.8.0 `/v1/systemone` (`run_jevbench.py --arm d1`,
+  local CPU Q8_0, ~2.3 h wall). **0.7489 acc / 0.7616 macro / ECE 0.065 /
+  Brier 0.279**, 231/231 valid, 0 failures, p50 5.9 s. Second-best
+  single-model row after decider-2b (0.7576), best ECE of any 2B-class
+  arm. Vendor card claims JevBench v1.4.1 77.9 on their protocol.
+  Recorded as JEVBENCH.md arm 8. Not redistributable (lfm1.0 derivative
+  cap); VIVERE output-only extraction is the sanctioned reuse path.
+
 ### B2. JEV-27B contamination-audit probe [STAGED, blocked on Modal spend limit — 2026-10-28]
 - **Staged:** runner arm `jev27` shipped (`run_jevbench.py --arm jev27`
   — autotrust's own serve_decide.py POST /v1/decide, thinking off,

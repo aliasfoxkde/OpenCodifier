@@ -1085,6 +1085,116 @@ class Jev27Adapter:
         return res
 
 
+class D1SystemOneAdapter:
+    """LiquidAI/d1-2B through llama.cpp's /v1/systemone (v0.8.0+).
+
+    Native decision-model wire, one question per request, probabilities
+    native (never renormalized). Rendering mirrors the jev27 arm's
+    recorded conventions: noul criteria fold into the instructions (the
+    harness's no/yes keyed back from the model's false/true noul
+    probability), choice criteria pass through as the criteria dict
+    (label itself when absent — the choice_candidates rule), score
+    levels pass as the positional list. Failure/HTTP-error => ok=False,
+    scored incorrect (serial no-retry budget semantics, same as jev27).
+    """
+
+    name = "d1-2b-systemone"
+    price_input_per_m = 0.0
+    price_output_per_m = 0.0
+    ladder = None
+
+    def __init__(self, endpoint: str, model_label: str, timeout_s: float):
+        self.endpoint = endpoint.rstrip("/")
+        self.model_label = model_label
+        self.timeout_s = timeout_s
+
+    def load(self):
+        pass
+
+    def close(self):
+        pass  # stateless HTTP client; the server is managed externally
+
+    def reserve_estimate(self, _t):
+        return None
+
+    def run(self, t) -> "DecisionResult":
+        import urllib.request  # noqa: PLC0415
+
+        from jevbench.adapters.base import DecisionResult  # noqa: PLC0415
+
+        qtype = t.question["type"]
+        instructions = str(t.question.get("instructions") or "").strip()
+        criteria = t.question.get("criteria")
+        if qtype == "noul" and isinstance(criteria, dict):
+            rendered = "; ".join(
+                f"{label}: {text}" for label, text in criteria.items())
+            instructions = f"{instructions} ({rendered})" if rendered \
+                else instructions
+        question: dict = {"type": qtype, "instructions": instructions}
+        if qtype == "choice":
+            labels = list(t.labels)
+            if isinstance(criteria, dict):
+                question["criteria"] = {
+                    lab: criteria.get(lab, lab) for lab in labels}
+            elif isinstance(criteria, list):
+                question["criteria"] = [
+                    criteria[i] if i < len(criteria) else lab
+                    for i, lab in enumerate(labels)]
+            else:
+                question["criteria"] = {lab: lab for lab in labels}
+        elif qtype == "score":
+            question["criteria"] = (list(criteria)
+                                    if isinstance(criteria, list)
+                                    else list(t.labels))
+        body = {
+            "state": t.state if isinstance(t.state, str)
+            else json.dumps(t.state),
+            "questions": {"q0": question},
+        }
+        data = json.dumps(body).encode()
+        req = urllib.request.Request(
+            f"{self.endpoint}/v1/systemone", data=data, method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        started = time.perf_counter()
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout_s) as r:
+                parsed = json.loads(r.read())
+        except Exception as e:  # noqa: BLE001 — harness classifies failures
+            return DecisionResult(self.name, False,
+                                  error=f"{type(e).__name__}: {e}",
+                                  probs_source="native",
+                                  model=self.model_label)
+        latency = time.perf_counter() - started
+        res = DecisionResult(self.name, False, status=200, latency_s=latency,
+                             probs_source="native", model=self.model_label,
+                             raw={"qtype": qtype})
+        ans = (parsed.get("answers") or {}).get("q0")
+        if not isinstance(ans, dict):
+            res.error = "missing answer q0"
+            return res
+        if qtype == "noul":
+            p_true = ans.get("noul")
+            if not isinstance(p_true, (int, float)):
+                res.error = "missing noul probability"
+                return res
+            res.probs = {"yes": float(p_true), "no": 1.0 - float(p_true)}
+            res.label = "yes" if p_true > 0.5 else "no"
+        else:
+            probs = ans.get("probabilities")
+            if not isinstance(probs, dict) or set(probs) != set(t.labels):
+                res.error = "probabilities do not cover the label set"
+                return res
+            try:
+                res.probs = {lab: float(probs[lab]) for lab in t.labels}
+            except (TypeError, ValueError) as e:
+                res.error = f"probability parse failed: {e}"
+                return res
+            res.label = max(res.probs, key=res.probs.get)
+        res.ok = True
+        return res
+
+
 class NliOnnxAdapter:
     """Zero-shot NLI cross-encoder through ONNX Runtime (PLAN 24j; arm of
     record `MoritzLaurer/deberta-v3-base-zeroshot-v2.0`, its own published
@@ -1634,7 +1744,7 @@ def main() -> int:
         "--arm",
         required=True,
         choices=["engine", "fork_4b", "jev_native", "vtx", "nli", "gguf",
-                 "slot", "minicpm", "strands", "jev27"],
+                 "slot", "minicpm", "strands", "jev27", "d1"],
     )
     ap.add_argument(
         "--slot-base",
@@ -1707,6 +1817,18 @@ def main() -> int:
         "--jev27-model",
         default="autotrust/JEV-27B",
         help="model label recorded for the jev27 arm",
+    )
+    ap.add_argument(
+        "--d1-endpoint",
+        default=None,
+        help="base URL of a llama.cpp (v0.8.0+) server /v1/systemone "
+             "endpoint serving a d1 decision model "
+             "(required with --arm d1)",
+    )
+    ap.add_argument(
+        "--d1-model",
+        default="LiquidAI/d1-2B",
+        help="model label recorded for the d1 arm",
     )
     ap.add_argument(
         "--strands-ckpt",
@@ -1831,6 +1953,11 @@ def main() -> int:
     elif args.arm == "jev27":
         adapter = Jev27Adapter(args.jev27_endpoint, args.jev27_model,
                                args.timeout)
+    elif args.arm == "d1":
+        if args.d1_endpoint is None:
+            ap.error("--arm d1 requires --d1-endpoint")
+        adapter = D1SystemOneAdapter(args.d1_endpoint, args.d1_model,
+                                     args.timeout)
     else:
         adapter = JevNativeBridgeAdapter(args.model_dir, args.threads, args.timeout)
 
@@ -2057,6 +2184,13 @@ def main() -> int:
                      "never renormalized; noul false/true mapped to "
                      "no/yes; failures score incorrect (serial "
                      "no-retry); contamination-audit leg of B2",
+            "d1": "native /v1/systemone one-question requests to a "
+                  "llama.cpp v0.8.0+ server running a d1 decision model; "
+                  "noul criteria folded into instructions, choice "
+                  "criteria as the criteria dict (label when absent), "
+                  "score levels positional; probabilities native as-is, "
+                  "never renormalized; noul p(true) mapped to no/yes; "
+                  "failures score incorrect (serial no-retry)",
         }[args.arm],
         "determinism": determinism,
         "adapter_warnings": getattr(adapter, "warnings", []),
