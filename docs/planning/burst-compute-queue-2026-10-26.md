@@ -96,6 +96,14 @@ training stays user-gated per TRAINING.md §8 non-goals.
 ### B6. d1-2B survey arm — DONE (2026-10-28)
 - LiquidAI/d1-2B (commercial decision model, lfm1.0 license —
   extraction-teacher-only for us) benchmarked on JevBench public 231
+
+  - **Teacher-runner scope decision (2026-10-29):** the d1 teacher pass
+  (`d1_teacher_pass.py`) was made concurrent — 4 worker threads
+  matching llama-server `-np 4`, single writer thread over the same
+  append-only resume file, `--limit` bounds new votes with ≤workers-1
+  overshoot. Transient server failures are not recorded, so resume
+  re-votes them; permanent parse failures stay recorded so a poisoned
+  item cannot loop. Committed on `sync/runner-parallel-teacher`.
   through llama.cpp v0.8.0 `/v1/systemone` (`run_jevbench.py --arm d1`,
   local CPU Q8_0, ~2.3 h wall). **0.7489 acc / 0.7616 macro / ECE 0.065 /
   Brier 0.279**, 231/231 valid, 0 failures, p50 5.9 s. Second-best
