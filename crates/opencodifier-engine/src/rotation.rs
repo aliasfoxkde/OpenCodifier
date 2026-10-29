@@ -378,11 +378,11 @@ fn betacf(x: f64, aa: f64, bb: f64) -> f64 {
     const MAX_IT: usize = 200;
     const EPS: f64 = 3.0e-12;
     const FPMIN: f64 = 1.0e-300;
-    let qab = aa + bb;
-    let qap = aa + 1.0;
-    let qam = aa - 1.0;
+    let sum_ab = aa + bb;
+    let a_plus_one = aa + 1.0;
+    let a_minus_one = aa - 1.0;
     let mut c = 1.0;
-    let mut d = 1.0 - qab * x / qap;
+    let mut d = 1.0 - sum_ab * x / a_plus_one;
     if d.abs() < FPMIN {
         d = FPMIN;
     }
@@ -392,7 +392,7 @@ fn betacf(x: f64, aa: f64, bb: f64) -> f64 {
         #[allow(clippy::cast_precision_loss)]
         let mf = m as f64;
         let m2 = 2.0 * mf;
-        let mut term_a = mf * (bb - mf) * x / ((qam + m2) * (aa + m2));
+        let mut term_a = mf * (bb - mf) * x / ((a_minus_one + m2) * (aa + m2));
         d = 1.0 + term_a * d;
         if d.abs() < FPMIN {
             d = FPMIN;
@@ -403,7 +403,7 @@ fn betacf(x: f64, aa: f64, bb: f64) -> f64 {
         }
         d = 1.0 / d;
         h *= d * c;
-        term_a = -(aa + mf) * (qab + mf) * x / ((aa + m2) * (qap + m2));
+        term_a = -(aa + mf) * (sum_ab + mf) * x / ((aa + m2) * (a_plus_one + m2));
         d = 1.0 + term_a * d;
         if d.abs() < FPMIN {
             d = FPMIN;
