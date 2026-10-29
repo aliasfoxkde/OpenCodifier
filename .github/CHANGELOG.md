@@ -24,6 +24,9 @@ include model weights in the binary release.
   recipe controls, carried forward from the post-0.6.1 mainline.
 - Certified early exit for the rotation readout, with deterministic
   release-binary regression coverage.
+- Version identity changes re-key the recorded decision cache hashes; the
+  WASM conformance fixture is re-recorded with its answer/confidence/outcome
+  unchanged.
 
 ### Release validation
 
