@@ -261,3 +261,29 @@ any training. Notes:
   (train-side rows, not the board) → exact D15 artifact for E1-E →
   board ECE reported out-of-sample. Expected to land between the
   in-sample 0.068 and the global 0.131.
+
+### Out-of-sample correction (2026-10-29, same day)
+
+The predicted out-of-sample landing zone was wrong — tested with the
+T5500-recovered E1-E suite rows (holdout-120 + rel200-280):
+
+- Suite-pooled choice fit **T=6.144** (holdout alone fits 4.763,
+  rel200 alone 6.740). Applied to the board: **ECE 0.1511 — worse
+  than the shipped global 3.362 (0.1305)**. The earlier "expected
+  between 0.068 and the global 0.131" is retracted.
+- Transfer is asymmetric and domain-bound: holdout-fitted T helps
+  rel200 (0.262 → 0.149) but rel200-fitted T hurts holdout
+  (0.179 → 0.212); 2-fold CV on the suite union shows the direction
+  is real on-suite (0.226→0.145, 0.256→0.148) but the gain does not
+  survive the suite→board shift.
+- Verdict: the per-kind board 0.0678 is **mostly in-sample fitting**.
+  What survives: (a) per-kind *shape* — bool/score kinds genuinely
+  want different temperatures than choice, so the D25 per-kind seam
+  stays the right mechanism; (b) temperature is fit-per-surface, not
+  global — an artifact fitted on one surface must not be trusted on
+  another (the D15 shipping gate's ECE-check rule, now confirmed
+  cross-domain). An honest per-kind artifact for the board needs
+  board-like fit rows that are not the board itself — i.e. a held-out
+  slice of the JevBench-style distribution, which we do not have;
+  the cross_validate path on the board itself is the only available
+  estimator and must be labeled as such.
