@@ -52,6 +52,22 @@ training stays user-gated per TRAINING.md §8 non-goals.
   val_every 500), plateau counter survives resume. Fingerprint
   unchanged, so the step-2000 state resumes under v6. Expected: 2-3
   sessions total instead of 5, depending on plateau onset.
+- **Session 3 (2026-10-29): ran clean to the 12 h cap, killed at step
+  4300/11009** (CANCEL_ACKNOWLEDGED = the cap's terminal state, not an
+  error). v6 upload path worked as designed: `ckpt/resume-state.pt`
+  on HF verified at step 4000 (adapter tensors inside, 64 tensors,
+  best val 0.0119@4000, plateau counter 0). Val curve through 4000 is
+  still descending — 0.0260 → 0.0119, tok_acc 0.9957, no plateau
+  (early-stop never armed). Per-family val @4000: choice 0.0082,
+  noul 0.0212, relational_compositional 0.0015, score 0.0201. v6
+  achieved its design goal: the 12 h kill lost only the 300-step
+  4000→4300 tail. **Next session is quota-gated**: the 30 h weekly
+  GPU allowance is exhausted; resume push returns
+  "Maximum weekly GPU quota of 30.00 hours reached" until Kaggle
+  resets it (sessions 1+2+3 ≈ 30 h). Resume is automatic from step
+  4000 — re-push the same kernel when the quota window reopens
+  (~2.5 sessions remain of work: 4300→11009 ≈ 6700 steps at
+  ~115 steps/h).
 
 ### B6. d1-2B survey arm — DONE (2026-10-28)
 - LiquidAI/d1-2B (commercial decision model, lfm1.0 license —
