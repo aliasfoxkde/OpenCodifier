@@ -230,3 +230,34 @@ are evidence at any n. The 231-item JevBench arm clears the floor; the
 still carry the pair on disk, which nothing in-repo loads through the
 engine's loader — the next compute-box refit regenerates them into the
 floor-honest shape (analysis-only aurc), changing no T or ECE value.
+
+## Per-kind vs global-T on the E1-E board run (2026-10-29)
+
+`perkind_holdout_fit.py --probs` (T3.2 pattern) on the E1-E 2B JevBench
+public-231 run (`runs/jevbench/e1e-slot-231`, accuracy 0.6840,
+T-invariant) against the pinned jevbench-ref split. Fits are in-sample
+on the board — a sizing probe for the per-kind D15 artifact, not a
+shipped calibration; disclosure per the T3.2 rule.
+
+| fit | board ECE | auto@5% |
+|---|---|---|
+| T=1 (raw) | 0.2067 | 23/231 (0.100) |
+| global T=3.362 (shipped holdout fit) | 0.1305 | 9/231 (0.039) |
+| per-kind (bool 20.0*, choice 2.7974, score 4.1458) | **0.0678** | **48/231 (0.208)** |
+
+Per-kind temperature halves the global fit's ECE and doubles the
+auto-accept coverage — the d1-2B / MOPD pattern (per-question-type
+calibration) transfers to our arm through the D25 ladder seam without
+any training. Notes:
+
+- \* bool T hit the fit grid's 20.0 cap; the optimum is at or beyond
+  the cap — bool confidences want near-uniformization (ECE 0.359 →
+  0.069 on 74 rows). Grid should extend before shipping.
+- score kind has only 18 board rows; its per-kind T (4.15) is
+  weakly identified and still leaves ECE 0.152 on that slice —
+  fitting belongs on the holdout/suite split, where score rows are
+  denser.
+- Next step when a compute window opens: holdout-side per-kind fit
+  (train-side rows, not the board) → exact D15 artifact for E1-E →
+  board ECE reported out-of-sample. Expected to land between the
+  in-sample 0.068 and the global 0.131.
