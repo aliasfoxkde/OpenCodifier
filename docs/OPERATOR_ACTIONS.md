@@ -167,6 +167,42 @@ ORT_DYLIB_PATH=~/.local/lib/python3.13/site-packages/onnxruntime/capi/libonnxrun
 
 ---
 
+## GitForge CI trigger retry storm (diagnosed 2026-10-29)
+
+**Symptom.** ~100 failed `pipeline_runs` after 12:00 UTC in one day; the
+pending trigger queue stopped draining.
+
+**Root cause.** Four orphaned local-only commit hashes (`3c921c9`,
+`c3ad7d9c`, `f5a57e3`, `97966eb`-pre-image) plus seven
+`codex/prebuilt-release-installer-20261029` hashes had `pending`
+`pipeline_trigger_requests` rows. Each retry dies at checkout with
+`fatal: unable to read tree ... retryable=false` — the commit objects do
+not exist on the server. The retry churn starved the queue of capacity.
+
+**Recovery path (worked).** A fresh push kick-starts the engine; its
+"periodic engine redrive" recovers stalled runs and republishes all
+pending triggers, after which jobs complete normally on the online
+runner. Verified: `redrove stalled chain ... recovered stalled runs
+rebuilt=N` in `journalctl -u gitforge@ci.service`.
+
+**Open defect (fix the tool, not the procedure).** The ci service should
+mark a trigger request permanently `failed` when checkout fails with
+`retryable=false` on an object-missing error, instead of leaving it
+`pending` for unbounded retries. Until fixed, recovery requires a fresh
+push to trigger redrive.
+
+**Read-only triage queries:**
+
+```bash
+sudo sqlite3 /var/lib/gitforge/gitforge.db \
+  "select status,count(*) from pipeline_trigger_requests group by status;"
+sudo sqlite3 /var/lib/gitforge/gitforge.db \
+  "select substr(new_hash,1,8),ref_name,status,attempts,substr(error,1,80) \
+   from pipeline_trigger_requests where status in ('pending','processing');"
+```
+
+---
+
 ## JEV-27B corpus — action items
 
 Priority for next session:
