@@ -106,6 +106,7 @@ just release-preflight                 # toolchain readiness per target
 just release-matrix                    # build + stage + attest every target
 just release-verify                    # re-hash every artifact vs its attestation
 just release-notes                     # this file, from the attestations
+just release-set-verify                # exact tag, clean source, complete matrix, checksums
 just ci                                # the gate of record, before tagging
 just e2e                               # the run-tested claim, on the host target
 ```

@@ -125,6 +125,7 @@ are broken into sections — read top-down only as deep as you need.
 
 **Running it**
 
+- [`scripts/install-prebuilt.sh`](scripts/install-prebuilt.sh) — install a verified release binary without Rust or Cargo; supports Linux x86_64/aarch64 and macOS x86_64/arm64.
 - [`recipes/`](recipes/) — runnable graphs + captured responses.
 - [`docs/FORK_LLAMA_SERVER.md`](docs/FORK_LLAMA_SERVER.md) — the
   llama.cpp fork that serves decision rungs.
@@ -152,6 +153,10 @@ are broken into sections — read top-down only as deep as you need.
 - [`docs/OPERATOR_ACTIONS.md`](docs/OPERATOR_ACTIONS.md) — items only
   the operator can do.
 
+**Portable binary installation**
+
+- [Prebuilt binary release and onboarding plan](docs/planning/prebuilt-binary-release-and-onboarding-2026-10-29.md) — audit, installer contract, provenance gates, rollout, and Amortyx integration.
+
 **Research**
 
 - [`docs/RESEARCH.md`](docs/RESEARCH.md) — sectioned research log
@@ -167,12 +172,30 @@ policy): [`docs/planning/`](docs/planning/), including the
 and the [offline campaign](docs/planning/offline-campaign-2026-10-23.md)
 tracker.
 
+## Install a prebuilt CLI
+
+On a supported Linux/macOS host, clone this repository and run:
+
+```sh
+sh scripts/install-prebuilt.sh
+```
+
+The script downloads the pinned stable release binary and its adjacent
+attestation, checks target, SHA-256, source cleanliness, and version, then
+atomically installs `opencodifier` into `~/.local/bin`. It requires `curl`
+and Python 3's standard library; it does **not** install Rust/Cargo, download
+model weights, or start a service. Override the target directory with
+`--install-dir`; select a specific release with `--version vX.Y.Z`. See the
+[binary release plan](docs/planning/prebuilt-binary-release-and-onboarding-2026-10-29.md)
+for the provenance, support, update, rollback, and validation contract.
+
 ## Development
 
 ```bash
 git clone https://github.com/aliasfoxkde/OpenCodifier
 cd OpenCodifier
 just ci        # fmt + clippy (strict) + tests + doc + cargo-deny + aegis
+python3 -m unittest discover -s tests -p 'test_*.py' -v  # binary installer contracts
 just coverage  # line coverage (cargo llvm-cov)
 ```
 

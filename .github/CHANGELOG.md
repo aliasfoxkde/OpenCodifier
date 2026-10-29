@@ -6,6 +6,38 @@ project does not yet guarantee a stable public API — version `0.x`
 releases may break, and every breaking change is recorded in this file
 (and reflected in `docs/DECISIONS.md` where a binding decision moves).
 
+## [0.6.2] — Unreleased
+
+The planned 0.6.2 release will package the current engine/CLI from a clean
+tagged source tree and add a verified prebuilt installation path. It will
+not include model weights in the binary release.
+
+### Added
+
+- Prebuilt CLI installer for Linux x86_64/aarch64 and macOS x86_64/arm64.
+  It verifies the adjacent release attestation, reported platform, file
+  size, SHA-256, clean source record, and binary version before atomically
+  replacing a user-local executable. Installing does not require Rust or
+  Cargo and does not start services.
+- CLI first-run flow (`init`, `doctor`), selectable lane presets, an
+  agent-facing `codify_gate` tool, feedback capture, and reusable CI
+  recipe controls, carried forward from the post-0.6.1 mainline.
+- Certified early exit for the rotation readout, with deterministic
+  release-binary regression coverage.
+- Version identity changes re-key the recorded decision cache hashes; the
+  three affected WASM conformance fixtures are re-recorded with their
+  answers/confidence/outcomes unchanged.
+
+### Release validation
+
+- Gate of record: GitForge pipeline receipt for the release commit.
+- Full target build matrix and per-target attestations: recorded in the
+  attached generated release notes and `sha256sums.txt`.
+- Linux x86_64 prebuilt installation and the 30-check serve/MCP E2E suite:
+  recorded from a disposable Fedora 44 validation environment.
+- Cross-target artifacts are labeled with their actual verification level;
+  targets not run on native hardware are not described as runtime-tested.
+
 ## [0.6.1] — 2026-10-15
 
 > Version note: `v0.6.0` was cut as a draft release and its tag pattern was
@@ -629,7 +661,9 @@ history.
   (563ad3f; folded from Unreleased — this item shipped in 0.1.0 but
   was left unstaged there).
 
-[Unreleased]: https://github.com/aliasfoxkde/OpenCodifier/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/aliasfoxkde/OpenCodifier/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/aliasfoxkde/OpenCodifier/compare/v0.6.1...v0.6.2
+[0.6.1]: https://github.com/aliasfoxkde/OpenCodifier/compare/v0.5.0...v0.6.1
 [0.4.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.4.0
 [0.3.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.3.0
 [0.2.0]: https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.2.0

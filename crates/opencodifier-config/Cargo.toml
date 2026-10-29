@@ -9,8 +9,8 @@ authors.workspace = true
 description = "Configuration discovery, precedence, and strict validation for OpenCodifier"
 
 [dependencies]
-opencodifier-core = { path = "../opencodifier-core" }
-opencodifier-engine = { path = "../opencodifier-engine" }
+opencodifier-core = { path = "../opencodifier-core", version = "0.6.2" }
+opencodifier-engine = { path = "../opencodifier-engine", version = "0.6.2" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
