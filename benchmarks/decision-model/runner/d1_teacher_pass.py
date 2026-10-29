@@ -32,6 +32,9 @@ def parse_args():
                         default="/nas/Temp/work/oc-model-eval/runs/d1-teacher-v1/votes.jsonl")
     parser.add_argument("--limit", type=int, default=0,
                         help="stop after N new votes (0 = unbounded)")
+    parser.add_argument("--retry-failed", action="store_true",
+                        help="strip failed rows from the output file so "
+                             "resume re-votes them (run before the pass)")
     return parser.parse_args()
 
 
@@ -99,6 +102,23 @@ def main():
     args = parse_args()
     pool = load_pool(args.pool_ids)
 
+    if args.retry_failed:
+        kept = dropped = 0
+        lines = []
+        with open(args.out) as f:
+            for line in f:
+                if line.strip() and not json.loads(line).get("ok"):
+                    dropped += 1
+                    continue
+                lines.append(line)
+                kept += 1
+        tmp = args.out + ".tmp"
+        with open(tmp, "w") as f:
+            f.writelines(lines)
+        import os
+        os.replace(tmp, args.out)
+        logger.info("retry-failed: kept %d, dropped %d failed rows", kept, dropped)
+
     completed = set()
     try:
         with open(args.out) as f:
@@ -127,9 +147,21 @@ def main():
     with open(args.out, "a", buffering=1) as out:
         for item in queue:
             row = vote(item, args.endpoint)
-            out.write(json.dumps(row) + "\n")
+            # Only completed votes go in the resume file; transient
+            # failures (5xx, timeouts) stay pending for the next resume.
+            # Permanent parse failures (malformed answer shape) are kept
+            # so a poisoned item cannot loop forever.
+            transient = (not row["ok"] and row["error"]
+                         and row["error"].startswith(("HTTPError", "URLError",
+                                                      "TimeoutError",
+                                                      "ConnectionError")))
+            if transient:
+                logger.warning("transient failure %s: %s (not recorded)",
+                               row["id"], row["error"])
+            else:
+                out.write(json.dumps(row) + "\n")
             votes += 1
-            if not row["ok"]:
+            if not row["ok"] and not transient:
                 logger.warning("vote failed %s: %s", row["id"], row["error"])
             if votes % 50 == 0:
                 rate = votes / (time.time() - started)
