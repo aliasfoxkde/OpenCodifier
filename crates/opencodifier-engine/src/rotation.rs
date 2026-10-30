@@ -588,6 +588,72 @@ mod tests {
     }
 
     #[test]
+    fn arithmetic_mean_combine_matches_manual_average() {
+        // ArithmeticMean combines the prior-corrected reads linearly;
+        // for a uniform inner classifier the corrected reads stay
+        // uniform, so the output must be uniform under either combine.
+        let inner = MockClassifier::new("mock/inner");
+        let rot = RotationReadout::new(Arc::new(inner), "rot/arith")
+            .with_combine(super::Combine::ArithmeticMean);
+        assert_eq!(rot.model_id(), "rot/arith");
+        let q = choice_question(three_candidates());
+        let d = rot.decide(&State::from_text("s"), &q).unwrap();
+        for e in d.entries() {
+            assert!((e.probability - 1.0 / 3.0).abs() < 1e-9, "{e:?}");
+        }
+    }
+
+    #[test]
+    fn arithmetic_mean_matches_log_mean_on_biased_reads() {
+        // For distributions with full support both combine rules agree
+        // up to normalization tolerance; pinning them against each other
+        // keeps the arithmetic branch honest.
+        let rot_log = RotationReadout::new(Arc::new(FirstBiased), "rot/log");
+        let rot_arith = RotationReadout::new(Arc::new(FirstBiased), "rot/arith")
+            .with_combine(super::Combine::ArithmeticMean);
+        let q = choice_question(three_candidates());
+        let a = rot_log.decide(&State::from_text("s"), &q).unwrap();
+        let b = rot_arith.decide(&State::from_text("s"), &q).unwrap();
+        for (x, y) in a.entries().iter().zip(b.entries().iter()) {
+            assert_eq!(x.key, y.key);
+            assert!((x.probability - y.probability).abs() < 1e-9, "{x:?} vs {y:?}");
+        }
+    }
+
+    #[test]
+    fn normalize_refuses_collapse() {
+        // An all-zero combined mass cannot renormalize: the readout must
+        // refuse loudly rather than emit NaN probabilities.
+        let mut entries = vec![DistributionEntry { key: "a".into(), probability: 0.0 }];
+        assert!(super::normalize(&mut entries).is_err());
+        let mut nonfinite = vec![DistributionEntry { key: "a".into(), probability: f64::NAN }];
+        assert!(super::normalize(&mut nonfinite).is_err());
+    }
+
+    #[test]
+    fn numeric_helpers_edge_branches() {
+        use super::{betainc, binom_cdf, ln_gamma};
+        // binom_cdf saturates at and above the trial count, and at the
+        // probability bounds.
+        assert_eq!(binom_cdf(3, 3.0, 0.5), 1.0);
+        assert_eq!(binom_cdf(5, 3.0, 0.5), 1.0);
+        assert_eq!(binom_cdf(2, 5.0, 0.0), 1.0);
+        assert_eq!(binom_cdf(2, 5.0, 1.0), 0.0);
+        // betainc clamps outside [0, 1] and its reflection branch
+        // (x past the midpoint) stays in range and complements the
+        // direct branch.
+        assert_eq!(betainc(0.0, 2.0, 3.0), 0.0);
+        assert_eq!(betainc(1.0, 2.0, 3.0), 1.0);
+        let direct = betainc(0.3, 2.0, 5.0);
+        let reflected = betainc(0.7, 5.0, 2.0);
+        assert!((direct - (1.0 - reflected)).abs() < 1e-12, "{direct} vs {reflected}");
+        // ln_gamma's reflection branch (x < 0.5) via the gamma identity
+        // ln Γ(1/2) = ln √π.
+        let half = ln_gamma(0.5);
+        assert!((half - 0.5 * std::f64::consts::PI.ln()).abs() < 1e-12);
+    }
+
+    #[test]
     fn model_id_carries_the_configuration() {
         let rot = RotationReadout::new(Arc::new(MockClassifier::new("mock/i")), "rot/x1");
         assert_eq!(rot.model_id(), "rot/x1");
