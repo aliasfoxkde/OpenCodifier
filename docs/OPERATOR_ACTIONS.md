@@ -191,6 +191,23 @@ mark a trigger request permanently `failed` when checkout fails with
 `pending` for unbounded retries. Until fixed, recovery requires a fresh
 push to trigger redrive.
 
+**Resolution (2026-10-30).** Main lane verified GREEN: pipeline run
+`9f7a5a16` (commit `03ed530`) — all 7 jobs (fmt, clippy, test, coverage,
+frontend, server-build, e2e) succeeded on the online runner. Task closed.
+
+**Two further defects found during diagnosis (fix the tool, not the
+procedure):**
+1. **SQLite lock-storm retry churn.** Under queue pressure the ci
+   service's SQLite writes contend (lock-storm pattern): retries pile
+   up faster than runs drain, amplifying the stall. Retry scheduling
+   needs backoff, and trigger republish on redrive currently re-enqueues
+   everything with no backoff at all — the redrive that recovers the
+   queue also re-creates the storm if any trigger is still unfixable.
+2. **Republish-no-backoff.** Same root: `pipeline_trigger_requests`
+   republish during engine redrive resets attempts, so a permanently
+   uncheckoutable hash re-enters the retry loop at full rate on every
+   redrive.
+
 **Read-only triage queries:**
 
 ```bash
