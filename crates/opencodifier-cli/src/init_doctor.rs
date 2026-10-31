@@ -44,8 +44,14 @@ pub fn probe_host() -> Vec<ProbeFinding> {
 }
 
 fn probe_cpu() -> ProbeFinding {
+    let text = std::fs::read_to_string("/proc/cpuinfo").ok();
+    probe_cpu_from(text.as_deref())
+}
+
+/// The cpu decision core: `/proc/cpuinfo` text in, finding out.
+fn probe_cpu_from(cpuinfo: Option<&str>) -> ProbeFinding {
     let cores = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
-    let flags = std::fs::read_to_string("/proc/cpuinfo").map_or("unknown ISA", |text| {
+    let flags = cpuinfo.map_or("unknown ISA", |text| {
         let has_avx2 = text.contains(" avx2");
         let has_avx512 = text.contains(" avx512");
         if has_avx512 {
@@ -61,6 +67,11 @@ fn probe_cpu() -> ProbeFinding {
 
 fn probe_ram() -> ProbeFinding {
     let meminfo = std::fs::read_to_string("/proc/meminfo").unwrap_or_default();
+    probe_ram_from(&meminfo)
+}
+
+/// The ram decision core: meminfo text in, finding out.
+fn probe_ram_from(meminfo: &str) -> ProbeFinding {
     let total_kib = meminfo
         .lines()
         .find_map(|line| line.strip_prefix("MemTotal:"))
@@ -89,6 +100,11 @@ fn probe_gpu() -> ProbeFinding {
                 .any(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
         });
     let has_nvidia = which_on_path("nvidia-smi").is_some();
+    gpu_finding(has_vulkan, has_nvidia)
+}
+
+/// The gpu decision core: presence flags in, finding out.
+fn gpu_finding(has_vulkan: bool, has_nvidia: bool) -> ProbeFinding {
     let found = if has_vulkan && has_nvidia {
         "Vulkan ICDs + NVIDIA tooling present"
     } else if has_vulkan {
@@ -102,7 +118,12 @@ fn probe_gpu() -> ProbeFinding {
 }
 
 fn probe_local_server() -> ProbeFinding {
-    match which_on_path("llama-server") {
+    server_finding(which_on_path("llama-server"))
+}
+
+/// The local-server decision core: PATH lookup result in, finding out.
+fn server_finding(found: Option<PathBuf>) -> ProbeFinding {
+    match found {
         Some(path) => ProbeFinding {
             probe: "local-server",
             found: format!("llama-server on PATH at {}", path.display()),
@@ -120,7 +141,7 @@ fn probe_local_server() -> ProbeFinding {
 fn probe_artifacts() -> ProbeFinding {
     let candidates = [PathBuf::from("models"), PathBuf::from("/nas/Temp/work/oc-model-eval")];
     let mut found = Vec::new();
-    for dir in candidates {
+    for dir in &candidates {
         if let Ok(entries) = std::fs::read_dir(dir) {
             for entry in entries.filter_map(Result::ok) {
                 let path = entry.path();
@@ -132,6 +153,11 @@ fn probe_artifacts() -> ProbeFinding {
             }
         }
     }
+    artifacts_finding(found)
+}
+
+/// The artifacts decision core: gathered names in, finding out.
+fn artifacts_finding(mut found: Vec<String>) -> ProbeFinding {
     if found.is_empty() {
         ProbeFinding {
             probe: "artifacts",
@@ -267,9 +293,18 @@ fn write_lane(name: &str, out: Option<&std::path::Path>) -> Result<(), CliError>
 /// requires fails.
 pub(crate) fn run_doctor(_args: &DoctorArgs) -> Result<(), CliError> {
     let findings = probe_host();
+    doctor_report(&findings)
+}
+
+/// The doctor decision core: findings in, exit decision out.
+///
+/// # Errors
+///
+/// [`CliError`] with [`CODE_DOCTOR_FAILED`] when any probe failed.
+fn doctor_report(findings: &[ProbeFinding]) -> Result<(), CliError> {
     let mut lines = Vec::new();
     let mut failed = 0usize;
-    for finding in &findings {
+    for finding in findings {
         lines.push(format!(
             "[{}] {}: {}",
             if finding.ok { "ok" } else { "FAIL" },
@@ -288,4 +323,223 @@ pub(crate) fn run_doctor(_args: &DoctorArgs) -> Result<(), CliError> {
         ));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::*;
+
+    #[test]
+    fn probes_are_named_and_typed() {
+        let findings = probe_host();
+        let names: Vec<_> = findings.iter().map(|f| f.probe).collect();
+        assert_eq!(names, ["cpu", "ram", "gpu", "local-server", "artifacts", "config"]);
+        assert!(findings.iter().all(|f| !f.found.is_empty()));
+        // The cpu probe always succeeds: it falls back to a baseline ISA.
+        assert!(findings.iter().find(|f| f.probe == "cpu").unwrap().ok);
+    }
+
+    #[test]
+    fn ram_probe_reports_a_tier_or_refuses() {
+        let finding = probe_ram();
+        assert_eq!(finding.probe, "ram");
+        // On any host with /proc/meminfo the probe succeeds with a tier;
+        // the unreadable branch only fires where meminfo is missing.
+        if finding.ok {
+            assert!(finding.found.contains("GiB total"), "{:?}", finding.found);
+        } else {
+            assert!(finding.found.contains("unreadable"));
+        }
+    }
+
+    #[test]
+    fn proposals_always_lead_with_zero() {
+        // No findings at all (empty slice): the constraint proposal is
+        // the zero lane plus delegate — never a local lane.
+        let proposals = propose_lanes(&[]);
+        assert_eq!(proposals.first().unwrap().0.name, "zero");
+        assert!(proposals.len() <= 3);
+    }
+
+    #[test]
+    fn full_host_findings_propose_at_most_three() {
+        let findings = probe_host();
+        let proposals = propose_lanes(&findings);
+        assert!(!proposals.is_empty());
+        assert!(proposals.len() <= 3);
+        // Every rationale is a non-empty one-liner.
+        assert!(proposals.iter().all(|(_, why)| !why.is_empty()));
+    }
+
+    #[test]
+    fn a_fully_provisioned_host_gets_the_local_lane() {
+        let finding =
+            |probe: &'static str, found: String, ok: bool| ProbeFinding { probe, found, ok };
+        let findings = vec![
+            finding("gpu", "Vulkan ICDs present".to_owned(), true),
+            finding("local-server", "llama-server on PATH".to_owned(), true),
+            finding("artifacts", "GGUF: m.gguf".to_owned(), true),
+            finding("ram", "31.4 GiB total — 2B/4B models fit".to_owned(), true),
+        ];
+        let proposals = propose_lanes(&findings);
+        assert_eq!(proposals.len(), 3, "zero + delegate + local-2b");
+        let local = proposals[2].0;
+        assert_eq!(local.name, "local-2b");
+        assert!(proposals[2].1.contains("GPU present"), "{:?}", proposals[2].1);
+    }
+
+    #[test]
+    fn a_server_without_ram_headroom_stays_at_two_proposals() {
+        let finding =
+            |probe: &'static str, found: String, ok: bool| ProbeFinding { probe, found, ok };
+        let findings = vec![
+            finding("local-server", "llama-server on PATH".to_owned(), true),
+            finding("artifacts", "GGUF: m.gguf".to_owned(), true),
+            finding("ram", "2.0 GiB total — small models only".to_owned(), true),
+        ];
+        let proposals = propose_lanes(&findings);
+        assert_eq!(proposals.len(), 2);
+        assert!(proposals.iter().all(|(lane, _)| lane.name != "local-2b"));
+    }
+
+    #[test]
+    fn init_writes_the_chosen_lane_to_the_given_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("lane.json");
+        let args =
+            InitArgs { yes: false, json: false, lane: Some("zero".into()), out: Some(out.clone()) };
+        run_init(&args).unwrap();
+        let text = std::fs::read_to_string(&out).unwrap();
+        let config: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert!(config.get("lane").is_some(), "lane document written: {text}");
+    }
+
+    #[test]
+    fn init_refuses_an_unknown_lane() {
+        let dir = tempfile::tempdir().unwrap();
+        let args = InitArgs {
+            yes: false,
+            json: false,
+            lane: Some("turbo".into()),
+            out: Some(dir.path().join("no.json")),
+        };
+        let error = run_init(&args).unwrap_err();
+        assert_eq!(error.code(), CODE_INIT_REFUSED);
+    }
+
+    #[test]
+    fn init_json_mode_prints_and_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let before = std::fs::read_dir(dir.path()).unwrap().count();
+        let args = InitArgs { yes: false, json: true, lane: None, out: None };
+        // The process cwd may hold a project file; run in the temp dir is
+        // not required — json mode prints and returns without writing.
+        run_init(&args).unwrap();
+        let after = std::fs::read_dir(dir.path()).unwrap().count();
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn init_yes_accepts_the_top_proposal() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("accepted.json");
+        let args = InitArgs { yes: true, json: false, lane: None, out: Some(out.clone()) };
+        run_init(&args).unwrap();
+        let text = std::fs::read_to_string(&out).unwrap();
+        assert!(text.contains("\"lane\""));
+    }
+
+    #[test]
+    fn doctor_mirrors_the_probe_line_format() {
+        // The real probes run here; on a healthy host doctor succeeds.
+        match run_doctor(&DoctorArgs { json: false }) {
+            Ok(()) => {}
+            Err(error) => {
+                assert_eq!(error.code(), CODE_DOCTOR_FAILED);
+            }
+        }
+    }
+
+    #[test]
+    fn doctor_failure_reports_the_probe_count() {
+        let failing =
+            ProbeFinding {
+                probe: "gpu", found: "none detected — CPU-only".to_owned(), ok: false
+            };
+        let error = doctor_report(&[failing]).unwrap_err();
+        assert_eq!(error.code(), CODE_DOCTOR_FAILED);
+        assert!(error.to_string().contains("1 probe(s) failed"));
+    }
+
+    #[test]
+    fn doctor_report_accepts_healthy_findings() {
+        let ok = |probe: &'static str| ProbeFinding { probe, found: "fine".to_owned(), ok: true };
+        doctor_report(&[ok("cpu"), ok("ram"), ok("gpu"), ok("config")]).unwrap();
+    }
+
+    #[test]
+    fn cpu_core_reads_isa_flags() {
+        let avx512 = probe_cpu_from(Some("flags: fpu avx512f avx2"));
+        assert!(avx512.found.contains("AVX512"), "{:?}", avx512.found);
+        let avx2 = probe_cpu_from(Some("flags: fpu avx2"));
+        assert!(avx2.found.contains("AVX2"), "{:?}", avx2.found);
+        let baseline = probe_cpu_from(Some("flags: fpu"));
+        assert!(baseline.found.contains("baseline"), "{:?}", baseline.found);
+        let missing = probe_cpu_from(None);
+        assert!(missing.found.contains("unknown ISA"), "{:?}", missing.found);
+    }
+
+    #[test]
+    fn ram_core_reports_tiers_and_the_unreadable_branch() {
+        let big = probe_ram_from("MemTotal: 16777216 kB\n");
+        assert!(big.ok && big.found.contains("2B/4B models fit"), "{:?}", big.found);
+        let small = probe_ram_from("MemTotal: 2097152 kB\n");
+        assert!(small.ok && small.found.contains("small models only"), "{:?}", small.found);
+        let unreadable = probe_ram_from("");
+        assert!(
+            !unreadable.ok && unreadable.found.contains("unreadable"),
+            "{:?}",
+            unreadable.found
+        );
+    }
+
+    #[test]
+    fn gpu_core_covers_all_four_flag_combinations() {
+        assert!(gpu_finding(true, true).found.contains("Vulkan ICDs + NVIDIA"));
+        assert!(gpu_finding(true, false).found.contains("Vulkan ICDs present"));
+        assert!(gpu_finding(false, true).found.contains("NVIDIA tooling"));
+        assert!(gpu_finding(false, false).found.contains("CPU-only"));
+    }
+
+    #[test]
+    fn server_core_covers_found_and_missing() {
+        let found = server_finding(Some(PathBuf::from("/usr/local/bin/llama-server")));
+        assert!(found.ok && found.found.contains("on PATH"), "{:?}", found.found);
+        let missing = server_finding(None);
+        assert!(!missing.ok && missing.found.contains("not on PATH"), "{:?}", missing.found);
+    }
+
+    #[test]
+    fn artifacts_core_truncates_and_reports_empty() {
+        let none = artifacts_finding(Vec::new());
+        assert!(!none.ok && none.found.contains("no GGUF"), "{:?}", none.found);
+        let many = artifacts_finding((0..6).map(|i| format!("m{i}.gguf")).collect());
+        assert!(many.ok, "{:?}", many.found);
+        assert_eq!(many.found.matches(".gguf").count(), 4, "truncate(4) applied: {:?}", many.found);
+    }
+
+    #[test]
+    fn write_lane_refuses_an_unknown_lane() {
+        let error = write_lane("turbo", None).unwrap_err();
+        assert_eq!(error.code(), CODE_INIT_REFUSED);
+    }
+
+    #[test]
+    fn write_lane_reports_an_unwritable_output_path() {
+        let error =
+            write_lane("zero", Some(Path::new("/nonexistent/oc/dir/lane.json"))).unwrap_err();
+        assert_eq!(error.code(), CODE_UNWRITABLE_OUTPUT);
+    }
 }

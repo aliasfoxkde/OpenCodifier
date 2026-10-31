@@ -658,6 +658,33 @@ mod tests {
         let rot = RotationReadout::new(Arc::new(MockClassifier::new("mock/i")), "rot/x1");
         assert_eq!(rot.model_id(), "rot/x1");
     }
+
+    #[test]
+    fn debug_render_lists_the_configuration() {
+        let rot = RotationReadout::new(Arc::new(MockClassifier::new("mock/i")), "rot/dbg");
+        let text = format!("{rot:?}");
+        assert!(text.contains("RotationReadout"), "{text}");
+        assert!(text.contains("rot/dbg"), "{text}");
+    }
+
+    #[test]
+    fn decide_extended_delegates_without_an_index() {
+        use crate::classifier::Classifier;
+        let rot = RotationReadout::new(Arc::new(FirstBiased), "rot/ext");
+        let q = choice_question(three_candidates());
+        let (d, aux) = rot.decide_extended(&State::from_text("s"), &q, None).unwrap();
+        assert!(aux.is_none());
+        assert!((d.entries()[0].probability - 1.0 / 3.0).abs() < 1e-6, "{d:?}");
+    }
+
+    #[test]
+    fn first_biased_mock_refuses_non_choice_questions() {
+        let bool_q = DecisionQuestion::Boolean(
+            opencodifier_core::BooleanQuestion::new("b", "is it so").unwrap(),
+        );
+        let error = FirstBiased.decide(&State::from_text("s"), &bool_q).unwrap_err();
+        assert!(error.to_string().contains("only answers choice"), "{error}");
+    }
 }
 
 #[cfg(test)]

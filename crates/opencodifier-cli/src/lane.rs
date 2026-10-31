@@ -86,4 +86,31 @@ mod tests {
         let error = expand_or_err("turbo").unwrap_err();
         assert_eq!(error.code(), CODE_UNKNOWN_LANE);
     }
+
+    #[test]
+    fn show_runs_for_every_preset_in_the_table() {
+        for lane in opencodifier_config::LANE_TABLE {
+            run(&LaneSubcommand::Show { name: lane.name.to_owned() }).unwrap();
+        }
+    }
+
+    #[test]
+    fn use_writes_the_config_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("project.json");
+        run(&LaneSubcommand::Use { name: "zero".to_owned(), out: Some(out.clone()) }).unwrap();
+        let text = std::fs::read_to_string(&out).unwrap();
+        let config: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert!(config.get("lane").is_some(), "{text}");
+    }
+
+    #[test]
+    fn use_refuses_an_unknown_lane_before_writing() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("never.json");
+        let error =
+            run(&LaneSubcommand::Use { name: "turbo".to_owned(), out: Some(out) }).unwrap_err();
+        assert_eq!(error.code(), CODE_UNKNOWN_LANE);
+        assert!(!dir.path().join("never.json").exists());
+    }
 }

@@ -117,3 +117,46 @@ fn native_round_trip_preserves_the_report() {
         .expect("decode");
     assert_eq!(decoded.escalation(), response.escalation(), "report survives the round trip");
 }
+
+#[test]
+fn boolean_and_score_questions_carry_partial_answers() {
+    // The escalation report's partial answer matches the question kind:
+    // boolean → a bool value, score → the winning level label. Both ride
+    // the same band as the choice case above.
+    let policy = DecisionPolicy::default().with_escalate_below(0.65).unwrap();
+    let scripted_mock = Arc::new(
+        MockClassifier::new("mock-esc-kinds")
+            .with_script("needs", vec![("true", 0.55), ("false", 0.45)])
+            .unwrap()
+            .with_script("difficulty", vec![("trivial", 0.55), ("complex", 0.25), ("expert", 0.20)])
+            .unwrap(),
+    );
+    let config = EngineConfig::with_default_pipeline().unwrap();
+    let engine = EngineHandle::new(config, scripted_mock, None).unwrap();
+
+    let boolean_request = request_with_policy(
+        state_with_fact("env", "production"),
+        vec![common::boolean_question("needs", "Does this need tools?")],
+        policy.clone(),
+        RequestMetadata::default(),
+    );
+    let response = engine.decide(&boolean_request).expect("boolean decide");
+    assert_eq!(response.outcome(), DecisionOutcome::Escalate);
+    let report = response.escalation().expect("report");
+    let partial = report.payload.partial_answer.as_ref().expect("boolean partial");
+    assert_eq!(partial.probability, 0.55);
+    assert_eq!(partial.value, opencodifier_core::PartialAnswerValue::Boolean(true));
+
+    let score_request = request_with_policy(
+        state_with_fact("env", "production"),
+        vec![common::score_question("difficulty", &["trivial", "complex", "expert"])],
+        policy,
+        RequestMetadata::default(),
+    );
+    let response = engine.decide(&score_request).expect("score decide");
+    assert_eq!(response.outcome(), DecisionOutcome::Escalate);
+    let report = response.escalation().expect("report");
+    let partial = report.payload.partial_answer.as_ref().expect("score partial");
+    assert_eq!(partial.probability, 0.55);
+    assert_eq!(partial.value, opencodifier_core::PartialAnswerValue::Text("trivial".to_owned()));
+}
