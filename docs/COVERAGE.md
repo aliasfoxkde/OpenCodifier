@@ -183,6 +183,46 @@ residual is the permanent waiver ledger D36's revisit clause
 anticipated; the ratchet retires at the reachable ceiling, and a
 future tranche that finds a genuinely reachable line reopens it.
 
+## How to measure coverage (in-image, always)
+
+**Rule: never pick test targets from a local coverage run.** The floor
+is measured inside `opencodifier-ci-rust:2` and only an in-image
+measurement can move it — local rustc versions emit a different,
+finer-grained mapping (see "Two toolchains, two mappings"; the same
+tree reads ~8 points lower locally). Local runs are for *targeting*
+(which behavior lacks a test); the number of record is always in-image.
+
+Re-measure in-image before choosing what to test:
+
+```bash
+docker run --rm \
+  -v /nas/Temp/repos/OpenCodifier:/workspace -w /workspace \
+  -v /nas/Dev/Targets:/oc-target \
+  -e CARGO_TARGET_DIR=/oc-target/opencodifier-coverage \
+  -v /nas/Temp/tmp:/out \
+  opencodifier-ci-rust:2 bash -c '
+    export CARGO_BUILD_JOBS=4
+    cargo llvm-cov --workspace --lcov --output-path /out/lcov.info
+    python3 scripts/coverage_floor.py /out/lcov.info --floor 97.5'
+```
+
+Notes that cost time when they are rediscovered:
+
+- `CARGO_BUILD_JOBS=4` matches the CI lane; the 4 GiB container cap
+  makes an unbounded build thrash.
+- Point `CARGO_TARGET_DIR` at the shared target root, never a fresh
+  dated directory — the instrumented rebuild is expensive and a
+  per-experiment target dir is what fills the root NVMe.
+- Write the lcov export to `/out` (NAS scratch), not to `/tmp` inside
+  the container, so it survives the container and can be diffed against
+  the previous census.
+- The image's `python3` is present and is the sanctioned inline
+  interpreter — `scripts/coverage_floor.py` runs inside the container
+  unchanged.
+- Only one coverage measurement may run at a time; concurrent runs
+  pollute the shared `llvm-cov-target` profraw pool (see
+  "Measurement integrity").
+
 ## Measurement integrity
 
 - **Ghost files**: a renamed source leaves stale instrumentation in
