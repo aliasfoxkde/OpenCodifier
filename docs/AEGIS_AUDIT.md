@@ -68,6 +68,50 @@ All findings above are **accepted as documented** in this baseline. If Aegis CI 
 
 ---
 
+## Baseline regeneration
+
+**The trap.** Aegis fingerprints are **line-anchored** —
+`pattern:file:line:<hash>`. Adding or removing a single line anywhere
+*below* a finding shifts that finding's fingerprint, so it no longer
+matches the baseline and the gate reports it as **new**. A commit that
+touches only `docs/` can therefore turn the supply-chain lane red with
+zero code change. (Seen 2026-10-31: run `6e1dd7ba` on `6471ad7` — a
+runbook edit failed the gate on a doc line shift; the regen commit
+`70735a8` restored it.)
+
+**Regenerate** (the baseline is the JSON document a `--format json`
+scan produces; the gate filters its output against it):
+
+```bash
+aegis --format json scan --file . --output-file .aegis/baseline.json
+```
+
+Rules for a regen:
+
+- **Same flags as the gate.** The gate is
+  `aegis --format json scan --file . --baseline .aegis/baseline.json`
+  (`.gitforge.yml`); a regen that uses a different `--config` writes a
+  baseline the gate cannot match.
+- **Trim `stats.inspection_ledger` before committing.** A full scan
+  embeds the `.git` ledger in the baseline (tens of MB per commit, and
+  it is what pushed 77 historical blobs over GitHub's 100 MB limit —
+  see `docs/OPERATOR_ACTIONS.md` §0). The committed baseline keeps
+  only `{"schema_version": 1}`.
+- **Stage first.** A directory scan does not see untracked files, so a
+  baseline regenerated before `git add` silently omits them.
+- **Regen and source edit land in the same commit**, and the gate is
+  re-verified (`rc=0`) before the push. A regen in its own commit
+  leaves the tree red in between.
+
+**Verify** (exit code reflects *new* findings only):
+
+```bash
+aegis --format json scan --file . --baseline .aegis/baseline.json
+echo $?   # 0 = no new findings
+```
+
+---
+
 ## Action Items
 
 | Priority | Action | Owner |
