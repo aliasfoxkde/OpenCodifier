@@ -416,6 +416,10 @@ pub enum LaneSubcommand {
         /// The lane name.
         #[arg(value_name = "NAME")]
         name: String,
+        /// Overwrite the target file if it already exists. Without this
+        /// flag an existing file is refused, never clobbered.
+        #[arg(long)]
+        force: bool,
         /// Where to write the config. Default: `./opencodifier.json`.
         #[arg(long, value_name = "PATH")]
         out: Option<PathBuf>,

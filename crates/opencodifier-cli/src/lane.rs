@@ -44,10 +44,16 @@ pub(crate) fn run(command: &LaneSubcommand) -> Result<(), CliError> {
                 .map_err(|error| CliError::engine("config.serialize", error.to_string()))?;
             output::print_line(&text)
         }
-        LaneSubcommand::Use { name, out } => {
+        LaneSubcommand::Use { name, force, out } => {
             let config = expand_or_err(name)?;
             let path =
                 out.clone().unwrap_or_else(|| PathBuf::from(opencodifier_config::PROJECT_FILE));
+            if path.exists() && !force {
+                return Err(CliError::input(
+                    CODE_UNWRITABLE_OUTPUT,
+                    format!("{} already exists; pass --force to overwrite it", path.display()),
+                ));
+            }
             let text = serde_json::to_string_pretty(&config)
                 .map_err(|error| CliError::engine("config.serialize", error.to_string()))?;
             std::fs::write(&path, text).map_err(|error| {
@@ -98,10 +104,37 @@ mod tests {
     fn use_writes_the_config_file() {
         let dir = tempfile::tempdir().unwrap();
         let out = dir.path().join("project.json");
-        run(&LaneSubcommand::Use { name: "zero".to_owned(), out: Some(out.clone()) }).unwrap();
+        run(&LaneSubcommand::Use { name: "zero".to_owned(), force: false, out: Some(out.clone()) })
+            .unwrap();
         let text = std::fs::read_to_string(&out).unwrap();
         let config: serde_json::Value = serde_json::from_str(&text).unwrap();
         assert!(config.get("lane").is_some(), "{text}");
+    }
+
+    #[test]
+    fn use_refuses_to_clobber_an_existing_file_without_force() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("project.json");
+        std::fs::write(&out, "{\"existing\": true}").unwrap();
+        let error = run(&LaneSubcommand::Use {
+            name: "zero".to_owned(),
+            force: false,
+            out: Some(out.clone()),
+        })
+        .unwrap_err();
+        assert_eq!(error.code(), CODE_UNWRITABLE_OUTPUT);
+        assert_eq!(std::fs::read_to_string(&out).unwrap(), "{\"existing\": true}");
+    }
+
+    #[test]
+    fn use_overwrites_an_existing_file_with_force() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("project.json");
+        std::fs::write(&out, "{\"existing\": true}").unwrap();
+        run(&LaneSubcommand::Use { name: "zero".to_owned(), force: true, out: Some(out.clone()) })
+            .unwrap();
+        let text = std::fs::read_to_string(&out).unwrap();
+        assert!(!text.contains("existing"), "{text}");
     }
 
     #[test]
@@ -109,7 +142,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let out = dir.path().join("never.json");
         let error =
-            run(&LaneSubcommand::Use { name: "turbo".to_owned(), out: Some(out) }).unwrap_err();
+            run(&LaneSubcommand::Use { name: "turbo".to_owned(), force: false, out: Some(out) })
+                .unwrap_err();
         assert_eq!(error.code(), CODE_UNKNOWN_LANE);
         assert!(!dir.path().join("never.json").exists());
     }
