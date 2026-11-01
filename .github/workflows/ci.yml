@@ -1,4 +1,6 @@
 # Mirror-only CI config. GitForge (.gitforge.yml) is the pipeline of
+# Keep cargo-deny wildcard checks meaningful for path dependencies by pinning
+# each internal workspace dependency to the workspace package version.
 # record; a red run here is NOT a code-failure signal.
 name: ci-mirror
 
