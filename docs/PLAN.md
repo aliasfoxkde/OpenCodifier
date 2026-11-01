@@ -67,6 +67,7 @@ Remaining risks tracked in §6 below.
 | 24 | RESEARCH §15.6 enhancement program | **in progress** (2026-10-07) — items 1–4, 8–10 + §15.8 fold-ins done (ledger: RESEARCH §15.6.1); items 5/6 sized, model-rung options, deferred per the §15.6 note |
 | 25 | The gate program: escalation, lanes, first-run detection, CI/CD | **opened** (2026-10-21) — design `docs/ESCALATION_LANES_PLAN.md`; #188 premise validation first, tasks #188–#197 |
 | 26 | Amortyx pre-router integration + token-reduction stack | **in progress** (2026-10-26) — phase-2 consult LIVE in shadow (§14 of INTEGRATION_AMORTYX.md: consult p50 ~3 ms, task-signal agreement/divergence counters collecting, abstain-degrades verified on provider ranking); dual-arm parity baseline run (dispatch unchanged = arm parity by construction; shadow counters are the labeled evidence for enforce promotion after ≥1 week); token-reduction design of record `docs/planning/token-reduction-router-stack.md` (M1–M8, build queue 1–5) |
+| 27 | Prebuilt binary releases + no-Rust onboarding | **in progress** (2026-10-29) — design of record `docs/planning/prebuilt-binary-release-and-onboarding-2026-10-29.md`; v0.6.1 Linux x86_64 binary passes 30/30 E2E on Fedora but its attestation reports 29 dirty paths; verified installer and provenance contract underway; new clean patch release + Amortyx-Stack integration remain |
 
 ## Phase 2 — schema adapters + fixtures (done, 5952769)
 
