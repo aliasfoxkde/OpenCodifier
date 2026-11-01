@@ -98,9 +98,9 @@ fn read_bounded(path: &Path) -> Result<Vec<u8>, CliError> {
     })?;
     let mut bytes = Vec::new();
     let limit = u64::try_from(MAX_ENCODED_IMAGE_BYTES).unwrap_or(u64::MAX);
-    file.take(limit.saturating_add(1)).read_to_end(&mut bytes).map_err(
-        |error| CliError::input(CODE_UNREADABLE_INPUT, format!("{}: {error}", path.display())),
-    )?;
+    file.take(limit.saturating_add(1)).read_to_end(&mut bytes).map_err(|error| {
+        CliError::input(CODE_UNREADABLE_INPUT, format!("{}: {error}", path.display()))
+    })?;
     Ok(bytes)
 }
 
