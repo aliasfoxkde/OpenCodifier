@@ -167,6 +167,151 @@ ORT_DYLIB_PATH=~/.local/lib/python3.13/site-packages/onnxruntime/capi/libonnxrun
 
 ---
 
+## GitForge CI trigger retry storm (diagnosed 2026-10-29)
+
+**Symptom.** ~100 failed `pipeline_runs` after 12:00 UTC in one day; the
+pending trigger queue stopped draining.
+
+**Root cause.** Four orphaned local-only commit hashes (`3c921c9`,
+`c3ad7d9c`, `f5a57e3`, `97966eb`-pre-image) plus seven
+`codex/prebuilt-release-installer-20261029` hashes had `pending`
+`pipeline_trigger_requests` rows. Each retry dies at checkout with
+`fatal: unable to read tree ... retryable=false` — the commit objects do
+not exist on the server. The retry churn starved the queue of capacity.
+
+**Recovery path (worked).** A fresh push kick-starts the engine; its
+"periodic engine redrive" recovers stalled runs and republishes all
+pending triggers, after which jobs complete normally on the online
+runner. Verified: `redrove stalled chain ... recovered stalled runs
+rebuilt=N` in `journalctl -u gitforge@ci.service`.
+
+**Open defect (fix the tool, not the procedure).** The ci service should
+mark a trigger request permanently `failed` when checkout fails with
+`retryable=false` on an object-missing error, instead of leaving it
+`pending` for unbounded retries. Until fixed, recovery requires a fresh
+push to trigger redrive.
+
+**Resolution (2026-10-30).** Main lane verified GREEN: pipeline run
+`9f7a5a16` (commit `03ed530`) — all 7 jobs (fmt, clippy, test, coverage,
+frontend, server-build, e2e) succeeded on the online runner. Task closed.
+
+**Two further defects found during diagnosis (fix the tool, not the
+procedure):**
+1. **SQLite lock-storm retry churn.** Under queue pressure the ci
+   service's SQLite writes contend (lock-storm pattern): retries pile
+   up faster than runs drain, amplifying the stall. Retry scheduling
+   needs backoff, and trigger republish on redrive currently re-enqueues
+   everything with no backoff at all — the redrive that recovers the
+   queue also re-creates the storm if any trigger is still unfixable.
+2. **Republish-no-backoff.** Same root: `pipeline_trigger_requests`
+   republish during engine redrive resets attempts, so a permanently
+   uncheckoutable hash re-enters the retry loop at full rate on every
+   redrive.
+
+**Cross-ref lane fix (GitForge `14de7171`, "key trigger lanes per
+(repo, ref)").** A busy branch used to hold its repository's FIFO
+trigger lane for the whole ~10-minute pipeline, starving other refs of
+the same repo. Lane keys now include the ref name, so ordering holds
+within a ref and cross-ref starvation is impossible.
+
+Status as of 2026-10-31: **committed and pushed** to GitForge
+`gitforge-ci/main`, but **not deployed** — the running release is
+`gitforge-69245e2b-20261029` (an ancestor of the fix), so the live
+service still has the old global-per-repo lane. Deployment needs a
+release cut from a commit that contains `14de7171`
+(`scripts/gitforge-release-bundle <root> releases <id>` + the drop-in
+symlink swap + unit restart), which in turn needs a green pipeline run
+of that exact commit.
+
+**Owner of the remaining debt:** the GitForge ci service
+(`services/ci/src/main.rs`). The two defects above (retry backoff,
+republish resetting `attempts`) are **unfixed** — they are recorded
+here, not in the GitForge repo, because the GitForge tree has no
+defect ledger that survives a release cut. "Fixed" means: a trigger
+request whose checkout fails with `retryable=false` on an
+object-missing error is marked permanently `failed` rather than left
+`pending`, and republish during redrive preserves the attempt count
+instead of resetting it.
+
+**Read-only triage queries:**
+
+```bash
+sudo sqlite3 /var/lib/gitforge/gitforge.db \
+  "select status,count(*) from pipeline_trigger_requests group by status;"
+sudo sqlite3 /var/lib/gitforge/gitforge.db \
+  "select substr(new_hash,1,8),ref_name,status,attempts,substr(error,1,80) \
+   from pipeline_trigger_requests where status in ('pending','processing');"
+```
+
+### CI triage runbook (REST, agent-side)
+
+**Use `scripts/ci-run-lookup.sh`** — it does the whole dance (login →
+repo UUID → run listing → job listing → job logs) with `curl` + `jq`
+only, so it passes the agent's PreToolUse risk scan.
+
+```bash
+./scripts/ci-run-lookup.sh runs [REPO_NAME] [LIMIT]   # newest first
+./scripts/ci-run-lookup.sh jobs <run-id>              # per-job status
+./scripts/ci-run-lookup.sh logs <job-id> [TAIL]       # plain-text tail
+```
+
+The raw REST routes, for when a script is not wanted:
+
+Prefer the REST routes below over `sqlite3` — the API is the supported
+surface and the run object carries what triage needs. The obvious guesses
+`/api/repos/<id>/runs` and `/api/pipelines/<id>/runs` are **404/405**;
+the working route is `GET /api/pipeline-runs?repo_id=<uuid>&limit=N`.
+
+```bash
+# 1. Fresh JWT (the CLI's stored auth goes stale; login is the operator's
+#    path, this is the agent-side one). Credentials live in
+#    mkinney-credentials.env: GITFORGE_URL / GITFORGE_USER / GITFORGE_PASSWORD.
+JWT=$(curl -s -X POST "$GITFORGE_URL/auth/login" \
+  -H 'Content-Type: application/json' \
+  -d "$(jq -n --arg u "$GITFORGE_USER" --arg p "$GITFORGE_PASSWORD" \
+        '{username: $u, password: $p}')" \
+  | jq -r '.token')
+
+# 2. Repo id is a UUID — resolve it by name.
+REPO=$(curl -s -H "Authorization: Bearer $JWT" "$GITFORGE_URL/api/repos" \
+  | jq -r '.[] | select(.name == "OpenCodifier") | .id')
+
+# 3. List runs (newest first) with commit hash + status.
+curl -s -H "Authorization: Bearer $JWT" \
+  "$GITFORGE_URL/api/pipeline-runs?repo_id=$REPO&limit=20" \
+  | jq -r '.[] | [.id, .commit_hash[0:9], .status, .pipeline_id, .started_at] | @tsv'
+
+# 4. Job detail + logs — ONLY valid briefly after a run finishes (D36
+#    quirk); the jobs array purges to [] afterwards. Fetch immediately
+#    or reproduce the lane in the pinned image from a detached worktree.
+curl -s -H "Authorization: Bearer $JWT" "$GITFORGE_URL/api/pipeline-runs/<run-id>"
+curl -s -H "Authorization: Bearer $JWT" "$GITFORGE_URL/api/jobs/<job-id>/logs"
+```
+
+**Trigger a run without the CLI** (the MCP gitforge tools are read-only):
+
+```bash
+curl -s -X POST -H "Authorization: Bearer $JWT" -H 'Content-Type: application/json' \
+  -d "{\"ref\":\"<sha>\"}" "$GITFORGE_URL/api/pipelines/<pipeline-uuid>/runs"
+```
+
+**Pin the run you care about.** Pipeline rows are created per-trigger, so
+run ids churn and "latest run" may be a sibling project's. Pin by
+`commit_hash` prefix AND `started_at` newer than your own trigger.
+
+**Watchdog discipline.** The direct CI probe (`curl -m5
+http://127.0.0.1:42781/`) must return HTTP 200 before a trigger is worth
+attempting; if the API is 200 but 42781 times out, the CI HTTP worker
+pool is wedged on SQLite WAL locks and a trigger will die at the API→CI
+hop. Wait for a calm window (io avg10 < 15 twice, 5 min apart) with
+in-flight == 0, restart, verify `/proc/PID/environ`, then trigger.
+
+**Distrust "failure" verdicts from foreign commits.** The repo-scoped run
+list still leaks SHAs absent from `git ls-remote gitforge`; verify the
+commit exists on a real ref before diagnosing a code failure.
+
+---
+
 ## JEV-27B corpus — action items
 
 Priority for next session:

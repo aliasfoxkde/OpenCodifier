@@ -157,7 +157,7 @@ def auto5(rows, temps):
 def run_probs_mode(run_dir, ref_dir, glob_t):
     tasks = {}
     for f in ("easy", "hard", "original"):
-        for line in open(f"{ref_dir}/{f}.jsonl"):
+        for line in open(f"{ref_dir}/datasets/public/{f}.jsonl"):
             if line.strip():
                 t = json.loads(line)
                 tasks[t["id"]] = (str(t["expected"]), t["question"]["type"])

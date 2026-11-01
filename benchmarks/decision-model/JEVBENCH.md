@@ -184,6 +184,48 @@ JevBench RESULTS; jev.page):
 | **Jev-Style-0.8B v3** | **64.1 % (148/231)** | **self-run, official harness — our bridge** |
 | open-jev-zefan-2b | 64.5 % | board |
 | Laya | 58.4 % | official |
+| autotrust/JEV-27B | 88.70 (family-macro) | published (autotrust announcement) — the B2 contamination-audit target |
+| LiquidAI/d1-2B | JevBench v1.4.1 77.9 | vendor card (their split/protocol; our public-231 replay below) |
+
+7. **autotrust/JEV-27B — the contamination-audit arm (queue B2,
+   2026-10-28).** autotrust's own serving path, not a port:
+   `serve_decide.py` (vLLM OpenAI server + `POST /v1/decide` from
+   their HF repo) with their `adapter_vllm/` LoRA and shipped
+   `calibration.json`; the runner (`run_jevbench.py --arm jev27
+   --jev27-endpoint`) posts each task verbatim — kind from the item
+   type, state passthrough, instructions + criteria folded into the
+   single question string the wire carries — with `thinking: "off"`
+   so the row is a pure System-1 audit. Probabilities native as-is
+   (never renormalized), noul false/true mapped to no/yes, failures
+   score incorrect (serial no-retry). Host: Modal H100 burst
+   (~$3-5 of the authorized budget; 27B bf16 + decision head does not
+   fit the T5500 V100 pair, and the head has no llama.cpp path).
+   The audit question: autotrust published **88.70 family-macro** on
+   this split; their model card records training on
+   `SargeDev/jev-distill-corpus-v3` — if their number does not
+   reproduce through their own serving code on our lane, the §14
+   dominance table needs a footnote; if it does, the row is real and
+   the chase target stands.
+
+8. **LiquidAI/d1-2B — the commercial decision-model survey arm
+   (2026-10-28).** A 1.92B multimodal decision model (LFM3-VL-2B
+   backbone: 13 gated short convs + 5 SWA + 6 global attention
+   layers; readout head, no generation) through llama.cpp v0.8.0's
+   native `/v1/systemone` wire (`run_jevbench.py --arm d1
+   --d1-endpoint`, local CPU Q8_0): one question per request, noul
+   criteria folded into instructions, choice criteria as the
+   criteria dict (label itself when absent — the choice_candidates
+   rule), score levels positional, probabilities native as-is
+   (the server applies the model-file temperatures — d1 ships its
+   own calibration, the same discipline as our D7/D9), noul p(true)
+   mapped to no/yes, failures score incorrect (serial no-retry,
+   same posture as jev27). Independent of the Jev distill lineage —
+   Liquid's own MOPD multi-teacher recipe — so a clean external
+   reference for what a purpose-trained 2B decision model scores
+   outside that corpus. **License: lfm1.0** — revenue-capped ($10M)
+   commercial use, derivative works inherit the cap, not
+   OSI-approved: weights are a benchmark reference and an
+   extraction teacher only, never a redistributable arm.
 
 ## Comparability caveats (stated up front)
 
@@ -235,6 +277,7 @@ milliseconds. Acceptance criteria:
 | engine + 4B rung, fusion-v2 gate (2026-10-05) | 0.5584 | 0.5622 | 0.335 | 0.734 | 1.2 ms / 0.73 s | 231/231 | native |
 | engine + 4B rung, proofs-only posture (2026-10-05) | **0.6883** | 0.6622 | 0.171 | 0.431 | 0.58 s / 14.0 s | 231/231 | native |
 | engine + 4B rung, proofs-only posture (2026-10-06 D35 rerun) | 0.6840 | 0.6593 | 0.170 | 0.436 | 0.82 s / 18.7 s | 231/231 | native |
+| d1-2B (LiquidAI Q8_0, llama.cpp v0.8.0 `/v1/systemone`, 2026-10-28) | 0.7489 | 0.7616 | 0.065 | 0.279 | 5.9 s / 57.2 s | replay 91.7% (33/36 noul pairs; ordinal/choice labels stable) | native |
 
 **The third-party 2B GGUF rows (task #125, 2026-10-08).** Two
 independently trained 2B decision models, each under its authors' own

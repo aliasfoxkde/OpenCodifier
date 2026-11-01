@@ -169,3 +169,119 @@ fn outcome_label(outcome: DecisionOutcome) -> String {
         .and_then(|value| value.as_str().map(str::to_owned))
         .unwrap_or_else(|| format!("{outcome:?}"))
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use super::*;
+    use opencodifier_core::{ChoiceQuestion, DecisionQuestion, RequestMetadata, State};
+
+    fn base_request() -> DecisionRequest {
+        let policy: opencodifier_core::DecisionPolicy = serde_json::from_value(serde_json::json!({
+            "min_confidence": 0.0, "verify_below": 0.0,
+            "abstain_below": 0.0, "risk": "low",
+        }))
+        .unwrap();
+        let question = DecisionQuestion::Choice(
+            ChoiceQuestion::new(
+                "q",
+                "which is red",
+                vec![
+                    opencodifier_core::Candidate::new("a", "red cube").unwrap(),
+                    opencodifier_core::Candidate::new("b", "blue sphere").unwrap(),
+                ],
+            )
+            .unwrap(),
+        );
+        DecisionRequest::new(
+            State::from_text("a red cube left of a blue sphere"),
+            vec![question],
+            policy,
+            RequestMetadata::default(),
+        )
+        .unwrap()
+    }
+
+    fn temp_image(bytes: &[u8], tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("oc-decide-image-{tag}.bin"));
+        std::fs::write(&path, bytes).unwrap();
+        path
+    }
+
+    #[test]
+    fn with_images_accepts_png_magic() {
+        let png = temp_image(&PNG_MAGIC, "png");
+        let rebuilt = with_images(&base_request(), &[png]).unwrap();
+        assert_eq!(rebuilt.state().images().len(), 1);
+        let _ = std::fs::remove_file(std::env::temp_dir().join("oc-decide-image-png.bin"));
+    }
+
+    #[test]
+    fn with_images_accepts_jpeg_magic() {
+        let jpeg = temp_image(&JPEG_MAGIC, "jpeg");
+        let rebuilt = with_images(&base_request(), &[jpeg]).unwrap();
+        assert_eq!(rebuilt.state().images().len(), 1);
+        let _ = std::fs::remove_file(std::env::temp_dir().join("oc-decide-image-jpeg.bin"));
+    }
+
+    #[test]
+    fn with_images_attaches_multiple_in_order() {
+        let png = temp_image(&PNG_MAGIC, "multi-png");
+        let jpeg = temp_image(&JPEG_MAGIC, "multi-jpeg");
+        let rebuilt = with_images(&base_request(), &[png, jpeg]).unwrap();
+        assert_eq!(rebuilt.state().images().len(), 2);
+        for tag in ["multi-png", "multi-jpeg"] {
+            let _ = std::fs::remove_file(
+                std::env::temp_dir().join(format!("oc-decide-image-{tag}.bin")),
+            );
+        }
+    }
+
+    #[test]
+    fn with_images_refuses_unknown_magic() {
+        let junk = temp_image(b"not-an-image", "junk");
+        let error = with_images(&base_request(), &[junk]).unwrap_err();
+        assert_eq!(error.code(), CODE_UNSUPPORTED_IMAGE);
+        let _ = std::fs::remove_file(std::env::temp_dir().join("oc-decide-image-junk.bin"));
+    }
+
+    #[test]
+    fn with_images_refuses_unreadable_path() {
+        let error = with_images(&base_request(), &[PathBuf::from("/nonexistent/oc/missing.png")])
+            .unwrap_err();
+        assert_eq!(error.code(), CODE_UNREADABLE_INPUT);
+    }
+
+    #[test]
+    fn with_images_refuses_an_image_above_the_encoded_ceiling() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("huge.png");
+        // A PNG-magic header whose declared length is above the ceiling;
+        // the file itself stays small — the check is on the byte count.
+        let big = {
+            let mut bytes = PNG_MAGIC.to_vec();
+            bytes.resize(MAX_ENCODED_IMAGE_BYTES + 1, 0u8);
+            bytes
+        };
+        std::fs::write(&path, &big).unwrap();
+        let error = with_images(&base_request(), &[path]).unwrap_err();
+        assert_eq!(error.code(), CODE_UNSUPPORTED_IMAGE);
+        assert!(error.to_string().contains("ceiling"));
+    }
+
+    #[test]
+    fn finish_maps_decisive_and_abstain_paths() {
+        assert!(finish(DecisionOutcome::Accept, false).is_ok());
+        assert!(finish(DecisionOutcome::Abstain, true).is_ok());
+        let error = finish(DecisionOutcome::Abstain, false).unwrap_err();
+        assert_eq!(error.code(), CODE_ESCALATED);
+    }
+
+    #[test]
+    fn outcome_label_is_the_wire_snake_case() {
+        assert_eq!(outcome_label(DecisionOutcome::Accept), "accept");
+        assert_eq!(outcome_label(DecisionOutcome::Abstain), "abstain");
+    }
+}
