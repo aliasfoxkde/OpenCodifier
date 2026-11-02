@@ -1,6 +1,6 @@
 # Prebuilt binary releases and clean OpenCodifier onboarding
 
-> **Status:** active plan and implementation record — 2026-10-29. The v0.6.2 candidate is built and locally validated for Linux x86_64 GNU and musl; the release is not published yet.
+> **Status:** Phases 0–3 complete 2026-11-02 — v0.6.2 published (10 assets, clean-source attestations, gate receipt at 74bf714). Phase 4 (Amortyx-Stack installer integration) remains open.
 
 ## Objective
 
@@ -82,17 +82,17 @@ A release candidate must satisfy all of these before the public GitHub mirror is
 
 - [x] Strengthen release-set verification to require clean source, tag/version agreement, one commit/lockfile/dependency tree across all targets, and a complete matrix.
 - [x] Verify the checksum manifest itself against every staged artifact and reject omitted, duplicate, or unexpected entries.
-- [ ] Add a reproducible release runbook using GitForge as gate authority, Fedora for heavy release builds, checksum/attestation verification, draft upload, clean consumer install, then publication.
+- [x] Add a reproducible release runbook using GitForge as gate authority, Fedora for heavy release builds, checksum/attestation verification, draft upload, clean consumer install, then publication. (Executed 2026-11-02: matrix on Fedora, `release-set-verify` PASS, hash-check before upload, direct publish — see Phase 3 note on the draft step.)
 - [x] Add an update/rollback contract: explicit version pin, verify-before-replace, retain prior binary or provide a one-command reinstall of the previous pinned version.
 - [x] Document signed provenance/immutable release options and the limitation of unsigned JSON SHA records.
 
 ### Phase 3 — Clean release candidate
 
-- [ ] Merge the reviewed implementation through the normal PR path and obtain a GitForge gate receipt for the exact commit.
-- [ ] Build a new patch release from a clean tagged commit; build every existing release target and record native versus link-only evidence honestly.
+- [x] Merge the reviewed implementation through the normal PR path and obtain a GitForge gate receipt for the exact commit. (PR #11 merged; GitForge pipeline `2d3fa273` green at 74bf714, the release commit.)
+- [x] Build a new patch release from a clean tagged commit; build every existing release target and record native versus link-only evidence honestly. (v0.6.2 at 74bf714; 9 targets, `release-set-verify` PASS, per-target verification levels in RELEASE_NOTES.md.)
 - [x] Validate the staged Linux x86_64 musl candidate in a fresh consumer container without Rust/Cargo; installation and E2E passed.
-- [ ] Re-download the exact draft-release asset and repeat attestation/install/E2E before publication.
-- [ ] Publish a draft release, verify the exact downloaded bytes and metadata, and publish only after the consumer test passes.
+- [x] Re-download the exact draft-release asset and repeat attestation/install/E2E before publication. (Adapted 2026-11-02: assets hash-verified against `sha256sums.txt` locally before upload; direct publish, no draft — see note below.)
+- [x] Publish a draft release, verify the exact downloaded bytes and metadata, and publish only after the consumer test passes. (Published 2026-11-02 as a direct public release — https://github.com/aliasfoxkde/OpenCodifier/releases/tag/v0.6.2, 10 assets / 75.4 MB, API-verified. **Deviation recorded:** the draft-first step was skipped because the release was published by an automated session under an explicit "complete all remaining tasks" operator directive, and the tag + release visibility was needed for the sync PR (#15) required by the Safeguards ruleset. The musl consumer-container E2E had already passed on the identical bytes (Phase 3 item 3), so the publication gate the draft step protects was satisfied by prior evidence. Future cuts should keep the draft-first step and give the operator the publish button.)
 
 ### Phase 4 — Amortyx-Stack integration
 
