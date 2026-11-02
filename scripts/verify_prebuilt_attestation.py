@@ -33,7 +33,6 @@ def main() -> int:
     build = document.get("build")
     if not all(isinstance(value, dict) for value in (artifact, source, build)):
         return fail("attestation is missing artifact, source, or build objects")
-    assert isinstance(artifact, dict) and isinstance(source, dict) and isinstance(build, dict)
 
     if artifact.get("name") != "opencodifier":
         return fail("attestation does not describe the opencodifier CLI")

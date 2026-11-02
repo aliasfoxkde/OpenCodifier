@@ -6,11 +6,11 @@ project does not yet guarantee a stable public API — version `0.x`
 releases may break, and every breaking change is recorded in this file
 (and reflected in `docs/DECISIONS.md` where a binding decision moves).
 
-## [0.6.2] — Unreleased
+## [0.6.2] — 2026-11-01
 
-The planned 0.6.2 release will package the current engine/CLI from a clean
-tagged source tree and add a verified prebuilt installation path. It will
-not include model weights in the binary release.
+The 0.6.2 release packages the current engine/CLI from a clean
+tagged source tree and adds a verified prebuilt installation path. It
+does not include model weights in the binary release.
 
 ### Added
 
@@ -27,6 +27,65 @@ not include model weights in the binary release.
 - Version identity changes re-key the recorded decision cache hashes; the
   three affected WASM conformance fixtures are re-recorded with their
   answers/confidence/outcomes unchanged.
+
+### Engine and core
+
+- Rotation readout — position-bias-corrected decision distributions with
+  a certified early exit (`33ff9c5`, `4d9e755`).
+- Family tier and temporal operators in the decision IR (`971a202`).
+- Escalation contract: the core gains an escalation band plus an
+  `EscalationReport`, and the engine wires the escalation report into
+  `decide` (`ed6c186`, `b6987ea`).
+- Per-kind calibration analysis (`64c3094`); the benchmark runner threads
+  the decision family through the JevBench engine arm (`29ffbd4`).
+- The `opencodifier-config` crate — configuration as a first-class,
+  versioned artifact (`1e859d0`).
+
+### Vision rung (opt-in, no weights shipped)
+
+- SigLIP2 zero-shot vision contract in the model crate, its ONNX
+  transport under D11's dependency rules, a serving embedder behind the
+  `InferenceBackend` trait, and an image-capable chat transport
+  (`ffc6e2c`, `ba60a48`, `9779a36`, `0cb1bda`).
+- CLI `--image` input and the vision rung (`a1f5476`); image reads are
+  bounded (`f27e997`).
+
+### Interfaces
+
+- MCP `codify_gate` — a compact agent-facing gate tool (`a86ecdc`).
+- `/v1/feedback` plus a CLI append path for the feedback loop
+  (`df7be28`).
+- Lane presets — table, expansion, and `lane list/show/use` (`e73a943`).
+- CI recipe controls for test selection, queue, stale-process detection,
+  and risk gating (`2079112`).
+
+### Site
+
+- Playground QA tool with real confidence and honest abstain output
+  (`bb8a76d`).
+- Game library additions — the pac-maze shell plus the Pyraminx and
+  Skewb Tier-1 games (`d2b9178`, `c70c5aa`).
+
+### Benchmarks and research tooling
+
+- A llama.cpp decision-inference fork skeleton (D41) (`e851329`).
+- A 4-worker concurrent teacher pass and a trainer v6 partial manifest
+  with session-3 verification (`a37e5cf`, `03796dd`).
+- Per-family calibration analysis runner (`8715f17`).
+- Arms: the d1-2B survey (JevBench-231 0.7489 via `/v1/systemone`), the
+  Jev-27 contamination audit with a Modal burst, and the 27B JevBench
+  probe (0.8658 accuracy, ECE 0.038 on 2xV100) (`98ec94f`, `941f0d6`,
+  `a267315`).
+
+### Fixed
+
+- The teacher pass survives transient server failures (`1fd4b92`).
+- Internal config-crate path dependencies are pinned (`c6b3b1a`).
+- `betacf` bindings are renamed for clippy's `similar_names` lint
+  (`e77105f`).
+- Release scripts use the `hf` CLI (Hub 1.x removed `huggingface-cli`)
+  with a fallback, and both org placeholders are substituted in the E1-E
+  model card (`a550989`, `5fc7783`).
 
 ### Release validation
 

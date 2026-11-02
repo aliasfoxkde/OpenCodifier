@@ -6,6 +6,7 @@
 //! printed; only the exit code distinguishes it (2, or 0 with
 //! `--abstain-is-success`).
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use opencodifier_core::{
@@ -85,6 +86,24 @@ fn with_policy_override(
     .map_err(CliError::from)
 }
 
+/// Reads at most [`MAX_ENCODED_IMAGE_BYTES`] + 1 bytes from `path`.
+///
+/// The read is capped rather than size-checked first: a device node or a
+/// FIFO reports a length of zero but yields unbounded data, so a
+/// metadata-based ceiling check would let an attacker-controlled path
+/// stream gigabytes into memory before the rejection fires.
+fn read_bounded(path: &Path) -> Result<Vec<u8>, CliError> {
+    let file = std::fs::File::open(path).map_err(|error| {
+        CliError::input(CODE_UNREADABLE_INPUT, format!("{}: {error}", path.display()))
+    })?;
+    let mut bytes = Vec::new();
+    let limit = u64::try_from(MAX_ENCODED_IMAGE_BYTES).unwrap_or(u64::MAX);
+    file.take(limit.saturating_add(1)).read_to_end(&mut bytes).map_err(|error| {
+        CliError::input(CODE_UNREADABLE_INPUT, format!("{}: {error}", path.display()))
+    })?;
+    Ok(bytes)
+}
+
 /// Attaches `--image` files to the request's state.
 ///
 /// Each file's media type is detected from the magic bytes (PNG or
@@ -102,9 +121,7 @@ fn with_policy_override(
 fn with_images(request: &DecisionRequest, paths: &[PathBuf]) -> Result<DecisionRequest, CliError> {
     let mut state = request.state().clone();
     for path in paths {
-        let bytes = std::fs::read(path).map_err(|error| {
-            CliError::input(CODE_UNREADABLE_INPUT, format!("{}: {error}", path.display()))
-        })?;
+        let bytes = read_bounded(path)?;
         if bytes.len() > MAX_ENCODED_IMAGE_BYTES {
             return Err(CliError::input(
                 CODE_UNSUPPORTED_IMAGE,
@@ -203,48 +220,46 @@ mod tests {
         .unwrap()
     }
 
-    fn temp_image(bytes: &[u8], tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir();
-        let path = dir.join(format!("oc-decide-image-{tag}.bin"));
+    /// Writes `bytes` into a private tempdir; the guard deletes it on
+    /// drop, so no fixed names in the shared temp dir and no manual
+    /// cleanup to swallow failures.
+    fn temp_image(dir: &tempfile::TempDir, bytes: &[u8], name: &str) -> PathBuf {
+        let path = dir.path().join(name);
         std::fs::write(&path, bytes).unwrap();
         path
     }
 
     #[test]
     fn with_images_accepts_png_magic() {
-        let png = temp_image(&PNG_MAGIC, "png");
+        let dir = tempfile::tempdir().unwrap();
+        let png = temp_image(&dir, &PNG_MAGIC, "png.bin");
         let rebuilt = with_images(&base_request(), &[png]).unwrap();
         assert_eq!(rebuilt.state().images().len(), 1);
-        let _ = std::fs::remove_file(std::env::temp_dir().join("oc-decide-image-png.bin"));
     }
 
     #[test]
     fn with_images_accepts_jpeg_magic() {
-        let jpeg = temp_image(&JPEG_MAGIC, "jpeg");
+        let dir = tempfile::tempdir().unwrap();
+        let jpeg = temp_image(&dir, &JPEG_MAGIC, "jpeg.bin");
         let rebuilt = with_images(&base_request(), &[jpeg]).unwrap();
         assert_eq!(rebuilt.state().images().len(), 1);
-        let _ = std::fs::remove_file(std::env::temp_dir().join("oc-decide-image-jpeg.bin"));
     }
 
     #[test]
     fn with_images_attaches_multiple_in_order() {
-        let png = temp_image(&PNG_MAGIC, "multi-png");
-        let jpeg = temp_image(&JPEG_MAGIC, "multi-jpeg");
+        let dir = tempfile::tempdir().unwrap();
+        let png = temp_image(&dir, &PNG_MAGIC, "a.png");
+        let jpeg = temp_image(&dir, &JPEG_MAGIC, "b.jpg");
         let rebuilt = with_images(&base_request(), &[png, jpeg]).unwrap();
         assert_eq!(rebuilt.state().images().len(), 2);
-        for tag in ["multi-png", "multi-jpeg"] {
-            let _ = std::fs::remove_file(
-                std::env::temp_dir().join(format!("oc-decide-image-{tag}.bin")),
-            );
-        }
     }
 
     #[test]
     fn with_images_refuses_unknown_magic() {
-        let junk = temp_image(b"not-an-image", "junk");
+        let dir = tempfile::tempdir().unwrap();
+        let junk = temp_image(&dir, b"not-an-image", "junk.bin");
         let error = with_images(&base_request(), &[junk]).unwrap_err();
         assert_eq!(error.code(), CODE_UNSUPPORTED_IMAGE);
-        let _ = std::fs::remove_file(std::env::temp_dir().join("oc-decide-image-junk.bin"));
     }
 
     #[test]
@@ -269,6 +284,22 @@ mod tests {
         let error = with_images(&base_request(), &[path]).unwrap_err();
         assert_eq!(error.code(), CODE_UNSUPPORTED_IMAGE);
         assert!(error.to_string().contains("ceiling"));
+    }
+
+    #[test]
+    fn with_images_refuses_a_directory_path_as_unreadable() {
+        let dir = tempfile::tempdir().unwrap();
+        let error = with_images(&base_request(), &[dir.path().to_path_buf()]).unwrap_err();
+        assert_eq!(error.code(), CODE_UNREADABLE_INPUT);
+    }
+
+    #[test]
+    fn read_bounded_stops_at_the_ceiling_plus_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("huge.bin");
+        std::fs::write(&path, vec![0u8; MAX_ENCODED_IMAGE_BYTES + 4096]).unwrap();
+        let bytes = read_bounded(&path).unwrap();
+        assert_eq!(bytes.len(), MAX_ENCODED_IMAGE_BYTES + 1);
     }
 
     #[test]

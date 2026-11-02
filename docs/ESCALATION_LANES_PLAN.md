@@ -218,7 +218,7 @@ CLI surface:
 ```
 opencodifier lane list          # table with cost/accuracy/latency envelope
 opencodifier lane show <name>    # the exact resolved config it expands to
-opencodifier lane use <name>     # writes the chosen lane into the config
+opencodifier lane use <name>     # writes the chosen lane into the config (refuses to overwrite unless --force)
 ```
 
 ---

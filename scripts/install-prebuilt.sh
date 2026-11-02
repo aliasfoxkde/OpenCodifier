@@ -78,6 +78,9 @@ printf 'Downloading OpenCodifier %s for %s\n' "$VERSION_NUMBER" "$TARGET"
 curl --fail --location --silent --show-error --retry 3 --connect-timeout 15 --max-time 180 "$URL" -o "$TMP_DIR/opencodifier"
 curl --fail --location --silent --show-error --retry 3 --connect-timeout 15 --max-time 60 "${URL}.attestation.json" -o "$TMP_DIR/attestation.json"
 python3 "$(dirname "$0")/verify_prebuilt_attestation.py" "$TMP_DIR/attestation.json" "$TMP_DIR/opencodifier" "$TARGET"
+# The attestation is verified for integrity and provenance metadata, but it
+# arrives over the same channel as the binary: this protects against
+# corruption, not against a compromised release channel (no signature yet).
 chmod 755 "$TMP_DIR/opencodifier"
 REPORTED_VERSION=$("$TMP_DIR/opencodifier" --version)
 EXPECTED_VERSION="opencodifier $VERSION_NUMBER"
@@ -93,4 +96,5 @@ cp "$TMP_DIR/opencodifier" "$TEMP_INSTALL"
 chmod 755 "$TEMP_INSTALL"
 mv -f "$TEMP_INSTALL" "$INSTALL_DIR/opencodifier"
 printf 'Installed %s to %s/opencodifier\n' "$REPORTED_VERSION" "$INSTALL_DIR"
+printf 'Note: the attestation is verified for integrity but is not yet cryptographically\nsigned; it cannot authenticate against a compromised release channel.\n'
 printf 'No service was started. Add %s to PATH if needed.\n' "$INSTALL_DIR"
